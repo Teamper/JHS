@@ -90,7 +90,7 @@ export class NewVideoPlugin extends BasePlugin {
                 .nv-card__title, .nv-card__actress { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
                 .nv-card__title { color:var(--jhs-text); font-size:var(--jhs-font-size-sm); font-weight:700; }
                 .nv-card__actress, .nv-card__date { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
-                .jhs-new-video-pagination { padding:var(--jhs-space-3) 0; border-top:1px solid var(--jhs-border); text-align:center; }
+                .jhs-new-video-pagination { flex:0 0 auto; padding:var(--jhs-space-2) 0; border-top:1px solid var(--jhs-border); text-align:center; }
                 .jhs-form-dialog { display:grid; gap:var(--jhs-space-3); padding:var(--jhs-space-4); }
                 .jhs-avatar-editor { display:grid; grid-template-columns:100px minmax(0,1fr); gap:var(--jhs-space-3); align-items:start; }
                 .jhs-avatar-editor__preview { width:100px; height:100px; border:2px solid var(--jhs-border); border-radius:50%; object-fit:cover; }
@@ -110,8 +110,9 @@ export class NewVideoPlugin extends BasePlugin {
                 .jhs-form-dialog .jhs-textarea { min-height:60px; overflow-y:hidden; }
                 .jhs-option-row { display:flex; align-items:center; gap:var(--jhs-space-2); min-height:36px; }
                 #actress-pagination { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
-                @media (max-width:767px) { .jhs-new-video-toolbar { align-items:stretch; flex-direction:column; } .jhs-new-video-toolbar select, .jhs-new-video-toolbar .jhs-btn { min-height:44px; } .jhs-task-status-list { grid-template-columns:1fr; } .page-number-btn { display:none !important; } }
+                @media (max-width:767px) { .jhs-new-video-toolbar { align-items:stretch; flex-direction:column; } .jhs-new-video-toolbar select, .jhs-new-video-toolbar .jhs-btn { min-height:44px; } .newVideoToolBox .jhs-task-status-list { display:flex; flex-shrink:0; overflow-x:auto; } .newVideoToolBox .jhs-task-status { flex:0 0 180px; } .page-number-btn { display:none !important; } }
                 @media (prefers-reduced-motion:reduce) { .gfriends-image-item-wrapper { transition:none; } }
+                @media (max-width:767px) { .newVideoToolBox { overflow-y:auto; } .newVideoToolBox #new-video-list-container { min-height:160px; } }
             </style>
         `;
     }
@@ -159,7 +160,7 @@ export class NewVideoPlugin extends BasePlugin {
         this.nvDecisionsCache = await this.getRuntimeService("state").getNewVideoDecisions();
         (await storageManager.getFavoriteActressList()).forEach((actress => Array.isArray(actress.newVideoList) && actress.newVideoList.forEach((item => {
             const carNum = normalizeCarNum("string" == typeof item ? item : item.carNum);
-            carNum && !e.has(carNum) && !this.isDecisionHidden(carNum) && keys.add(carNum);
+            carNum && !hasAnyState(normalizeStateFlags(e.get(carNum)?.stateFlags)) && !this.isDecisionHidden(carNum) && keys.add(carNum);
         }))));
         return keys.size;
     }
@@ -212,7 +213,7 @@ export class NewVideoPlugin extends BasePlugin {
             title: '<span class="jhs-dialog-title" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测</span>',
             content: o,
             scrollbar: !1,
-            area: utils.getDialogArea("workspace"),
+            ui: { size: "workspace", body: "scroll" }, area: utils.getDialogArea("workspace"),
             anim: -1,
             success: async (e, t) => {
                 this.nvWorkspaceMounted = !0, this.nvWorkspaceRoot = e, JhsSelect.enhance(e), this.bindClick(), this.applyViewMode(), this.renderTaskStatuses(), await this.reloadNewVideoWorkspaceData(), utils.setupEscClose(t);
@@ -298,6 +299,7 @@ export class NewVideoPlugin extends BasePlugin {
     }
     applyViewMode() {
         const list = "list" === this._viewMode;
+        $("#nv-pagination-bar").toggle(list);
         $("#actress-card-container").toggle(!list), $("#actress-pagination").toggle(!list), $("#new-video-list-container").toggle(list), $("#new-video-list-footer").toggle(list), JhsSelect.setVisible("#paramSortBy", !list), JhsSelect.setVisible("#nvSortBy", list), JhsSelect.setVisible("#paramActressType", !list), JhsSelect.setVisible("#nvCategoryFilter", list), JhsSelect.setVisible("#nvStateFilter", list), JhsSelect.setVisible("#nvDecisionFilter", list), $("#nvSearch").toggleClass("jhs-is-hidden", !list), $(".jhs-new-video-view [role='tab']").each(((index, tab) => {
             const active = $(tab).data("view") === this._viewMode;
             $(tab).attr({ "aria-selected": String(active), tabindex: active ? "0" : "-1" }).toggleClass("active", active);
@@ -313,6 +315,7 @@ export class NewVideoPlugin extends BasePlugin {
     async reloadNewVideoWorkspaceData({ preservePage = !1 } = {}) {
         if (!this.isWorkspaceMounted()) return;
         const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? $("#new-video-list-container") : $("#actress-card-container");
+        $("#nv-pagination-bar").remove();
         renderStateView(container, { type: "loading", title: "加载中" });
         try {
             const settings = await storageManager.getSetting();
@@ -391,7 +394,7 @@ export class NewVideoPlugin extends BasePlugin {
         e.empty().append(cards), $(".btn-delete-actress").off("click").on("click", (e => {
             e.preventDefault();
             const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
-            utils.q(e, `是否取消收藏 ${n.name}?`, (async () => {
+            utils.q(e, `是否取消收藏 ${escapeHtml(n.name)}?`, (async () => {
                 const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting()), csrfToken = document.querySelector("meta[name=csrf-token]").content;
                 const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
                 result.success ? (await storageManager.removeFavoriteActress(t), await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-removed" })) : (show.error("移除失败"),
@@ -464,6 +467,7 @@ export class NewVideoPlugin extends BasePlugin {
         if (!container.length) return;
         const items = await this.getNewVideoFlatList();
         if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
+        $("#nv-pagination-bar").remove();
         this.nvFlatListCache = items, this.nvSortBy = $("#nvSortBy").val() || this.nvSortBy;
         const totalPages = Math.ceil(items.length / this.nvPageSize);
         this.nvCurrentPage = totalPages ? Math.min(this.nvCurrentPage, totalPages) : 1;
@@ -542,6 +546,7 @@ export class NewVideoPlugin extends BasePlugin {
         const t = this.nvSortList(e), n = this.nvPageSize, a = (this.nvCurrentPage - 1) * n, i = a + n, s = t.slice(a, i), o = Math.ceil(t.length / n), r = this.nvJavDbUrl;
         this.nvCurrentPageItems = s;
         if (generation !== this.nvRenderGeneration) return;
+        $("#nv-pagination-bar").remove();
             const l = $("#new-video-list-container");
             let c = "";
             c += '<div id="nv-grid" class="jhs-new-video-grid">';
@@ -574,7 +579,7 @@ export class NewVideoPlugin extends BasePlugin {
             l.html(c), l.find(".nv-cover-img").on("error", (function() { $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden"); })), l.find(".nv-select").on("change", (event => { const carNum = normalizeCarNum(event.currentTarget.value); event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), this.renderBatchBar(); })), l.find(".pagination-btn").off("click").on("click", (e => {
                 const n = parseInt($(e.currentTarget).data("nvpage"));
                 n >= 1 && n <= o && n !== this.nvCurrentPage && (this.nvCurrentPage = n, this.nvRenderGeneration++, this.nvRenderPage(this.nvRenderGeneration), this.renderBatchBar(), l.scrollTop(0));
-            })), this.nvCoverPreview ??= new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", owner: this.nvWorkspaceRoot, resolveOwner: () => this.nvWorkspaceRoot, zIndexStrategy: "owner" }), void this.hydrateVisibleCovers(s, generation);
+            })), l.find("#nv-pagination-bar").insertAfter(l), this.nvCoverPreview ??= new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", owner: this.nvWorkspaceRoot, resolveOwner: () => this.nvWorkspaceRoot, zIndexStrategy: "owner" }), void this.hydrateVisibleCovers(s, generation);
     }
     async editActress(e) {
         const dialog = this.getRuntimeService("dialog");
@@ -583,7 +588,7 @@ export class NewVideoPlugin extends BasePlugin {
         dialog.open({
             type: 1,
             title: `编辑女优: ${safe(t)} (${safe(o)})`,
-            area: utils.getDialogArea("sm"),
+            ui: { size: "sm", body: "scroll" }, area: utils.getDialogArea("sm"),
             content: c,
             btn: [ "保存", "取消" ],
             success: (e, t) => {

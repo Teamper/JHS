@@ -4,7 +4,7 @@
 export function buildUiPrimitivesCss() {
     return `
 <style id="jhs-ui-primitives">
-    :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) {
+    :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) {
         color: var(--jhs-text);
         font-family: var(--jhs-font);
         font-size: var(--jhs-font-size-md);
@@ -138,6 +138,7 @@ export function buildUiPrimitivesCss() {
     .jhs-video-toolbar > .jhs-toolbar {
         margin-left: auto;
     }
+    body:has(.fancybox-content #video-bottom-toolbar) #jhs-fab { visibility:hidden; }
     .jhs-video-quality-list {
         display: flex;
         align-items: center;
@@ -215,8 +216,8 @@ export function buildUiPrimitivesCss() {
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input:not([type]), .jhs-ui input[type="text"], .jhs-ui input[type="number"], .jhs-ui input[type="url"], .jhs-ui input[type="password"],
         .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input:not([type]), .layui-layer-content input[type="text"], .layui-layer-content input[type="number"],
-        .layui-layer-content input[type="url"], .layui-layer-content input[type="password"], .layui-layer-content select, .layui-layer-content textarea) {
+        .jhs-dialog .layui-layer-content input:not([type]), .jhs-dialog .layui-layer-content input[type="text"], .jhs-dialog .layui-layer-content input[type="number"],
+        .jhs-dialog .layui-layer-content input[type="url"], .jhs-dialog .layui-layer-content input[type="password"], .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea) {
         box-sizing: border-box;
         min-height: var(--jhs-control-height);
         padding: var(--jhs-space-2) var(--jhs-space-3);
@@ -233,12 +234,12 @@ export function buildUiPrimitivesCss() {
     }
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input, .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input, .layui-layer-content select, .layui-layer-content textarea):hover:not(:disabled) {
+        .jhs-dialog .layui-layer-content input, .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea):hover:not(:disabled) {
         border-color: var(--jhs-accent);
     }
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input, .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input, .layui-layer-content select, .layui-layer-content textarea):focus-visible {
+        .jhs-dialog .layui-layer-content input, .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea):focus-visible {
         border-color: var(--jhs-accent);
         outline: 2px solid var(--jhs-accent-tint);
         outline-offset: 1px;
@@ -247,11 +248,11 @@ export function buildUiPrimitivesCss() {
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input[type="text"], .jhs-ui input[type="number"], .jhs-ui input[type="url"],
         .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input[type="text"], .layui-layer-content input[type="number"],
-        .layui-layer-content input[type="url"], .layui-layer-content select, .layui-layer-content textarea):hover:not(:focus) {
+        .jhs-dialog .layui-layer-content input[type="text"], .jhs-dialog .layui-layer-content input[type="number"],
+        .jhs-dialog .layui-layer-content input[type="url"], .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea):hover:not(:focus) {
         border-color: var(--jhs-border-strong);
     }
-    :where(.jhs-textarea, .jhs-ui textarea, .layui-layer-content textarea) {
+    :where(.jhs-textarea, .jhs-ui textarea, .jhs-dialog .layui-layer-content textarea) {
         min-height: 76px;
         resize: vertical;
     }
@@ -288,7 +289,7 @@ export function buildUiPrimitivesCss() {
         transform: translateX(18px);
     }
 
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"]) {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"]) {
         appearance: none;
         width: 100%;
         height: 22px;
@@ -298,12 +299,12 @@ export function buildUiPrimitivesCss() {
         background: transparent;
         cursor: pointer;
     }
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"])::-webkit-slider-runnable-track {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"])::-webkit-slider-runnable-track {
         height: 4px;
         border-radius: var(--jhs-radius-pill);
         background: var(--jhs-border);
     }
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"])::-webkit-slider-thumb {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"])::-webkit-slider-thumb {
         appearance: none;
         width: 18px;
         height: 18px;
@@ -313,7 +314,7 @@ export function buildUiPrimitivesCss() {
         background: var(--jhs-accent);
         box-shadow: 0 0 0 1px var(--jhs-accent), var(--jhs-shadow-xs);
     }
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"]):disabled {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"]):disabled {
         cursor: not-allowed;
         opacity: .55;
     }
@@ -589,7 +590,7 @@ export function buildUiPrimitivesCss() {
     }
     /* 内容区占满标题/按钮栏以下的剩余空间，配合表格 height:100% 让尾行与分页条始终可达；
        auto 高度的 layer（消息/确认框）中 flex 退化为自然高度，不受影响 */
-    .layui-layer-content {
+    .jhs-dialog .layui-layer-content {
         flex: 1 1 auto;
         min-height: 0;
         box-sizing: border-box;
@@ -878,7 +879,6 @@ export function buildUiPrimitivesCss() {
 
         .jhs-layout-294497f1 { top:-15px }
 
-        .jhs-layout-2afc43dc { min-width:120px; }
 
         .jhs-layout-2e003268 { margin-bottom:5px }
 
@@ -893,13 +893,11 @@ export function buildUiPrimitivesCss() {
 
         .jhs-layout-3b6a3a65 { cursor:pointer }
 
-        .jhs-layout-3f0d74e1 { min-width:120px; }
 
         .jhs-layout-3fed2a7e { margin-left:5px; }
 
         .jhs-layout-3fefafab { overflow-y:auto;height:calc(100% - 40px); }
 
-        .jhs-layout-44293084 { width:120px;text-align:center;padding:8px 0; }
 
 
 
@@ -912,7 +910,6 @@ export function buildUiPrimitivesCss() {
         .jhs-layout-598afa5a { margin-bottom:25px; }
 
 
-        .jhs-layout-5c319329 { min-width:120px; }
 
 
         .jhs-layout-5f3e3549 { width:140px;text-align:center;padding:8px 0; }
@@ -1032,14 +1029,46 @@ export function buildUiPrimitivesCss() {
         .jhs-layout-f5f47b30 { margin-left:100px;width:400px; }
 
     @media (prefers-reduced-motion: reduce) {
-        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *,
-        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *::before,
-        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *::after {
+        :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) *,
+        :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) *::before,
+        :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) *::after {
             scroll-behavior: auto !important;
             transition-duration: 0.01ms !important;
             animation-duration: 0.01ms !important;
             animation-iteration-count: 1 !important;
         }
+    }
+    .jhs-state-actions { container:jhs-state-actions / inline-size; width:100%; min-width:0; flex:1 1 344px; }
+    .jhs-state-actions__buttons { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); }
+    .jhs-state-actions .jhs-state-action { min-width:80px; width:auto; padding:0 var(--jhs-space-3); }
+    .jhs-state-action[aria-pressed="true"] { border-color:currentColor; box-shadow:inset 0 0 0 1px currentColor; }
+    .jhs-state-actions[data-jhs-state-count="2"] { width:auto; flex:0 1 auto; container-type:normal; }
+    .jhs-fc2-toolbar > .jhs-state-actions { grid-column:1 / -1; flex-basis:100%; }
+    @container jhs-state-actions (max-width:479px) {
+        .jhs-state-actions[data-jhs-state-count="4"] .jhs-state-actions__buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    .jhs-detail-btn-row { gap:var(--jhs-space-4); }
+    :is(.jhs-detail-owned-slot,.jhs-review-panel,.jhs-related-panel) { background:var(--jhs-surface); color:var(--jhs-text); }
+    .jhs-detail-btn-row > :not(.jhs-state-actions) { gap:var(--jhs-space-2); }
+    .jhs-btn[aria-busy="true"] { cursor:progress; }
+    .jhs-table .tabulator-cell .jhs-btn { min-height:var(--jhs-control-height-sm); font-size:var(--jhs-font-size-xs); padding:0 var(--jhs-space-2); }
+    .jhs-dialog.layui-layer { display:flex; flex-direction:column; box-sizing:border-box; overflow:hidden; border-radius:var(--jhs-radius-md); }
+    .jhs-dialog > .layui-layer-title { flex:0 0 auto; padding-right:52px; }
+    .jhs-dialog > .layui-layer-content { min-height:0; min-width:0; flex:1 1 auto; overflow:auto; }
+    .jhs-dialog[data-jhs-dialog-body="table"] > .layui-layer-content { display:flex; flex-direction:column; overflow:hidden; }
+    .jhs-dialog[data-jhs-dialog-body="media"] > .layui-layer-content { display:flex; flex-direction:column; overflow:hidden; }
+    .jhs-dialog > .layui-layer-content > iframe { min-height:0; width:100%; max-width:100%; }
+    .jhs-dialog > .layui-layer-btn { flex:0 0 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--jhs-space-2); padding:var(--jhs-space-4); }
+    .jhs-dialog > .layui-layer-btn > a { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:var(--jhs-control-height); margin:0; padding:0 var(--jhs-space-3); border-radius:var(--jhs-radius-sm); font-size:var(--jhs-font-size-sm); }
+    .jhs-dialog .layui-layer-setwin { top:0; right:0; }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close { display:block; width:44px; height:44px; margin:0; background-position:center; }
+    :is(.jhs-ui,.jhs-dialog) label:has(> :is(input[type="checkbox"],.jhs-switch,.mini-switch)) { display:inline-flex; align-items:center; min-height:var(--jhs-control-height); gap:var(--jhs-space-2); }
+    @media (max-width:767px), (pointer:coarse) {
+        :is(.jhs-btn,.jhs-filter-btn,.jhs-select-trigger,.jhs-field,.jhs-input,.jhs-select,.jhs-icon-btn,.card-btn), .jhs-table .tabulator-cell .jhs-btn,
+        .jhs-dialog > .layui-layer-btn > a { min-height:var(--jhs-touch-target); }
+        :is(.jhs-ui,.jhs-dialog) label:has(> :is(input[type="checkbox"],.jhs-switch,.mini-switch)) { min-height:var(--jhs-touch-target); }
+        .jhs-dialog .layui-layer-close { width:44px!important; height:44px!important; }
+        .jhs-dialog .layui-layer-close::before,.jhs-dialog .layui-layer-close::after { top:21px; left:13px; }
     }
 </style>`;
 }
@@ -1176,7 +1205,7 @@ export class JhsSelect {
             event.preventDefault(), this.choose($(event.currentTarget));
         })).on("keydown", ".jhs-select-option", ((/** @type {any} */ event) => {
             const items = this.options(), index = items.index(event.currentTarget);
-            if ("Escape" === event.key) return event.preventDefault(), this.close(!0);
+            if ("Escape" === event.key) return event.preventDefault(), event.stopPropagation(), this.close(!0);
             if ("Tab" === event.key) return void this.close(!0);
             if ([ "Enter", " " ].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;

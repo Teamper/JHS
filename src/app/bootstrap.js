@@ -1,5 +1,6 @@
 // @ts-check
 
+import { prepareDialogOptions } from "../core/dialog-shell.js";
 import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { buildDetailPanelCss } from "../ui/detail/panel-styles.js";
@@ -35,6 +36,7 @@ function patchLayerRuntime(layerRuntime, utilsRuntime) {
     };
     const originalOpen = layerRuntime.open;
     layerRuntime.open = function(options = {}) {
+        options = prepareDialogOptions(options, utilsRuntime);
         const success = options.success;
         return originalOpen.call(this, { ...options, success(element, id) {
             if (typeof success === "function") success.call(this, element, id);

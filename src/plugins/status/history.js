@@ -1,6 +1,6 @@
 // @ts-check
 
-import { b, d, g, h, k, l, m, normalizeCarNum, p, r, u, v, y } from "../../core/constants.js";
+import { b, d, g, h, k, l, m, normalizeCarNum, p, r, u, v, y, escapeHtml } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
@@ -116,7 +116,8 @@ export class HistoryPlugin extends BasePlugin {
     async initCss() {
         return `
             <style>
-                .jhs-history-layout { display:flex; flex-direction:column; height:100%; min-height:0; padding:var(--jhs-space-3) var(--jhs-space-4); overflow:hidden; }
+                .jhs-history-layout { display:flex; flex-direction:column; flex:1; height:100%; min-height:0; min-width:0; box-sizing:border-box; padding:var(--jhs-space-3) var(--jhs-space-4); overflow:hidden; }
+                .jhs-history-layout > :not(#table-container) { flex-shrink:0; }
                 .jhs-history-dialog #filterBox, .jhs-history-dialog #allSelectBox { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
                 .jhs-history-selection-summary { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
                 .jhs-history-select-all { width:18px; height:18px; accent-color:var(--jhs-accent); cursor:pointer; }
@@ -157,11 +158,12 @@ export class HistoryPlugin extends BasePlugin {
         $("#historyBtn,#miniHistoryBtn").on("click", ((/** @type {any} */ e) => this.openHistory()));
     }
     openHistory() {
-        let e = `\n            <div class="jhs-layout-7cb3f981 jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container" class="jhs-layout-81eaab28"></div>\n            </div>\n        `;
+        let e = `\n            <div class="jhs-history-layout jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container"></div>\n            </div>\n        `;
         e = e.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">作品状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
         this.getRuntimeService("dialog").open({
             type: 1,
             title: "鉴定记录",
+            ui: { body: "table" },
             content: e,
             scrollbar: !1,
             shadeClose: !0,
@@ -343,7 +345,7 @@ export class HistoryPlugin extends BasePlugin {
             };
             if (t.hasClass("history-filterBtn")) {
                 const record = this.tableObj?.getRow(a)?.getData(), isBlocked = normalizeStateFlags(record?.stateFlags).blocked;
-                isBlocked ? void s(d) : utils.q(e, `是否屏蔽${a}?`, (() => s(d)));
+                isBlocked ? void s(d) : utils.q(e, `是否屏蔽${escapeHtml(a)}?`, (() => s(d)));
             } else t.hasClass("history-favoriteBtn") ? void s(h) : t.hasClass("history-hasDownBtn") ? void s(g) : t.hasClass("history-hasWatchBtn") ? void s(p) : t.hasClass("history-deleteBtn") ? this.handleDelete(e, a) : t.hasClass("history-detailBtn") && void this.handleClickDetail(e, {
                 carNum: a,
                 url: i
@@ -573,7 +575,7 @@ export class HistoryPlugin extends BasePlugin {
     }
     /** @param {any} e @param {string} t */
     handleDelete(e, t) {
-        utils.q(e, `是否移除${t}?`, (async () => {
+        utils.q(e, `是否移除${escapeHtml(t)}?`, (async () => {
             try {
                 await this.historyRepository.remove(t), this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(t),
                 await this.reloadTable();
@@ -634,7 +636,7 @@ export class HistoryPlugin extends BasePlugin {
                 const save = async () => {
                     await this.historyRepository.patch(e.carNum, nextFlags, { type: "history-edit", replaceMetadata: !0, record: { ...e, names: nextNames, url: nextUrl, remark: nextRemark } }), this.tableObj.setData(), dialog.close(index);
                 };
-                if (!flags.blocked && nextFlags.blocked) return utils.q(null, `是否屏蔽${e.carNum}?`, (() => void save())), !1;
+                if (!flags.blocked && nextFlags.blocked) return utils.q(null, `是否屏蔽${escapeHtml(e.carNum)}?`, (() => void save())), !1;
                 await save();
             }
         });

@@ -1,5 +1,6 @@
 // @ts-check
 
+import { prepareDialogOptions } from "../../core/dialog-shell.js";
 import { JHS_Z_INDEX } from "../../core/theme.js";
 
 export class LayerDialogAdapter {
@@ -14,5 +15,5 @@ export class LayerDialogAdapter {
     /** @param {string} message @param {Record<string, unknown>} [options] */
     alert(message, options) { return this.layer.alert(message, this.withDefaultLayer(options)); }
     /** @param {Record<string, unknown> | undefined} options */
-    withDefaultLayer(options = {}) { return { zIndex: JHS_Z_INDEX.layer, ...options }; }
+    withDefaultLayer(options = {}) { const value = { zIndex: JHS_Z_INDEX.layer, ...options }; return options.ui ? prepareDialogOptions(value, /** @type {any} */ (globalThis).utils) : value; }
 }

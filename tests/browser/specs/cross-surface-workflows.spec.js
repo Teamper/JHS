@@ -56,7 +56,7 @@ test("FC2 dialog offline marking keeps movie identity across surfaces", async ({
   await page.evaluate(() => {
     const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
     offline.registry = {
-      getCandidates: async () => [{ provider: { id: "fixture", name: "Fixture", submit: async (_resource, info) => { window.__offlineContext = info; } }, availability: { authState: "ready" } }],
+      getCandidates: async () => [{ provider: { id: "fixture", name: "Fixture", isEnabled: async () => true, submit: async (_resource, info) => { window.__offlineContext = info; } }, availability: { authState: "ready" } }],
       updateAvailability() {},
     };
     window.utils.q = (_event, _message, confirm) => confirm();

@@ -35,6 +35,6 @@ describe("layered dialog DOM ownership", () => {
         expect(css).toContain(".jhs-history-dialog #filterBox");
         expect(css).toContain(".jhs-history-dialog #allSelectBox");
         expect(css).toContain(".jhs-history-dialog #table-container");
-        expect(history).toContain('class="jhs-layout-7cb3f981 jhs-history-dialog"');
+        expect(history).toContain('class="jhs-history-layout jhs-history-dialog"');
     });
 });

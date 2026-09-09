@@ -226,25 +226,25 @@ export function buildThemeCss() {
     .jhs-ui input[type="number"],
     .jhs-ui textarea,
     .jhs-ui select,
-    .layui-layer-content input[type="text"],
-    .layui-layer-content input[type="number"],
-    .layui-layer-content textarea,
-    .layui-layer-content select {
+    .jhs-dialog .layui-layer-content input[type="text"],
+    .jhs-dialog .layui-layer-content input[type="number"],
+    .jhs-dialog .layui-layer-content textarea,
+    .jhs-dialog .layui-layer-content select {
         background-color: var(--jhs-input-bg);
         color: var(--jhs-text);
         border: 1px solid var(--jhs-border);
     }
     .jhs-ui ::placeholder,
-    .layui-layer-content ::placeholder {
+    .jhs-dialog .layui-layer-content ::placeholder {
         color: var(--jhs-placeholder);
         opacity: 1;
     }
     .jhs-ui button:disabled,
     .jhs-ui input:disabled,
     .jhs-ui select:disabled,
-    .layui-layer-content button:disabled,
-    .layui-layer-content input:disabled,
-    .layui-layer-content select:disabled {
+    .jhs-dialog .layui-layer-content button:disabled,
+    .jhs-dialog .layui-layer-content input:disabled,
+    .jhs-dialog .layui-layer-content select:disabled {
         background-color: var(--jhs-disabled-bg);
         color: var(--jhs-disabled-text);
         border-color: var(--jhs-border);
@@ -253,13 +253,13 @@ export function buildThemeCss() {
     }
 
     /* JHS 表面基础字体 */
-    .jhs-ui, .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box {
+    .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box {
         font-family: var(--jhs-font);
     }
 
     /* 焦点环 */
     :where(.jhs-ui) :focus-visible,
-    :where(.layui-layer-content) :focus-visible,
+    :where(.jhs-dialog .layui-layer-content) :focus-visible,
     :where(.tabulator) :focus-visible {
         outline: 2px solid var(--jhs-accent);
         outline-offset: 2px;
@@ -270,7 +270,7 @@ export function buildThemeCss() {
     .content-panel::-webkit-scrollbar,
     .tabulator-tableholder::-webkit-scrollbar,
     .has-navbar-fixed-top::-webkit-scrollbar,
-    .layui-layer-content::-webkit-scrollbar {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar {
         width: 6px;
         height: 6px;
     }
@@ -278,7 +278,7 @@ export function buildThemeCss() {
     .content-panel::-webkit-scrollbar-track,
     .tabulator-tableholder::-webkit-scrollbar-track,
     .has-navbar-fixed-top::-webkit-scrollbar-track,
-    .layui-layer-content::-webkit-scrollbar-track {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar-track {
         background: var(--jhs-surface-2);
         border-radius: 10px;
     }
@@ -286,7 +286,7 @@ export function buildThemeCss() {
     .content-panel::-webkit-scrollbar-thumb,
     .tabulator-tableholder::-webkit-scrollbar-thumb,
     .has-navbar-fixed-top::-webkit-scrollbar-thumb,
-    .layui-layer-content::-webkit-scrollbar-thumb {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar-thumb {
         background: var(--jhs-border-strong);
         border-radius: 10px;
     }
@@ -294,20 +294,20 @@ export function buildThemeCss() {
     .content-panel::-webkit-scrollbar-thumb:hover,
     .tabulator-tableholder::-webkit-scrollbar-thumb:hover,
     .has-navbar-fixed-top::-webkit-scrollbar-thumb:hover,
-    .layui-layer-content::-webkit-scrollbar-thumb:hover {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar-thumb:hover {
         background: var(--jhs-text-faint);
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .jhs-ui, .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box,
-        .jhs-ui *, .layui-layer-content *, .tabulator *, .toastify *, .jhs-fab *, .menu-box * {
+        .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box,
+        .jhs-ui *, .jhs-dialog .layui-layer-content *, .tabulator *, .toastify *, .jhs-fab *, .menu-box * {
             transition: none !important;
             animation: none !important;
         }
     }
 
     /* 暗色下覆盖 layui-layer 弹层 chrome (外部 layui.css 为亮色主题) */
-    :root[data-jhs-theme="dark"] .layui-layer {
+    :root[data-jhs-theme="dark"] .jhs-dialog.layui-layer {
         background-color: var(--jhs-surface);
         color: var(--jhs-text);
         box-shadow: var(--jhs-shadow-lg);
@@ -317,20 +317,20 @@ export function buildThemeCss() {
         color: var(--jhs-text);
         border-bottom: 1px solid var(--jhs-border);
     }
-    :root[data-jhs-theme="dark"] .layui-layer-content {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content {
         color: var(--jhs-text);
     }
-    :root[data-jhs-theme="dark"] .layui-layer-btn a {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-btn a {
         background-color: var(--jhs-surface-2);
         border: 1px solid var(--jhs-border);
         color: var(--jhs-text);
     }
-    :root[data-jhs-theme="dark"] .layui-layer-btn .layui-layer-btn0 {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-btn .jhs-dialog .layui-layer-btn0 {
         background-color: var(--jhs-accent);
         border-color: transparent;
         color: var(--jhs-accent-text-on);
     }
-    .layui-layer-setwin .layui-layer-close {
+    .jhs-dialog .layui-layer-setwin .layui-layer-close {
         width: 36px!important;
         height: 36px!important;
         background: none!important;
@@ -338,8 +338,8 @@ export function buildThemeCss() {
         font-size: 0!important;
         opacity: 1!important;
     }
-    .layui-layer-setwin .layui-layer-close::before,
-    .layui-layer-setwin .layui-layer-close::after {
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::before,
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::after {
         content: "";
         position: absolute;
         top: 17px;
@@ -349,15 +349,15 @@ export function buildThemeCss() {
         border-radius: 1px;
         background: currentColor;
     }
-    .layui-layer-setwin .layui-layer-close::before { transform: rotate(45deg); }
-    .layui-layer-setwin .layui-layer-close::after { transform: rotate(-45deg); }
-    .layui-layer-setwin .layui-layer-close:hover,
-    .layui-layer-setwin .layui-layer-close:focus-visible { color: var(--jhs-text)!important; }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::before { transform: rotate(45deg); }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::after { transform: rotate(-45deg); }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close:hover,
+    .jhs-dialog .layui-layer-setwin .layui-layer-close:focus-visible { color: var(--jhs-text)!important; }
     :root[data-jhs-theme="dark"] .layui-input,
-    :root[data-jhs-theme="dark"] .layui-layer-content input[type="text"],
-    :root[data-jhs-theme="dark"] .layui-layer-content input[type="number"],
-    :root[data-jhs-theme="dark"] .layui-layer-content textarea,
-    :root[data-jhs-theme="dark"] .layui-layer-content select {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content input[type="text"],
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content input[type="number"],
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content textarea,
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content select {
         background-color: var(--jhs-input-bg);
         color: var(--jhs-text);
         border: 1px solid var(--jhs-border);

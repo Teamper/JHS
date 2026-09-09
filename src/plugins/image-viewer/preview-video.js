@@ -1,5 +1,7 @@
 // @ts-check
 
+import { createStateActions } from "../../ui/detail/state-actions.js";
+
 import { L, o } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
@@ -200,7 +202,7 @@ export class PreviewVideoPlugin extends BasePlugin {
     openDmmDialog() {
         if (!canUseDmmPreview(this.getRuntimeService("settings").snapshot()) || this.previewSession) return;
         const host = $('<div data-jhs-preview-host="true"></div>');
-        this.getRuntimeService("dialog").open({ type: 1, title: "预告片", content: host, area: utils.getDialogArea("lg"),
+        this.getRuntimeService("dialog").open({ type: 1, title: "预告片", ui: { body: "media" }, content: host, area: utils.getDialogArea("lg"),
             success: (/** @type {any} */ layer, /** @type {number} */ id) => { void this.handleVideo(host[0], id).catch(error => clog.error("预览失败", error)); },
             end: () => { if (this.previewSession?.host === host[0]) this.disposePreviewSession(); }
         });
@@ -302,7 +304,8 @@ export class PreviewVideoPlugin extends BasePlugin {
         $toolbar.append($qualityList);
         const $actions = $("<div></div>").addClass("jhs-toolbar");
         const hasDetailActions = !!this.getOptionalDependency("DetailPageButtonPlugin");
-        $actions.append(hasDetailActions ? '<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn"><span>屏蔽</span></button>' : "", hasDetailActions ? '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn"><span>收藏</span></button>' : "", '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>');
+        if (hasDetailActions) $actions.append(createStateActions({ actions: ["blocked", "favorite"], ids: { blocked: "video-filterBtn", favorite: "video-favoriteBtn" } }));
+        $actions.append('<button type="button" class="jhs-btn jhs-btn--secondary" id="speed-btn">快进</button>');
         if (!alive()) return;
         $toolbar.append($actions); $host.append($toolbar);
         $toolbar.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (/** @type {MouseEvent} */ event) => {

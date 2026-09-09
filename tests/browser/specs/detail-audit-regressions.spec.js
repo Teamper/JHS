@@ -154,7 +154,7 @@ test("two rapid offline clicks during availability checks must submit only once"
     window.jQuery("#audit-offline").data("jhsMovieContext", { carNum: "ABC-123", surface: "native-detail" });
     window.auditOffline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
     window.auditPendingAvailability = []; window.auditSubmits = 0;
-    window.auditCandidate = { provider: { id: "123", name: "123", submit: async () => { window.auditSubmits++; } }, availability: { authState: "ready" } };
+    window.auditCandidate = { provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { window.auditSubmits++; } }, availability: { authState: "ready" } };
     window.auditOffline.registry = { getCandidates: () => new Promise(resolve => window.auditPendingAvailability.push(resolve)), updateAvailability() {} };
   });
   await page.locator("#audit-offline").click(); await page.locator("#audit-offline").dispatchEvent("click");
@@ -169,7 +169,7 @@ test("offline remote success followed by history failure must not be recorded as
   const result = await page.evaluate(async () => {
     const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), button = window.jQuery('<button>离线</button>').appendTo(document.body);
     let calls = 0; const history = [];
-    offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", submit: async () => { calls++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
+    offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { calls++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
     offline.getRuntimeService("state").appendOfflineHistory = async row => { history.push(row.status); if (history.length === 1) throw new Error("local history write failed"); };
     await offline.submitResource({ currentTarget: button[0] }, "magnet:?xt=urn:btih:audit", button, { carNum: "ABC-123" });
     return { calls, history, buttonText: button.text() };
@@ -241,6 +241,9 @@ test("native magnet layout uses container width and keeps host operations after 
       return { display:getComputedStyle(row).display, style:row.getAttribute("style"), grid:getComputedStyle(row).gridTemplateAreas, row:box(row), info:box(row.querySelector('[data-jhs-magnet-part="info"]')), date:box(row.querySelector('[data-jhs-magnet-part="date"]')), actions:box(row.querySelector('[data-jhs-magnet-part="actions"]')), buttons:[...row.querySelector('[data-jhs-magnet-part="actions"]').children].map(box) };
     });
     expect(geometry.buttons).toHaveLength(3);
+    const appearances = await frame.locator('[data-jhs-magnet-part="actions"]').first().evaluate(root => [...root.children].map(button => { const s=getComputedStyle(button); return [s.backgroundColor,s.color,s.borderRadius,s.fontSize]; }));
+    expect(appearances[0]).toEqual(appearances[1]);
+    expect(appearances[1]).toEqual(appearances[2]);
     expect(Math.max(...geometry.buttons.map(x=>x.y))-Math.min(...geometry.buttons.map(x=>x.y))).toBeLessThanOrEqual(1);
     expect(Math.max(...geometry.buttons.map(x=>x.height))-Math.min(...geometry.buttons.map(x=>x.height))).toBeLessThanOrEqual(1);
     expect(geometry.buttons.at(-1).right).toBeLessThanOrEqual(geometry.row.right + 1);

@@ -89,7 +89,7 @@ export class StatsPlugin extends BasePlugin {
             ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map((item => row(item.name, item.count, topValue, "var(--jhs-accent)", new URL(item.starId ? `/actors/${encodeURIComponent(item.starId)}` : `/search?q=${encodeURIComponent(item.name)}`, javDbUrl).href))).join("")}</div></section>` : ""}
         </div>`;
         const dialog = this.getRuntimeService("dialog");
-        dialog.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (/** @type {Element} */ layerElement, /** @type {number} */ layerIndex) => {
+        dialog.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: !1, ui: { size: "lg", body: "scroll" }, area: utils.getDialogArea("lg"), anim: -1, success: (/** @type {Element} */ layerElement, /** @type {number} */ layerIndex) => {
             $(layerElement).find(".jhs-stats__bar").each(((/** @type {number} */ _index, /** @type {Element} */ element) => { $(element).css({ "--jhs-value": `${$(element).data("width")}%`, "--jhs-bar": $(element).data("color") }); }));
             $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", ((/** @type {MouseEvent} */ event) => {
                 const metric = $(event.currentTarget), action = metric.data("action");

@@ -30,21 +30,29 @@ export class DetailWorkspacePlugin extends BasePlugin {
             .jhs-detail-workspace .jhs-detail-btn-row { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-4); }
             .jhs-detail-workspace [data-jhs-section="gallery"] .jhs-detail-workspace__content { overflow-x:auto; }
             .jhs-detail-host-workspace { color:var(--jhs-text); }
-            .jhs-detail-owned-slot { min-width:0; padding:var(--jhs-space-5) 0; border-top:1px solid var(--jhs-border); }
+            .jhs-detail-owned-slot { min-width:0; box-sizing:border-box; padding:var(--jhs-space-4); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
             .jhs-detail-owned-slot:empty { display:none; }
-            .jhs-detail-owned-slot--summary-actions { padding:var(--jhs-space-3) 0 var(--jhs-space-5); border-top:0; }
-            .jhs-detail-post-resource { min-width:0; }
+            .jhs-detail-owned-slot--summary-actions { margin-block:var(--jhs-space-5); }
+            .jhs-detail-post-resource { display:grid; min-width:0; gap:var(--jhs-space-5); margin-block:var(--jhs-space-5); }
             .jhs-detail-host-workspace .jhs-detail-btn-row { margin:0!important; }
             .jhs-detail-host-action { display:inline-flex!important; min-height:var(--jhs-control-height)!important; align-items:center!important; justify-content:center!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border)!important; border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface)!important; color:var(--jhs-text)!important; box-shadow:none!important; font:inherit!important; font-size:var(--jhs-font-size-sm)!important; font-weight:600!important; line-height:1!important; text-decoration:none!important; }
             .jhs-detail-host-action:hover { border-color:var(--jhs-accent)!important; background:var(--jhs-surface-2)!important; color:var(--jhs-accent)!important; }
             .jhs-offline-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-2); margin-left:var(--jhs-space-2); vertical-align:middle; }
             [data-jhs-workspace-site="javdb"] [data-jhs-magnets] { container:jhs-magnets / inline-size; min-width:0; }
-            [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row] { display:grid; grid-template-columns:minmax(0,1fr); grid-template-areas:"info" "date" "actions"; gap:var(--jhs-space-2); align-items:center; margin:0; padding:var(--jhs-space-3); box-sizing:border-box; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-host-region="resources"] { margin:0; min-width:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-host-region="resources"] > .column { padding:0; min-width:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-resource-surface] { margin:0; padding:var(--jhs-space-4); box-sizing:border-box; min-width:0; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); color:var(--jhs-text); }
+            [data-jhs-workspace-site="javdb"] [data-jhs-resource-body] { padding:0; border:0; background:transparent; color:inherit; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnets] > .magnet-sort { margin-bottom:var(--jhs-space-3); }
+            [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row] { display:grid; grid-template-columns:minmax(0,1fr); grid-template-areas:"info" "date" "actions"; gap:var(--jhs-space-2); align-items:center; margin:0; padding:var(--jhs-space-3); box-sizing:border-box; border-bottom:1px solid var(--jhs-border); background:transparent; }
+            [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row]:last-child { border-bottom:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="info"] .name { color:var(--jhs-text); font-size:var(--jhs-font-size-md); font-weight:600; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="date"] { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
             [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part] { width:auto!important; min-width:0; max-width:100%; margin:0!important; padding:0; }
             [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="info"] { grid-area:info; overflow-wrap:anywhere; }
             [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="date"] { grid-area:date; white-space:nowrap; }
             [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] { grid-area:actions; display:flex; flex-wrap:nowrap; align-items:center; gap:var(--jhs-space-2); }
-            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; box-sizing:border-box; height:var(--jhs-control-height)!important; min-height:var(--jhs-control-height)!important; margin:0!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm)!important; font-size:var(--jhs-font-size-sm); line-height:1!important; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; box-sizing:border-box; height:var(--jhs-control-height)!important; min-height:var(--jhs-control-height)!important; margin:0!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface); color:var(--jhs-text); font-size:var(--jhs-font-size-sm); line-height:1!important; }
             @container jhs-magnets (min-width:768px) {
                 [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row] { grid-template-columns:minmax(0,1fr) max-content max-content; grid-template-areas:"info date actions"; gap:var(--jhs-space-4); }
             }
@@ -54,7 +62,6 @@ export class DetailWorkspacePlugin extends BasePlugin {
             @media (pointer:coarse) {
                 [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { height:44px!important; min-height:44px!important; }
             }
-            @media (max-width:767px) { .jhs-detail-owned-slot { padding:var(--jhs-space-4) 0; } }
         </style>`;
     }
     async handle() {

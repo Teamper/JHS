@@ -1,0 +1,27 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { JSDOM } from "jsdom";
+import { prepareDialogOptions } from "../src/core/dialog-shell.js";
+let dom;
+afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
+it("consumes UI metadata, preserves callbacks and releases resize listeners", () => {
+    dom = new JSDOM('<div id="dialog"></div>');
+    vi.stubGlobal("window", dom.window);
+    const remove = vi.spyOn(dom.window, "removeEventListener"), success = vi.fn(() => "mounted"), end = vi.fn(() => "closed");
+    const options = prepareDialogOptions({ ui: { size: "lg", body: "table" }, success, end, shadeClose: false }, { getDialogArea: () => ["800px", "600px"] });
+    expect(options.ui).toBeUndefined();
+    expect(Object.getOwnPropertySymbols(options)).toEqual([]);
+    expect(options.shadeClose).toBe(false);
+    expect(options.area).toEqual(["800px", "600px"]);
+    expect(prepareDialogOptions(options)).toBe(options);
+    const copied = { ...options };
+    expect(prepareDialogOptions(copied)).toBe(copied);
+    const root = dom.window.document.querySelector("#dialog");
+    expect(options.success(root, 7)).toBe("mounted");
+    expect(root.dataset.jhsDialogBody).toBe("table");
+    Object.defineProperty(dom.window, "innerWidth", { value:390, configurable:true });
+    dom.window.dispatchEvent(new dom.window.Event("resize"));
+    expect(root.style.maxWidth).toBe("374px");
+    expect(options.end("reason")).toBe("closed");
+    expect(end).toHaveBeenCalledExactlyOnceWith("reason");
+    expect(remove.mock.calls.some(([event]) => event === "resize")).toBe(true);
+});

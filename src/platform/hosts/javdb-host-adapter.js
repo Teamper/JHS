@@ -61,6 +61,11 @@ export class JavDbHostAdapter {
             sortSelect: controller.querySelector('select[data-action*="magnet-sort#sort"]'),
             prepareLayout() {
                 resourceRoot.setAttribute("data-jhs-magnets", "true");
+                resourceRegion.setAttribute("data-jhs-host-region", "resources");
+                const surface = resourceRoot.closest(".message.video-panel, .video-panel") || controller;
+                surface.setAttribute("data-jhs-resource-surface", "true");
+                const body = resourceRoot.closest(".message-body");
+                if (body && surface.contains(body)) body.setAttribute("data-jhs-resource-body", "true");
                 for (const row of resourceRoot.children) {
                     if (!row.matches(".item")) continue;
                     const info = row.querySelector(":scope > .magnet-name"), date = row.querySelector(":scope > .date"), actions = row.querySelector(":scope > .buttons");

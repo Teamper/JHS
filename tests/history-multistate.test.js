@@ -4,14 +4,18 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import { HistorySelectionModel } from "../src/features/history/history-selection-model.js";
 import { HistoryRepository } from "../src/features/history/history-repository.js";
 
+import { escapeHtml } from "../src/core/constants.js";
+afterEach(() => vi.unstubAllGlobals());
+
 function loadHistory() {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window), patch = vi.fn().mockResolvedValue(), toggle = vi.fn().mockResolvedValue(), close = vi.fn(), confirm = vi.fn((event, message, callback) => callback());
+    vi.stubGlobal("document",dom.window.document);
     const layer = { open: vi.fn(), close }, stateService = { patch, toggle }, runtimeServices = { dialog: { open: layer.open, close: layer.close }, state: stateService }, context = vm.createContext({
-        document: dom.window.document, window: dom.window, URL, $, BasePlugin: class { getRuntimeService(name) { return runtimeServices[name]; } }, HistorySelectionModel, HistoryRepository, Tabulator: class {}, layer,
+        document: dom.window.document, window: dom.window, URL, $, escapeHtml, BasePlugin: class { getRuntimeService(name) { return runtimeServices[name]; } }, HistorySelectionModel, HistoryRepository, Tabulator: class {}, layer,
         normalizeStateFlags: flags => ({ favorite: false, downloaded: false, watched: false, blocked: false, ...flags }), storageManager: {}, legacyActionToFlag: action => ({ filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" })[action],
         utils: { getDialogArea: () => [], q: confirm }, show: { error: vi.fn() }, clog: { debug: vi.fn() }, i: (target, key, value) => (target[key] = value),
         r: true, l: false, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", m: "屏蔽", v: "收藏", y: "下载", k: "观看"

@@ -1,5 +1,7 @@
 // @ts-check
 
+import { createStateActions } from "../../ui/detail/state-actions.js";
+
 import { _, k, m, o, v, y } from "../../core/constants.js";
 import { DetailStateController } from "../../core/detail-state-controller.js";
 import { normalizeBtihHash } from "../../core/feature-helpers.js";
@@ -136,7 +138,7 @@ export class Fc2Plugin extends BasePlugin {
         source = [ "fc2", "123av" ].includes(source) ? source : "";
         /** @type {Fc2DetailContext | null} */
         let context = null;
-        return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', area: utils.getDialogArea("workspace"), skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
+        return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', ui: { size: "workspace", body: "scroll" }, area: utils.getDialogArea("workspace"), skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
             success: (/** @type {HTMLElement} */ layerRoot, /** @type {number} */ layerIndex) => { context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog" }), utils.setupEscClose(layerIndex); },
             end: () => context?.destroy()
         });
@@ -155,7 +157,7 @@ export class Fc2Plugin extends BasePlugin {
     /** @param {Fc2DetailContext} context */
     initializeWorkspace(context) {
         const summary = $('<div class="jhs-fc2-summary"><div class="jhs-fc2-preview" data-jhs-role="main-preview"></div><div class="jhs-fc2-summary__body"><div data-jhs-role="summary-content"><div class="jhs-fc2-state">正在加载影片信息…</div></div></div></div>'), toolbar = $('<div class="jhs-fc2-toolbar" role="toolbar" aria-label="影片操作"></div>');
-        [ [ "filterBtn", "jhs-btn--filter", m ], [ "favoriteBtn", "jhs-btn--fav", v ], [ "hasDownBtn", "jhs-btn--down", y ], [ "hasWatchBtn", "jhs-btn--watch", k ] ].forEach((([ id, className, label ]) => toolbar.append($('<button type="button" class="jhs-btn"><span></span></button>').attr("id", id).addClass(className).find("span").text(label).end())));
+        toolbar.append(createStateActions());
         toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitlecat">字幕 (SubtitleCat)</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="xunlei">字幕 (迅雷)</button>'), summary.find(".jhs-fc2-summary__body").append(toolbar), context.getSlot("summary").append(summary);
         const gallery = $('<div class="jhs-fc2-gallery-grid" data-jhs-role="gallery-grid"></div>'), screenshot = $('<div class="jhs-fc2-screenshot" data-jhs-role="screenshot"></div>');
         gallery.on(`click${context.namespace}`, ".jhs-fc2-gallery-item", ((/** @type {MouseEvent} */ event) => {

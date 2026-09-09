@@ -226,7 +226,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             type: 1,
             title: "设置",
             content: s,
-            area: utils.getDialogArea("lg"),
+            ui: { size: "lg", body: "scroll" }, area: utils.getDialogArea("lg"),
             scrollbar: !1,
             success: async (e, n) => {
                 const generation = ++this._settingsDialogGeneration;
@@ -681,7 +681,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);
         });
         content.on("change", '[name="parserType"]', renderFields), renderFields(), content.appendTo("body").hide();
-        dialog.open({ type: 1, title: existing ? "编辑自定义磁力源" : "添加自定义磁力源", content, area: utils.getDialogArea("md"), btn: ["保存", "取消"], success: () => content.show(), end: () => content.remove(), yes: async index => {
+        dialog.open({ type: 1, title: existing ? "编辑自定义磁力源" : "添加自定义磁力源", content, ui: { size: "md", body: "scroll" }, area: utils.getDialogArea("md"), btn: ["保存", "取消"], success: () => content.show(), end: () => content.remove(), yes: async index => {
             const form = Object.fromEntries(content.find("input,select").map(((i, element) => [element.name, "checkbox" === element.type ? element.checked : element.value])).get());
             try {
                 const source = buildCustomMagnetSource(form, existing);
@@ -704,7 +704,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);
         });
         content.appendTo("body").hide();
-        dialog.open({ type: 1, title: `${existing ? "编辑" : "新建"}${isTag ? "标签" : "过滤"}规则`, content, area: utils.getDialogArea("sm"), btn: ["保存", "取消"], success: () => content.show(), end: () => content.remove(), yes: async index => {
+        dialog.open({ type: 1, title: `${existing ? "编辑" : "新建"}${isTag ? "标签" : "过滤"}规则`, content, ui: { size: "sm", body: "scroll" }, area: utils.getDialogArea("sm"), btn: ["保存", "取消"], success: () => content.show(), end: () => content.remove(), yes: async index => {
             const rule = Object.fromEntries(content.find("input,select").map(((i, element) => [element.name, "checkbox" === element.type ? element.checked : element.value])).get());
             rule.id = existing?.id || `rule-${Date.now()}`, rule.weight = Number(rule.weight), rule.penalty = Number(rule.penalty);
             try {

@@ -5,7 +5,7 @@ export function buildDetailPanelCss() {
     return `
         .jhs-review-panel { min-width:0; }
         .jhs-panel-header { display:flex; min-height:var(--jhs-control-height); align-items:center; justify-content:space-between; gap:var(--jhs-space-3); margin-bottom:var(--jhs-space-3); }
-        .jhs-panel-header h3 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-xl); }
+        .jhs-panel-header h3 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); font-weight:600; line-height:1.5; }
         .jhs-panel-toggle { flex:none; }
         .jhs-review-list { display:grid; }
         .jhs-review-item { min-width:0; padding:var(--jhs-space-4) 0; border-bottom:1px solid color-mix(in srgb,var(--jhs-border) 55%,transparent); }
@@ -34,5 +34,12 @@ export function buildDetailPanelCss() {
         .jhs-related-title { min-width:0; overflow:hidden; color:var(--jhs-accent); font-size:16px; font-weight:600; text-overflow:ellipsis; text-decoration:none; white-space:nowrap; }
         .jhs-related-meta { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2) var(--jhs-space-4); color:var(--jhs-text-muted); font-size:14px; }
         .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
+        .jhs-detail-owned-slot :is(.jhs-review-item,.jhs-related-item) { padding:var(--jhs-space-3); border-bottom-color:var(--jhs-border); }
+        .jhs-detail-owned-slot .jhs-panel-header { padding-bottom:var(--jhs-space-3); margin-bottom:0; border-bottom:1px solid var(--jhs-border); }
+        .jhs-detail-owned-slot .jhs-panel-header:has(.jhs-panel-toggle[aria-expanded="false"]) { padding-bottom:0; border-bottom:0; }
+        .jhs-detail-owned-slot .jhs-panel-footer { padding:var(--jhs-space-3); }
+        .jhs-detail-owned-slot :is(.jhs-review-meta,.jhs-related-meta,.jhs-related-time) { font-size:var(--jhs-font-size-sm); }
+        .jhs-detail-owned-slot .jhs-related-title { white-space:normal; overflow-wrap:anywhere; }
+        .jhs-detail-owned-slot .jhs-related-time { white-space:normal; overflow-wrap:anywhere; }
     `;
 }

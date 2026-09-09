@@ -408,7 +408,7 @@ test("captured detail ownership survives detached controls, iframe isolation, an
     button.textContent = "离线";
     document.body.append(button);
     plugin.registry = {
-      getCandidates: async () => [{ provider: { id: "123", name: "123 云盘", submit: async () => ({ ok: true }) }, availability: { authState: "ready" } }],
+      getCandidates: async () => [{ provider: { id: "123", name: "123 云盘", isEnabled: async () => true, submit: async () => ({ ok: true }) }, availability: { authState: "ready" } }],
       updateAvailability() {},
     };
     await plugin.submitResource({ currentTarget: button, clientX: 120, clientY: 120 }, "magnet:?xt=urn:btih:fixture", window.jQuery(button), { carNum: "ABC-1" });

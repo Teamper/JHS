@@ -29,6 +29,10 @@ for (const [label, url] of [
       if (cold) await fulfillHostFixtures(sampleContext);
       const page = await sampleContext.newPage();
       await page.goto(url, { waitUntil: "domcontentloaded" });
+      if (process.env.JHS_STARTUP_BUNDLE) {
+        const addScriptTag = page.addScriptTag.bind(page);
+        page.addScriptTag = options => addScriptTag(options.path?.endsWith("JHS.user.js") ? { path: process.env.JHS_STARTUP_BUNDLE } : options);
+      }
       const startedAt = performance.now();
       // 保持启动基准只测核心引导；评论默认开启的请求不纳入启动预算。
       await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no" } });

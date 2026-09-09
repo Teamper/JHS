@@ -126,6 +126,7 @@ export class BlacklistPlugin extends BasePlugin {
         this.getRuntimeService("dialog").open({
             type: 1,
             title: "演员黑名单",
+            ui: { body: "table" },
             content: n,
             scrollbar: !1,
             area: utils.getDialogArea("xl"),

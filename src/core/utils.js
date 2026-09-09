@@ -1,6 +1,6 @@
+import { prepareDialogOptions } from "./dialog-shell.js";
 import { i, normalizeCarNum } from "./constants.js";
 import { JHS_Z_INDEX } from "./theme.js";
-import { LifecycleScope } from "./lifecycle-scope.js";
 
 export class Utils {
     constructor() {
@@ -57,9 +57,10 @@ export class Utils {
             insert: 0
         });
         destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
-        let releaseResize = () => {};
-        layer.open({
+        let owningLayerIndex = null;
+        layer.open(prepareDialogOptions({
             type: 2,
+            ui: { size: "workspace", body: "media" },
             title: t,
             content: destination.href,
             scrollbar: !1,
@@ -67,27 +68,13 @@ export class Utils {
             area: this.getDialogArea("workspace"),
             isOutAnim: !1,
             anim: -1,
-            success: (e, t) => {
-                this.setupEscClose(t);
-                const resize = () => {
-                    const root = document.getElementById(`layui-layer${t}`);
-                    if (!root) return;
-                    const [width, height] = this.getDialogArea("workspace");
-                    layer.style(t, { width, height, left: `${Math.max(0, (window.innerWidth - parseFloat(width)) / 2)}px`, top: `${Math.max(0, (window.innerHeight - parseFloat(height)) / 2)}px` });
-                    const content = root.querySelector(".layui-layer-content"), frame = root.querySelector("iframe"), title = root.querySelector(".layui-layer-title");
-                    const contentHeight = `${Math.max(0, parseFloat(height) - (title?.getBoundingClientRect().height || 0))}px`;
-                    if (content instanceof HTMLElement) content.style.height = contentHeight;
-                    if (frame) frame.style.height = contentHeight;
-                };
-                const scope = new LifecycleScope(`workspace-resize-${t}`);
-                scope.listen(window, "resize", resize);
-                releaseResize = () => { scope.dispose(); this.releaseEscClose(t); };
-            },
-            end: () => releaseResize()
-        });
+            success: (e, t) => { owningLayerIndex = t; this.setupEscClose(t); },
+            end: () => { if (owningLayerIndex != null) this.releaseEscClose(owningLayerIndex); }
+        }, this));
     }
     _handleGlobalEscKey(e) {
         if ("Escape" !== e.key && 27 !== e.keyCode) return;
+        if (e.defaultPrevented || e.isDefaultPrevented?.()) return;
         if (0 === this.layerIndexStack.length) return;
         /* 先剔除已被 X 按钮/shadeClick 等途径关闭的陈旧索引，避免 Esc 被空操作吞掉 */
         for (;this.layerIndexStack.length && !document.getElementById(`layui-layer${this.layerIndexStack[this.layerIndexStack.length - 1]}`); ) this.layerIndexStack.pop();
@@ -95,12 +82,16 @@ export class Utils {
         if (null == t) return;
         const n = $(`#layui-layer${t}`);
         let a = !1;
-        if (n.find(".viewer-container").length > 0) a = !0; else {
+        const hasPreview = root => $(root).find(".viewer-container:visible, .fancybox-container.fancybox-is-open:visible, .fancybox-container.fancybox-is-closing:visible").filter((_, preview) => {
+            const owner = $(preview).closest(".layui-layer");
+            return !owner.length || owner.attr("id") === `layui-layer${t}`;
+        }).length > 0;
+        if (hasPreview(document)) a = !0; else {
             const e = n.find(`#layui-layer-iframe${t}`)[0];
-            if (e && e.contentDocument) try {
-                $(e.contentDocument).find(".viewer-container").length > 0 && (a = !0);
+            if (e) try {
+                e.contentDocument && hasPreview(e.contentDocument) && (a = !0);
             } catch (i) {
-                clog.warn("无法检查跨域 iframe 内的 .viewer-container");
+                clog.warn("无法检查跨域 iframe 内的预览容器");
             }
         }
         a || (this.layerIndexStack.pop(), layer.close(t));

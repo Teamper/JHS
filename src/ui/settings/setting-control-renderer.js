@@ -1,5 +1,6 @@
 // @ts-check
 
+import { parseBooleanSetting } from "../../core/feature-helpers.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { getSettingBindingHub } from "./setting-binding-controller.js";
 
@@ -11,7 +12,7 @@ import { getSettingBindingHub } from "./setting-binding-controller.js";
 
 /** @param {string} key @param {unknown} value */
 function normalizeBooleanValue(key, value) {
-    return value === "yes" || value === true;
+    return parseBooleanSetting(value, false);
 }
 
 /** @typedef {{ value?: unknown, onChange?: ((value: unknown) => void) | null }} ControlOptions */

@@ -67,6 +67,22 @@ function createHarness() {
 afterEach(() => vi.useRealTimers());
 
 describe("new video workspace snapshot", () => {
+    it("counts existing records with cleared flags as pending, matching the workspace", async () => {
+        const {plugin,storageManager}=createHarness();
+        const records=new Map([
+            ["ABC-001",{carNum:"ABC-001",stateFlags:{favorite:false,downloaded:false,watched:false,blocked:false}}],
+            ["ABC-002",{carNum:"ABC-002",stateFlags:{favorite:true}}],
+        ]);
+        storageManager.getCarMap.mockResolvedValue(records);
+        plugin.renderCurrentView=vi.fn(async()=>{});
+        plugin.renderTaskStatuses=vi.fn();
+        await plugin.reloadNewVideoWorkspaceData();
+        const pending=await plugin.getNewVideoFlatList();
+        expect(pending.map(item=>item.carNum)).toEqual(["ABC-001"]);
+        expect(await plugin.getPendingNewVideoTotal()).toBe(pending.length);
+        records.get("ABC-002").stateFlags.favorite=false;
+        expect(await plugin.getPendingNewVideoTotal()).toBe(2);
+    });
     it("routes workspace, editor, CDN and avatar dialogs through DialogService", () => {
         const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
         expect(source).toContain('getRuntimeService("dialog")');

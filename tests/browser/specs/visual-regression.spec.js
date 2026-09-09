@@ -26,11 +26,12 @@ for (const [label, url, selector] of pages) {
       await page.goto(url, { waitUntil: "domcontentloaded" });
       // 固定历史页面视觉基线时关闭评论网络加载；默认开启与显式关闭行为由 Review 回归覆盖。
       await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no" } });
-      await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.requests !== undefined)).toBe(true);
+      await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
       await page.evaluate((mode) => {
         const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
         return settings.set("themeMode", mode);
       }, theme);
+      await expect(page.locator("html")).toHaveAttribute("data-jhs-theme", theme);
       await page.waitForTimeout(300);
       await expect(page.locator(selector).first()).toBeVisible();
       await expect(page).toHaveScreenshot(`${label.replace(/\s+/g, "-")}-${theme}.png`, { fullPage: false, maxDiffPixelRatio: 0.02 });
@@ -77,6 +78,7 @@ for (const theme of ["light", "dark"]) {
         enableLoadOtherSite: "no",
       },
     });
+    await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
     await page.evaluate((mode) => {
       const manager = window.unsafeWindow.pluginManager;
       const fc2 = manager.getBean("Fc2Plugin");
@@ -112,6 +114,7 @@ for (const theme of ["light", "dark"]) {
       const settings = manager.getBean("SettingPlugin").getRuntimeService("settings");
       return settings.set("themeMode", mode);
     }, theme);
+    await expect(page.locator("html")).toHaveAttribute("data-jhs-theme", theme);
     const primary = page.locator('.movie-list .item a[data-jhs-fc2-primary="true"]');
     await expect(primary).toBeVisible();
     await expect(primary).toHaveAttribute("data-jhs-fc2-primary", "true");
