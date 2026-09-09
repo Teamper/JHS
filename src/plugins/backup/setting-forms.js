@@ -283,9 +283,9 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     const webdavDirty = !dirtyKeys || ["webDavUrl", "webDavUsername", "webDavPassword"].some((key) => dirtyKeys.has(key));
     if (webdavDirty && dependencies.webdav?.saveProfile) {
         await dependencies.webdav.saveProfile({
-            url: String(root.find("#webDavUrl").val() || "").trim(),
-            username: String(root.find("#webDavUsername").val() || ""),
-            password: String(root.find("#webDavPassword").val() || ""),
+            ...(!dirtyKeys || dirtyKeys.has("webDavUrl") ? { url: String(root.find("#webDavUrl").val() || "").trim() } : {}),
+            ...(!dirtyKeys || dirtyKeys.has("webDavUsername") ? { username: String(root.find("#webDavUsername").val() || "") } : {}),
+            ...(!dirtyKeys || dirtyKeys.has("webDavPassword") ? { password: String(root.find("#webDavPassword").val() || "") } : {}),
         });
     }
     const patch = await collectManualSettingPatch(root, dirtyKeys);
