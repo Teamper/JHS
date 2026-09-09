@@ -19,13 +19,6 @@ function setup(html, url = "https://www.javbus.com/search/1234567/3") {
 }
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
 describe("reviewed UI regressions", () => {
-    it("does not submit a stale password when only the username was edited", async () => {
-        const $ = setup('<div id="form"><input id="webDavUsername" value="new-user"><input id="webDavPassword" value="stale-password"></div>');
-        const root = $("#form").data("jhsDirtyManualKeys", new Set(["webDavUsername"]));
-        const saveProfile = vi.fn(async () => {});
-        await saveSettingForm({ settings: { snapshot: () => ({}), update: async fn => fn({}) }, webdav: { saveProfile } }, root);
-        expect(saveProfile).toHaveBeenCalledWith({ username: "new-user" });
-    });
     it("releases blacklist batch ownership and buttons after context failure", async () => {
         const $ = setup('<button id="filterAllVideo"></button>'), plugin = Object.create(BlacklistPlugin.prototype);
         plugin.getRuntimeService = () => async () => null;
@@ -35,13 +28,12 @@ describe("reviewed UI regressions", () => {
         expect($("#filterAllVideo").attr("aria-disabled")).not.toBe("true");
         expect($("#filterAllVideo").hasClass("jhs-batch-busy")).toBe(false);
     });
-    it("releases batch ownership when scope initialization fails", async () => {
-        setup('<button id="favoriteAllVideo"></button>');
-        const plugin = Object.create(ListPagePlugin.prototype);
-        plugin.getRuntimeService = () => async () => { throw new Error("scope failed"); };
-        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
-        expect(isBatchRunActive()).toBe(false);
-        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
+    it("does not submit a stale password when only the username was edited", async () => {
+        const $ = setup('<div id="form"><input id="webDavUsername" value="new-user"><input id="webDavPassword" value="stale-password"></div>');
+        const root = $("#form").data("jhsDirtyManualKeys", new Set(["webDavUsername"]));
+        const saveProfile = vi.fn(async () => {});
+        await saveSettingForm({ settings: { snapshot: () => ({}), update: async fn => fn({}) }, webdav: { saveProfile } }, root);
+        expect(saveProfile).toHaveBeenCalledWith({ username: "new-user" });
     });
     it("restores JavBus text without losing the host link", async () => {
         const $ = setup('<div class="item"><a href="/ABC-123"><img data-title="原題"><div class="video-title" title="原題">翻译标题</div></a></div>');
@@ -51,11 +43,7 @@ describe("reviewed UI regressions", () => {
         expect($(".video-title").text().trim()).toBe("原題");
         expect($("a").attr("href")).toBe("/ABC-123");
     });
-    it.each(["search", "star", "genre"])("keeps numeric %s ids when resolving page one", prefix => {
-        const host = new JavBusHostAdapter(null, null);
-        expect(host.resolveFirstPageUrl(`https://www.javbus.com/en/${prefix}/1234567/3`)).toBe(`https://www.javbus.com/en/${prefix}/1234567`);
-        expect(host.resolveFirstPageUrl(`https://www.javbus.com/${prefix}/1234567`)).toBe(`https://www.javbus.com/${prefix}/1234567`);
-    });    it("keeps native preview actions when DMM is disabled", async () => {
+    it("keeps native preview actions when DMM is disabled", async () => {
         const $ = setup('<div class="fancybox-content"><video id="preview-video"></video></div>', "https://javdb.com/v/abc");
         vi.stubGlobal("getComputedStyle", dom.window.getComputedStyle.bind(dom.window));
         vi.stubGlobal("MutationObserver", dom.window.MutationObserver);
@@ -69,5 +57,18 @@ describe("reviewed UI regressions", () => {
         expect(favoriteOne).toHaveBeenCalledOnce();
         plugin.unmountDmmPlayer();
         expect($("#video-favoriteBtn")).toHaveLength(1);
+    });
+    it("releases batch ownership when scope initialization fails", async () => {
+        setup('<button id="favoriteAllVideo"></button>');
+        const plugin = Object.create(ListPagePlugin.prototype);
+        plugin.getRuntimeService = () => async () => { throw new Error("scope failed"); };
+        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
+        expect(isBatchRunActive()).toBe(false);
+        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
+    });
+    it.each(["search", "star", "genre"])("keeps numeric %s ids when resolving page one", prefix => {
+        const host = new JavBusHostAdapter(null, null);
+        expect(host.resolveFirstPageUrl(`https://www.javbus.com/en/${prefix}/1234567/3`)).toBe(`https://www.javbus.com/en/${prefix}/1234567`);
+        expect(host.resolveFirstPageUrl(`https://www.javbus.com/${prefix}/1234567`)).toBe(`https://www.javbus.com/${prefix}/1234567`);
     });
 });
