@@ -437,7 +437,7 @@ export class Fc2Plugin extends BasePlugin {
             if (!movieId) return this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related"), renderFc2State(context.getSlot("reviews"), "JavDB 暂无对应作品"), renderFc2State(context.getSlot("related"), "JavDB 暂无对应作品");
             this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
             const scope = () => this.getRuntimeService("scope")(), relatedPanel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope }), reviewPanel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope });
-            await Promise.allSettled([ reviewPanel.show(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive, ownCleanup: cleanup => context.addObserver({ disconnect: cleanup }) }), relatedPanel.show(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive }) ]);
+            await Promise.allSettled([ reviewPanel.show(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive, ownCleanup: cleanup => context.addObserver({ disconnect: cleanup }) }), relatedPanel.show(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive, ownCleanup: cleanup => context.addObserver({ disconnect: cleanup }) }) ]);
         } catch (error) {
             if (!context.isAlive()) return;
             this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");

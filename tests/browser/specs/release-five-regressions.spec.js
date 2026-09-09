@@ -58,6 +58,15 @@ test("115 matching retry stays on the list", async ({page,context}) => {
     await expect(page.locator(".jhs-115-list-match")).toBeVisible();
     expect(page.url()).toBe("https://javdb.com/");await expect(page.locator("iframe")).toHaveCount(0);
 });
+test("related expansion synchronizes across tabs like reviews", async ({page,context}) => {
+    await fulfillHostFixtures(context);await boot(page);const other=await context.newPage();await boot(other);
+    for (const current of [page,other]) await current.evaluate(()=>{for(const [plugin,service] of [["RelatedPlugin","related"],["ReviewPlugin","review"]]) window.unsafeWindow.pluginManager.getBean(plugin).getRuntimeService(service).list=async()=>[];});
+    await page.locator(".jhs-related-toggle").click();await page.locator(".jhs-review-toggle").click();
+    await expect(other.locator(".jhs-review-toggle")).toHaveAttribute("aria-expanded","true");
+    await expect(other.locator(".jhs-related-toggle")).toHaveAttribute("aria-expanded","true");
+    await other.locator(".jhs-related-toggle").click();await expect(page.locator(".jhs-related-container")).toBeHidden();
+});
+
 test("115 matching cancels late detail results and restarts once", async ({page,context}) => {
     await fulfillHostFixtures(context);await boot(page,{enable115Match:false});
     await page.evaluate(()=>{
@@ -93,6 +102,30 @@ for(const count of [0,1,2]) test(`115 ${count} matches isolate their card action
     if(count===1) expect(await page.evaluate(()=>window.playLinks)).toEqual(["https://115.com/?fixture=0"]);
     if(count===2) await expect(page.locator('.layui-layer a[href^="https://115.com/"]')).toHaveCount(2);
     expect(page.url()).toBe("https://javdb.com/");await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("related collapse invalidates pending load and pagination can retry", async ({page,context})=>{
+    await fulfillHostFixtures(context);await boot(page);
+    await page.evaluate(()=>{
+        window.relatedRequests=[];
+        window.unsafeWindow.pluginManager.getBean("RelatedPlugin").getRuntimeService("related").list=(_movie,{page,scope})=>new Promise((resolve,reject)=>window.relatedRequests.push({page,scope,resolve,reject}));
+    });
+    await page.locator(".jhs-related-toggle").click();
+    await expect.poll(()=>page.evaluate(()=>window.relatedRequests.length)).toBe(1);
+    await page.locator(".jhs-related-toggle").click();
+    expect(await page.evaluate(()=>window.relatedRequests[0].scope.signal.aborted)).toBe(true);
+    await page.evaluate(()=>window.relatedRequests[0].resolve([{id:"late",name:"late"}]));
+    await page.locator(".jhs-related-toggle").click();
+    await expect.poll(()=>page.evaluate(()=>window.relatedRequests.length)).toBe(2);
+    await page.evaluate(()=>window.relatedRequests[1].resolve(Array.from({length:20},(_,id)=>({id:String(id),name:`list ${id}`}))));
+    await expect(page.locator(".jhs-related-item")).toHaveCount(20);
+    await page.locator(".jhs-related-load-more").click();
+    await page.evaluate(()=>window.relatedRequests[2].reject(new Error("fixture failure")));
+    await expect(page.locator(".jhs-related-load-more")).toHaveText("加载失败，请重试");
+    await page.locator(".jhs-related-load-more").click();
+    await page.evaluate(()=>window.relatedRequests[3].resolve([{id:"last",name:"last"}]));
+    await expect(page.locator(".jhs-related-item")).toHaveCount(21);
+    expect(await page.evaluate(()=>window.relatedRequests.map(r=>r.page))).toEqual([1,1,2,2]);
 });
 
 test("provider disabled while choosing cannot submit", async ({page,context})=>{
