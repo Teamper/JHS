@@ -1,6 +1,6 @@
 // @ts-check
 
-import { _, d, g, h, k, l, m, p, r, v, y } from "../../core/constants.js";
+import { _, d, g, h, k, l, m, p, r, v, y, escapeHtml } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
@@ -187,7 +187,7 @@ export class CoverButtonPlugin extends BasePlugin {
                         await this.getRuntimeService("state").patch(i, { [flag]: !0 }, { type: "list-card-state", record: { carNum: i, url: s, names: n, publishTime: o, fc2Source } }), show.ok("操作成功");
                     } catch (r) { clog.error("保存操作失败:", r), show.error("操作失败"); }
                 };
-                n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? void r(h) : n.hasClass("hasDownBtn") ? void r(g) : n.hasClass("hasWatchBtn") && void r(p), this.closeCardMenus();
+                n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${escapeHtml(i)}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? void r(h) : n.hasClass("hasDownBtn") ? void r(g) : n.hasClass("hasWatchBtn") && void r(p), this.closeCardMenus();
             } catch (t) { clog.error("按钮点击处理失败:", t); }
         }));
         const settings = this.getRuntimeService("settings").snapshot(), movie = this.getRuntimeService("movie"), n = movie.externalSiteOrigin("missAvBtn", settings), a = movie.externalSiteOrigin("jableBtn", settings), i = movie.externalSiteOrigin("avgleBtn", settings), s = movie.providerOrigin("av123") || "";

@@ -1,4 +1,4 @@
-import { _, i, l, normalizeCarNum, r } from "../../core/constants.js";
+import { _, i, l, normalizeCarNum, r, escapeHtml } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { buildFallbackCarUrl, parseCarNumberText } from "../../core/feature-helpers.js";
 import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
@@ -634,7 +634,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 }
             });
             node.on("click", ".jhs-source-test", event => this.testSource(event.currentTarget, source.baseUrl || source.searchUrlTemplate?.replace("{keyword}", "test"), { custom, source }));
-            custom && node.on("click", ".jhs-source-edit", (() => this.openSourceDialog(source, root))).on("click", ".jhs-source-delete", (event => utils.q(event, `确认删除来源「${source.name}」？`, (async () => {
+            custom && node.on("click", ".jhs-source-edit", (() => this.openSourceDialog(source, root))).on("click", ".jhs-source-delete", (event => utils.q(event, `确认删除来源「${escapeHtml(source.name)}」？`, (async () => {
                 try {
                     await this.resourceSettings.updateArray("customMagnetSources", (list) => list.filter((item => item.id !== source.id)));
                     this.resourceState.custom = await this.resourceSettings.getMagnetSources();
@@ -658,7 +658,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         if (!list.length) host.append('<p class="jhs-setting-help">暂无规则</p>');
         list.forEach((rule => {
             const node = $('<article class="jhs-card"></article>').append($("<strong></strong>").text(rule.name), $("<p></p>").text(`${"regex" === rule.type ? "正则" : "包含"}：${rule.pattern}${"tag" === kind ? ` · 权重 ${Number(rule.weight) >= 0 ? "+" : ""}${rule.weight || 0}` : ` · ${"hide" === rule.action ? "隐藏" : `降权 ${rule.penalty || -20}`}`}`), '<div class="jhs-toolbar"><button class="jhs-btn jhs-rule-edit">编辑</button><button class="jhs-btn jhs-btn--danger jhs-rule-delete">删除</button></div>');
-            node.on("click", ".jhs-rule-edit", (() => this.openRuleDialog(kind, rule, root))).on("click", ".jhs-rule-delete", (event => utils.q(event, `确认删除规则「${rule.name}」？`, (async () => {
+            node.on("click", ".jhs-rule-edit", (() => this.openRuleDialog(kind, rule, root))).on("click", ".jhs-rule-delete", (event => utils.q(event, `确认删除规则「${escapeHtml(rule.name)}」？`, (async () => {
                 try {
                     await this.resourceSettings.updateArray("tag" === kind ? "magnetTagRules" : "magnetFilterRules", (list) => list.filter((item => item.id !== rule.id)));
                     this.resourceState["tag" === kind ? "tags" : "filters"] = await this.resourceSettings.getArray("tag" === kind ? "magnetTagRules" : "magnetFilterRules");

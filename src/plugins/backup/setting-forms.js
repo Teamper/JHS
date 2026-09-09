@@ -1,6 +1,6 @@
 // @ts-check
 
-import { C, _, r } from "../../core/constants.js";
+import { C, _, r, escapeHtml } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { parseNumberSetting } from "../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
@@ -447,7 +447,7 @@ function addLabelTag(container, text, root) {
         event.stopPropagation(), event.preventDefault();
         const current = $(event.currentTarget);
         const keyword = current.closest(".keyword-label").attr("data-keyword").split(" ")[0];
-        utils.q(event, `是否移除屏蔽词  ${keyword}?`, (async () => {
+        utils.q(event, `是否移除屏蔽词  ${escapeHtml(keyword)}?`, (async () => {
             current.parent().remove();
             root.data(dirtyKey, true);
         }));

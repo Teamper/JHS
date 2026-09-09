@@ -681,7 +681,7 @@ export class ListPagePlugin extends BasePlugin {
                 e.preventDefault();
                 const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i, fc2Source} = this.findCarNumAndHref(t);
                 let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
-                s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `是否屏蔽番号 ${n}?`, (async () => {
+                s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `是否屏蔽番号 ${escapeHtml(n)}?`, (async () => {
                     try {
                         o || (o = await this.parseActressName(a)), await this.getRuntimeService("state").patch(n, { blocked: !0 }, { record: { carNum: n, url: a, names: o, publishTime: i, fc2Source } }), show.ok("操作成功");
                     } catch (s) { clog.error("屏蔽操作失败:", s), show.error("操作失败"); }

@@ -1,5 +1,6 @@
 // @ts-check
 
+import { escapeHtml } from "../../core/constants.js";
 import { createLatestSettingWriter } from "../settings/setting-binding-controller.js";
 import { readReviewKeywords } from "../../core/review-keywords.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
@@ -156,7 +157,7 @@ export class ReviewPanel {
             if ((this.settings.snapshot().enableTitleSelectFilter ?? "yes") !== "yes") return;
             const text = String(window.getSelection()?.toString() || ""); if (!text) return;
             event.preventDefault();
-            await /** @type {any} */ (globalThis).utils.q(event, `是否将 '${text}' 加入评论区关键词?`, async () => { await this.saveKeyword(text); /** @type {any} */ (globalThis).show.ok("操作成功, 刷新页面后生效"); });
+            await /** @type {any} */ (globalThis).utils.q(event, `是否将 '${escapeHtml(text)}' 加入评论区关键词?`, async () => { await this.saveKeyword(text); /** @type {any} */ (globalThis).show.ok("操作成功, 刷新页面后生效"); });
         });
     }
 }

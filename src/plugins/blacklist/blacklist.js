@@ -1,6 +1,6 @@
 // @ts-check
 
-import { A, B, D, I, P, T, d, l, o, r } from "../../core/constants.js";
+import { A, B, D, I, P, T, d, l, o, r, escapeHtml } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { normalizeHttpUrl, parseNumberSetting, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { requestHostPage } from "../../core/host-page-request.js";
@@ -62,9 +62,9 @@ export class BlacklistPlugin extends BasePlugin {
                 role: "虚拟演员",
                 movieType: t,
                 blacklistUrl: e.toString()
-            }, i = `是否将分类 <span class="jhs-task-emphasis">${t}</span> 加入到黑名单中?`, n && (i = `分类 <span class="jhs-task-emphasis">${t}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
-        } else a = this.getActressPageInfo(), i = `是否将该演员 <span class="jhs-task-emphasis">${a.name}</span> 加入到黑名单中?`,
-        n && (i = `演员 <span class="jhs-task-emphasis">${a.name}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
+            }, i = `是否将分类 <span class="jhs-task-emphasis">${escapeHtml(t)}</span> 加入到黑名单中?`, n && (i = `分类 <span class="jhs-task-emphasis">${escapeHtml(t)}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
+        } else a = this.getActressPageInfo(), i = `是否将该演员 <span class="jhs-task-emphasis">${escapeHtml(a.name)}</span> 加入到黑名单中?`,
+        n && (i = `演员 <span class="jhs-task-emphasis">${escapeHtml(a.name)}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
         const {starId: s, name: r, allName: c, role: d, movieType: h, blacklistUrl: g} = a;
         if (o.includes("page") && !o.includes("page=1") && (i += "<br/> 注意: 当前页面非第一页, 屏蔽数据将从此页面开始"),
         l) {
@@ -325,7 +325,7 @@ export class BlacklistPlugin extends BasePlugin {
                         var t, n;
                         null == (t = e.getElement().querySelector(".delete-btn")) || t.addEventListener("click", ((/** @type {Event} */ e) => {
                             const t = a.name, n = a.starId;
-                            t ? n ? utils.q(e, `是否移除对 ${t} 的屏蔽?`, (async () => {
+                            t ? n ? utils.q(e, `是否移除对 ${escapeHtml(t)} 的屏蔽?`, (async () => {
                                 await storageManager.removeBlacklistCarList(n), await storageManager.deleteBlacklistItem(n),
                                 show.info("操作成功"), await this.reloadTable();
                             })) : show.error("获取starId失败") : show.error("获取名称失败");
