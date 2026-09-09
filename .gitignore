@@ -6,3 +6,5 @@ outputs/
 CLAUDE.md
 .zcode/
 *.bundle
+.playwright-cli/
+tests/browser/debug.log
