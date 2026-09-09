@@ -118,6 +118,8 @@ export async function bootstrapJhs() {
         [ "blacklist-rules-changed", "filter-rules-changed", "legacy-refresh" ].forEach((type => jhsEventBus.on(type, (() => storageManager._invalidateCache()))));
         jhsEventBus.on("car-state-changed", () => storageManager._invalidateCache(storageManager.car_list_key));
         patchLayerRuntime(vendors.layer, utils);
+        // 先退出整包 IIFE 调用栈，避免首个资源请求为整包同步生成调试源位置。
+        await Promise.resolve();
         importVendorStyles(utils);
         markPhase("pre-settings");
         const disabledMigration = await readDisabledPluginSettings(storageManager);
