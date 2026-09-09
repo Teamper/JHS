@@ -54,14 +54,14 @@ export function createAppContext(runtime) {
     const cache = new CacheService({ diagnostics, storage });
     const dialog = new DialogService(dialogPort);
     const styles = new StyleRegistry(stylePort);
-    const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
-    diagnostics.setNetworkController(http);
     const settingsRegistry = new SettingsRegistry();
     registerDefaultSettings(settingsRegistry);
     const settings = new SettingsService(storage, { afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     }, normalizers: settingsRegistry.normalizers() });
+    const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache, settings });
+    diagnostics.setNetworkController(http);
     const credential = new CredentialService(storage, runtime.localStorage);
     const webdav = new WebDavService(http, credential, settings);
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {

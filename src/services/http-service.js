@@ -66,12 +66,13 @@ export async function createRequestKey(options) {
 }
 
 export class HttpService {
-    /** @param {{request: (options: any) => Promise<any>}} port @param {import("./external-url-policy.js").ExternalUrlPolicy} urlPolicy @param {{diagnostics?: import("./diagnostics-service.js").DiagnosticsService, cache?: import("./cache-service.js").CacheService}} [options] */
+    /** @param {{request: (options: any) => Promise<any>}} port @param {import("./external-url-policy.js").ExternalUrlPolicy} urlPolicy @param {{diagnostics?: import("./diagnostics-service.js").DiagnosticsService, cache?: import("./cache-service.js").CacheService, settings?: {snapshot: () => Readonly<Record<string, unknown>>}}} [options] */
     constructor(port, urlPolicy, options = {}) {
         this.port = port;
         this.urlPolicy = urlPolicy;
         this.diagnostics = options.diagnostics ?? null;
         this.cache = options.cache ?? null;
+        this.settings = options.settings ?? null;
         /** @type {Map<string, {promise: Promise<any>, controller: AbortController, consumers: number}>} */
         this.inflight = new Map();
         /** @type {Map<string, {state: "closed" | "open" | "half-open", failCount: number, openTime: number, cooldownMs: number, threshold: number, probing: boolean}>} */
@@ -82,7 +83,17 @@ export class HttpService {
 
     /** @param {Record<string, any>} options @param {import("../core/lifecycle-scope.js").LifecycleScope} [scope] */
     async request(options, scope) {
+        scope?.assertActive();
         const method = String(options.method ?? "GET").toUpperCase();
+        if (this.settings) {
+            const settings = this.settings.snapshot();
+            options = { ...options,
+                timeout: options.timeout ?? Math.max(1000, Math.min(120000, Number(settings.httpTimeout) || 5000)),
+                retryCount: options.retryCount ?? (["GET", "HEAD"].includes(method) ? Math.max(1, Math.min(10, Math.trunc(Number(settings.httpRetryCount) || 3))) - 1 : 0),
+                circuitThreshold: options.circuitThreshold ?? Number(settings.circuitBreakerThreshold ?? 3),
+                circuitCooldownMs: options.circuitCooldownMs ?? Number(settings.circuitBreakerCooldown ?? 60000),
+            };
+        }
         const cacheScope = options.cacheScope ?? "none";
         if (method !== "GET" && cacheScope !== "none") throw new TypeError("Mutation requests cannot use generic cache/dedupe");
         const urlPolicy = /** @type {{trustClass: string, hosts?: string[], expectedOrigin?: string}} */ (options.urlPolicy);
@@ -90,14 +101,17 @@ export class HttpService {
         if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
         const cacheNamespace = String(options.cacheNamespace ?? options.providerId ?? "default");
         const requestKey = await createRequestKey({ ...options, method, url: initialUrl.href, cacheScope, cacheNamespace });
+        scope?.assertActive();
         const serializedKey = stableSerialize(requestKey);
         const cachePolicy = { scope: cacheScope, sessionScopeId: options.sessionScopeId };
         if (method === "GET" && cacheScope !== "none" && this.cache) {
             const cached = await this.cache.get(cacheNamespace, serializedKey, cachePolicy);
+            scope?.assertActive();
             if (cached.hit) return cached.value;
         }
         const cacheGeneration = cacheScope === "public" && this.cache ? this.cache.generation(cacheNamespace) : undefined;
-        let entry = this.inflight.get(serializedKey);
+        const inflightKey = JSON.stringify([serializedKey, cacheGeneration ?? null]);
+        let entry = this.inflight.get(inflightKey);
         if (!entry) {
             const controller = new AbortController();
             entry = { controller, consumers: 0, promise: Promise.resolve() };
@@ -109,26 +123,28 @@ export class HttpService {
                     return response;
                 })
                 .finally(() => {
-                    this.inflight.delete(serializedKey);
+                    if (this.inflight.get(inflightKey) === entry) this.inflight.delete(inflightKey);
                     this.updateDiagnostics();
                 });
-            this.inflight.set(serializedKey, entry);
+            this.inflight.set(inflightKey, entry);
         }
         return this.consume(entry, scope);
     }
 
     /** @param {Record<string, any>} options @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} urlPolicy */
     async executeUnderlying(options, urlPolicy) {
-        const domain = new URL(options.url).hostname, retryCount = Math.max(0, Math.min(5, Number(options.retryCount ?? 0) || 0)), acceptableStatuses = new Set((options.acceptableStatuses ?? []).map((/** @type {unknown} */ status) => Number(status)).filter(Number.isFinite));
+        const domain = new URL(options.url).hostname, retryCount = Math.max(0, Math.min(9, Math.trunc(Number(options.retryCount ?? 0) || 0))), acceptableStatuses = new Set((options.acceptableStatuses ?? []).map((/** @type {unknown} */ status) => Number(status)).filter(Number.isFinite));
+        const state = this.ensureCircuit(domain, options);
+        let ownsProbe = false;
         let finalError = null;
         for (let attempt = 0; attempt <= retryCount; attempt += 1) {
-            const blocked = this.checkCircuit(domain);
+            if (options.signal?.aborted) { finalError = new JhsError("ABORTED", "请求已取消", { source: options.providerId }); break; }
+            const blocked = ownsProbe ? null : this.checkCircuit(domain);
             if (blocked) {
                 finalError = new JhsError("CIRCUIT_OPEN", `站点 ${domain} 已熔断，${blocked.remaining}秒后重试`, { source: options.providerId, details: { domain, remainingSeconds: blocked.remaining } });
                 break;
             }
-            const state = this.ensureCircuit(domain, options);
-            if (state.state === "half-open") state.probing = true;
+            if (state.state === "half-open") state.probing = true, ownsProbe = true;
             try {
                 const response = await this.port.request(options);
                 this.urlPolicy.assertFinalUrl(response.finalUrl || options.url, urlPolicy);
@@ -157,6 +173,7 @@ export class HttpService {
             }
         }
         if (finalError && ["NETWORK_ERROR", "TIMEOUT", "CF_BLOCKED"].includes(finalError.code)) this.recordBreakerFailure(domain, options);
+        if (ownsProbe) state.probing = false;
         this.diagnostics?.recordError(finalError);
         throw finalError;
     }
@@ -224,7 +241,9 @@ export class HttpService {
             if (entry.consumers === 0 && !this.isSettled(entry)) entry.controller.abort();
             this.updateDiagnostics();
         } };
-        const removeFromScope = scope?.ownRequestConsumer(consumer);
+        let removeFromScope;
+        try { removeFromScope = scope?.ownRequestConsumer(consumer); }
+        catch (error) { consumer.release(); void entry.promise.catch(() => {}); throw error; }
         this.updateDiagnostics();
         let removeAbortListener = () => {};
         const result = scope ? Promise.race([
