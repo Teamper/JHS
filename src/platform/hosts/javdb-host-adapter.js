@@ -59,6 +59,18 @@ export class JavDbHostAdapter {
             site: "javdb", hostRoot, controller, observeRoot: controller, resourceRoot, resourceRegion,
             rows: () => [...resourceRoot.children].filter((row) => row.matches(".item")),
             sortSelect: controller.querySelector('select[data-action*="magnet-sort#sort"]'),
+            prepareLayout() {
+                resourceRoot.setAttribute("data-jhs-magnets", "true");
+                for (const row of resourceRoot.children) {
+                    if (!row.matches(".item")) continue;
+                    const info = row.querySelector(":scope > .magnet-name"), date = row.querySelector(":scope > .date"), actions = row.querySelector(":scope > .buttons");
+                    if (!info || !actions) continue;
+                    row.setAttribute("data-jhs-magnet-row", "true");
+                    info.setAttribute("data-jhs-magnet-part", "info");
+                    date?.setAttribute("data-jhs-magnet-part", "date");
+                    actions.setAttribute("data-jhs-magnet-part", "actions");
+                }
+            },
             getResource(/** @type {Element} */ row) { return row.querySelector('.copy-to-clipboard[data-clipboard-text^="magnet:"]')?.getAttribute("data-clipboard-text") || row.querySelector('.magnet-name a[href^="magnet:"]')?.getAttribute("href") || ""; },
             getActionTarget: (/** @type {Element} */ row) => row.querySelector(":scope > .buttons"),
             actionTargetRequiresWrapper: () => false,

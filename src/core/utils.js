@@ -1,5 +1,6 @@
 import { i, normalizeCarNum } from "./constants.js";
 import { JHS_Z_INDEX } from "./theme.js";
+import { LifecycleScope } from "./lifecycle-scope.js";
 
 export class Utils {
     constructor() {
@@ -56,6 +57,7 @@ export class Utils {
             insert: 0
         });
         destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
+        let releaseResize = () => {};
         layer.open({
             type: 2,
             title: t,
@@ -67,7 +69,21 @@ export class Utils {
             anim: -1,
             success: (e, t) => {
                 this.setupEscClose(t);
-            }
+                const resize = () => {
+                    const root = document.getElementById(`layui-layer${t}`);
+                    if (!root) return;
+                    const [width, height] = this.getDialogArea("workspace");
+                    layer.style(t, { width, height, left: `${Math.max(0, (window.innerWidth - parseFloat(width)) / 2)}px`, top: `${Math.max(0, (window.innerHeight - parseFloat(height)) / 2)}px` });
+                    const content = root.querySelector(".layui-layer-content"), frame = root.querySelector("iframe"), title = root.querySelector(".layui-layer-title");
+                    const contentHeight = `${Math.max(0, parseFloat(height) - (title?.getBoundingClientRect().height || 0))}px`;
+                    if (content instanceof HTMLElement) content.style.height = contentHeight;
+                    if (frame) frame.style.height = contentHeight;
+                };
+                const scope = new LifecycleScope(`workspace-resize-${t}`);
+                scope.listen(window, "resize", resize);
+                releaseResize = () => { scope.dispose(); this.releaseEscClose(t); };
+            },
+            end: () => releaseResize()
         });
     }
     _handleGlobalEscKey(e) {

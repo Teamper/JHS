@@ -141,6 +141,12 @@ export async function injectUserscriptRuntime(page, options = {}) {
         mountedLayers.delete(id);
       },
       closeAll() { [...mountedLayers.keys()].forEach((id) => this.close(id)); },
+      style(id, styles) {
+        const host = mountedLayers.get(id)?.host;
+        if (!host) return;
+        Object.assign(host.style, styles);
+        if (styles.left != null || styles.top != null) host.style.transform = "none";
+      },
       confirm(message, options = {}, yes, cancel) {
         const content = document.createElement("div");
         content.className = "layui-layer-dialog-content";
