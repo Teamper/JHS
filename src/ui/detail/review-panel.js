@@ -1,14 +1,14 @@
 // @ts-check
 
 import { createLatestSettingWriter } from "../settings/setting-binding-controller.js";
-
-const FILTER_KEY = "review_filter_keyword";
+import { readReviewKeywords } from "../../core/review-keywords.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 export class ReviewPanel {
     /** @param {{review: any, settings: any, storage: any, scope: () => Promise<any>}} dependencies */
     constructor(dependencies) { this.review = dependencies.review; this.settings = dependencies.settings; this.storage = dependencies.storage; this.scope = dependencies.scope; }
 
-    /** @param {string} movieId @param {any} target @param {{ownedSection?: any, isActive?: () => boolean}} [options] */
+    /** @param {string} movieId @param {any} target @param {{ownedSection?: any, isActive?: () => boolean, ownCleanup?: (cleanup: () => void) => unknown}} [options] */
     async show(movieId, target, options = {}) {
         const jq = /** @type {any} */ (globalThis).$, isActive = options.isActive ?? (() => true);
         if (!isActive() || !target?.length) return jq();
@@ -17,18 +17,32 @@ export class ReviewPanel {
         const panel = jq('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
         const header = jq('<header class="jhs-panel-header"><h3>评论</h3></header>');
         const toggle = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
-        const state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1, isActive };
+        const parentScope = await this.scope(), panelScope = new LifecycleScope(`reviews:${movieId}`);
+        if (!isActive() || parentScope?.disposed) return jq();
+        const releaseParent = parentScope?.addCleanup?.(() => panelScope.dispose());
+        options.ownCleanup?.(() => { panelScope.dispose(); releaseParent?.(); });
+        const state = { movieId, panel, panelScope, floorIndex: 1, loaded: false, loading: false, page: 1, enabled: false, generation: 0, isActive: () => !panelScope.disposed && isActive(), requestScope: /** @type {LifecycleScope | null} */ (null) };
         header.append(toggle);
         if (options.ownedSection) options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle); else panel.append(header);
         panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>');
         target.append(panel); this.bindFilter(panel);
         const enabled = (this.settings.snapshot().enableLoadReview ?? "yes") === "yes";
-        this.updateToggle(toggle, enabled);
-        const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadReview", fallback: "yes", apply: (value) => {
+        const applyExpanded = (/** @type {unknown} */ value) => {
+            if (!state.isActive()) return;
             const next = value === "yes";
+            if (state.enabled !== next) {
+                state.enabled = next; state.generation++;
+                if (!next) { state.requestScope?.dispose(); state.loading = false; }
+            }
             this.updateToggle(toggle, next);
             panel.find(".jhs-review-container, .jhs-review-footer").toggle(next);
-        }, onError: (error) => {
+            panel.find(".jhs-review-load-more").prop("disabled", false).text("加载更多评论");
+            if (next && !state.loaded && !state.loading) return this.fetch(state);
+        };
+        if (this.settings.addEventListener) panelScope.listen(this.settings, "settings.changed", (/** @type {any} */ event) => {
+            if (event.detail?.names?.includes("enableLoadReview")) void applyExpanded(this.settings.snapshot().enableLoadReview ?? "yes");
+        });
+        const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadReview", fallback: "yes", apply: (value) => { void applyExpanded(value); }, onError: (error) => {
             /** @type {any} */ (globalThis).clog?.error("评论面板展开设置保存失败，已恢复", error);
             /** @type {any} */ (globalThis).show?.error?.("评论面板展开设置保存失败，已恢复原设置");
         } });
@@ -36,10 +50,10 @@ export class ReviewPanel {
             event.preventDefault(); event.stopPropagation();
             const expanded = toggle.find(".toggle-text").text() === "展开";
             const desired = expanded ? "yes" : "no";
-            if (expanded && !state.loaded && !state.loading) void this.fetch(state);
             void writeExpanded(desired);
         });
-        if (enabled) await this.fetch(state); else panel.find(".jhs-review-container, .jhs-review-footer").hide();
+        panelScope.addCleanup(() => { state.requestScope?.dispose(); toggle.off("click"); panel.off("contextmenu.jhsReviewFilter"); });
+        await applyExpanded(enabled ? "yes" : "no");
         return panel;
     }
 
@@ -48,29 +62,32 @@ export class ReviewPanel {
 
     /** @param {any} state */
     async fetch(state) {
-        if (state.loading || !state.isActive()) return;
+        if (state.loading || !state.enabled || !state.isActive()) return;
         const jq = /** @type {any} */ (globalThis).$, container = state.panel.find(".jhs-review-container"), footer = state.panel.find(".jhs-review-footer");
         state.loading = true; container.empty().append(jq('<div class="jhs-panel-state"></div>').text("获取评论中...")); footer.empty();
-        const pageSize = Number(this.settings.snapshot().reviewCount) || 20; let scope;
+        const pageSize = Number(this.settings.snapshot().reviewCount) || 20, generation = state.generation;
+        const scope = new LifecycleScope(`reviews:${state.movieId}:page:1`), release = state.panelScope.addCleanup(() => scope.dispose());
+        state.requestScope = scope;
         try {
-            scope = await this.scope();
             const reviews = await this.review.list({ movieId: state.movieId }, { page: 1, limit: pageSize, scope });
-            if (!state.isActive() || scope?.signal?.aborted) return;
+            if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
+            const keywords = await this.getKeywords();
+            if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
             state.loading = false; state.loaded = true; container.empty();
             if (!reviews.length) return void container.append(jq('<div class="jhs-panel-state"></div>').text("无评论"));
-            const keywords = await this.getKeywords(); await this.display(state, reviews, container, keywords);
+            await this.display(state, reviews, container, keywords);
             if (reviews.length === pageSize) this.bindLoadMore(state, pageSize, keywords, container, footer); else footer.append(jq('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
         } catch (error) {
-            state.loading = false;
+            if (generation === state.generation) state.loading = false;
             if (!state.isActive() || scope?.signal?.aborted) return;
             /** @type {any} */ (globalThis).clog?.error("获取评论失败:", error);
             this.renderRetry(container, "获取评论失败", () => void this.fetch(state));
-        }
+        } finally { release(); if (state.requestScope === scope) state.requestScope = null; }
     }
 
-    async getKeywords() { const value = await this.storage.get(FILTER_KEY); return Array.isArray(value) ? value.map(String) : []; }
+    async getKeywords() { return readReviewKeywords(this.storage); }
     /** @param {string} text */
-    async saveKeyword(text) { const values = await this.getKeywords(); if (!values.includes(text)) await this.storage.set(FILTER_KEY, [...values, text]); }
+    async saveKeyword(text) { await readReviewKeywords(this.storage, text); }
 
     /** @param {any} container @param {string} message @param {() => void} retry */
     renderRetry(container, message, retry) {
@@ -83,17 +100,18 @@ export class ReviewPanel {
         const jq = /** @type {any} */ (globalThis).$, button = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = jq('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
         footer.empty().append(button, end);
         button.on("click", async () => {
-            const nextPage = state.page + 1; let scope; button.text("加载中...").prop("disabled", true);
+            if (!state.enabled || !state.isActive() || state.loading) return;
+            const nextPage = state.page + 1, generation = state.generation, scope = new LifecycleScope(`reviews:${state.movieId}:page:${nextPage}`), release = state.panelScope.addCleanup(() => scope.dispose());
+            state.requestScope = scope; state.loading = true; button.text("加载中...").prop("disabled", true);
             try {
-                scope = await this.scope();
                 const reviews = await this.review.list({ movieId: state.movieId }, { page: nextPage, limit: pageSize, scope });
-                if (!state.isActive() || scope?.signal?.aborted) return;
+                if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
                 state.page = nextPage; await this.display(state, reviews, container, keywords);
                 if (reviews.length < pageSize) button.remove(), end.show(); else button.text("加载更多评论").prop("disabled", false);
             } catch (error) {
                 if (!state.isActive() || scope?.signal?.aborted) return;
                 /** @type {any} */ (globalThis).clog?.error("加载更多评论失败:", error); button.text("加载失败，请重试").prop("disabled", false);
-            }
+            } finally { release(); if (generation === state.generation) state.loading = false; if (state.requestScope === scope) state.requestScope = null; }
         });
     }
 

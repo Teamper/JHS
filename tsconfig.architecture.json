@@ -28,6 +28,7 @@
     "src/core/javdb-api.js",
     "src/core/legacy-plugin-contributions.js",
     "src/core/lifecycle-scope.js",
+    "src/core/review-keywords.js",
     "src/core/list-item-reader.js",
     "src/core/magnet-quality.js",
     "src/core/migration.js",

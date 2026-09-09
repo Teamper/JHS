@@ -180,6 +180,7 @@ export async function bootstrapJhs() {
         await context.registries.features.start();
         markPhase("feature-runtime");
         await runDataMigrations(storageManager);
+        await storageManager.getReviewFilterKeywordList();
         await stateService.recoverPendingTransaction();
         markPhase("data-prepare");
         await Promise.all([pluginManager.processCss(), Promise.resolve(applyThemeMode(context.services.settings.snapshot().themeMode))]);

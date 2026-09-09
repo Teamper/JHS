@@ -6,6 +6,8 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 import { createLatestSettingWriter } from "../src/ui/settings/setting-binding-controller.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { readReviewKeywords } from "../src/core/review-keywords.js";
 
 function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "yes", enableTitleSelectFilter: "yes" } } = {}) {
     const dom = new JSDOM('<div id="review-a"></div><div id="review-b"></div><div id="related-a"></div><div id="related-b"></div>', { url: "https://javdb.com/v/a" }), $ = jqueryFactory(dom.window);
@@ -17,7 +19,7 @@ function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "
         document: dom.window.document, window: dom.window, $, BasePlugin: class { getBean() { return null; } getRuntimeService(name) { return runtimeServices[name]; } }, _: "yes", C: "no", r: false, l: false,
         storageManager: { getSetting: vi.fn(async (key, fallback) => null == key ? settings : "reviewCount" === key ? 20 : settings[key] ?? fallback), getReviewFilterKeywordList: vi.fn(async () => []), saveReviewFilterKeyword: vi.fn(), saveSettingItem: vi.fn() },
         utils: { formatDate: value => value, q: (event, message, callback) => callback() }, show: { error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn() }, escapeHtml: String,
-        i: (target, key, value) => (target[key] = value), createLatestSettingWriter
+        i: (target, key, value) => (target[key] = value), createLatestSettingWriter, LifecycleScope, readReviewKeywords
     });
     vm.runInContext(readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8"), context);
     vm.runInContext(readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8"), context);

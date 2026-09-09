@@ -15,12 +15,22 @@ export class ReviewPlugin extends BasePlugin {
             await this.showReview(movieId, this.getHostedSlot("reviews"));
         }
         if (l) {
-            if (this.getRuntimeService("settings").snapshot().enableLoadReview === "no") return;
             const carNumber = this.getPageInfo().carNum;
             if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
-            const scope = await this.getRuntimeService("scope")();
-            const movieRef = await this.getRuntimeService("movie").resolve({ carNum: carNumber }, { scope });
-            movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"));
+            const scope = await this.getRuntimeService("scope")(), settings = this.getRuntimeService("settings");
+            let mounting = false;
+            const mount = async () => {
+                if (mounting || scope?.disposed || settings.snapshot().enableLoadReview === "no") return;
+                mounting = true;
+                try {
+                    const movieRef = await this.getRuntimeService("movie").resolve({ carNum: carNumber }, { scope });
+                    if (movieRef?.movieId && !scope?.disposed && settings.snapshot().enableLoadReview !== "no") await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"));
+                } finally { mounting = false; }
+            };
+            scope?.listen?.(settings, "settings.changed", (/** @type {any} */ event) => {
+                if (event.detail?.names?.includes("enableLoadReview")) void mount().catch(error => clog.error("加载评论失败", error));
+            });
+            await mount();
         }
     }
     getHostedSlot(/** @type {string} */ name) {

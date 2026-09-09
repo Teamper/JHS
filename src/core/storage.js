@@ -2,6 +2,7 @@ import { A, B, D, P, a, d, escapeHtml, g, h, i, normalizeCarNum, p, s } from "./
 import { IMPORTABLE_DATA_KEYS, PORTABLE_DATA_KEYS, hasPortableUserData, mergePortableSettings, runDataMigrations, selectPortableSettings, validatePortableData } from "./migration.js";
 import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
+import { readReviewKeywords } from "./review-keywords.js";
 
 let e = new WeakSet, t = async function(e, t, n) {
     let a;
@@ -400,7 +401,7 @@ export class StorageManager {
         return this._readCached("cacheTitleFilterKeyword", this.filter_keyword_title_key, []);
     }
     async getReviewFilterKeywordList() {
-        return await this.forage.getItem(this.filter_keyword_review_key) || [];
+        return readReviewKeywords({ get: key => this.forage.getItem(key), set: (key, value) => this._setItemAndInvalidate(key, value), remove: key => this.forage.removeItem(key) });
     }
     async saveReviewFilterKeyword(n) {
         return s(this, e, t).call(this, n, this.filter_keyword_review_key, "评论关键词");
@@ -638,9 +639,7 @@ export class StorageManager {
         t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.blacklist_car_list_key, t)),
         await this.forage.removeItem(e), e = "title_filter_keyword", t = await this.forage.getItem(e) || [],
         t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.filter_keyword_title_key, t)),
-        await this.forage.removeItem(e), e = "review_filter_keyword", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.filter_keyword_review_key, t)),
-        await this.forage.removeItem(e), e = "highlightedTags", t = await this.forage.getItem(e) || [],
+        await this.forage.removeItem(e), await this.getReviewFilterKeywordList(), e = "highlightedTags", t = await this.forage.getItem(e) || [],
         t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.highlighted_tags_key, t)),
         await this.forage.removeItem(e);
     }
