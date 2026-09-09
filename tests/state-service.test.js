@@ -31,6 +31,12 @@ function createHarness(initial = {}) {
 }
 
 describe("StateService durable transactions", () => {
+    it("keeps a persisted offline success when broadcasting the history update fails", async () => {
+        const {service,eventBus,data}=createHarness();
+        eventBus.emit.mockRejectedValueOnce(new Error("channel closed"));
+        await expect(service.appendOfflineHistory({id:"submitted-1",carNum:"ABC-1",status:"submitted"})).resolves.toMatchObject({id:"submitted-1",status:"submitted"});
+        expect(data.get("offline_history")).toHaveLength(1);
+    });
     it.each(["mutation_journal", "car_list", "favorite_actresses", "new_video_decisions", "activity_log", "journal-clear"])("recovers an undo failure at %s without losing retry eligibility", async stage => {
         const { service, storage, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }], new_video_decisions: { "ABC-1": { action: "snoozed" } } });
         const result = await service.patch("ABC-1", { favorite: true }), before = structuredClone(Object.fromEntries(data));

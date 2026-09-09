@@ -19,7 +19,7 @@ function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
         open: vi.fn(options => { options.content.appendTo("body"); return 7; }),
     };
     const stateService = { appendOfflineHistory: history, patch: vi.fn() }, closePage = vi.fn().mockResolvedValue(true), getOwningLayerIndex = vi.fn(() => 9);
-    class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } }
+    class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : name === "settings" ? { snapshot: () => ({ needClosePage: "yes" }) } : null; } }
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, $, BasePlugin, Map, Array, Date, TypeError,
         r: true, l: false, setTimeout, clearTimeout,
@@ -66,6 +66,58 @@ describe("offline provider registry", () => {
 });
 
 describe("unified offline button state", () => {
+    it("releases the button when busy-state initialization throws", async () => {
+        const submit=vi.fn(), {plugin,button}=loadOfflinePlugin(submit);
+        vi.spyOn(button,"attr").mockImplementationOnce(()=>{throw new Error("button failed");});
+        await plugin.submitResource({},"magnet:?xt=init",button,{carNum:"ABC-1"});
+        expect(button.hasClass("loading")).toBe(false); expect(submit).not.toHaveBeenCalled();
+    });
+    it("settles a provider chooser closed through its end callback", async () => {
+        const {plugin,layer}=loadOfflinePlugin(vi.fn());
+        const candidates=[{provider:{id:"123",name:"123"},availability:{authState:"ready"}},{provider:{id:"115",name:"115"},availability:{authState:"ready"}}];
+        const pending=plugin.chooseCandidate({},candidates);
+        await vi.waitFor(()=>expect(layer.open).toHaveBeenCalledOnce());
+        layer.open.mock.calls[0][0].end(); await expect(pending).resolves.toBeNull();
+    });
+    it("releases ownership when availability fails and allows an immediate retry", async () => {
+        const submit = vi.fn(async () => {}), { plugin,button } = loadOfflinePlugin(submit);
+        plugin.registry.getCandidates.mockRejectedValueOnce(new Error("availability failed"));
+        await plugin.submitResource({}, "magnet:?xt=retry", button, {carNum:"ABC-1"});
+        expect(button.hasClass("loading")).toBe(false);
+        await plugin.submitResource({}, "magnet:?xt=retry", button, {carNum:"ABC-1"});
+        expect(submit).toHaveBeenCalledOnce();
+    });
+    it("does not submit after the owning scope or button disappears during availability", async () => {
+        for (const mode of ["scope", "button"]) {
+            const submit = vi.fn(), {plugin,button} = loadOfflinePlugin(submit);
+            let release; const candidates = await plugin.registry.getCandidates();
+            plugin.lifecycleScope = {disposed:false};
+            plugin.registry.getCandidates = () => new Promise(resolve=>{release=resolve;});
+            const pending = plugin.submitResource({}, "magnet:?xt=closed", button, {carNum:"ABC-1"});
+            if (mode === "scope") plugin.lifecycleScope.disposed = true; else button.remove();
+            release(candidates); await pending;
+            expect(submit).not.toHaveBeenCalled(); expect(button.hasClass("loading")).toBe(false);
+        }
+    });
+    it("releases a cancelled provider choice without submitting", async () => {
+        const submit = vi.fn(), {plugin,button} = loadOfflinePlugin(submit);
+        plugin.chooseCandidate = async()=>null;
+        await plugin.submitResource({}, "magnet:?xt=cancel", button, {carNum:"ABC-1"});
+        expect(submit).not.toHaveBeenCalled(); expect(button.hasClass("loading")).toBe(false);
+    });
+    it("keeps cloud success when local history fails and never records a false failure", async () => {
+        const submit = vi.fn(async()=>{}), history = vi.fn(async()=>{throw new Error("disk");});
+        const {plugin,button,context}=loadOfflinePlugin(submit,history);
+        await plugin.submitResource({}, "magnet:?xt=success", button, {carNum:"ABC-1"});
+        expect(submit).toHaveBeenCalledOnce(); expect(history).toHaveBeenCalledOnce();
+        expect(history.mock.calls[0][0].status).toBe("submitted"); expect(button.text()).toBe("已提交");
+        expect(context.show.error).toHaveBeenCalledWith(expect.stringContaining("任务已创建"));
+    });
+    it("reports the provider failure even when recording that failure also fails", async () => {
+        const {plugin,button,context}=loadOfflinePlugin(vi.fn(async()=>{throw new Error("cloud failure");}),vi.fn(async()=>{throw new Error("disk failure");}));
+        await expect(plugin.submitResource({}, "magnet:?xt=failed", button, {carNum:"ABC-1"})).resolves.toBeUndefined();
+        expect(context.show.error).toHaveBeenCalledWith(expect.stringContaining("cloud failure")); expect(button.hasClass("loading")).toBe(false);
+    });
     it("closes the owning detail surface after confirming the downloaded state", async () => {
         const { button, closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
         context.utils.q.mockImplementation((_event, _message, confirm) => confirm());
@@ -142,18 +194,20 @@ describe("unified offline button state", () => {
         } finally { vi.useRealTimers(); }
     });
 
-    it("restores the original state immediately after a failed submission", async () => {
+    it("releases the operation after recording a failed submission", async () => {
         let resolveHistory;
         const history = vi.fn(() => new Promise(resolve => { resolveHistory = resolve; }));
         const { button, plugin } = loadOfflinePlugin(vi.fn(async () => { throw new Error("failed"); }), history);
         const pending = plugin.submitResource({}, "magnet:?xt=failed", button, { carNum: "ABC-1" });
         while (!history.mock.calls.length) await Promise.resolve();
-        expect(button.text()).toBe("离线");
+        expect(button.text()).toBe("提交中");
         expect(button.prop("disabled")).toBe(false);
-        expect(button.hasClass("loading")).toBe(false);
-        expect(button.attr("aria-busy")).toBeUndefined();
+        expect(button.hasClass("loading")).toBe(true);
+        expect(button.attr("aria-busy")).toBe("true");
         resolveHistory();
         await pending;
+        expect(button.text()).toBe("离线");
+        expect(button.hasClass("loading")).toBe(false);
         expect(history).toHaveBeenCalledOnce();
         expect(history.mock.calls[0][0].status).toBe("failed");
     });

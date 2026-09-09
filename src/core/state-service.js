@@ -119,7 +119,9 @@ export class StateService {
     async appendOfflineHistory(record) {
         return this._withLock(async () => {
             const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || new Date().toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
-            history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history), await this.eventBus.emit("offline-history-changed", { ids: [ item.id ] });
+            history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history);
+            try { await this.eventBus.emit("offline-history-changed", { ids: [ item.id ] }); }
+            catch (error) { globalThis.console?.warn("[JHS] 离线历史已保存，通知失败"); }
             return item;
         });
     }

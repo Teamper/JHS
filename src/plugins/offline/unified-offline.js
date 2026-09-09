@@ -68,6 +68,7 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     async handle() {
         if (!(r || l)) return;
         const scope = await this.getRuntimeService("scope")();
+        this.lifecycleScope = scope;
         this.registerProviders(scope), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
         if (window.isDetailPage) this.injectNativeButtons(), jhsEventBus && scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
@@ -106,8 +107,8 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         return new Promise((resolve => {
             const dialog = this.getRuntimeService("dialog");
             const content = $('<div class="jhs-form-dialog"><p>选择离线服务</p><div class="jhs-toolbar"></div></div>'), toolbar = content.find(".jhs-toolbar");
-            candidates.forEach((candidate => toolbar.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").text(`${candidate.provider.name} · ${"ready" === candidate.availability.authState ? "已就绪" : "状态未知"}`).on("click", (() => { dialog.close(index), resolve(candidate); })))));
-            const index = dialog.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: () => resolve(null) });
+            candidates.forEach((candidate => toolbar.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").text(`${candidate.provider.name} · ${"ready" === candidate.availability.authState ? "已就绪" : "状态未知"}`).on("click", (() => { resolve(candidate), dialog.close(index); })))));
+            const index = dialog.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: () => resolve(null), end: () => resolve(null) });
         }));
     }
     /** Resolve the movie identity from the action's owning surface. */
@@ -137,6 +138,8 @@ export class UnifiedOfflinePlugin extends BasePlugin {
             return !1;
         }
         try {
+            const preference = this.getRuntimeService("settings").snapshot().needClosePage ?? "yes";
+            if (preference !== "yes" && preference !== true) return !0;
             const closed = await utils.closePage(closeContext);
             if (!closed) throw new Error("未找到可关闭的详情页");
             return !0;
@@ -147,28 +150,51 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     }
     /** @param {unknown} event @param {string} resource @param {JQueryHandle} [button] @param {any} [context] @param {string | null} [retryOf] @param {{ forceAvailabilityRefresh?: boolean, preferredProviderId?: string }} [options] */
     async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
-        if (button.hasClass("loading")) return;
-        const candidates = await this.registry.getCandidates(resource, { force: !!options.forceAvailabilityRefresh });
-        if (!candidates.length) return void show.error("没有已启用且支持该资源的离线服务，请检查授权与设置");
-        const selected = candidates.find((candidate => candidate.provider.id === options.preferredProviderId)) || await this.chooseCandidate(event, candidates);
-        if (!selected) return;
-        const info = this.getVideoInfo(button, context), detailRoot = button[0] || /** @type {any} */ (event)?.currentTarget || null;
-        if (!info) return void show.error("无法确定影片身份，未执行离线操作");
-        const closeContext = { root: detailRoot, layerIndex: utils.getOwningLayerIndex({ root: detailRoot }) };
-        const original = button.text(), restoreButton = () => {
-            if (!button[0]?.isConnected) return;
+        if (this.lifecycleScope?.disposed || button.hasClass("loading")) return;
+        const original = button.text(), trigger = button[0] || /** @type {any} */ (event)?.currentTarget;
+        const initiallyConnected = !!trigger?.isConnected;
+        const restoreButton = () => {
             button.removeClass("loading").removeAttr("aria-busy aria-disabled").text(original);
         };
-        let submitted = !1;
+        let submitted = false;
+        /** @type {OfflineCandidate | null} */ let selected = null;
+        /** @type {any} */ let info = null;
         try {
-            button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: !0, authState: "ready", reason: "最近提交成功" });
-            await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = !0,
-            button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (() => { void this.markDownloadedAndClose(info, closeContext); }));
+        button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中");
+        const candidates = await this.registry.getCandidates(resource, { force: !!options.forceAvailabilityRefresh });
+        if (!candidates.length) return void show.error("没有已启用且支持该资源的离线服务，请检查授权与设置");
+        if (this.lifecycleScope?.disposed || initiallyConnected && !trigger.isConnected) return;
+        selected = candidates.find((candidate => candidate.provider.id === options.preferredProviderId)) || await this.chooseCandidate(event, candidates);
+        if (!selected) return;
+        if (this.lifecycleScope?.disposed || initiallyConnected && !trigger.isConnected) return;
+        info = this.getVideoInfo(button, context);
+        const detailRoot = trigger || null;
+        if (!info) return void show.error("无法确定影片身份，未执行离线操作");
+        const closeContext = { root: detailRoot, layerIndex: utils.getOwningLayerIndex({ root: detailRoot }) };
+            button.text("提交中");
+            await selected.provider.submit(resource, info);
+            submitted = true;
+            this.registry.updateAvailability(selected.provider.id, { available: !0, authState: "ready", reason: "最近提交成功" });
+            try {
+                await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf });
+            } catch (error) {
+                clog.error("离线任务已创建，但本地记录保存失败", error);
+                show.error("任务已创建，但本地记录保存失败，请勿重复提交");
+            }
+            if (!initiallyConnected || trigger.isConnected) {
+                button.text("已提交");
+                show.ok(`${selected.provider.name} 离线任务已创建`);
+                utils.q(event, "是否将该作品标记为已下载？", (() => { void this.markDownloadedAndClose(info, closeContext); }));
+            }
         } catch (error) {
+            if (submitted) { clog.error("离线任务已创建，后续界面更新失败", error); return; }
             const errorRecord = /** @type {{ code?: string, message?: string }} */ (error), code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
-            [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });
-            restoreButton();
-            submitted || await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }), show.error(`${selected.provider.name} 离线失败：${message}`);
+            if (selected) {
+                [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });
+                try { await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }); }
+                catch (historyError) { clog.error("离线失败记录保存失败", historyError); }
+            }
+            show.error(`${selected?.provider.name || ""} 离线失败：${message}`);
         } finally { submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton(); }
     }
 }
