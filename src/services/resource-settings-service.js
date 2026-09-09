@@ -1,5 +1,6 @@
 // @ts-check
 
+import { parseBooleanSetting as parseBooleanSettingValue } from "../core/feature-helpers.js";
 import { MAGNET_SOURCE_IDS, validateCustomMagnetSource, validateHttpsBaseUrl } from "./magnet-source-registry.js";
 
 export const BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
@@ -25,14 +26,8 @@ export function buildCustomMagnetSource(/** @type {ResourceRecord} */ form, /** 
     return validateCustomMagnetSource(config);
 }
 
-/** Parse legacy boolean strings without the classic Boolean("false") trap. */
 /** @param {unknown} value @param {boolean} [fallback] */
-export function parseBooleanSetting(value, fallback = false) {
-    if (value == null) return fallback;
-    if (value === true || value === "true" || value === "yes" || value === 1 || value === "1") return true;
-    if (value === false || value === "false" || value === "no" || value === 0 || value === "0") return false;
-    return fallback;
-}
+export function parseBooleanSetting(value, fallback = false) { return parseBooleanSettingValue(value, fallback); }
 
 /** Parse finite numeric setting with optional bounds. */
 /** @param {unknown} value @param {number} fallback @param {{min?: number, max?: number}} [bounds] */

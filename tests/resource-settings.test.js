@@ -1,3 +1,4 @@
+import { parseBooleanSetting as parseBooleanSettingValue } from "../src/core/feature-helpers.js";
 import { ResourceSettingsService } from "../src/services/resource-settings-service.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
@@ -9,7 +10,7 @@ const registry = readTestFile(join(import.meta.dirname, "../src/services/magnet-
 const service = readTestFile(join(import.meta.dirname, "../src/services/resource-settings-service.js"), "utf8");
 function load(initial = {}) {
     const values = new Map(Object.entries(initial)), storage = { getSetting: vi.fn(async (key, fallback) => values.has(key) ? values.get(key) : fallback), saveSettingItem: vi.fn(async (key, value) => values.set(key, value)) };
-    const context = vm.createContext({ URL, storageManager: storage, Date });
+    const context = vm.createContext({ URL, storageManager: storage, Date, parseBooleanSettingValue });
     vm.runInContext(`${registry}\n${service}\nglobalThis.Service=ResourceSettingsService;globalThis.buildSource=buildCustomMagnetSource;globalThis.validateRule=validateRule;globalThis.BUILT_INS=BUILT_IN_MAGNET_SOURCES`, context);
     return { api: context, storage, values, instance: new context.Service(storage) };
 }

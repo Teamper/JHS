@@ -28,12 +28,32 @@ function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestOfflinePlugin=UnifiedOfflinePlugin;`, context);
-    const plugin = new context.TestOfflinePlugin(), provider = { id: "115", name: "115", submit };
+    const plugin = new context.TestOfflinePlugin(), provider = { id: "115", name: "115", isEnabled: async () => true, submit };
     plugin.registry = { getCandidates: vi.fn(async () => [ { provider, availability: { authState: "ready" } } ]), updateAvailability: vi.fn() };
     return { $, button: $("button"), closePage, context, history, layer, plugin, stateService };
 }
 
 describe("offline provider registry", () => {
+    it("explains disabled, unsupported and unauthenticated candidates without exposing credentials", async () => {
+        const Registry=loadRegistry(),registry=new Registry();
+        registry.register({id:"123",name:"123 云盘",capabilities:["magnet"],isEnabled:async()=>true,getAvailability:async()=>({available:false,authState:"token-missing",reason:"尚未同步 123 授权"}),submit(){}});
+        registry.register({id:"115",name:"115",capabilities:["magnet","ed2k"],isEnabled:async()=>false,getAvailability:vi.fn(),submit(){}});
+        expect(await registry.getCandidates("magnet:?xt=test")).toEqual([]);
+        expect(registry.getUnavailableReason()).toBe("123 云盘：尚未同步 123 授权；115：未启用");
+        await registry.getCandidates("ed2k://file");
+        expect(registry.getUnavailableReason()).toBe("123 云盘：不支持 ED2K；115：未启用");
+        registry.providers.delete("123");
+        await registry.getCandidates("magnet:?xt=test");
+        expect(registry.getUnavailableReason()).toBe("123 云盘：授权桥接插件未加载或已禁用；115：未启用");
+    });
+
+    it("refreshes rejected availability on a manual submission before giving up", async () => {
+        const submit=vi.fn(async()=>{}),{plugin,button}=loadOfflinePlugin(submit);
+        plugin.registry.getCandidates.mockImplementation(async(_resource,{force})=>force?[{provider:{id:"123",name:"123 云盘",isEnabled:async()=>true,submit},availability:{authState:"ready"}}]:[]);
+        await plugin.submitResource({},"magnet:?xt=test",button,{carNum:"ABC-123"});
+        expect(submit).toHaveBeenCalledOnce();
+        expect(plugin.registry.getCandidates).toHaveBeenLastCalledWith("magnet:?xt=test",{force:true});
+    });
     it("filters resources by enabled capability and availability", async () => {
         const Registry = loadRegistry(), registry = new Registry(), ready = vi.fn().mockResolvedValue({ available: true, authState: "ready" });
         registry.register({ id: "123", name: "123", capabilities: ["magnet"], isEnabled: async () => true, getAvailability: ready, submit() {} });
@@ -171,7 +191,7 @@ describe("unified offline button state", () => {
             const submit = vi.fn(() => new Promise(resolve => { resolveSubmit = resolve; }));
             const { button, history, plugin } = loadOfflinePlugin(submit);
             const pending = plugin.submitResource({}, "magnet:?xt=ok", button, { carNum: "ABC-1" });
-            while (!submit.mock.calls.length) await Promise.resolve();
+            await vi.waitFor(() => expect(submit).toHaveBeenCalled());
             expect(button.text()).toBe("提交中");
             expect(button.prop("disabled")).toBe(false);
             expect(button.attr("aria-busy")).toBe("true");
@@ -199,7 +219,7 @@ describe("unified offline button state", () => {
         const history = vi.fn(() => new Promise(resolve => { resolveHistory = resolve; }));
         const { button, plugin } = loadOfflinePlugin(vi.fn(async () => { throw new Error("failed"); }), history);
         const pending = plugin.submitResource({}, "magnet:?xt=failed", button, { carNum: "ABC-1" });
-        while (!history.mock.calls.length) await Promise.resolve();
+        await vi.waitFor(() => expect(history).toHaveBeenCalled());
         expect(button.text()).toBe("提交中");
         expect(button.prop("disabled")).toBe(false);
         expect(button.hasClass("loading")).toBe(true);

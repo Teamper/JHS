@@ -10,6 +10,15 @@ export async function mapLimit(items, concurrency = 4, mapper) {
     return results;
 }
 
+/** Parse legacy boolean strings without the classic Boolean("false") trap. */
+/** @param {unknown} value @param {boolean} [fallback] */
+export function parseBooleanSetting(value, fallback = false) {
+    if (value == null) return fallback;
+    if (value === true || value === "true" || value === "yes" || value === 1 || value === "1") return true;
+    if (value === false || value === "false" || value === "no" || value === 0 || value === "0") return false;
+    return fallback;
+}
+
 /** @param {unknown} value @param {number} fallback @param {{min?: number, max?: number}} [limits] */
 export function parseNumberSetting(value, fallback, { min = -Infinity, max = Infinity } = {}) {
     if (null == value || "" === String(value).trim()) return fallback;

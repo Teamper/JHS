@@ -8,6 +8,8 @@
  * write through the same SettingsService key. Feature toggles are "live":
  * changes apply immediately through the feature owner's mount/unmount/reconfigure.
  */
+import { parseBooleanSetting } from "../core/feature-helpers.js";
+
 /** @param {import("./settings-registry.js").SettingsRegistry} registry */
 export function registerDefaultSettings(registry) {
     const boolean = { type: "boolean", effect: "live" };
@@ -114,11 +116,11 @@ export function registerDefaultSettings(registry) {
     // ---- 云盘服务（与完整设置的云盘面板共用 Catalog / Binding） ----
     toggle("enable123Offline", "OfflineFeature", "123 云盘离线", {
         description: "支持 Magnet，需要先在 123 云盘页面同步授权。",
-        surfaces: ["full"], section: "cloud", defaultValue: yes,
+        surfaces: ["full"], section: "cloud", defaultValue: true, normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, false),
     });
     toggle("enable115Offline", "OfflineFeature", "115 离线下载", {
         description: "支持 Magnet 与 ED2K。",
-        surfaces: ["full"], section: "cloud", defaultValue: no,
+        surfaces: ["full"], section: "cloud", defaultValue: false, normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, false),
     });
     registry.register({
         key: "offlineProviderMode", owner: "OfflineFeature", label: "默认服务", description: "选择离线提交时优先使用的服务。",
@@ -128,11 +130,11 @@ export function registerDefaultSettings(registry) {
     });
     toggle("enable115Match", "OfflineFeature", "115 文件匹配", {
         description: "根据当前番号查找网盘中已存在的视频。",
-        surfaces: ["full"], section: "cloud", defaultValue: no,
+        surfaces: ["full"], section: "cloud", defaultValue: false, normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, false),
     });
     toggle("enable115LoginRedirect", "OfflineFeature", "未登录时提供登录入口", {
         description: "提交失败时显示 115 登录地址。",
-        surfaces: ["full"], section: "cloud", defaultValue: no,
+        surfaces: ["full"], section: "cloud", defaultValue: false, normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, false),
     });
     registry.register({
         key: "oneOneFiveConcurrency", owner: "OfflineFeature", label: "匹配并发数", description: "控制 115 文件匹配的并发请求数，范围 1–10。",

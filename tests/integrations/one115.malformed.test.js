@@ -13,3 +13,11 @@ it("normalizes duplicate and login-required offline responses", async () => {
         await expect(createOne115Adapter({ request }).submit("magnet:?xt=urn:btih:abc")).rejects.toMatchObject({ code });
     }
 });
+
+it.each([{}, [], "ok", { task_id: "unconfirmed" }, { state: null }])("rejects an unconfirmed 115 offline response %j", async payload => {
+    const request = vi.fn()
+        .mockResolvedValueOnce({ data: { sign: "s", time: "t", uid: 1 } })
+        .mockResolvedValueOnce({ data: JSON.stringify(payload) });
+    await expect(createOne115Adapter({ request }).submit("magnet:?xt=urn:btih:abc")).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    expect(request).toHaveBeenCalledTimes(2);
+});

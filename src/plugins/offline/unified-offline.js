@@ -1,5 +1,7 @@
 // @ts-check
 
+import { parseBooleanSetting } from "../../core/feature-helpers.js";
+
 import { l, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
@@ -9,7 +11,7 @@ import { getDetailResourceAdapter } from "../../ui/detail/detail-resource-adapte
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
 /** @typedef {{ available: boolean, authState: string, reason: string }} ProviderAvailability */
-/** @typedef {{ id: string, name: string, capabilities: string[], isEnabled: () => boolean | Promise<boolean>, getAvailability: (options: { force: boolean }) => Promise<ProviderAvailability>, submit: (resource: string, info?: any) => Promise<unknown>, openUrl?: () => string, retryPolicy?: { automaticAttempts: number } }} OfflineProvider */
+/** @typedef {{ id: string, name: string, capabilities: string[], isEnabled: () => boolean | Promise<boolean>, getAvailability: (options: { force: boolean }) => Promise<ProviderAvailability>, submit: (resource: string, info?: any, options?: {isActive?: () => boolean}) => Promise<unknown>, openUrl?: () => string, retryPolicy?: { automaticAttempts: number } }} OfflineProvider */
 /** @typedef {{ provider: OfflineProvider, availability: ProviderAvailability }} OfflineCandidate */
 /** @typedef {{ preventDefault: () => void, stopPropagation: () => void, currentTarget: EventTarget }} JQueryClickEvent */
 
@@ -32,6 +34,7 @@ class OfflineProviderRegistry {
     constructor() {
         /** @type {Map<string, OfflineProvider>} */ this.providers = new Map;
         /** @type {Map<string, { time: number, value: ProviderAvailability }>} */ this.availabilityCache = new Map;
+        /** @type {string[]} */ this.unavailableReasons = [];
         this.positiveTtl = 3e5, this.negativeTtl = 2e4;
     }
     /** @param {OfflineProvider} provider */
@@ -42,12 +45,21 @@ class OfflineProviderRegistry {
     /** @param {string} resource @param {{ force?: boolean }} [options] */
     async getCandidates(resource, { force = !1 } = {}) {
         const type = /^ed2k:/i.test(resource) ? "ed2k" : /^magnet:/i.test(resource) ? "magnet" : "unknown", candidates = /** @type {OfflineCandidate[]} */ ([]);
+        const reasons = /** @type {string[]} */ ([]);
         for (const provider of this.providers.values()) {
-            if (!provider.capabilities.includes(type) || !await provider.isEnabled()) continue;
+            if (!provider.capabilities.includes(type)) { reasons.push(`${provider.name}：不支持 ${type === "unknown" ? "该资源格式" : type.toUpperCase()}`); continue; }
+            if (!await provider.isEnabled()) { reasons.push(`${provider.name}：未启用`); continue; }
             const availability = await this.getAvailability(provider, force);
-            [ "ready", "unknown" ].includes(availability.authState) && candidates.push({ provider, availability });
+            if ([ "ready", "unknown" ].includes(availability.authState)) candidates.push({ provider, availability });
+            else reasons.push(`${provider.name}：${availability.reason || "授权不可用"}`);
         }
+        this.unavailableReasons = reasons;
         return candidates;
+    }
+    getUnavailableReason() {
+        const reasons = [...this.unavailableReasons];
+        if (!this.providers.has("123")) reasons.unshift("123 云盘：授权桥接插件未加载或已禁用");
+        return reasons.join("；") || "离线服务插件未加载或已禁用";
     }
     /** @param {OfflineProvider} provider @param {boolean} [force] */
     async getAvailability(provider, force = !1) {
@@ -75,8 +87,14 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     /** @param {any} scope */
     registerProviders(scope) {
         const one23 = this.getOptionalDependency("OneTwoThreeOfflinePlugin"), offline = this.getRuntimeService("offline");
-        one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable123Offline", !0), getAvailability: async () => await one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async (/** @type {string} */ resource) => { const token = await one23.getStoredToken(); if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" }); return offline.submitWithIntegration("pan123", resource, { token, scope }); }, openUrl: () => offline.getIntegrationHomeUrl("pan123") });
-        this.registry.register({ id: "115", name: "115", capabilities: [ "magnet", "ed2k" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable115Offline", !1), getAvailability: async () => ({ available: !0, authState: "unknown", reason: "提交时确认登录状态" }), submit: (/** @type {string} */ resource) => offline.submitWithIntegration("one115", resource, { scope }), openUrl: () => offline.getIntegrationHomeUrl("one115") });
+        one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: async () => parseBooleanSetting(this.getRuntimeService("settings").snapshot().enable123Offline ?? true, false), getAvailability: async () => await one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async (resource, _info, options = {}) => {
+            const token = await one23.getStoredToken();
+            if (scope?.disposed || options.isActive?.() === false) throw Object.assign(new Error("所属界面已关闭，未提交任务"), { code: "SUBMIT_CANCELLED" });
+            if (!parseBooleanSetting(this.getRuntimeService("settings").snapshot().enable123Offline ?? true, false)) throw Object.assign(new Error("123 离线服务已关闭，未提交任务"), { code: "SERVICE_DISABLED" });
+            if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" });
+            return offline.submitWithIntegration("pan123", resource, { token, scope });
+        }, openUrl: () => offline.getIntegrationHomeUrl("pan123") });
+        this.registry.register({ id: "115", name: "115", capabilities: [ "magnet", "ed2k" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: async () => parseBooleanSetting(this.getRuntimeService("settings").snapshot().enable115Offline ?? false, false), getAvailability: async () => ({ available: !0, authState: "unknown", reason: "提交时确认登录状态" }), submit: (/** @type {string} */ resource) => offline.submitWithIntegration("one115", resource, { scope }), openUrl: () => offline.getIntegrationHomeUrl("one115") });
         (/** @type {any} */ (window)).offlineProviderRegistry = this.registry;
     }
     bindSubmit() {
@@ -114,11 +132,12 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     /** Resolve the movie identity from the action's owning surface. */
     /** @param {JQueryHandle} button @param {unknown} [explicitContext] */
     getVideoInfo(button, explicitContext = null) {
-        const item = button?.closest?.(".item");
+        const trigger = button?.[0] || button;
+        const item = this.getRuntimeService("host")?.locateListItems?.().find((/** @type {Element} */ card) => trigger && card.contains(trigger));
         const result = resolveOfflineMovieContext({
             explicitContext,
             trigger: button,
-            listResolver: () => item?.length ? readListItem(item) : null,
+            listResolver: () => item ? readListItem(item) : null,
             nativeResolver: () => window.isDetailPage ? this.getPageInfo() : null,
             legacyResolver: () => this.getPageInfo?.(),
             logger: (/** @type {string} */ message) => clog.warn(message),
@@ -161,18 +180,20 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         /** @type {any} */ let info = null;
         try {
         button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中");
-        const candidates = await this.registry.getCandidates(resource, { force: !!options.forceAvailabilityRefresh });
-        if (!candidates.length) return void show.error("没有已启用且支持该资源的离线服务，请检查授权与设置");
+        let candidates = await this.registry.getCandidates(resource, { force: !!options.forceAvailabilityRefresh });
+        if (!candidates.length && !options.forceAvailabilityRefresh && !this.lifecycleScope?.disposed && (!initiallyConnected || trigger.isConnected)) candidates = await this.registry.getCandidates(resource, { force: !0 });
+        if (!candidates.length) return void show.error(`无法离线：${this.registry.getUnavailableReason?.() || "没有已启用且支持该资源的离线服务，请检查授权与设置"}`);
         if (this.lifecycleScope?.disposed || initiallyConnected && !trigger.isConnected) return;
         selected = candidates.find((candidate => candidate.provider.id === options.preferredProviderId)) || await this.chooseCandidate(event, candidates);
         if (!selected) return;
+        if (!await selected.provider.isEnabled()) return void show.error("所选离线服务已关闭，未提交任务");
         if (this.lifecycleScope?.disposed || initiallyConnected && !trigger.isConnected) return;
         info = this.getVideoInfo(button, context);
         const detailRoot = trigger || null;
         if (!info) return void show.error("无法确定影片身份，未执行离线操作");
         const closeContext = { root: detailRoot, layerIndex: utils.getOwningLayerIndex({ root: detailRoot }) };
             button.text("提交中");
-            await selected.provider.submit(resource, info);
+            await selected.provider.submit(resource, info, { isActive: () => !this.lifecycleScope?.disposed && (!initiallyConnected || trigger.isConnected) });
             submitted = true;
             this.registry.updateAvailability(selected.provider.id, { available: !0, authState: "ready", reason: "最近提交成功" });
             try {
@@ -189,6 +210,8 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         } catch (error) {
             if (submitted) { clog.error("离线任务已创建，后续界面更新失败", error); return; }
             const errorRecord = /** @type {{ code?: string, message?: string }} */ (error), code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
+            if (code === "SUBMIT_CANCELLED") return;
+            if (code === "SERVICE_DISABLED") return void show.error(message);
             if (selected) {
                 [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });
                 try { await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }); }

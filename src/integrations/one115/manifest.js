@@ -68,6 +68,7 @@ export function createOne115Adapter(http) {
                 const message = String(payload?.error_msg || payload?.error || payload?.msg || "115 离线任务创建失败"), code = classify115OfflineError(message);
                 throw new JhsError(code, message, { source: "one115", details: { state: payload?.state ?? null } });
             }
+            if (payload.state !== true && payload.state !== 1) throw new JhsError("INVALID_RESPONSE", "115 未返回明确的离线任务创建成功状态", { source: "one115" });
             return Object.freeze({ success: true, taskId: String(payload.task_id || payload.info_hash || "") });
         },
         /** @param {string} fileId @param {string} newName @param {{scope?: any}} [options] */

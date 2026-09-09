@@ -1,12 +1,12 @@
 // @ts-check
 
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { decryptCredential, encryptCredential } from "../../core/credential-crypto.js";
+import { decryptData, encryptData } from "../../core/credential-crypto.js";
 
 export class OneTwoThreeOfflinePlugin extends BasePlugin {
     constructor() {
         super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta",
-        this.syncTimer = null, this.syncFallbackMs = 3e5;
+        this.syncTimer = null, this.syncFallbackMs = 3e5, this.syncGeneration = 0;
     }
     getName() {
         return "OneTwoThreeOfflinePlugin";
@@ -54,23 +54,32 @@ export class OneTwoThreeOfflinePlugin extends BasePlugin {
         };
     }
     async syncTokenOnce() {
+        const generation = ++this.syncGeneration;
         const storage = this.getRuntimeService("storage"), e = this.getTokenFrom123Pan();
         if (!e.token) return;
         const secretKey = `${this.tokenKey}_secret`;
         let secret = storage.getValue(secretKey, "");
         if (!secret) secret = crypto.randomUUID?.() || `${Date.now()}-${crypto.getRandomValues(new Uint32Array(4)).join("-")}`, storage.setValue(secretKey, secret);
-        const t = storage.getValue(this.tokenKey, ""), current = await decryptCredential(t, secret), n = storage.getValue(this.tokenMetaKey, null);
+        const t = storage.getValue(this.tokenKey, ""), current = await this.getStoredToken(), n = storage.getValue(this.tokenMetaKey, null);
         if (current === e.token && t.startsWith("AES:") && n && n.source === e.source) return;
-        storage.setValue(this.tokenKey, await encryptCredential(e.token, secret)), storage.setValue(this.tokenMetaKey, {
+        const encrypted = "AES:" + await encryptData(e.token, secret);
+        const latest = this.getTokenFrom123Pan();
+        if (generation !== this.syncGeneration || latest.token !== e.token || latest.source !== e.source || storage.getValue(this.tokenKey, "") !== t || storage.getValue(secretKey, "") !== secret) return;
+        storage.setValue(this.tokenKey, encrypted), storage.setValue(this.tokenMetaKey, {
             source: e.source,
             updatedAt: (new Date).toISOString()
         }), current !== e.token && show.info(`123 云盘授权已更新：${e.source}`);
     }
     async getStoredToken() {
         const storage = this.getRuntimeService("storage"), value = storage.getValue(this.tokenKey, ""), secret = storage.getValue(`${this.tokenKey}_secret`, "");
-        return value && secret ? decryptCredential(value, secret) : value;
+        if (typeof value !== "string") return "";
+        if (!value.startsWith("AES:")) return value;
+        if (typeof secret !== "string" || !secret) return "";
+        try { return await decryptData(value.slice(4), secret, false); }
+        catch { return ""; }
     }
     clearStoredToken(/** @type {string} */ e) {
+        this.syncGeneration++;
         const storage = this.getRuntimeService("storage");
         storage.setValue(this.tokenKey, ""), storage.setValue(this.tokenMetaKey, {
             source: "cleared",
