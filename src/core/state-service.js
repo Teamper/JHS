@@ -327,7 +327,7 @@ export class StateService {
     async undoTransaction(transactionId) {
         return this._withLock(async () => {
             await this._recoverWithoutLock();
-            const domains = await this._readDomains(), transaction = domains.activity.entries.find((/** @param {StateRecord} entry */ entry => entry.id === transactionId && "committed" === entry.commitState));
+            const before = await this._readDomains(), domains = cloneStateValue(before), transaction = domains.activity.entries.find((/** @param {StateRecord} entry */ entry => entry.id === transactionId && "committed" === entry.commitState));
             if (!transaction) throw new Error("操作记录不存在或尚未提交");
             const carMap = new Map(domains.carList.map((/** @param {StateRecord} record */ record => [ normalizeCarNum(record.carNum), cloneStateValue(record) ]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses);
             /** @type {string[]} */
@@ -362,9 +362,14 @@ export class StateService {
             }
             transaction.undoAttemptedAt = new Date().toISOString();
             const log = pruneActivityLog(domains.activity), nextCars = [ ...carMap.values() ], touchedDomains = [...touched];
-            const select = (/** @type {StateRecord} */ source) => Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(key === "activity" ? log : source[key])]));
-            const journal = { schema: 2, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: select(domains), after: select({ carList: nextCars, actresses, decisions, activity: log }) };
-            await this.storage.forage.setItem("mutation_journal", journal), touched.has("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), touched.has("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), touched.has("decisions") && await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+            const select = (/** @type {StateRecord} */ source) => Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(source[key])]));
+            const journal = { schema: 2, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: select(before), after: select({ carList: nextCars, actresses, decisions, activity: log }) };
+            try {
+                await this.storage.forage.setItem("mutation_journal", journal), touched.has("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), touched.has("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), touched.has("decisions") && await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+            } catch (error) {
+                await this._recoverWithoutLock();
+                throw error;
+            }
             reverted.length && await this.eventBus.emit("car-state-changed", { carNums: reverted, undoOf: transactionId }), await this.eventBus.emit("activity-log-changed", { transactionId, undo: !0 });
             return { reverted, conflicts };
         });

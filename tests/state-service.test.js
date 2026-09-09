@@ -31,6 +31,30 @@ function createHarness(initial = {}) {
 }
 
 describe("StateService durable transactions", () => {
+    it.each(["mutation_journal", "car_list", "favorite_actresses", "new_video_decisions", "activity_log", "journal-clear"])("recovers an undo failure at %s without losing retry eligibility", async stage => {
+        const { service, storage, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }], new_video_decisions: { "ABC-1": { action: "snoozed" } } });
+        const result = await service.patch("ABC-1", { favorite: true }), before = structuredClone(Object.fromEntries(data));
+        let failed = false;
+        const write = async (key, value) => { if (!failed && key === stage) { failed = true; throw new Error("injected undo failure"); } data.set(key, value); };
+        storage.forage.setItem.mockImplementation(write); storage._setItemAndInvalidate.mockImplementation(write);
+        storage.forage.removeItem.mockImplementation(async key => { if (!failed && stage === "journal-clear") { failed = true; throw new Error("injected undo failure"); } data.delete(key); });
+        await expect(service.undoTransaction(result.transactionId)).rejects.toThrow("injected undo failure");
+        await service.recoverPendingTransaction();
+        expect(Object.fromEntries(data)).toEqual(before);
+        expect((await service.undoTransaction(result.transactionId)).reverted).toEqual(["ABC-1"]);
+    });
+    it("restores undo eligibility when the activity write fails", async () => {
+        const { service, data, storage } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }] });
+        const result = await service.patch("ABC-1", { favorite: true });
+        const write = storage.forage.setItem.getMockImplementation();
+        storage.forage.setItem.mockImplementationOnce(async (...args) => write(...args));
+        storage.forage.setItem.mockImplementationOnce(async () => { throw new Error("activity write failed"); });
+        await expect(service.undoTransaction(result.transactionId)).rejects.toThrow("activity write failed");
+        await service.recoverPendingTransaction();
+        expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
+        expect((await service.undoTransaction(result.transactionId)).reverted).toEqual(["ABC-1"]);
+        expect(data.get("car_list")[0].stateFlags.favorite).toBe(false);
+    });
     it("commits car state, activity, new-video removal and decision cleanup once", async () => {
         const { service, data, eventBus } = createHarness({
             car_list: [],
