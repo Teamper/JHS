@@ -16,7 +16,7 @@ export class JavBusHostAdapter {
             const secondLast = segments[segments.length - 2];
             if (segments.length >= 2 && /^\d+$/.test(last)) {
                 const removable = secondLast === "page"
-                    || (segments.length >= 3 && JAVBUS_LIST_PREFIXES.has(segments[segments.length - 3]) && !/^\d+$/.test(secondLast));
+                    || (segments.length >= 3 && JAVBUS_LIST_PREFIXES.has(segments[segments.length - 3]));
                 if (removable) {
                     const remaining = secondLast === "page" ? segments.slice(0, -2) : segments.slice(0, -1);
                     url.pathname = remaining.length ? "/" + remaining.join("/") : "/";

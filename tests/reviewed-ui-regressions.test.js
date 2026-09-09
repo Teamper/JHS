@@ -43,4 +43,16 @@ describe("reviewed UI regressions", () => {
         expect(isBatchRunActive()).toBe(false);
         await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
     });
-});
+    it("restores JavBus text without losing the host link", async () => {
+        const $ = setup('<div class="item"><a href="/ABC-123"><img data-title="原題"><div class="video-title" title="原題">翻译标题</div></a></div>');
+        const plugin = Object.create(ListPagePlugin.prototype);
+        plugin.getSelector = () => ({ itemSelector: ".item" });
+        await plugin.revertTranslation();
+        expect($(".video-title").text().trim()).toBe("原題");
+        expect($("a").attr("href")).toBe("/ABC-123");
+    });
+    it.each(["search", "star", "genre"])("keeps numeric %s ids when resolving page one", prefix => {
+        const host = new JavBusHostAdapter(null, null);
+        expect(host.resolveFirstPageUrl(`https://www.javbus.com/en/${prefix}/1234567/3`)).toBe(`https://www.javbus.com/en/${prefix}/1234567`);
+        expect(host.resolveFirstPageUrl(`https://www.javbus.com/${prefix}/1234567`)).toBe(`https://www.javbus.com/${prefix}/1234567`);
+    });});

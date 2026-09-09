@@ -832,7 +832,7 @@ export class ListPagePlugin extends BasePlugin {
             r && (a = t.find(".video-title strong").text().trim());
             const i = t.find(".video-title");
             i.contents().each(((/** @type {number} */ index, /** @type {Node} */ node) => {
-                3 !== node.nodeType || "" === (node.textContent || "").trim() || (node.textContent || "").includes(a || "") || (node.textContent = " " + n + " ");
+                3 !== node.nodeType || !n || "" === (node.textContent || "").trim() || a && (node.textContent || "").includes(a) || (node.textContent = " " + n + " ");
             })), i.removeAttr("title");
         });
     }
