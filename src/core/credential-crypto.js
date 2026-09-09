@@ -48,12 +48,12 @@ export async function encryptData(value, secret = getInstallationSecret()) {
 export async function encryptPortableBackup(value) { return encryptData(value, LEGACY_ENCRYPTION_SALT); }
 
 /** @param {string} value */
-export async function decryptData(value, secret = getInstallationSecret()) {
+export async function decryptData(value, secret = getInstallationSecret(), allowLegacyFallback = true) {
     const combined = base64ToArrayBuffer(value), iv = combined.slice(0, 12), data = combined.slice(12);
     const decrypt = async (/** @type {string} */ candidate) => new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await getEncryptionKey(candidate), data));
     try { return await decrypt(secret); }
     catch (error) {
-        if (secret === LEGACY_ENCRYPTION_SALT) throw error;
+        if (!allowLegacyFallback || secret === LEGACY_ENCRYPTION_SALT) throw error;
         return decrypt(LEGACY_ENCRYPTION_SALT);
     }
 }

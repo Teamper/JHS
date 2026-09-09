@@ -76,7 +76,9 @@ async function persistBootstrapMigration(settings, disabledMigration, localOrigi
         if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) draft.sortMethod = legacySortMethod;
         if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) draft.foldCategoryCollapsed = legacyFoldCategory === "yes";
         if (draft.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) draft.videoMuted = legacyVideoMuted === "yes";
-        for (const key of credentialMigration?.cleanup?.settingKeys || []) delete draft[key];
+        for (const key of credentialMigration?.cleanup?.settingKeys || []) {
+            if (draft[key] === credentialMigration.cleanup.settingValues?.[key]) delete draft[key];
+        }
     });
 }
 
@@ -140,8 +142,9 @@ export async function bootstrapJhs() {
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");
         const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
         const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
+        credentialMigration.cleanup = await context.services.credential.validateLegacyCleanup(credentialMigration.cleanup);
         await persistBootstrapMigration(context.services.settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration);
-        context.services.credential.cleanupLegacyPageStorage(credentialMigration.cleanup?.pageKeys);
+        await context.services.credential.cleanupLegacyPageStorage(credentialMigration.cleanup?.pageKeys, context.services.settings);
         markPhase("settings-migration");
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
@@ -156,6 +159,7 @@ export async function bootstrapJhs() {
             ...(globalThis.__jhsBrowserTestMetadata ?? {}),
         });
         Object.assign(globalThis, logger);
+        if (credentialMigration.issues?.length) logger.show.info("部分旧凭证未能安全迁移，已保留原数据，请重新保存对应凭证");
         if (localOriginSettings.notice) logger.show.info(localOriginSettings.notice);
         const pluginManager = new PluginManager({ diagnostics: context.services.diagnostics });
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
