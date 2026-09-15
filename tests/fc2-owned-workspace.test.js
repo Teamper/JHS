@@ -60,13 +60,14 @@ function loadWantApi({ encryptedToken = "encrypted", response = { success: 1 } }
 function loadImageViewer() {
     const dom = new JSDOM('<div id="gallery"><img src="a.jpg"><img src="b.jpg"></div>'), $ = jqueryFactory(dom.window), instances = [];
     class ViewerMock {
-        constructor(host, options) { this.host = host, this.options = options, this.viewerData = { width: 1000, height: 800 }, this.imageData = { width: 400, height: 200 }, this.zoomTo = vi.fn(), this.moveTo = vi.fn(), this.prev = vi.fn(), this.next = vi.fn(), instances.push(this); }
+        constructor(host, options) { this.host = host, this.options = options, this.viewerData = { width: 1000, height: 800 }, this.imageData = { width: 400, height: 200 }, this.zoomTo = vi.fn(), this.moveTo = vi.fn(), this.resize = vi.fn(), this.prev = vi.fn(), this.next = vi.fn(), this.destroy = vi.fn(), instances.push(this); }
         show() {}
         destroy() {}
     }
-    const marker = loggerSource.indexOf("}(), function() {", loggerSource.indexOf("unsafeWindow.show")), start = loggerSource.indexOf("function() {", marker), end = loggerSource.indexOf("}(), window.ImageHoverPreview", start), viewerIife = loggerSource.slice(start, end + 1), context = vm.createContext({ window: dom.window, document: dom.window.document, $, Viewer: ViewerMock, JHS_Z_INDEX: { viewer: 100 }, setTimeout: vi.fn() });
-    vm.runInContext(`(${viewerIife})();`, context);
-    return { dom, instances };
+    const marker = loggerSource.indexOf("}(), function() {", loggerSource.indexOf("unsafeWindow.show")), start = loggerSource.indexOf("function() {", marker), end = loggerSource.indexOf("}(), window.ImageHoverPreview", start), viewerIife = loggerSource.slice(start, end + 1), context = vm.createContext({ window: dom.window, document: dom.window.document, $, Viewer: ViewerMock, JHS_Z_INDEX: { viewer: 100 }, AbortController: dom.window.AbortController, MutationObserver: dom.window.MutationObserver, setTimeout: vi.fn() });
+    const scopeSource = readFileSync(join(repoRoot, "src/core/lifecycle-scope.js"), "utf8").replace("export class", "class");
+    vm.runInContext(`${scopeSource}; const scope = new LifecycleScope("viewer-test"); globalThis.testScope=scope; (${viewerIife})();`, context);
+    return { dom, instances, scope: context.testScope };
 }
 
 describe("FC2 owned detail workspace", () => {
@@ -109,12 +110,65 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("opens the selected gallery image with navigation and centers it in both axes", () => {
-        const { dom, instances } = loadImageViewer(), gallery = dom.window.document.querySelector("#gallery"), selected = gallery.querySelectorAll("img")[1];
+        const { dom, instances, scope } = loadImageViewer(), gallery = dom.window.document.querySelector("#gallery"), selected = gallery.querySelectorAll("img")[1];
         dom.window.showImageViewer(selected, "", { galleryRoot: gallery });
         const viewer = instances[0];
         expect(viewer.host).toBe(gallery), expect(viewer.options.initialViewIndex).toBe(1), expect(viewer.options.toolbar.prev).toBe(1), expect(viewer.options.toolbar.next).toBe(1);
         viewer.options.viewed();
         expect(viewer.moveTo).toHaveBeenCalledWith(300, 300);
+        scope.dispose(); dom.window.close();
+    });
+
+    it("replaces an opening viewer and ignores its late callbacks", () => {
+        const {dom,instances,scope}=loadImageViewer(), images=dom.window.document.querySelectorAll("img");
+        dom.window.showImageViewer(images[0]);
+        dom.window.showImageViewer(images[1]);
+        expect(instances[0].destroy).toHaveBeenCalledOnce();
+        instances[1].options.shown();
+        instances[0].options.shown(); instances[0].options.viewed(); instances[0].options.hidden();
+        expect(instances[0].zoomTo).not.toHaveBeenCalled();
+        expect(instances[1].destroy).not.toHaveBeenCalled();
+        expect(dom.window.document.body.style.overflow).toBe("hidden");
+        scope.dispose();
+        expect(instances[1].destroy).toHaveBeenCalledOnce();
+        expect(dom.window.document.body.style.overflow).toBe("");
+        dom.window.close();
+    });
+
+    it("contains FC2 previews in their owner and shares screenshots without eager full image loading", () => {
+        const { dom, instances, scope } = loadImageViewer(), document = dom.window.document;
+        document.body.innerHTML = '<div class="layui-layer"><div class="layui-layer-content"><div class="jhs-fc2-workspace"><div data-jhs-slot="gallery"><div id="gallery"><img src="https://example.test/a.jpg"><img src="https://example.test/b.jpg"></div><button><img id="sheet" src="https://example.test/sheet.jpg"></button></div></div></div></div>';
+        const selected = document.querySelector("#sheet"), workspace = document.querySelector(".jhs-fc2-workspace");
+        dom.window.showImageViewer(selected);
+        const viewer = instances[0];
+        expect(viewer.host.closest(".layui-layer-content")).not.toBeNull();
+        expect(viewer.options.inline).toBe(true);
+        expect(viewer.options.initialViewIndex).toBe(2);
+        expect(viewer.options.url).toBe("data-jhs-viewer-source");
+        expect([...viewer.host.querySelectorAll("img")].map(image => image.getAttribute(viewer.options.url))).toEqual(["https://example.test/a.jpg", "https://example.test/b.jpg", "https://example.test/sheet.jpg"]);
+        expect([...viewer.host.querySelectorAll("img")].every(image => image.src.startsWith("data:image/"))).toBe(true);
+        expect(workspace.inert).toBe(true);
+        viewer.options.viewed();
+        expect(viewer.zoomTo).not.toHaveBeenCalled();
+        expect(viewer.resize).toHaveBeenCalledOnce();
+        scope.dispose();
+        expect(document.querySelector(".jhs-image-viewer-host")).toBeNull();
+        expect(document.querySelector(".jhs-image-viewer-owner")).toBeNull();
+        expect(workspace.inert).toBeFalsy();
+        dom.window.close();
+    });
+
+    it("releases per-viewer subscriptions on repeated close and preserves unrelated scroll styles", () => {
+        const {dom,instances,scope}=loadImageViewer();
+        dom.window.document.body.style.overflow="clip";
+        for(let i=0;i<5;i++) {
+            dom.window.showImageViewer("https://example.test/image.png");
+            instances[i].options.shown(); instances[i].options.hidden();
+            expect(scope.cleanups.size).toBe(0);
+            expect(dom.window.document.querySelectorAll(".temporary-container")).toHaveLength(0);
+            expect(dom.window.document.body.style.overflow).toBe("clip");
+        }
+        scope.dispose(); dom.window.close();
     });
 
     it("renders screenshot-provider results as the smallest thumbnail until opened", () => {
