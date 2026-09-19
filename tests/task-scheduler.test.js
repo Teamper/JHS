@@ -1,9 +1,11 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -27,6 +29,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         addFavoriteActressList: vi.fn(async () => {}), updateFavoriteActress: vi.fn(async () => true), updateBlacklistItem: vi.fn(async update => Object.assign(blacklistItems.find(item => item.starId === update.starId), update)), getCarMap: vi.fn(async () => new Map)
     };
     const localStorage = { getItem: vi.fn(key => values.has(key) ? values.get(key) : null), setItem: vi.fn((key, value) => values.set(key, String(value))), removeItem: vi.fn(key => values.delete(key)) };
+    const storage = { getLocal: localStorage.getItem, setLocal: localStorage.setItem, removeLocal: localStorage.removeItem }, scope = new LifecycleScope("feature:discovery");
     const eventHandlers = new Map, jhsEventBus = {
         on: vi.fn((type, handler) => {
             const handlers = eventHandlers.get(type) || [];
@@ -38,14 +41,40 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         })
     };
     const locks = { request: vi.fn(async (key, options, callback) => callback({ name: key })) };
-    const gmHttp = { get: vi.fn() }, beans = {
+    const gmHttp = { get: vi.fn() }, http = {
+        request: vi.fn(async request => ({ data: await gmHttp.get(request.url), finalUrl: request.url }))
+    }, actressInfo = {
+        collection: vi.fn(async (_integrationId, input) => {
+            const html = await gmHttp.get(input.pageUrl), page = $(new JSDOM(html, { url: input.pageUrl }).window.document);
+            return context.parseJavDbActorList(page, input.pageUrl);
+        }),
+        movies: vi.fn(async (_integrationId, input) => {
+            const url = `${input.baseUrl}/actors/${input.actorId}?t=d`, html = await gmHttp.get(url), page = $(new JSDOM(html, { url }).window.document);
+            return page.find(".movie-list .item").toArray().map(element => {
+                const item = $(element), parsed = context.readListItem(item);
+                return { ...parsed, coverUrl: item.find("img").attr("src") || "", score: 0, voteCount: 0 };
+            });
+        })
+    }, beans = {
         OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com"), getJavBusUrl: vi.fn(async () => "https://www.javbus.com") },
         NewVideoPlugin: { loadData: vi.fn(async () => {}), resetBtnTip: vi.fn(async () => {}) },
-        BlacklistPlugin: { resetBtnTip: vi.fn(async () => {}) },
-        ListPagePlugin: { findCarNumAndHref: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), title: element.attr("data-title") || "", publishTime: element.attr("data-date") || "" }) }
+        BlacklistPlugin: { resetBtnTip: vi.fn(async () => {}) }
     };
     class BasePlugin {
         getBean(name) { return beans[name]; }
+        getOptionalDependency(name) { return beans[name]; }
+        getRuntimeService(name) {
+            if ("storage" === name) return storage;
+            if ("scope" === name) return () => scope;
+            if ("http" === name) return http;
+            if ("actressInfo" === name) return actressInfo;
+            if ("movie" === name) return {
+                externalSiteOrigin: siteId => "javBusBtn" === siteId
+                    ? beans.OtherSitePlugin.getJavBusUrl()
+                    : beans.OtherSitePlugin.getJavDbUrl(),
+            };
+            return null;
+        }
         getSelector(site = "javdb") { return site === "javbus" ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" } : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
     }
     class StorageQueue { async addTask(task) { return task(); } async waitAllFinished() {} }
@@ -57,16 +86,18 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
         window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, BasePlugin, StorageQueue,
         T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
+        escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, (/** @type {string} */ c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c)),
         utils: { sleep: vi.fn(async () => {}), getNowStr: (a = "-", b = ":", timestamp = null) => format(null == timestamp ? clock.now : timestamp), getHourDifference: (left, right) => Math.floor(Math.abs(right.getTime() - left.getTime()) / 36e5), genericSort: items => [ ...items ], htmlTo$dom: html => $(new JSDOM(html, { url: "https://javdb.com/" }).window.document) },
-        clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() }, i: (target, key, value) => target[key] = value,
+        clog: { log: vi.fn(), html: vi.fn(), htmlDebug: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() }, i: (target, key, value) => target[key] = value,
         jhsEventBus, normalizeCarNum: value => String(value || "").toUpperCase(),
+        readListItem: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), title: element.attr("data-title") || "", publishTime: element.attr("data-date") || "" }),
         setTimeout, clearTimeout
     });
     context.globalThis = context;
-    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/parsers/third-party-parsers.js", "src/plugins/new-video/task.js" ].map(file => readFileSync(join(repoRoot, file), "utf8")).join("\n");
+    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js", "src/plugins/new-video/task.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     vm.runInContext(`${source};globalThis.Task=TaskPlugin`, context);
     const plugin = new context.Task;
-    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, beans, locks, jhsEventBus, $, htmlToPage: context.utils.htmlTo$dom };
+    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, $, htmlToPage: context.utils.htmlTo$dom };
 }
 
 describe("task scheduler state machine", () => {
@@ -165,6 +196,9 @@ describe("task scheduler state machine", () => {
         await harness.plugin.handle();
         await harness.jhsEventBus.emit("settings-changed", {});
         expect(recalculate).toHaveBeenCalledOnce();
+        expect(harness.scope.snapshot().listeners).toBe(2);
+        harness.scope.dispose();
+        expect(harness.scope.snapshot()).toMatchObject({ listeners: 0, disposed: true });
     });
 
     it("reports only current-tab execution as running and cleans active state on failure", async () => {
@@ -197,7 +231,7 @@ describe("task scheduler state machine", () => {
         harness.plugin.javDbUrl = "https://javdb.com";
         harness.gmHttp.get.mockImplementation(async url => (calls.push(url), "<div class=\"movie-list\"></div>"));
         let failB = true;
-        harness.plugin.parsePage = vi.fn(async (page, site, starId) => {
+        harness.plugin.parseActorMovies = vi.fn(async (movies, starId) => {
             if ("b" === starId && failB) throw new Error("parse failed");
             harness.favorites.find(item => item.starId === starId).lastCheckTime = harness.plugin.taskConfig ? "2026-08-23 13:00:00" : null;
         });

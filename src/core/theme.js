@@ -1,29 +1,35 @@
+// @ts-check
+
 /** 设计令牌层 (Design tokens): 全部 --jhs-* 变量, 亮色(:root) + 暗色(:root[data-jhs-theme="dark"])。
  * 在 css-injection.js 最先注入, 供所有后续插件 CSS 通过 var(--jhs-*) 消费。 */
 
-const JHS_Z_INDEX = Object.freeze({
+export const JHS_Z_INDEX = Object.freeze({
     content: 10,
     elevated: 20,
     localPopover: 30,
     popover: 100,
     dropdown: 1e3,
-    fabBackdrop: 1e4,
-    fabMenu: 10001,
-    fab: 10002,
+    fabBackdrop: 12345691,
+    fabMenu: 12345692,
+    fab: 12345693,
     debugLow: 12345678,
     hostNav: 12345679,
     hostTopbar: 12345689,
+    // 悬停预览必须低于 modal/layer：弹窗打开期间预览不得盖住详情内容（tooltip 档保留给需覆盖弹窗的原生提示）
+    hoverPreview: 12345690,
     modal: 12345699,
     sheetBackdrop: 12345789,
     sheet: 12345790,
-    loading: 99999999,
-    viewer: 999999990,
     layer: 999999991,
+    // 弹窗内部（如新片工作区）的悬停预览：须盖住所属 layer，但让位 viewer/loading
+    dialogHoverPreview: 999999992,
+    viewer: 999999993,
+    loading: 999999994,
     debug: 999999999,
-    tooltip: 9999999999
+    tooltip: 1_000_000_000
 });
 
-function buildThemeCss() {
+export function buildThemeCss() {
   return `\n<style>\n    :root {\n        /* 字体 */
         --jhs-font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 
@@ -31,6 +37,8 @@ function buildThemeCss() {
         --jhs-bg: #f4f6f9;
         --jhs-surface: #ffffff;
         --jhs-surface-2: #f2f4f8;
+        --jhs-surface-hover: #e9edf4;
+        --jhs-focus: #3b6ea5;
         --jhs-border: #e3e7ee;
         --jhs-border-strong: #8a94a6;
         --jhs-text: #1f2733;
@@ -72,12 +80,14 @@ function buildThemeCss() {
         --jhs-z-debug-low: ${JHS_Z_INDEX.debugLow};
         --jhs-z-host-nav: ${JHS_Z_INDEX.hostNav};
         --jhs-z-host-topbar: ${JHS_Z_INDEX.hostTopbar};
+        --jhs-z-hover-preview: ${JHS_Z_INDEX.hoverPreview};
         --jhs-z-modal: ${JHS_Z_INDEX.modal};
         --jhs-z-sheet-backdrop: ${JHS_Z_INDEX.sheetBackdrop};
         --jhs-z-sheet: ${JHS_Z_INDEX.sheet};
-        --jhs-z-loading: ${JHS_Z_INDEX.loading};
-        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
         --jhs-z-layer: ${JHS_Z_INDEX.layer};
+        --jhs-z-dialog-hover-preview: ${JHS_Z_INDEX.dialogHoverPreview};
+        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
+        --jhs-z-loading: ${JHS_Z_INDEX.loading};
         --jhs-z-debug: ${JHS_Z_INDEX.debug};
         --jhs-z-tooltip: ${JHS_Z_INDEX.tooltip};
 
@@ -149,6 +159,8 @@ function buildThemeCss() {
         --jhs-bg: #14181d;
         --jhs-surface: #1d232b;
         --jhs-surface-2: #262d37;
+        --jhs-surface-hover: #2e3642;
+        --jhs-focus: #7cb8e8;
         --jhs-border: #333c47;
         --jhs-border-strong: #64728a;
         --jhs-text: #e6ebf1;
@@ -214,25 +226,25 @@ function buildThemeCss() {
     .jhs-ui input[type="number"],
     .jhs-ui textarea,
     .jhs-ui select,
-    .layui-layer-content input[type="text"],
-    .layui-layer-content input[type="number"],
-    .layui-layer-content textarea,
-    .layui-layer-content select {
+    .jhs-dialog .layui-layer-content input[type="text"],
+    .jhs-dialog .layui-layer-content input[type="number"],
+    .jhs-dialog .layui-layer-content textarea,
+    .jhs-dialog .layui-layer-content select {
         background-color: var(--jhs-input-bg);
         color: var(--jhs-text);
         border: 1px solid var(--jhs-border);
     }
     .jhs-ui ::placeholder,
-    .layui-layer-content ::placeholder {
+    .jhs-dialog .layui-layer-content ::placeholder {
         color: var(--jhs-placeholder);
         opacity: 1;
     }
     .jhs-ui button:disabled,
     .jhs-ui input:disabled,
     .jhs-ui select:disabled,
-    .layui-layer-content button:disabled,
-    .layui-layer-content input:disabled,
-    .layui-layer-content select:disabled {
+    .jhs-dialog .layui-layer-content button:disabled,
+    .jhs-dialog .layui-layer-content input:disabled,
+    .jhs-dialog .layui-layer-content select:disabled {
         background-color: var(--jhs-disabled-bg);
         color: var(--jhs-disabled-text);
         border-color: var(--jhs-border);
@@ -241,13 +253,13 @@ function buildThemeCss() {
     }
 
     /* JHS 表面基础字体 */
-    .jhs-ui, .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box {
+    .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box {
         font-family: var(--jhs-font);
     }
 
     /* 焦点环 */
     :where(.jhs-ui) :focus-visible,
-    :where(.layui-layer-content) :focus-visible,
+    :where(.jhs-dialog .layui-layer-content) :focus-visible,
     :where(.tabulator) :focus-visible {
         outline: 2px solid var(--jhs-accent);
         outline-offset: 2px;
@@ -258,7 +270,7 @@ function buildThemeCss() {
     .content-panel::-webkit-scrollbar,
     .tabulator-tableholder::-webkit-scrollbar,
     .has-navbar-fixed-top::-webkit-scrollbar,
-    .layui-layer-content::-webkit-scrollbar {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar {
         width: 6px;
         height: 6px;
     }
@@ -266,7 +278,7 @@ function buildThemeCss() {
     .content-panel::-webkit-scrollbar-track,
     .tabulator-tableholder::-webkit-scrollbar-track,
     .has-navbar-fixed-top::-webkit-scrollbar-track,
-    .layui-layer-content::-webkit-scrollbar-track {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar-track {
         background: var(--jhs-surface-2);
         border-radius: 10px;
     }
@@ -274,7 +286,7 @@ function buildThemeCss() {
     .content-panel::-webkit-scrollbar-thumb,
     .tabulator-tableholder::-webkit-scrollbar-thumb,
     .has-navbar-fixed-top::-webkit-scrollbar-thumb,
-    .layui-layer-content::-webkit-scrollbar-thumb {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar-thumb {
         background: var(--jhs-border-strong);
         border-radius: 10px;
     }
@@ -282,20 +294,20 @@ function buildThemeCss() {
     .content-panel::-webkit-scrollbar-thumb:hover,
     .tabulator-tableholder::-webkit-scrollbar-thumb:hover,
     .has-navbar-fixed-top::-webkit-scrollbar-thumb:hover,
-    .layui-layer-content::-webkit-scrollbar-thumb:hover {
+    .jhs-dialog .layui-layer-content::-webkit-scrollbar-thumb:hover {
         background: var(--jhs-text-faint);
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .jhs-ui, .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box,
-        .jhs-ui *, .layui-layer-content *, .tabulator *, .toastify *, .jhs-fab *, .menu-box * {
+        .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box,
+        .jhs-ui *, .jhs-dialog .layui-layer-content *, .tabulator *, .toastify *, .jhs-fab *, .menu-box * {
             transition: none !important;
             animation: none !important;
         }
     }
 
     /* 暗色下覆盖 layui-layer 弹层 chrome (外部 layui.css 为亮色主题) */
-    :root[data-jhs-theme="dark"] .layui-layer {
+    :root[data-jhs-theme="dark"] .jhs-dialog.layui-layer {
         background-color: var(--jhs-surface);
         color: var(--jhs-text);
         box-shadow: var(--jhs-shadow-lg);
@@ -305,20 +317,20 @@ function buildThemeCss() {
         color: var(--jhs-text);
         border-bottom: 1px solid var(--jhs-border);
     }
-    :root[data-jhs-theme="dark"] .layui-layer-content {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content {
         color: var(--jhs-text);
     }
-    :root[data-jhs-theme="dark"] .layui-layer-btn a {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-btn a {
         background-color: var(--jhs-surface-2);
         border: 1px solid var(--jhs-border);
         color: var(--jhs-text);
     }
-    :root[data-jhs-theme="dark"] .layui-layer-btn .layui-layer-btn0 {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-btn .jhs-dialog .layui-layer-btn0 {
         background-color: var(--jhs-accent);
         border-color: transparent;
         color: var(--jhs-accent-text-on);
     }
-    .layui-layer-setwin .layui-layer-close {
+    .jhs-dialog .layui-layer-setwin .layui-layer-close {
         width: 36px!important;
         height: 36px!important;
         background: none!important;
@@ -326,8 +338,8 @@ function buildThemeCss() {
         font-size: 0!important;
         opacity: 1!important;
     }
-    .layui-layer-setwin .layui-layer-close::before,
-    .layui-layer-setwin .layui-layer-close::after {
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::before,
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::after {
         content: "";
         position: absolute;
         top: 17px;
@@ -337,15 +349,15 @@ function buildThemeCss() {
         border-radius: 1px;
         background: currentColor;
     }
-    .layui-layer-setwin .layui-layer-close::before { transform: rotate(45deg); }
-    .layui-layer-setwin .layui-layer-close::after { transform: rotate(-45deg); }
-    .layui-layer-setwin .layui-layer-close:hover,
-    .layui-layer-setwin .layui-layer-close:focus-visible { color: var(--jhs-text)!important; }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::before { transform: rotate(45deg); }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close::after { transform: rotate(-45deg); }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close:hover,
+    .jhs-dialog .layui-layer-setwin .layui-layer-close:focus-visible { color: var(--jhs-text)!important; }
     :root[data-jhs-theme="dark"] .layui-input,
-    :root[data-jhs-theme="dark"] .layui-layer-content input[type="text"],
-    :root[data-jhs-theme="dark"] .layui-layer-content input[type="number"],
-    :root[data-jhs-theme="dark"] .layui-layer-content textarea,
-    :root[data-jhs-theme="dark"] .layui-layer-content select {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content input[type="text"],
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content input[type="number"],
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content textarea,
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content select {
         background-color: var(--jhs-input-bg);
         color: var(--jhs-text);
         border: 1px solid var(--jhs-border);
@@ -398,17 +410,24 @@ function buildThemeCss() {
 }
 
 /** 将 themeMode 设置(light/dark/auto)解析为具体主题并应用到 documentElement。 */
-async function applyTheme() {
-    const mode = await storageManager.getSetting("themeMode", "light");
+export function applyThemeMode(mode = "light") {
     let resolved = "light";
     if ("dark" === mode) resolved = "dark";
     else if ("auto" === mode) resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     document.documentElement.setAttribute("data-jhs-theme", resolved);
 }
 
-/** 跟随系统模式下, 监听系统深浅色切换并实时应用。 */
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (() => {
-    storageManager.getSetting("themeMode", "light").then((e => {
-        "auto" === e && applyTheme();
-    }));
-}));
+/** @deprecated Prefer applyThemeMode(snapshot.themeMode) to avoid legacy cache reads. */
+export async function applyTheme() {
+    const mode = await storageManager.getSetting("themeMode", "light");
+    applyThemeMode(mode);
+}
+
+/** @param {import("./lifecycle-scope.js").LifecycleScope} scope */
+export function initializeThemeRuntime(scope) {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    scope.listen(media, "change", () => {
+        const mode = /** @type {any} */ (globalThis).settingsService?.snapshot?.().themeMode ?? storageManager.getSettingSync("themeMode", "light");
+        if ("auto" === mode) applyThemeMode(mode);
+    });
+}

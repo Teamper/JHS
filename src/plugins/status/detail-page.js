@@ -1,4 +1,8 @@
-class DetailPagePlugin extends BasePlugin {
+// @ts-check
+
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class DetailPagePlugin extends BasePlugin {
     getName() {
         return "DetailPagePlugin";
     }
@@ -6,9 +10,10 @@ class DetailPagePlugin extends BasePlugin {
         super();
     }
     handle() {
-        window.isDetailPage && ($(".video-meta-panel a").each((function() {
-            const e = $(this).attr("href");
-            e && (e.startsWith("http://") || e.startsWith("https://") || e.startsWith("/")) && $(this).attr("target", "_blank");
+        isDetailPage && ($(".video-meta-panel a").each(((/** @type {number} */ _index, /** @type {HTMLAnchorElement} */ element) => {
+            const node = $(element), e = node.attr("href");
+            if (!e) return;
+            try { ["http:", "https:"].includes(new URL(e, window.location.href).protocol) && node.attr("target", "_blank"); } catch {}
         })));
     }
 }

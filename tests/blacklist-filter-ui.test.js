@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -5,7 +6,8 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 
-const source = readFileSync(join(process.cwd(), "src/plugins/blacklist/blacklist.js"), "utf8");
+const source = readTestFile(join(process.cwd(), "src/plugins/blacklist/blacklist.js"), "utf8");
+const tableSource = readTestFile(join(process.cwd(), "src/ui/table/create-jhs-table.js"), "utf8");
 
 function createPlugin() {
     const dom = new JSDOM(`<body><input id="searchValue"><select id="dataType"><option value=""></option><option value="actor">actor</option><option value="actress">actress</option></select><select id="statusType"><option value=""></option><option value="normal">normal</option><option value="stop">stop</option></select><select id="urlType"><option value=""></option><option value="hasT">hasT</option><option value="noT">noT</option></select></body>`, { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
@@ -18,6 +20,7 @@ function createPlugin() {
     const JhsSelect = { setValue: vi.fn((target, value) => $(target).val(value)) };
     let tabulatorOptions;
     function Tabulator(selector, options) { tabulatorOptions = options; }
+    const createJhsTable = (Runtime, selector, options) => new Runtime(selector, options);
     const context = vm.createContext({
         console, Object, Array, Map, Set, Promise, Date, URL, $, BasePlugin, storageManager, JhsSelect,
         i: (target, key, value) => target[key] = value,
@@ -25,7 +28,7 @@ function createPlugin() {
         B: "actor", P: "actress", D: "censored", A: "uncensored", T: "javdb", I: "javbus", l: false, r: true,
         window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
         normalizeHttpUrl: value => { try { const url = new URL(String(value), dom.window.location.href); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } }, parseNumberSetting: (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-        renderStateView: vi.fn(), utils: {}, show: {}, clog: {}, navigator: {}, jhsEventBus: {}, stateService: {}, gmHttp: {}, Tabulator
+        renderStateView: vi.fn(), utils: {}, show: {}, clog: {}, navigator: {}, jhsEventBus: {}, stateService: {}, gmHttp: {}, Tabulator, createJhsTable
     });
     vm.runInContext(`${source};globalThis.TestPlugin=BlacklistPlugin`, context);
     const plugin = new context.TestPlugin;
@@ -36,12 +39,14 @@ function createPlugin() {
 describe("blacklist combined filters", () => {
     it("combines search, role, status and URL category without clearing sibling filters", async () => {
         const { plugin, $ } = createPlugin();
-        $("#searchValue").val("别名"), $("#dataType").val("actor"), $("#statusType").val("stop"), $("#urlType").val("hasT");
+        // the dialog owns a scoped root (set by openBlacklistDialog); filters live under it
+        plugin.blacklistRoot = $("body");
+        plugin.blacklistRoot.find("#searchValue").val("别名"), plugin.blacklistRoot.find("#dataType").val("actor"), plugin.blacklistRoot.find("#statusType").val("stop"), plugin.blacklistRoot.find("#urlType").val("hasT");
         const result = await plugin.getTableData();
         expect(result).toHaveLength(1);
         expect(result[0]).toMatchObject({ starId: "a-1", count: 1, isUnCheck: true });
-        expect($("#statusType").val()).toBe("stop");
-        expect($("#urlType").val()).toBe("hasT");
+        expect(plugin.blacklistRoot.find("#statusType").val()).toBe("stop");
+        expect(plugin.blacklistRoot.find("#urlType").val()).toBe("hasT");
     });
 
     it("keeps one table instance across empty and non-empty reloads", async () => {
@@ -63,9 +68,10 @@ describe("blacklist reset and pagination contracts", () => {
         expect(reset).toContain('search.val("")');
     });
 
-    it("exposes a real all-page selector and localized label", () => {
-        expect(source).toContain("paginationSizeSelector: [ 20, 50, 100, 1e3, !0 ]");
-        expect(source).toContain('all: "全部"');
+    it("does not expose Tabulator's blank all-page option", () => {
+        expect(source).toContain("paginationSizeSelector: [ 20, 50, 100, 1e3 ]");
+        expect(source).not.toContain("paginationSizeSelector: [ 20, 50, 100, 1e3, !0 ]");
+        expect(tableSource).toContain('all: "全部"');
         expect(source).not.toContain("99999");
     });
 

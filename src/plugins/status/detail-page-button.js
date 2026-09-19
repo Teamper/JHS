@@ -1,12 +1,36 @@
-class DetailPageButtonPlugin extends BasePlugin {
+// @ts-check
+
+import { createStateActions } from "../../ui/detail/state-actions.js";
+
+import { C, _, escapeHtml, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js";
+import { DetailStateController } from "../../core/detail-state-controller.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { createJhsTable } from "../../ui/table/create-jhs-table.js";
+import { createLatestSettingWriter } from "../../ui/settings/setting-binding-controller.js";
+
+/** @typedef {MouseEvent} ActionEvent */
+/** @typedef {{ url?: string, extension?: string, [key: string]: any }} SubtitleRecord */
+
+export class DetailPageButtonPlugin extends BasePlugin {
     getName() {
         return "DetailPageButtonPlugin";
     }
     constructor() {
-        super(), this.answerCount = 1, this.stateBinding = null;
+        super(), this.answerCount = 1;
+        /** @type {any} */ this.stateBinding = null;
+        /** @type {DetailStateController | null} */ this.detailStateController = null;
+    }
+    getDetailStateController() {
+        return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
     }
     async handle() {
-        this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
+        const scope = await this.getRuntimeService("scope")();
+        this.hideVideoControls(scope), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
+        if (window.isDetailPage) scope.addCleanup(jhsEventBus?.on("car-state-changed", payload => {
+            const carNum = this.getPageInfo().carNum;
+            if (payload.carNums?.includes(carNum)) return this.showStatus(carNum);
+        }) || (() => {}));
     }
     async autoRemoveNewVideoMark() {
         try {
@@ -14,15 +38,18 @@ class DetailPageButtonPlugin extends BasePlugin {
             if (e !== _) return;
             const t = this.getPageInfo();
             if (!t.carNum) return;
-            await stateService.removeFromNewVideoList([ t.carNum ], "browse");
+            await this.getRuntimeService("state").removeFromNewVideoList([ t.carNum ], "browse");
         } catch (e) { clog.error("自动移除新作品标记失败:", e); }
     }
     async createMenuBtn() {
-        const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
-        const workspaceSlot = this.getBean("DetailWorkspacePlugin")?.getSlot("summary-actions");
+        const e = this.getPageInfo(), t = e.carNum, n = $(`\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div data-jhs-state-slot></div>\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--secondary jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent ">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent ">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `);
+        n.find("[data-jhs-state-slot]").replaceWith(createStateActions());
+        const workspaceSlot = this.getOptionalDependency("DetailWorkspacePlugin")?.getSlot?.("summary-actions");
         workspaceSlot?.length ? workspaceSlot.append(n) : r ? $(".tabs").after(n) : l && $("#mag-submit-show").before(n), $("#magnetSearchBtn").on("click", (async () => {
-            let t = await this.getBean("MagnetHubPlugin").createMagnetHub(e.carNum);
-            layer.open({
+            const magnetHub = this.getOptionalDependency("MagnetHubPlugin");
+            if (!magnetHub) return void show.info("磁力搜索功能已禁用");
+            let t = await magnetHub.createMagnetHub(e.carNum);
+            this.getRuntimeService("dialog").open({
                 type: 1,
                 title: "磁力搜索 " + e.carNum,
                 content: '<div id="magnetHubBox"></div>',
@@ -33,22 +60,34 @@ class DetailPageButtonPlugin extends BasePlugin {
                 }
             });
         }));
-        const a = this.getBean("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
-        $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a.doFilterMagnet(),
-        $("#enable-magnets-filter").on("click", (e => {
-            let t = $("#magnets-span");
-            "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
-            t.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
-        })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))),
+        const a = this.getOptionalDependency("HighlightMagnetPlugin"), settings = this.getRuntimeService("settings"), i = settings.snapshot().enableMagnetsFilter ?? _;
+        a || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a?.doFilterMagnet?.();
+        const writeMagnetFilter = createLatestSettingWriter({ settings, key: "enableMagnetsFilter", fallback: C, apply: (value) => {
+            const filtering = value === _;
+            const label = $("#magnets-span");
+            if (filtering) { a?.doFilterMagnet?.(); label.text("关闭磁力过滤"); }
+            else { a?.showAll?.(); label.text("开启磁力过滤"); }
+        }, onError: (error) => {
+            clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+        } });
+        $("#enable-magnets-filter").on("click", (async (/** @type {ActionEvent} */ e) => {
+            if (!a) return;
+            const wasFiltering = "关闭磁力过滤" === $("#magnets-span").text();
+            await writeMagnetFilter(!wasFiltering ? _ : C);
+        })), $("#search-subtitle-btn").on("click", ((/** @type {ActionEvent} */ e) => {
+            const target = this.getRuntimeService("movie").sourceUrls({ carNum: t }, ["subtitlecat"])[0]?.url;
+            if (target) utils.openPage(target, t, !1, e);
+        })),
         $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t)));
         if (!t) {
             $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", !0).attr("title", "番号不可用");
             return void clog.warn("详情操作不可用：番号不可用");
         }
-        this.stateBinding = detailStateController.bind({ root: document, carNum: t, activityType: "detail-state", getRecord: () => this.getStateRecord() });
+        this.stateBinding = this.getDetailStateController().bind({ root: document, carNum: t, activityType: "detail-state", getRecord: () => this.getStateRecord() });
     }
+    /** @param {string} e */
     async showStatus(e) {
-        return detailStateController.render({ root: document, carNum: e });
+        return this.getDetailStateController().render({ root: document, carNum: e });
     }
     getStateRecord() {
         const info = this.getPageInfo();
@@ -59,28 +98,34 @@ class DetailPageButtonPlugin extends BasePlugin {
         const info = this.getPageInfo();
         return this.stateBinding = { root: document, layerIndex: null, carNum: normalizeCarNum(info.carNum), getRecord: () => this.getStateRecord(), activityType: "detail-state", selectors: {} };
     }
+    /** @param {ActionEvent} event */
     async favoriteOne(event) {
-        return detailStateController.requestToggle(this.getStateBinding(), "favorite", event);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "favorite", event);
     }
+    /** @param {ActionEvent} event */
     async hasDownOne(event) {
-        return detailStateController.requestToggle(this.getStateBinding(), "downloaded", event);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "downloaded", event);
     }
+    /** @param {ActionEvent} event */
     async hasWatchOne(event) {
-        return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "watched", event);
     }
-    searchXunLeiSubtitle(e) {
+    /** @param {string} e */
+    async searchXunLeiSubtitle(e) {
+        const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = await this.getRuntimeService("scope")();
         let t = loading();
-        gmHttp.get(`https://api-shoulei-ssl.xunlei.com/oracle/subtitle?gcid=&cid=&name=${e}`).then((t => {
-            let n = t.data;
-            n && 0 !== n.length ? layer.open({
+        try {
+            const n = await subtitle.search("xunlei", { carNum: e }, { scope });
+            n && 0 !== n.length ? dialog.open({
                 type: 1,
                 title: "迅雷字幕",
                 content: '\n                    <div class="jhs-layout-8ddc7c91"> \n                        <div id="xunlei-table-container" class="jhs-layout-583c2485"></div>\n                    </div>\n                ',
                 scrollbar: !1,
                 area: utils.getResponsiveArea([ "60%", "70%" ]),
                 anim: -1,
-                success: (t, a) => {
-                    new Tabulator("#xunlei-table-container", {
+                success: (/** @type {unknown} */ t, /** @type {number} */ a) => {
+                    createJhsTable((/** @type {any} */ (globalThis)).Tabulator, "#xunlei-table-container", {
+                        pagination: !1,
                         layout: "fitColumns",
                         placeholder: "暂无数据",
                         virtualDom: !0,
@@ -98,89 +143,79 @@ class DetailPageButtonPlugin extends BasePlugin {
                             responsive: 0
                         }, {
                             title: "类型",
-                            field: "ext",
+                            field: "extension",
                             headerSort: !1,
                             responsive: 0
                         }, {
                             title: "操作",
                             responsive: 0,
                             headerSort: !1,
-                            formatter: (t, n, a) => {
+                            formatter: (/** @type {any} */ t, /** @type {any} */ n, /** @type {(callback: () => void) => void} */ a) => {
                                 const i = t.getData();
                                 return a((() => {
                                     const n = t.getElement().querySelector(".subtitle-preview-btn"), a = t.getElement().querySelector(".subtitle-download-btn");
-                                    n && n.addEventListener("click", (async t => {
-                                        let n = i.url, a = e + "." + i.ext;
-                                        this.previewSubtitle(n, a);
-                                    })), a && a.addEventListener("click", (async t => {
-                                        let n = i.url, a = e + "." + i.ext, s = await gmHttp.get(n);
+                                    n && n.addEventListener("click", (async (/** @type {Event} */ t) => {
+                                        const a = e + "." + i.extension;
+                                        this.previewSubtitle(i, a);
+                                    })), a && a.addEventListener("click", (async (/** @type {Event} */ t) => {
+                                        const a = e + "." + i.extension, s = await subtitle.download("xunlei", i, { scope });
                                         utils.download(s, a);
                                     }));
                                 })), '\n                                        <button type="button" class="jhs-btn jhs-btn--secondary subtitle-preview-btn">预览</button>\n                                        <button type="button" class="jhs-btn jhs-btn--primary subtitle-download-btn">下载</button>\n                                    ';
                             }
-                        } ],
-                        locale: "zh-cn",
-                        langs: {
-                            "zh-cn": {
-                                pagination: {
-                                    first: "首页",
-                                    first_title: "首页",
-                                    last: "尾页",
-                                    last_title: "尾页",
-                                    prev: "上一页",
-                                    prev_title: "上一页",
-                                    next: "下一页",
-                                    next_title: "下一页",
-                                    all: "所有",
-                                    page_size: "每页行数"
-                                }
-                            }
-                        }
+                        } ]
                     }), utils.setupEscClose(a);
                 }
             }) : show.error("迅雷中找不到相关字幕!");
-        })).catch((e => {
+        } catch (e) {
             clog.error(e), show.error(e);
-        })).finally((() => {
+        } finally {
             t.close();
-        }));
+        }
     }
+    /** @param {ActionEvent | null} e @param {unknown} t */
     async filterOne(e, t) {
         e && e.preventDefault();
-        return detailStateController.requestToggle(this.getStateBinding(), "blocked", e);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "blocked", e);
     }
-    hideVideoControls() {
-        $(document).on("mouseenter", "#preview-video", (function() {
-            $(this).prop("controls", !0);
+    /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
+    hideVideoControls(scope) {
+        const documentRoot = $(document);
+        documentRoot.off("mouseenter.jhsDetailVideo").on("mouseenter.jhsDetailVideo", "#preview-video", ((/** @type {Event} */ event) => {
+            $(event.currentTarget).prop("controls", !0);
         }));
+        scope.addCleanup((() => documentRoot.off("mouseenter.jhsDetailVideo")));
     }
-    async previewSubtitle(e, t) {
-        if (!e) return void clog.error("未提供文件URL");
-        const n = e.split(".").pop().toLowerCase();
+    /** @param {SubtitleRecord} subtitle @param {string} t */
+    async previewSubtitle(subtitle, t) {
+        if (!subtitle?.url) return void clog.error("未提供文件URL");
+        const n = String(subtitle.extension || "").toLowerCase();
         if ("ass" === n || "srt" === n) try {
-            let a = await gmHttp.get(e), i = "字幕预览";
+            const dialog = this.getRuntimeService("dialog");
+            const scope = await this.getRuntimeService("scope")();
+            let a = await this.getRuntimeService("subtitle").download("xunlei", subtitle, { scope }), i = "字幕预览";
             "ass" === n ? i = "ASS字幕预览 - " + t : "srt" === n && (i = "SRT字幕预览 - " + t);
             const s = a.split("\n");
             let o = "";
             const r = String(s.length).length;
-            s.forEach(((e, t) => {
+            s.forEach(((/** @type {string} */ e, /** @type {number} */ t) => {
                 const n = String(t + 1).padStart(r, " ");
-                o += `<span class="jhs-code-line-number">${n}. </span>${e}\n`;
+                o += `<span class="jhs-code-line-number">${n}. </span>${escapeHtml(e)}\n`;
             }));
             const l = o;
-            layer.open({
+            dialog.open({
                 type: 1,
                 title: i,
                 area: utils.getResponsiveArea([ "80%", "80%" ]),
                 scrollbar: !1,
                 content: `<div class="jhs-code-viewer">${l}</div>`,
                 btn: [ "下载", "关闭" ],
-                btn1: function(e, n, i) {
+                btn1: function(/** @type {number} */ e, /** @type {unknown} */ n, /** @type {unknown} */ i) {
                     return utils.download(a, t), !1;
                 }
             });
         } catch (a) {
-            show.error(`预览失败: ${a.message}`), clog.error("预览字幕文件出错:", a);
+            show.error(`预览失败: ${a instanceof Error ? a.message : String(a)}`), clog.error("预览字幕文件出错:", a);
         } else show.error("仅支持预览ASS和SRT字幕文件");
     }
 }

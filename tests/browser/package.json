@@ -1,0 +1,21 @@
+{
+  "name": "jhs-browser-smoke",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "pretest": "node scripts/check-local-browser.mjs",
+    "test": "npm run test:startup && npm run test:functional",
+    "test:startup": "playwright test specs/startup-performance.spec.js --project=desktop-wide",
+    "test:functional": "playwright test --grep-invert \"fixture startup remains within the reviewed median\"",
+    "test:visual": "node scripts/visual-gate.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "jquery": "3.7.1",
+    "localforage": "1.10.0",
+    "tabulator-tables": "6.3.1"
+  }
+}

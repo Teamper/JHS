@@ -1,9 +1,10 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-const source = readFileSync(join(import.meta.dirname, "../src/core/event-bus.js"), "utf8");
+const source = readTestFile(join(import.meta.dirname, "../src/core/event-bus.js"), "utf8");
 
 class FakeBroadcastChannel {
     static channels = [];
@@ -13,7 +14,7 @@ class FakeBroadcastChannel {
 }
 
 function loadBus() {
-    const context = vm.createContext({ BroadcastChannel: FakeBroadcastChannel, crypto: { randomUUID: vi.fn().mockReturnValueOnce("tab-a").mockReturnValueOnce("tab-b").mockReturnValue("event-1") }, Date, Math, Map, Set, window: {}, unsafeWindow: {} }), end = source.indexOf("const jhsEventBus");
+    const context = vm.createContext({ BroadcastChannel: FakeBroadcastChannel, crypto: { randomUUID: vi.fn().mockReturnValueOnce("tab-a").mockReturnValueOnce("tab-b").mockReturnValue("event-1") }, Date, Math, Map, Set, window: {}, unsafeWindow: {} }), end = source.indexOf("let jhsEventBus");
     vm.runInContext(`${source.slice(0, end)}; globalThis.Bus = JhsEventBus;`, context);
     return context.Bus;
 }
@@ -43,5 +44,31 @@ describe("precise event bus", () => {
         bus.on("settings-changed", handler);
         await bus._receive(event), await bus._receive(event), await bus._receive({ ...event, eventId: "self", originId: bus.originId });
         expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("isolates a throwing local listener and still broadcasts to other tabs", async () => {
+        FakeBroadcastChannel.channels = [];
+        const Bus = loadBus(), first = new Bus("iso-local"), second = new Bus("iso-local");
+        const bad = vi.fn(async () => { throw new Error("boom"); }), good = vi.fn(), remote = vi.fn(), errors = [];
+        first.errorReporter = (error) => errors.push(error);
+        first.on("settings-changed", bad), first.on("settings-changed", good), second.on("settings-changed", remote);
+        await first.emit("settings-changed", { source: "legacy" });
+        await Promise.resolve();
+        expect(bad).toHaveBeenCalledTimes(1);
+        expect(good).toHaveBeenCalledTimes(1);
+        expect(remote).toHaveBeenCalledTimes(1);
+        expect(errors).toHaveLength(1);
+    });
+
+    it("isolates throwing remote listeners from each other", async () => {
+        FakeBroadcastChannel.channels = [];
+        const Bus = loadBus(), first = new Bus("iso-remote"), second = new Bus("iso-remote");
+        const bad = vi.fn(async () => { throw new Error("boom"); }), good = vi.fn();
+        second.errorReporter = () => {};
+        second.on("car-state-changed", bad), second.on("car-state-changed", good);
+        await first.emit("car-state-changed", { carNums: [] });
+        await Promise.resolve();
+        expect(bad).toHaveBeenCalledTimes(1);
+        expect(good).toHaveBeenCalledTimes(1);
     });
 });

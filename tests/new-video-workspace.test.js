@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -25,13 +26,21 @@ function createHarness() {
         OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") },
         TaskPlugin: { getTaskStatusSnapshot: vi.fn(() => ({ state: "idle", completedAt: null, nextAt: null })) }
     };
-    class BasePlugin { getBean(name) { return beans[name]; } }
-    class ImageHoverPreview { bindEvents() {} }
+    const runtimeServices = {
+        actressInfo: { placeholderUrl: vi.fn(() => "https://c0.jdbstatic.com/images/actor_unknow.jpg"), getAvatarSources: vi.fn(() => []) },
+        storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
+        state: stateService,
+        movie: { externalSiteOrigin: vi.fn(() => "https://javdb.com") },
+    };
+    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return runtimeServices[name]; } }
+    class ImageHoverPreview { constructor() {} bindEvents() {} destroy() {} }
+    dom.window.ImageHoverPreview = ImageHoverPreview;
     const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
     const context = vm.createContext({
         console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math,
         window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
         $, BasePlugin, ImageHoverPreview, storageManager, stateService, renderStateView,
+        JHS_Z_INDEX: { dialogHoverPreview: 999999992 },
         i: (target, key, value) => target[key] = value,
         normalizeCarNum,
         normalizeHttpUrl: (value, base = dom.window.location.href) => { try { const url = new URL(String(value), base); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } },
@@ -48,16 +57,39 @@ function createHarness() {
         T: "javdb", I: "javbus", D: "filter", A: "uncensored", _: "yes", l: false
     });
     context.globalThis = context;
-    const source = readFileSync(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("function aggregateNewVideoRecords");
+    const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("function aggregateNewVideoRecords");
     vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoPlugin`, context);
     const plugin = new context.TestPlugin;
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";
-    return { plugin, $, actresses, storageManager, stateService, beans };
+    return { plugin, $, actresses, storageManager, stateService, beans, runtimeServices };
 }
 
 afterEach(() => vi.useRealTimers());
 
 describe("new video workspace snapshot", () => {
+    it("counts existing records with cleared flags as pending, matching the workspace", async () => {
+        const {plugin,storageManager}=createHarness();
+        const records=new Map([
+            ["ABC-001",{carNum:"ABC-001",stateFlags:{favorite:false,downloaded:false,watched:false,blocked:false}}],
+            ["ABC-002",{carNum:"ABC-002",stateFlags:{favorite:true}}],
+        ]);
+        storageManager.getCarMap.mockResolvedValue(records);
+        plugin.renderCurrentView=vi.fn(async()=>{});
+        plugin.renderTaskStatuses=vi.fn();
+        await plugin.reloadNewVideoWorkspaceData();
+        const pending=await plugin.getNewVideoFlatList();
+        expect(pending.map(item=>item.carNum)).toEqual(["ABC-001"]);
+        expect(await plugin.getPendingNewVideoTotal()).toBe(pending.length);
+        records.get("ABC-002").stateFlags.favorite=false;
+        expect(await plugin.getPendingNewVideoTotal()).toBe(2);
+    });
+    it("routes workspace, editor, CDN and avatar dialogs through DialogService", () => {
+        const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
+        expect(source).toContain('getRuntimeService("dialog")');
+        expect(source).not.toContain("layer.open");
+        expect(source).not.toContain("layer.close");
+    });
+
     it("reads each source once and keeps view-only filtering in memory", async () => {
         const harness = createHarness();
         harness.plugin.renderCurrentView = vi.fn(async () => {}), harness.plugin.renderTaskStatuses = vi.fn();

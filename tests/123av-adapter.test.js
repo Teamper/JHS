@@ -1,18 +1,23 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const readSource = (path) => readFileSync(join(import.meta.dirname, "..", path), "utf8");
+const readSource = (path) => readTestFile(join(import.meta.dirname, "..", path), "utf8");
 const fc2Source = readSource("src/plugins/external-search/fc2-by-123av.js");
+const integrationSource = readSource("src/integrations/av123/manifest.js");
 const otherSiteSource = readSource("src/plugins/external-search/other-site.js");
 const httpSource = readSource("src/core/http.js");
 
 describe("123AV Chinese adapter contract", () => {
     it("uses the confirmed Chinese list and encoded search routes", () => {
-        expect(fc2Source).toContain("/cn/makers/fc2?page=${sourcePage}");
-        expect(fc2Source).toContain("/cn/search?keyword=${encodeURIComponent(this.keyword)}");
-        expect(otherSiteSource).toContain('`${await this.getAv123Url()}/cn`');
-        expect(otherSiteSource).toContain("encodeURIComponent(t)");
+        expect(integrationSource).toContain("/cn/makers/fc2?page=${sourcePage}");
+        expect(integrationSource).toContain("/cn/search?keyword=${encodeURIComponent(keyword)}&page=${sourcePage}");
+        expect(integrationSource).toContain("keyword ? [page]");
+        expect(fc2Source).not.toContain('this.keyword && $(".page-box").hide()');
+        expect(fc2Source).not.toContain("123av.com");
+        expect(otherSiteSource).toContain('providerId: "av123"');
+        expect(otherSiteSource).toContain('getRuntimeService("movie").searchUrl');
     });
 
     it("removes obsolete 123AV selectors, routes and sorting controls", () => {
@@ -22,15 +27,18 @@ describe("123AV Chinese adapter contract", () => {
         expect(otherSiteSource).not.toContain('getAv123Url() + "/ja"');
     });
 
-    it("classifies Cloudflare failures by property and preserves request context", () => {
-        expect(otherSiteSource).toContain("a?._cfBlocked");
+    it("classifies Cloudflare failures by normalized code and preserves request context", () => {
+        expect(otherSiteSource).toContain('const code = /** @type {{ code?: string }} */ (a)?.code');
+        expect(otherSiteSource).toContain('"CF_BLOCKED" === code');
+        expect(otherSiteSource).not.toContain("a?._cfBlocked");
         expect(otherSiteSource).not.toContain('includes("Just a moment")');
         expect(httpSource).toContain("Cloudflare challenge blocked: ${t}");
         expect(httpSource).toContain("n.requestUrl = t");
         expect(httpSource).toContain("n.finalUrl = e.finalUrl");
         expect(httpSource).toContain("n.cfDiagnostics =");
-        expect(fc2Source).toContain('cookiePartitionTopLevelSite: "https://123av.com"');
-        expect(otherSiteSource).toContain('requestOptions: { cookiePartitionTopLevelSite: "https://123av.com" }');
+        expect(integrationSource).toContain("cookiePartition: { topLevelSite: origin }");
+        expect(integrationSource).toContain('trustClass: "custom-public"');
+        expect(otherSiteSource).not.toContain("cookiePartitionTopLevelSite");
     });
 
     it("does not classify ordinary 404 markup as a Cloudflare challenge", () => {

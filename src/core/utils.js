@@ -1,4 +1,8 @@
-class Utils {
+import { prepareDialogOptions } from "./dialog-shell.js";
+import { i, normalizeCarNum } from "./constants.js";
+import { JHS_Z_INDEX } from "./theme.js";
+
+export class Utils {
     constructor() {
         return i(this, "intervalContainer", {}), i(this, "waitSequence", 0), i(this, "mimeTypes", {
             txt: "text/plain",
@@ -39,7 +43,10 @@ class Utils {
         let t;
         e.indexOf("css") >= 0 ? (t = document.createElement("link"), t.setAttribute("rel", "stylesheet"),
         t.href = e) : (t = document.createElement("script"), t.setAttribute("type", "text/javascript"),
-        t.src = e), document.documentElement.appendChild(t);
+        t.src = e);
+        // 挂到 head：挂在 documentElement 末尾会让 vendor CSS 在级联中晚于 JHS 样式而反超令牌；并按 URL 去重
+        const url = t.href || t.src;
+        [ ...document.head.querySelectorAll("link[href], script[src]") ].some((node => (node.href || node.src) === url)) || document.head.appendChild(t);
     }
     openPage(e, t, n, a) {
         n = n ?? !0;
@@ -50,8 +57,11 @@ class Utils {
             insert: 0
         });
         destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
-        layer.open({
+        let owningLayerIndex = null;
+        layer.open(prepareDialogOptions({
             type: 2,
+            zIndex: JHS_Z_INDEX.layer,
+            ui: { size: "workspace", body: "media" },
             title: t,
             content: destination.href,
             scrollbar: !1,
@@ -59,22 +69,30 @@ class Utils {
             area: this.getDialogArea("workspace"),
             isOutAnim: !1,
             anim: -1,
-            success: (e, t) => {
-                this.setupEscClose(t);
-            }
-        });
+            success: (e, t) => { owningLayerIndex = t; this.setupEscClose(t); },
+            end: () => { if (owningLayerIndex != null) this.releaseEscClose(owningLayerIndex); }
+        }, this));
     }
     _handleGlobalEscKey(e) {
         if ("Escape" !== e.key && 27 !== e.keyCode) return;
+        if (e.defaultPrevented || e.isDefaultPrevented?.()) return;
         if (0 === this.layerIndexStack.length) return;
-        const t = this.layerIndexStack[this.layerIndexStack.length - 1], n = $(`#layui-layer${t}`);
+        /* 先剔除已被 X 按钮/shadeClick 等途径关闭的陈旧索引，避免 Esc 被空操作吞掉 */
+        for (;this.layerIndexStack.length && !document.getElementById(`layui-layer${this.layerIndexStack[this.layerIndexStack.length - 1]}`); ) this.layerIndexStack.pop();
+        const t = this.layerIndexStack[this.layerIndexStack.length - 1];
+        if (null == t) return;
+        const n = $(`#layui-layer${t}`);
         let a = !1;
-        if (n.find(".viewer-container").length > 0) a = !0; else {
+        const hasPreview = root => $(root).find(".viewer-container:visible, .fancybox-container.fancybox-is-open:visible, .fancybox-container.fancybox-is-closing:visible").filter((_, preview) => {
+            const owner = $(preview).closest(".layui-layer");
+            return !owner.length || owner.attr("id") === `layui-layer${t}`;
+        }).length > 0;
+        if (hasPreview(document)) a = !0; else {
             const e = n.find(`#layui-layer-iframe${t}`)[0];
-            if (e && e.contentDocument) try {
-                $(e.contentDocument).find(".viewer-container").length > 0 && (a = !0);
+            if (e) try {
+                e.contentDocument && hasPreview(e.contentDocument) && (a = !0);
             } catch (i) {
-                clog.warn("无法检查跨域 iframe 内的 .viewer-container");
+                clog.warn("无法检查跨域 iframe 内的预览容器");
             }
         }
         a || (this.layerIndexStack.pop(), layer.close(t));
@@ -95,28 +113,68 @@ class Utils {
             clog.error("iframe监听失败 (跨域或未加载完毕):", i);
         }
     }
-    async closePage(options = {}) {
-        if ("yes" !== await storageManager.getSetting("needClosePage", "yes")) return !1;
-        const root = options?.root, parseIndex = element => {
+    /** 弹层经非 Esc 途径（X 按钮/shadeClick/layer.close）关闭时清理 Esc 栈，缺省清理栈顶 */
+    releaseEscClose(e) {
+        const t = null == e ? this.layerIndexStack[this.layerIndexStack.length - 1] : e;
+        null != t && (this.layerIndexStack = this.layerIndexStack.filter((n => n !== t)));
+    }
+    /** 将 Tab 焦点限制在弹窗内，并在释放时恢复原焦点。 @param {Element} container */
+    trapFocus(container) {
+        if (!container) return () => {};
+        const previous = document.activeElement;
+        const selector = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+        const visible = () => [ ...container.querySelectorAll(selector) ].filter((element => !element.hidden && "true" !== element.getAttribute("aria-hidden") && null !== element.offsetParent));
+        const handleKeydown = (/** @type {KeyboardEvent} */ event) => {
+            if ("Tab" !== event.key) return;
+            const items = visible();
+            if (!items.length) return void event.preventDefault();
+            const first = /** @type {HTMLElement} */ (items[0]), last = /** @type {HTMLElement} */ (items[items.length - 1]);
+            event.shiftKey && document.activeElement === first ? (event.preventDefault(), last.focus()) : !event.shiftKey && document.activeElement === last && (event.preventDefault(), first.focus());
+        };
+        container.addEventListener("keydown", handleKeydown);
+        queueMicrotask((() => /** @type {HTMLElement | undefined} */ (visible()[0])?.focus()));
+        return () => {
+            container.removeEventListener("keydown", handleKeydown);
+            previous?.isConnected && "function" == typeof /** @type {HTMLElement} */ (previous).focus && /** @type {HTMLElement} */ (previous).focus();
+        };
+    }
+    getOwningLayerIndex(options = {}) {
+        const parseIndex = element => {
             const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
             return match ? Number(match[1]) : null;
         };
         let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
+        try {
+            if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+        } catch {}
+        const root = options?.root;
         if (null === layerIndex && root) {
             const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
             layerIndex = parseIndex(layerElement);
         }
-        if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+        return layerIndex;
+    }
+    async closePage(options = {}) {
+        const settings = /** @type {any} */ (globalThis).settingsService?.snapshot?.();
+        const needClosePage = settings && Object.prototype.hasOwnProperty.call(settings, "needClosePage")
+            ? settings.needClosePage
+            : await storageManager.getSetting("needClosePage", "yes");
+        if ("yes" !== needClosePage && !0 !== needClosePage) return !1;
+        const layerIndex = this.getOwningLayerIndex(options);
+        if (null !== layerIndex && window.parent && window.parent !== window) try {
+            const parentUtils = /** @type {any} */ (globalThis).unsafeWindow?.parent?.utils;
+            if (parentUtils && parentUtils !== this && "function" == typeof parentUtils.closePage) return !!await parentUtils.closePage({ layerIndex });
+        } catch {}
         const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
         if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), !0;
-        if (window.opener && !window.opener.closed) return window.close(), !0;
-        return !1;
+        window.close();
+        return !0;
     }
-    loopDetector(e, t, n = 20, a = 1e4, i = !0) {
+    loopDetector(e, t, n = 20, a = 1e4, i = !0, scope = null) {
         const s = ++this.waitSequence;
         let o = null, r = null, l = null, c = !1;
         const d = () => {
-            o?.disconnect(), clearTimeout(r), clearTimeout(l), clearInterval(this.intervalContainer[s]?.fallback),
+            o && (scope?.releaseObserver ? scope.releaseObserver(o) : o.disconnect()), clearTimeout(r), clearTimeout(l), clearInterval(this.intervalContainer[s]?.fallback),
             delete this.intervalContainer[s];
         }, h = e => {
             if (c) return;
@@ -127,16 +185,17 @@ class Utils {
         }, p = () => {
             c || (clearTimeout(r), r = setTimeout(g, Math.max(0, n)));
         };
+        const cancel = () => { c = !0, d(); };
         this.intervalContainer[s] = {};
-        if (e()) return void h(!0);
-        if ("function" == typeof MutationObserver && document.documentElement) o = new MutationObserver(p),
-        o.observe(document.documentElement, { childList: !0, subtree: !0, characterData: !0 }); else this.intervalContainer[s].fallback = setInterval(g, Math.max(100, n));
+        if (e()) return h(!0), cancel;
+        if (scope?.observe && document.documentElement) o = scope.observe(document.documentElement, p, { childList: !0, subtree: !0, characterData: !0 }); else this.intervalContainer[s].fallback = setInterval(g, Math.max(100, n));
         l = setTimeout((() => {
             if (c) return;
             let t = !1;
             try { t = e(); } catch (e) { clog.error("DOM 等待条件执行失败", e); }
             h(t || i);
         }), Math.max(0, a));
+        return cancel;
     }
     rightClick(e, t, n) {
         let a;
@@ -180,6 +239,7 @@ class Utils {
     getNowStr(e = "-", t = ":", n = null) {
         let a;
         a = n ? new Date(n) : new Date;
+        if (isNaN(a.getTime())) return "";
         const i = a.getFullYear(), s = String(a.getMonth() + 1).padStart(2, "0"), o = String(a.getDate()).padStart(2, "0"), r = String(a.getHours()).padStart(2, "0"), l = String(a.getMinutes()).padStart(2, "0"), c = String(a.getSeconds()).padStart(2, "0");
         return `${[ i, s, o ].join(e)} ${[ r, l, c ].join(t)}`;
     }
@@ -267,7 +327,8 @@ class Utils {
         return [ "iphone", "ipod", "ipad", "android", "blackberry", "windows phone", "nokia", "webos", "opera mini", "mobile", "mobi", "tablet" ].some((t => e.includes(t)));
     }
     isMobileMode() {
-        const e = storageManager.getSettingSync("mobileMode", "auto");
+        const snapshot = /** @type {any} */ (globalThis).settingsService?.snapshot?.();
+        const e = snapshot?.mobileMode ?? storageManager.getSettingSync("mobileMode", "auto");
         return "on" === e || ("off" !== e && (this.isMobile() || window.innerWidth < 768));
     }
     async copyToClipboard(e, t) {

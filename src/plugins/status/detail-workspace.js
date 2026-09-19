@@ -1,46 +1,21 @@
-/** 返回当前详情页的宿主资源边界；调用者不得重挂载这些节点。 */
-function getDetailResourceAdapter() {
-    if (!window.isDetailPage) return null;
-    if (r) {
-        const hostRoot = $(".video-detail").first(), controller = hostRoot.find('[data-controller="magnet-sort"]').first(), resourceRoot = controller.find("#magnets-content").first();
-        if (!hostRoot.length || !controller.length || !resourceRoot.length) return null;
-        const resourceRegion = controller.closest(hostRoot.children()).first();
-        return {
-            site: "javdb", hostRoot, controller, observeRoot: controller, resourceRoot, resourceRegion,
-            rows: () => resourceRoot.children(".item").toArray(),
-            sortSelect: controller.find('select[data-action*="magnet-sort#sort"]').first(),
-            getResource(row) {
-                const item = $(row);
-                return item.find('.copy-to-clipboard[data-clipboard-text^="magnet:"]').first().attr("data-clipboard-text") || item.find('.magnet-name a[href^="magnet:"]').first().attr("href") || "";
-            },
-            getActionTarget: row => $(row).children(".buttons").first()
-        };
-    }
-    if (l) {
-        const hostRoot = $(".container").filter(((_, element) => $(element).find("#magnet-table").length > 0)).first(), resourceRoot = hostRoot.find("#magnet-table").first();
-        if (!hostRoot.length || !resourceRoot.length) return null;
-        const resourceRegion = resourceRoot.closest(hostRoot.children()).first(), observeRoot = resourceRoot.parent();
-        return {
-            site: "javbus", hostRoot, controller: resourceRoot, observeRoot, resourceRoot, resourceRegion,
-            rows: () => resourceRoot.find("tr").filter(((_, row) => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').length > 0)).toArray(),
-            sortSelect: $(),
-            getResource: row => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').first().attr("href") || "",
-            getActionTarget(row) {
-                const item = $(row), stableActions = item.find(".buttons,.actions,.btn-group").filter(((_, element) => $(element).closest("td").length > 0)).last();
-                if (stableActions.length) return stableActions;
-                const resourceCell = item.find('td:has(a[href^="magnet:"]),td:has(a[href^="ed2k:"])').first();
-                let actions = resourceCell.children(".jhs-offline-actions").first();
-                return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(resourceCell)), actions;
-            }
-        };
-    }
-    return null;
-}
+// @ts-check
+
+import { jhsEventBus } from "../../core/event-bus.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { JhsSelect } from "../../core/ui-primitives.js";
+import { getDetailResourceAdapter } from "../../ui/detail/detail-resource-adapter.js";
+
+/** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
 
 /** 非破坏性详情工作区：仅标记宿主稳定块，并为 JHS 自有内容提供固定插槽。 */
-class DetailWorkspacePlugin extends BasePlugin {
+export class DetailWorkspacePlugin extends BasePlugin {
     constructor() {
-        super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null;
+        super();
+        /** @type {JQueryHandle | null} */ this.hostRoot = null;
+        /** @type {any} */ this.resourceObserver = null;
+        /** @type {number | null} */ this.scheduledResourceFrame = null;
+        /** @type {(() => void) | null} */ this.cancelScheduledResourceFrame = null;
+        /** @type {any} */ this.lifecycleScope = null;
     }
     getName() { return "DetailWorkspacePlugin"; }
     async initCss() {
@@ -55,31 +30,53 @@ class DetailWorkspacePlugin extends BasePlugin {
             .jhs-detail-workspace .jhs-detail-btn-row { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-4); }
             .jhs-detail-workspace [data-jhs-section="gallery"] .jhs-detail-workspace__content { overflow-x:auto; }
             .jhs-detail-host-workspace { color:var(--jhs-text); }
-            .jhs-detail-owned-slot { min-width:0; padding:var(--jhs-space-5) 0; border-top:1px solid var(--jhs-border); }
+            .jhs-detail-owned-slot { min-width:0; box-sizing:border-box; padding:var(--jhs-space-4); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
             .jhs-detail-owned-slot:empty { display:none; }
-            .jhs-detail-owned-slot--summary-actions { padding:var(--jhs-space-3) 0 var(--jhs-space-5); border-top:0; }
-            .jhs-detail-post-resource { min-width:0; }
+            .jhs-detail-owned-slot--summary-actions { margin-block:var(--jhs-space-5); }
+            .jhs-detail-post-resource { display:grid; min-width:0; gap:var(--jhs-space-5); margin-block:var(--jhs-space-5); }
             .jhs-detail-host-workspace .jhs-detail-btn-row { margin:0!important; }
             .jhs-detail-host-action { display:inline-flex!important; min-height:var(--jhs-control-height)!important; align-items:center!important; justify-content:center!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border)!important; border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface)!important; color:var(--jhs-text)!important; box-shadow:none!important; font:inherit!important; font-size:var(--jhs-font-size-sm)!important; font-weight:600!important; line-height:1!important; text-decoration:none!important; }
             .jhs-detail-host-action:hover { border-color:var(--jhs-accent)!important; background:var(--jhs-surface-2)!important; color:var(--jhs-accent)!important; }
             .jhs-offline-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-2); margin-left:var(--jhs-space-2); vertical-align:middle; }
-            @media (max-width:767px) { .jhs-detail-owned-slot { padding:var(--jhs-space-4) 0; } }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnets] { container:jhs-magnets / inline-size; min-width:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-host-region="resources"] { margin:0; min-width:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-host-region="resources"] > .column { padding:0; min-width:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-resource-surface] { margin:0; padding:var(--jhs-space-4); box-sizing:border-box; min-width:0; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); color:var(--jhs-text); }
+            [data-jhs-workspace-site="javdb"] [data-jhs-resource-body] { padding:0; border:0; background:transparent; color:inherit; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnets] > .magnet-sort { margin-bottom:var(--jhs-space-3); }
+            [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row] { display:grid; grid-template-columns:minmax(0,1fr); grid-template-areas:"info" "date" "actions"; gap:var(--jhs-space-2); align-items:center; margin:0; padding:var(--jhs-space-3); box-sizing:border-box; border-bottom:1px solid var(--jhs-border); background:transparent; }
+            [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row]:last-child { border-bottom:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="info"] .name { color:var(--jhs-text); font-size:var(--jhs-font-size-md); font-weight:600; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="date"] { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part] { width:auto!important; min-width:0; max-width:100%; margin:0!important; padding:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="info"] { grid-area:info; overflow-wrap:anywhere; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="date"] { grid-area:date; white-space:nowrap; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] { grid-area:actions; display:flex; flex-wrap:nowrap; align-items:center; gap:var(--jhs-space-2); }
+            [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; box-sizing:border-box; height:var(--jhs-control-height)!important; min-height:var(--jhs-control-height)!important; margin:0!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface); color:var(--jhs-text); font-size:var(--jhs-font-size-sm); line-height:1!important; }
+            @container jhs-magnets (min-width:768px) {
+                [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row] { grid-template-columns:minmax(0,1fr) max-content max-content; grid-template-areas:"info date actions"; gap:var(--jhs-space-4); }
+            }
+            @container jhs-magnets (max-width:767px) {
+                [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { height:44px!important; min-height:44px!important; }
+            }
+            @media (pointer:coarse) {
+                [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { height:44px!important; min-height:44px!important; }
+            }
         </style>`;
     }
     async handle() {
         if (!window.isDetailPage) return;
-        utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, !0);
+        this.lifecycleScope = await this.getRuntimeService("scope")();
+        const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, !0, this.lifecycleScope);
+        this.lifecycleScope.addCleanup(cancel);
+        this.lifecycleScope.addCleanup((() => {
+            this.cancelScheduledResourceFrame?.(), this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+        }));
     }
     getHostAdapter() {
-        if (r) {
-            const root = $(".video-detail").first();
-            return root.length ? { site: "javdb", root } : null;
-        }
-        if (l) {
-            const root = $(".container").filter(((_, element) => $(element).find("#magnet-table,.screencap,.info").length > 0)).first();
-            return root.length ? { site: "javbus", root } : null;
-        }
-        return null;
+        const host = this.getRuntimeService("host"), root = host?.locateDetailRoot?.();
+        if (!root) return null;
+        return { site: host.site || "unknown", root: $(root) };
     }
     ensureWorkspace() {
         const adapter = this.getHostAdapter();
@@ -89,13 +86,14 @@ class DetailWorkspacePlugin extends BasePlugin {
             root.attr({ "data-jhs-workspace-ready": "true", "data-jhs-workspace-site": adapter.site }).addClass("jhs-detail-host-workspace jhs-ui");
             if ("javdb" === adapter.site) {
                 root.children("h2,.video-meta-panel").attr("data-jhs-host-region", "summary");
-                root.children(".columns").filter(((_, element) => $(element).find(".tile-images,.preview-images").length > 0)).attr("data-jhs-host-region", "gallery");
-                root.children(".columns").filter(((_, element) => $(element).find("#magnets-content").length > 0)).attr("data-jhs-host-region", "resources");
+                root.children(".columns").filter(((/** @type {number} */ _, /** @type {Element} */ element) => $(element).find(".tile-images,.preview-images").length > 0)).attr("data-jhs-host-region", "gallery");
+                root.children(".columns").filter(((/** @type {number} */ _, /** @type {Element} */ element) => $(element).find("#magnets-content").length > 0)).attr("data-jhs-host-region", "resources");
                 this.normalizeHostActions(root.find(".video-meta-panel").first());
             } else {
                 root.children("h3,.row.movie").attr("data-jhs-host-region", "summary");
-                root.children().filter(((_, element) => $(element).is("#mag-submit-show,#mag-submit") || $(element).find("#magnet-table").length > 0)).attr("data-jhs-host-region", "resources");
-                root.children().filter(((_, element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
+                const resource = getDetailResourceAdapter(this.getRuntimeService("host"));
+                resource?.resourceRegion?.attr("data-jhs-host-region", "resources");
+                root.children().filter(((/** @type {number} */ _, /** @type {Element} */ element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
                 this.normalizeHostActions(root.find(".info").first());
             }
             this.ensureOwnedSlots(root), this.adoptExistingOwnedPanels(root);
@@ -103,6 +101,7 @@ class DetailWorkspacePlugin extends BasePlugin {
         this.hostRoot = root, this.ensureOwnedSlots(root), this.placeOwnedSlots(), this.bindResourceLifecycle();
         return root;
     }
+    /** @param {string} name */
     getSlot(name) {
         return this.ensureWorkspace().find(`[data-jhs-slot="${name}"]`).first();
     }
@@ -116,7 +115,7 @@ class DetailWorkspacePlugin extends BasePlugin {
     }
     /** 只移动 JHS 自有插槽，将其固定在稳定宿主锚点旁。 */
     placeOwnedSlots() {
-        const root = this.hostRoot, resource = getDetailResourceAdapter();
+        const root = this.hostRoot, resource = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!root?.length) return;
         this.ensureOwnedSlots(root);
         const summaryActions = root.children('[data-jhs-slot="summary-actions"]').first(), postResource = root.children('[data-jhs-slot-group="post-resource"]').first();
@@ -124,80 +123,56 @@ class DetailWorkspacePlugin extends BasePlugin {
         summaryRegion.length && summaryActions.insertAfter(summaryRegion);
         resource?.resourceRegion?.length && postResource.insertAfter(resource.resourceRegion);
     }
+    /** @param {JQueryHandle} root */
     adoptExistingOwnedPanels(root) {
         [ [ ".jhs-detail-btn-row", "summary-actions" ], [ ".jhs-related-panel", "related" ], [ ".jhs-review-panel", "reviews" ] ].forEach((([ selector, slot ]) => {
             const target = root.find(`[data-jhs-slot="${slot}"]`).first();
-            root.find(selector).filter(((_, element) => !$(element).closest("[data-jhs-slot]").length)).each(((_, element) => target.append(element)));
+            root.find(selector).filter(((/** @type {number} */ _, /** @type {Element} */ element) => !$(element).closest("[data-jhs-slot]").length)).each(((/** @type {number} */ _, /** @type {Element} */ element) => target.append(element)));
         }));
     }
+    /** @param {JQueryHandle} info */
     normalizeHostActions(info) {
         const labels = new Set([ "想看", "看过", "看過", "存入清单", "存入清單", "下载", "下載", "订正", "訂正" ]);
-        info.find("a, button").filter((function() { return !$(this).is(".jhs-btn, [id^='jhs-']") && labels.has($(this).text().replace(/\s+/g, " ").trim()); })).addClass("jhs-detail-host-action");
+        info.find("a, button").filter(((/** @type {number} */ _, /** @type {Element} */ element) => !$(element).is(".jhs-btn, [id^='jhs-']") && labels.has($(element).text().replace(/\s+/g, " ").trim()))).addClass("jhs-detail-host-action");
     }
+    /** @param {MutationRecord} record */
     isJhsOnlyMutation(record) {
         if ($(record.target).closest(".jhs-offline-actions,.jhs-select-control,.jhs-magnet-score").length) return !0;
         const nodes = [ ...record.addedNodes, ...record.removedNodes ].filter((node => node.nodeType === Node.ELEMENT_NODE));
-        return nodes.length > 0 && nodes.every((node => node.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || node.closest?.(".jhs-offline-actions,.jhs-select-control")));
+        return nodes.length > 0 && nodes.every((node => {
+            const element = /** @type {Element} */ (node);
+            return element.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || element.closest?.(".jhs-offline-actions,.jhs-select-control");
+        }));
     }
     bindResourceLifecycle() {
-        const adapter = getDetailResourceAdapter();
+        const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!adapter) return;
         if (this.resourceObserver && this.resourceObserver.root === adapter.observeRoot[0]) return void this.scheduleResourceUpdate();
-        this.resourceObserver?.disconnect?.();
-        const observer = new MutationObserver((records => { records.every((record => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate(); }));
-        observer.root = adapter.observeRoot[0], observer.observe(adapter.observeRoot[0], { childList: !0, subtree: !0 }), this.resourceObserver = observer,
+        this.resourceObserver && this.lifecycleScope?.releaseObserver(this.resourceObserver);
+        if (!this.lifecycleScope) return;
+        const observer = this.lifecycleScope.observe(adapter.observeRoot[0], ((/** @type {MutationRecord[]} */ records) => { records.every((record => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate(); }), { childList: !0, subtree: !0 });
+        observer.root = adapter.observeRoot[0], this.resourceObserver = observer,
         adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
     }
     scheduleResourceUpdate() {
-        if (this.scheduledResourceFrame) return;
-        const schedule = window.requestAnimationFrame || (callback => setTimeout(callback));
+        if (null !== this.scheduledResourceFrame) return;
+        const usesAnimationFrame = "function" == typeof window.requestAnimationFrame;
+        const schedule = /** @type {(callback: FrameRequestCallback) => number} */ (usesAnimationFrame ? window.requestAnimationFrame.bind(window) : (callback => Number(setTimeout(callback))));
         this.scheduledResourceFrame = schedule((() => {
-            this.scheduledResourceFrame = null;
-            const adapter = getDetailResourceAdapter();
+            this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+            const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
             if (!adapter) return;
+            adapter.prepareLayout?.();
             this.placeOwnedSlots();
             adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
+            if (!jhsEventBus) return;
             void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: !1 });
         }));
+        this.cancelScheduledResourceFrame = () => {
+            null !== this.scheduledResourceFrame && (usesAnimationFrame ? window.cancelAnimationFrame?.(this.scheduledResourceFrame) : clearTimeout(this.scheduledResourceFrame));
+        };
     }
 }
 
 /** 创建 FC2 自有详情壳，所有异步模块只写入固定插槽。 */
-function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
-    const workspace = $('<div class="jhs-fc2-workspace jhs-ui"></div>').attr({
-        "data-jhs-fc2-source": source,
-        "data-jhs-fc2-mode": mode,
-        "data-jhs-car-num": normalizeCarNum(carNum) || ""
-    });
-    const definitions = [ [ "summary", "影片概览" ], [ "gallery", "预览与剧照" ], [ "resources", "资源" ], [ "reviews", "评论" ], [ "related", "相关清单" ] ];
-    definitions.forEach((([ name, title ]) => {
-        const section = $('<section class="jhs-fc2-section"></section>').attr("data-jhs-section", name);
-        const header = $('<header class="jhs-fc2-section__header"></header>'), heading = $("<h2></h2>").text(title), actions = $('<div class="jhs-fc2-section__actions"></div>').attr("data-jhs-section-actions", name);
-        section.append(header.append(heading, actions), $('<div class="jhs-fc2-section__content"></div>').attr("data-jhs-slot", name)), workspace.append(section);
-    }));
-    return workspace;
-}
-
-/** 创建只属于单个 FC2 详情实例的生命周期和插槽上下文。 */
-function createFc2DetailContext(root, options = {}) {
-    const workspace = $(root).is(".jhs-fc2-workspace") ? $(root) : $(root).find(".jhs-fc2-workspace").first();
-    let destroyed = !1;
-    const namespace = `.jhsFc2Detail${Date.now()}${Math.random().toString(36).slice(2)}`, observers = new Set();
-    const context = {
-        ...options,
-        root: workspace,
-        workspace,
-        namespace,
-        observers,
-        getSlot: name => workspace.find(`[data-jhs-slot="${name}"]`).first(),
-        getSection: name => workspace.find(`[data-jhs-section="${name}"]`).first(),
-        isAlive: () => !destroyed && workspace[0]?.isConnected !== !1,
-        addObserver(observer) { observer && observers.add(observer); return observer; },
-        destroy() {
-            if (destroyed) return;
-            destroyed = !0, workspace.off(namespace).find("*").off(namespace), observers.forEach((observer => observer.disconnect?.())), observers.clear(), workspace.removeData("jhsFc2Context");
-        }
-    };
-    workspace.data("jhsFc2Context", context);
-    return context;
-}
+/** @param {{ carNum?: string, source?: string, mode?: string }} [options] */

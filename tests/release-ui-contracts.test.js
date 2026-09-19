@@ -1,8 +1,9 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const read = file => readFileSync(join(process.cwd(), file), "utf8");
+const read = file => readTestFile(join(process.cwd(), file), "utf8");
 
 describe("v6.4.1 frozen UI contracts", () => {
     const newVideo = read("src/plugins/new-video/new-video.js");
@@ -35,11 +36,16 @@ describe("v6.4.1 frozen UI contracts", () => {
     it("opens mobile logs through the FAB and keeps the floating toggle hidden", () => {
         expect(mobile).toContain('item("logger", "运行日志")');
         expect(mobile).toContain("clog.openDialog?.()");
-        expect(logger).toContain('window.matchMedia?.("(max-width: 768px)").matches');
+        expect(logger).toContain('window.matchMedia?.("(max-width: 767px)").matches');
         expect(logger).toContain("openDialog() {");
         expect(logger).toContain("content: host.outerHTML");
         expect(logger).toContain('find(".jhs-logger-dialog")[0]?.appendChild(this.window)');
         expect(logger).toContain("unsafeWindow.parent !== unsafeWindow");
+    });
+
+    it("builds string image previews with DOM properties instead of HTML interpolation", () => {
+        expect(logger).toContain('image.src = String(t), image.alt = String(n)');
+        expect(logger).not.toContain('append(`<img src="${t}" alt="${n}">`)');
     });
 
     it("keeps offline submission focusable while exposing busy semantics", () => {

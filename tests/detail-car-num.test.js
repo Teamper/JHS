@@ -1,3 +1,6 @@
+import { prepareDialogOptions } from "../src/core/dialog-shell.js";
+import { JHS_Z_INDEX } from "../src/core/theme.js";
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -6,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadCarNumHelpers() {
-    const source = readFileSync(join(repoRoot, "src/core/constants.js"), "utf8"), start = source.indexOf("function normalizeCarNum"), end = source.indexOf("let M =", start);
+    const source = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = source.indexOf("function normalizeCarNum"), end = source.indexOf("let M =", start);
     const context = vm.createContext({});
     vm.runInContext(`${source.slice(start, end)}; globalThis.normalize = normalizeCarNum; globalThis.first = firstValidCarNum; globalThis.assertContract = assertPageInfoContract;`, context);
     return context;
@@ -53,7 +56,7 @@ function getPageInfo({ url, javdb = false, javbus = false, copyCarNum = null, fa
         assertPageInfoContract: helpers.assertContract,
         i: (target, key, value) => (target[key] = value)
     });
-    const source = readFileSync(join(repoRoot, "src/core/plugin-manager.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8");
     vm.runInContext(`${source}; globalThis.TestBasePlugin = BasePlugin;`, context);
     return context.TestBasePlugin.prototype.getPageInfo.call({});
 }
@@ -66,10 +69,12 @@ function loadUtils(url = "https://javdb.example/search?q=ABF-142") {
         document: {},
         layer,
         GM_openInTab: openTab,
+        prepareDialogOptions,
+        JHS_Z_INDEX,
         normalizeCarNum: loadCarNumHelpers().normalize,
         i: (target, key, value) => (target[key] = value)
     });
-    const source = readFileSync(join(repoRoot, "src/core/utils.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/core/utils.js"), "utf8");
     vm.runInContext(`${source}; globalThis.TestUtils = Utils;`, context);
     return { utils: new context.TestUtils(), layer, openTab };
 }
@@ -86,7 +91,7 @@ function loadDmmParser() {
         $: () => ({ attr: vi.fn().mockReturnThis(), css: vi.fn().mockReturnThis(), append: vi.fn().mockReturnThis() }),
         show: { error: vi.fn() }
     });
-    const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/preview-video.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
+    const source = readTestFile(join(repoRoot, "src/services/preview-service.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
     vm.runInContext(`${source.slice(start, end)}; globalThis.TestDmmParser = DmmPreviewParser;`, context);
     return { Parser: context.TestDmmParser, warn, error, request };
 }
@@ -95,7 +100,7 @@ function loadScreenshotPlugin(overrides = {}) {
     const warn = vi.fn(), debug = vi.fn(), error = vi.fn(), cachedRequest = vi.fn(), context = vm.createContext({
         console,
         URL,
-        BasePlugin: class {},
+        BasePlugin: class { getRuntimeService(name) { return "scope" === name ? async () => overrides.scope : overrides[name]; } },
         normalizeCarNum: loadCarNumHelpers().normalize,
         clog: { warn, debug, error, log: vi.fn() },
         storageManager: { cachedRequest },
@@ -107,10 +112,9 @@ function loadScreenshotPlugin(overrides = {}) {
         l: false
     });
     context.CACHE_TTL = { screenshot: 6048e5 };
-    const parserSource = readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8");
-    const registrySource = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot-provider-registry.js"), "utf8");
-    const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-    vm.runInContext(`${parserSource}\n${registrySource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
+    const parserSource = readTestFile(join(repoRoot, "src/integrations/javstore/parser.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
+    vm.runInContext(`${parserSource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
     return { Plugin: context.TestScreenshotPlugin, warn, debug, error, cachedRequest };
 }
 
@@ -192,110 +196,54 @@ describe("detail car number propagation", () => {
         expect(cachedRequest).not.toHaveBeenCalled();
     });
 
-    it("checks matching JavStore results in source order until CLICK HERE! is found", async () => {
-        const candidates = [
-            { text: "IPZZ-479 first", href: "/first-ipzz479-pn.html" },
-            { text: "IPZZ-479 second", href: "/second-ipzz479-pn.html" },
-            { text: "another title", href: "/other-pn.html" }
-        ];
-        const searchLinks = {
-            filter: (predicate) => {
-                const matches = candidates.filter((element, index) => predicate(index, element));
-                return { map: (mapper) => ({ get: () => matches.map((element, index) => mapper(index, element)) }) };
-            }
-        };
-        const noPreview = { filter: () => noPreview, first: () => noPreview, attr: () => undefined };
-        const previewLink = { filter: (predicate) => (predicate(0, { text: "CLICK HERE!" }), previewLink), first: () => previewLink,
-            attr: () => "//img.javstore.net/images/2025/02/13/MOSAIC-ARCHIVE-ipzz-479_s.jpg" };
-        const searchDom = { find: vi.fn(() => searchLinks) };
-        const firstDetail = { find: vi.fn(() => noPreview) };
-        const secondDetail = { find: vi.fn(() => previewLink) };
-        const gmHttp = { get: vi.fn().mockResolvedValueOnce("search-html").mockResolvedValueOnce("first-html").mockResolvedValueOnce("second-html") };
-        const utils = { htmlTo$dom: vi.fn((html) => ({ "search-html": searchDom, "first-html": firstDetail, "second-html": secondDetail })[html]) };
-        const { Plugin } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text, attr: () => element.href }) });
-        await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBe("https://img.javstore.net/images/2025/02/13/MOSAIC-ARCHIVE-ipzz-479_s.jpg");
-        expect(gmHttp.get.mock.calls.map(([url]) => url)).toEqual([
-            "https://javstore.net/search?q=IPZZ-479",
-            "https://javstore.net/first-ipzz479-pn.html",
-            "https://javstore.net/second-ipzz479-pn.html"
-        ]);
-        expect(searchDom.find).toHaveBeenCalledWith('a[href$="-pn.html"]');
-        expect(firstDetail.find).toHaveBeenCalledWith("a");
-        expect(secondDetail.find).toHaveBeenCalledWith("a");
-    });
-
-    it("returns null for a JavStore 404 or empty search without requesting details", async () => {
-        const gmHttp = { get: vi.fn().mockResolvedValue(null) };
-        const { Plugin } = loadScreenshotPlugin({ gmHttp });
-        await expect(new Plugin().getJavStoreScreenShot("ABF-142")).resolves.toBeNull();
-        expect(gmHttp.get).toHaveBeenCalledTimes(1);
-        expect(gmHttp.get.mock.calls[0][4]).toEqual({ ignoreNotFound: true });
-    });
-
-    it("returns null when no -pn.html result text matches the car number", async () => {
-        const links = { filter: (predicate) => (predicate(0, { text: "another title" }), { map: () => ({ get: () => [] }) }) };
-        const gmHttp = { get: vi.fn().mockResolvedValue("search-html") };
-        const utils = { htmlTo$dom: vi.fn(() => ({ find: vi.fn(() => links) })) };
-        const { Plugin, debug } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text }) });
-        await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBeNull();
-        expect(gmHttp.get).toHaveBeenCalledTimes(1);
-        expect(debug).toHaveBeenCalledWith("JavStore, 查询番号无结果:", "https://javstore.net/search?q=IPZZ-479");
-    });
-
-    it("continues after a candidate 404 and returns the next valid preview", async () => {
-        const candidateElements = [ { text: "IPZZ-479 first", href: "/missing-pn.html" }, { text: "IPZZ-479 second", href: "/valid-pn.html" } ];
-        const searchLinks = { filter: (predicate) => ({ map: (mapper) => ({ get: () => candidateElements.filter((element, index) => predicate(index, element)).map((element, index) => mapper(index, element)) }) }) };
-        const preview = { filter: (predicate) => (predicate(0, { text: "CLICK HERE!" }), preview), first: () => preview, attr: () => "/preview.th.jpg" };
-        const gmHttp = { get: vi.fn().mockResolvedValueOnce("search-html").mockResolvedValueOnce(null).mockResolvedValueOnce("detail-html") };
-        const utils = { htmlTo$dom: vi.fn((html) => "search-html" === html ? { find: () => searchLinks } : { find: () => preview }) };
-        const { Plugin } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text, attr: () => element.href }) });
-        await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBe("https://javstore.net/preview.jpg");
-        expect(gmHttp.get).toHaveBeenCalledTimes(3);
-    });
-
-    it("upgrades legacy JavStore cache entries and normalizes new cache writes", async () => {
-        const loaded = loadScreenshotPlugin();
-        loaded.cachedRequest.mockResolvedValueOnce({ url: "http://img.javstore.net/legacy.jpg" });
-        await expect(new loaded.Plugin().getCachedProviderScreenshot("javstore", "IPZZ-479", vi.fn())).resolves.toEqual({
-            url: "https://img.javstore.net/legacy.jpg", source: "javstore", detailUrl: null
-        });
-        loaded.cachedRequest.mockImplementationOnce(async (key, ttl, loader) => (await loader()).data);
-        await expect(new loaded.Plugin().getCachedProviderScreenshot("javstore", "IPZZ-480", async () => "http://img2.javstore.net/new.jpg")).resolves.toEqual({
-            url: "https://img2.javstore.net/new.jpg", source: "javstore", detailUrl: null
-        });
+    it("resolves screenshots through the declared ScreenshotService", async () => {
+        const resolve = vi.fn(async () => [{ url: "https://img.javstore.net/preview.jpg", providerId: "javstore" }]);
+        const settings = { snapshot: () => ({ enableLoadScreenShot: "yes" }) };
+        const { Plugin } = loadScreenshotPlugin({ screenshot: { resolve, isEnabled: () => true }, settings, scope: { id: "detail" } });
+        await expect(new Plugin().getScreenshot("IPZZ-479")).resolves.toBe("https://img.javstore.net/preview.jpg");
+        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" }, settings: { enableLoadScreenShot: "yes" }, allowWhenDisabled: false });
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {
-        const html = vi.fn(), container = { html, on: vi.fn().mockReturnThis() };
-        const { Plugin } = loadScreenshotPlugin({ $: vi.fn(() => container) });
+        const append = vi.fn(), container = { empty: vi.fn().mockReturnThis(), append, on: vi.fn().mockReturnThis() };
+        const image = { attributes: {}, attr(values) { Object.assign(this.attributes, values); return this; }, addClass: vi.fn().mockReturnThis() };
+        const { Plugin } = loadScreenshotPlugin({ $: vi.fn(value => value === ".screen-container" ? container : image) });
         new Plugin().addImg("缩略图", "http://img.javstore.net/legacy.jpg");
-        expect(html).toHaveBeenCalledWith(expect.stringContaining('src="https://img.javstore.net/legacy.jpg"'));
-        expect(html).not.toHaveBeenCalledWith(expect.stringContaining('src="http://img.javstore.net'));
+        expect(image.attributes.src).toBe("https://img.javstore.net/legacy.jpg");
+        expect(append).toHaveBeenCalledWith(image);
     });
 });
 
 describe("source regression contracts", () => {
     it("keeps detail consumers on the strict getPageInfo object contract", () => {
         for (const file of [
-            "src/plugins/translate/translate.js",
             "src/plugins/status/detail-page-button.js",
             "src/plugins/image-viewer/preview-video.js",
             "src/plugins/image-viewer/screenshot.js"
         ]) {
-            const source = readFileSync(join(repoRoot, file), "utf8");
+            const source = readTestFile(join(repoRoot, file), "utf8");
             expect(source).toContain("getPageInfo()");
             expect(source).not.toContain("getPageInfo()?.carNum");
         }
+        const translate = readTestFile(join(repoRoot, "src/plugins/translate/translate.js"), "utf8");
+        expect(translate).toContain('getRuntimeService("translation")');
+        expect(translate).not.toContain("getPageInfo()?.carNum");
+    });
+
+    it("routes detail state-action dialogs through the declared DialogService", () => {
+        const source = readTestFile(join(repoRoot, "src/plugins/status/detail-page-button.js"), "utf8");
+        expect(source).toContain('getRuntimeService("dialog")');
+        expect(source).not.toContain("layer.open");
     });
 
     it("treats opted-in HTTP 404 responses as neutral results before retry accounting", () => {
-        const source = readFileSync(join(repoRoot, "src/core/http.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/core/http.js"), "utf8");
         expect(source).toMatch(/404 === e\.status && requestOptions\.ignoreNotFound[\s\S]{0,80}a\(null\)/);
         expect(source.indexOf("404 === e.status && requestOptions.ignoreNotFound")).toBeLessThan(source.indexOf("this._isCloudflareChallenge(e.responseText, e.status)"));
     });
 
     it("uses readable non-shadowing variables for actress profile links", () => {
-        const source = readFileSync(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
         expect(source).toContain("const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl)");
         expect(source).toContain("noteText = isPaused");
         expect(source).not.toContain("`${c}/actors/${e.starId}?t=d`");

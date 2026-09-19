@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "file": "src/core/logger.js",
+      "category": "vendor-glue",
+      "reason": "Legacy logger facade owns Toastify, layer and Viewer compatibility handles until the facade removal cycle.",
+      "removalVersion": "6.6"
+    },
+    {
+      "file": "src/core/storage.js",
+      "category": "compatibility-glue",
+      "reason": "Legacy StorageManager public contract remains behind the typed StoragePort and StorageService adapters.",
+      "removalVersion": "6.6"
+    },
+    {
+      "file": "src/core/utils.js",
+      "category": "compatibility-glue",
+      "reason": "Legacy plugin utility surface remains available through the 6.6 Compatibility Facade boundary.",
+      "removalVersion": "6.6"
+    },
+    {
+      "file": "src/plugins/backup/setting.js",
+      "category": "compatibility-glue",
+      "reason": "Transitional SettingPlugin entry composes typed settings panels, forms and runtime services for legacy registration.",
+      "removalVersion": "6.6"
+    },
+    {
+      "file": "src/plugins/new-video/new-video.js",
+      "category": "compatibility-glue",
+      "reason": "Transitional NewVideoPlugin UI entry bridges the typed scheduler, state and service boundaries for legacy registration.",
+      "removalVersion": "6.6"
+    }
+  ]
+}

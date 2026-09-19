@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -16,7 +17,7 @@ function loadListButtonPlugin() {
         hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key])),
         isHardHidden: (flags, reasons = {}) => Boolean(flags.blocked || reasons.keyword || reasons.actorBlacklist || reasons.actressBlacklist)
     });
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8")};globalThis.Plugin=ListPageButtonPlugin`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8")};globalThis.Plugin=ListPageButtonPlugin`, context);
     return { dom, $, plugin: new context.Plugin(), storageManager, show };
 }
 

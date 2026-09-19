@@ -1,5 +1,10 @@
+// @ts-check
+
+import { C, _, l } from "../../core/constants.js";
+
 /** Generate the settings page CSS based on container config and site type. */
-function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
+/** @param {number | string} containerWidth @param {number} containerColumns @param {boolean} isJavBus @param {boolean} isJavDB */
+export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
     let base;
     if (isJavBus) {
         base = `
@@ -50,7 +55,7 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                     transition: all 0.2s ease;
                 }
                 .cache-item:hover {
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    box-shadow: var(--jhs-shadow-sm);
                     transform: translateY(-2px);
                 }
                 .cache-item { padding:var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); }
@@ -134,7 +139,8 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                 .simple-setting .jhs-setting-row, .mini-simple-setting .jhs-setting-row, .jhs-quick-setting .jhs-setting-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); min-height:48px; padding:var(--jhs-space-2) 0; border-bottom:1px solid var(--jhs-border); }
                 .simple-setting .jhs-setting-row:last-child, .mini-simple-setting .jhs-setting-row:last-child, .jhs-quick-setting .jhs-setting-row:last-child { border-bottom:0; }
                 .simple-setting .jhs-setting-row__control, .mini-simple-setting .jhs-setting-row__control, .jhs-quick-setting .jhs-setting-row__control { width:auto; justify-self:end; }
-                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-height:1.35; }
+                @media (max-width:767px) { .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { -webkit-line-clamp:unset; white-space:normal; } }
                 .jhs-setting-nav-item { position:relative; }
                 .jhs-nav-button { padding-right:15px !important; }
                 .jhs-mini-setting-box { position:relative; margin-left:auto; }
@@ -146,7 +152,7 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                 .jhs-table-dialog { height:100%; overflow:hidden; }
                 .jhs-table-dialog__content { margin:auto !important; }
                 .jhs-help-title { margin:0 0 var(--jhs-space-5); padding-bottom:var(--jhs-space-3); border-bottom:1px solid var(--jhs-border); color:var(--jhs-accent); font-size:22px; }
-                .jhs-list-btn-row { display:flex; align-items:center; gap:var(--jhs-space-2); margin:var(--jhs-space-2) 0; }
+                .jhs-list-btn-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); margin:var(--jhs-space-2) 0; }
 
                 .jhs-setting-layout {
                     display: grid;
@@ -359,7 +365,7 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                 .jhs-resource-advanced > summary { cursor:pointer; font-weight:600; }
                 #advanced-resource-json { width:100%; box-sizing:border-box; margin-top:var(--jhs-space-3); }
 
-                @media (max-width: 768px) {
+                @media (max-width: 767px) {
                     .jhs-setting-layout {
                         grid-template-columns: minmax(0, 1fr);
                         grid-template-rows: auto minmax(0, 1fr);
@@ -397,26 +403,31 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
 }
 
 /** Toggle between vertical (cover-fit) and normal (contain) image display modes. */
-async function applyImageMode() {
+/** @param {{ logImageHeightsByRow?: () => void } | null} [busImgPlugin] @param {unknown} [enableVerticalModel] */
+export async function applyImageMode(busImgPlugin = null, enableVerticalModel) {
     $("#verticalImgStyle").remove();
-    if (await storageManager.getSetting("enableVerticalModel", C) === _) {
+    const vertical = enableVerticalModel === undefined
+        ? await storageManager.getSetting("enableVerticalModel", C)
+        : enableVerticalModel;
+    if (vertical === _) {
         let e = "100% 50% !important";
         window.location.href.includes("/advanced_search?type=100") && (e = "50% 50% !important");
         const t = `
                 .cover {
-                    min-height: 350px !important;
+                    aspect-ratio: 3 / 4.26;
                     overflow: hidden !important;
-                    padding-top: 142% !important;
                 }
 
                 .cover img {
+                    width: 100%;
+                    height: 100%;
                     object-fit: cover !important;
                     object-position: ${e};
                 }
 
                 /* bus的 */
                 .masonry .movie-box img {
-                    min-height: 500px !important;
+                    aspect-ratio: 3 / 4.26;
                     object-fit: cover !important;
                     object-position: top right;
                 }
@@ -442,5 +453,29 @@ async function applyImageMode() {
             `;
         $("<style>").attr("id", "verticalImgStyle").text(e).appendTo("head");
     }
-    l && window.getBeanForSetting("BusImgPlugin").logImageHeightsByRow();
+}
+
+/**
+ * Apply all layout-affecting settings from a fresh snapshot without re-reading
+ * legacy storage. Handles vertical image mode, container columns and container
+ * width; used by settings.changed listeners and cross-tab/BFCache refreshes.
+ *
+ * @param {Record<string, unknown>} [snapshot]
+ * @param {{ busImgPlugin?: any, hostAdapter?: any }} [options]
+ */
+export async function applyLayoutFromSettings(snapshot = {}, { busImgPlugin = null, hostAdapter = null } = {}) {
+    const vertical = snapshot.enableVerticalModel === undefined ? C : snapshot.enableVerticalModel;
+    await applyImageMode(busImgPlugin, vertical);
+    const mobile = /** @type {any} */ (globalThis).utils?.isMobileMode?.() ?? false;
+    const columns = mobile ? 1 : Number(snapshot.containerColumns ?? 5) || 5;
+    const width = mobile ? 100 : Number(snapshot.containerWidth ?? 100) || 100;
+    if (l && busImgPlugin?.logImageHeightsByRow) {
+        await busImgPlugin.logImageHeightsByRow({ vertical, columns });
+    }
+    if (hostAdapter) {
+        const listRoot = hostAdapter.locateListRoot?.();
+        if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+        const layoutContainer = hostAdapter.getListLayoutContainer?.();
+        if (layoutContainer) layoutContainer.style.minWidth = `${width}%`;
+    }
 }

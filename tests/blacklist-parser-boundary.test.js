@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -10,27 +11,29 @@ const repoRoot = join(import.meta.dirname, "..");
 function loadBlacklist(html, save = vi.fn(async () => {}), pageUrl = "https://javdb.com/actors/a") {
     const dom = new JSDOM(html, { url: pageUrl }), $ = jqueryFactory(dom.window);
     const gmHttp = { get: vi.fn(async () => '<div class="masonry"></div><div id="waterfall"></div>') };
-    const listPage = { findCarNumAndHref: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), publishTime: element.attr("data-date") }) };
     class BasePlugin {
         getSelector(site) { return "javbus" === site
             ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }
             : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
-        getBean(name) { return "ListPagePlugin" === name ? listPage : null; }
+        getBean() { return null; }
+        getRuntimeService(name) { return "scope" === name ? () => ({}) : {}; }
     }
     const context = vm.createContext({
         console, URL, Date, window: dom.window, document: dom.window.document, $, BasePlugin, storageManager: { batchSaveBlacklistCarList: save },
-        T: "javdb", I: "javbus", d: "filter", r: true, l: false, o: "", _: "yes", gmHttp, clog: { error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), ok: vi.fn() }, utils: { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) }, i: (target, key, value) => target[key] = value
+        T: "javdb", I: "javbus", d: "filter", r: true, l: false, o: "", _: "yes", requestHostPage: (_http, url) => gmHttp.get(String(url)), clog: { error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), ok: vi.fn() }, utils: { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) }, i: (target, key, value) => target[key] = value,
+        readListItem: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), publishTime: element.attr("data-date") })
     });
-    const source = [ "src/core/feature-helpers.js", "src/parsers/third-party-parsers.js", "src/plugins/blacklist/blacklist.js" ].map(file => readFileSync(join(repoRoot, file), "utf8")).join("\n");
+    const source = [ "src/core/feature-helpers.js", "src/integrations/host-list/parser.js", "src/plugins/blacklist/blacklist.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     vm.runInContext(`${source};globalThis.Plugin=BlacklistPlugin`, context);
     return { plugin: new context.Plugin, $page: $(dom.window.document), save, gmHttp };
 }
 
 describe("blacklist parser boundaries", () => {
     it("uses the full-batch label for initial and refreshed tooltips", () => {
-        const source = readFileSync(join(repoRoot, "src/plugins/blacklist/blacklist.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/plugins/blacklist/blacklist.js"), "utf8");
         expect(source).not.toContain("上次检测时间");
         expect(source.match(/上次整批检测/g)).toHaveLength(2);
+        expect(source).not.toMatch(/\b(?:gmHttp|localStorage)\s*\./);
     });
 
     it("rejects challenge, missing containers and empty pages with pagination", async () => {
@@ -71,6 +74,7 @@ describe("blacklist parser boundaries", () => {
             .mockResolvedValueOnce({ nextPageLink: "https://www.javbus.com/star/a/2" })
             .mockResolvedValueOnce({ nextPageLink: null });
         await loaded.plugin.filterActorVideo("A", "a", loaded.$page, "javbus");
+        expect(loaded.gmHttp.get).toHaveBeenCalledWith("https://www.javbus.com/star/a/2");
         expect(loaded.plugin.parseAndSaveFilterInfo).toHaveBeenNthCalledWith(1, loaded.$page, "A", "a", "javbus");
         expect(loaded.plugin.parseAndSaveFilterInfo).toHaveBeenNthCalledWith(2, expect.anything(), "A", "a", "javbus");
     });

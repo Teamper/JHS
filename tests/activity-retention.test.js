@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -6,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadRetention() {
-    const source = readFileSync(join(repoRoot, "src/core/state-service.js"), "utf8"), end = source.indexOf("class StateService");
+    const source = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), end = source.indexOf("class StateService");
     const context = vm.createContext({ Date, JSON, Object, Array, Math });
     vm.runInContext(`${source.slice(0, end)}; globalThis.prune = pruneActivityLog;`, context);
     return context.prune;

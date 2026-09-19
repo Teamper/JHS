@@ -1,7 +1,16 @@
-class MobileBottomBarPlugin extends BasePlugin {
+// @ts-check
+
+import { k, m, r, v, y } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { normalizeStateFlags } from "../../core/state-model.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
+
+export class MobileBottomBarPlugin extends BasePlugin {
     constructor() {
         super(...arguments);
         this._fabGeneration = 0;
+        /** @type {Array<{ element: Element, parent: Node | null, next: Node | null }>} */
+        this._commandBarSources = [];
     }
     getName() {
         return "MobileBottomBarPlugin";
@@ -34,6 +43,17 @@ class MobileBottomBarPlugin extends BasePlugin {
                 -webkit-tap-highlight-color: transparent;
                 user-select: none;
                 -webkit-user-select: none;
+            }
+            html.jhs-fab-mounted {
+                scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+            }
+            #jhs-fab-safe-area {
+                display: block;
+                width: 100%;
+                height: calc(104px + env(safe-area-inset-bottom, 0px));
+                clear: both;
+                visibility: hidden;
+                pointer-events: none;
             }
             #jhs-fab:active {
                 transform: scale(0.9);
@@ -177,13 +197,19 @@ class MobileBottomBarPlugin extends BasePlugin {
                 .jhs-commandbar__left { flex-basis:100%; }
                 .jhs-commandbar__right { margin-left:auto; }
             }
-            @media (max-width: 768px) {
+            @media (max-width: 767px) {
                 .jhs-page-commandbar { display: none; }
             }
         `;
     }
     async handle() {
-        if (!utils.isMobileMode()) return;
+        const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
+        scope.listen(profile, "profile.changed", () => this.syncSurfaces());
+        this.syncSurfaces();
+    }
+    mountBottomBar() {
+        if ($("#jhs-fab").length) return;
+        document.documentElement.classList.add("jhs-fab-mounted");
         // 添加遮罩
         const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
         // 添加菜单
@@ -191,59 +217,97 @@ class MobileBottomBarPlugin extends BasePlugin {
         $("body").append(menu);
         // 添加 FAB 按钮
         const fab = $('<button type="button" id="jhs-fab" class="jhs-btn" aria-label="打开 JHS 工具" aria-controls="jhs-fab-menu" aria-haspopup="menu" aria-expanded="false">＋</button>').appendTo("body");
+        $('<div id="jhs-fab-safe-area" aria-hidden="true"></div>').appendTo("body");
         this.bindEvents(fab, backdrop);
     }
-    async afterPluginsReady() {
-        this.buildCommandBar();
+    unmountBottomBar() {
+        this._fabGeneration++;
+        $("#jhs-fab, #jhs-fab-menu, #jhs-fab-safe-area, .jhs-fab-backdrop").remove();
+        document.documentElement.classList.remove("jhs-fab-mounted");
     }
-    /** 将列表页分散的 JHS 控件收敛为单一命令栏。 */
-    buildCommandBar() {
-        if (!window.isListPage || $("#jhs-page-commandbar").length) return;
-        const commandbar = $(`
-            <div id="jhs-page-commandbar" class="jhs-page-commandbar jhs-ui" role="toolbar" aria-label="JHS 页面工具">
-                <div class="jhs-commandbar__left"></div>
-                <div class="jhs-commandbar__right"></div>
-            </div>`);
-        const listBox = r ? $(this.getSelector().boxSelector).first() : $(".masonry").first();
-        if (!listBox.length) return void clog.warn("JHS 页面工具栏未创建：列表容器尚未就绪");
-        listBox.before(commandbar);
-        const left = commandbar.find(".jhs-commandbar__left"), right = commandbar.find(".jhs-commandbar__right");
-        const primary = $('<div class="jhs-commandbar__primary"></div>');
-        [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ].forEach((selector => {
+    async afterPluginsReady() {
+        this.syncSurfaces();
+    }
+    /** 统一桌面/移动两套 UI Surface：compact 只保留 FAB，regular/wide 只保留桌面工具栏与设置入口。 */
+    syncSurfaces() {
+        const compact = this.getRuntimeService("profile").current() === "compact";
+        const setting = this.getOptionalDependency("SettingPlugin");
+        if (compact) {
+            this.unmountDesktopCommandBar();
+            setting?.unmountDesktopSettingNav?.();
+            this.mountBottomBar();
+        } else {
+            this.unmountBottomBar();
+            this.mountDesktopCommandBar();
+            setting?.mountDesktopSettingNav?.();
+        }
+    }
+    mountDesktopCommandBar() {
+        if (!window.isListPage) return;
+        const existing = $("#jhs-page-commandbar");
+        // 插件并发启动时，部分按钮可能晚于命令栏创建：已存在时补收后到的控件，而不是直接返回
+        existing.length ? this.collectCommandControls(existing) : this.buildCommandBar();
+    }
+    /** 将当前页面中尚未收拢的来源控件按类别放入命令栏（可重复调用）。 */
+    collectCommandControls(/** @type {any} */ commandbar) {
+        const isCollected = (/** @type {string} */ selector) => {
             const item = $(selector).first();
-            item.length && item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary);
+            return !item.length || !!item.closest("#jhs-page-commandbar").length;
+        };
+        const remember = (/** @type {Element} */ element) => {
+            (this._commandBarSources ||= []).push({ element, parent: null, next: null });
+        };
+        const left = commandbar.find(".jhs-commandbar__left"), right = commandbar.find(".jhs-commandbar__right");
+        if (!left.length || !right.length) return;
+        if (!commandbar.find(".jhs-commandbar__primary").length && !isCollected("#waitCheckBtn")) left.append('<div class="jhs-commandbar__primary"></div>');
+        const primary = commandbar.find(".jhs-commandbar__primary");
+        [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ].forEach((selector => {
+            if (isCollected(selector)) return;
+            const item = $(selector).first();
+            item.length && (remember(item[0]), item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary));
         }));
         primary.children().length && left.append(primary);
-        const more = $('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
-        [ "#statsBtn", "#blacklistBtn" ].forEach((selector => {
-            const item = $(selector).first();
-            item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu"));
-        }));
-        more.find(".jhs-commandbar__menu").children().length && left.append(more);
-        const quickFilter = $("#jhs-quick-filter").first();
-        quickFilter.length && left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach()));
-        const contextItem = $("#addBlacklistBtn").first();
-        contextItem.length && contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right));
-        const sort = $(".jhs-sort-control").first();
-        if (sort.length) {
-            const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
-            sort.detach().appendTo(view), right.append(view);
+        if (!commandbar.find(".jhs-commandbar__more").length && ![ "#statsBtn", "#blacklistBtn" ].every(isCollected)) {
+            commandbar.find(".jhs-commandbar__left").append('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
         }
-        const batch = $('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
-        [ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].forEach((selector => {
+        const more = commandbar.find(".jhs-commandbar__more");
+        [ "#statsBtn", "#blacklistBtn" ].forEach((selector => {
+            if (isCollected(selector)) return;
             const item = $(selector).first();
-            item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu"));
+            item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu")));
         }));
-        batch.find(".jhs-commandbar__menu").children().length && right.append(batch);
-        $(".jhs-list-btn-row").filter((function() { return !$(this).children().length; })).remove();
-        commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each((function() {
-            const container = $(this), toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
-            toggle.on("click", (event => {
+        more.find(".jhs-commandbar__menu").children().length && more.appendTo(left);
+        const quickFilter = $("#jhs-quick-filter").first();
+        quickFilter.length && !quickFilter.closest("#jhs-page-commandbar").length && (remember(quickFilter[0]), left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach())));
+        const contextItem = $("#addBlacklistBtn").first();
+        contextItem.length && !contextItem.closest("#jhs-page-commandbar").length && (remember(contextItem[0]), contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right)));
+        const sort = $(".jhs-sort-control").first();
+        if (sort.length && !sort.closest("#jhs-page-commandbar").length) {
+            const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
+            remember(sort[0]), sort.detach().appendTo(view), right.append(view);
+        }
+        if (!commandbar.find(".jhs-commandbar__batch").length && ![ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].every(isCollected)) {
+            right.append('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
+        }
+        const batch = commandbar.find(".jhs-commandbar__batch");
+        [ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].forEach((selector => {
+            if (isCollected(selector)) return;
+            const item = $(selector).first();
+            item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
+        }));
+        batch.find(".jhs-commandbar__menu").children().length && batch.appendTo(right);
+        // 控件从隐藏 parking 或原始位置进入 commandbar；unmount 时统一移入隐藏 parking。
+        commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each(((/** @type {number} */ index, /** @type {Element} */ element) => {
+            const container = $(element);
+            if (container.data("jhsCommandbarBound")) return;
+            container.data("jhsCommandbarBound", !0);
+            const toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
+            toggle.on("click", ((/** @type {any} */ event) => {
                 event.stopPropagation();
                 const open = !menu.hasClass("is-open");
                 commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"),
                 menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.children().first().trigger("focus");
-            })), menu.on("keydown", "[role='menuitem']", (event => {
+            })), menu.on("keydown", "[role='menuitem']", ((/** @type {any} */ event) => {
                 const items = menu.find("[role='menuitem']"), index = items.index(event.currentTarget);
                 if ("Escape" === event.key) return event.preventDefault(), menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
                 if ("Tab" === event.key) return menu.removeClass("is-open"), void toggle.attr("aria-expanded", "false");
@@ -255,33 +319,85 @@ class MobileBottomBarPlugin extends BasePlugin {
                 menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
             }));
         }));
-        $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", (event => {
+        $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", ((/** @type {any} */ event) => {
             $(event.target).closest(".jhs-commandbar__more, .jhs-commandbar__batch").length || (commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"));
         }));
-        this.getBean("ListPagePlugin")?.syncQuickFilterUi();
+        // 按钮被搬走后，隐藏宿主导航中的空壳容器，避免 hover 时出现空导航项
+        $(".historyBtnBox").each(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
+            element.children.length || (element.style.display = "none");
+        }));
+        this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
+    }
+    /** 收集当前页面中所有桌面工具栏来源控件（无论是否曾被 buildCommandBar 收拢）。 */
+    collectDesktopCommandSources() {
+        const selectors = [
+            "#waitCheckBtn", "#newVideoBtn", "#historyBtn",
+            "#statsBtn", "#blacklistBtn", "#jhs-quick-filter", "#addBlacklistBtn",
+            ".jhs-sort-control", "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo",
+        ];
+        const collected = [];
+        for (const selector of selectors) {
+            const item = $(selector).first();
+            if (!item.length) continue;
+            if (item.closest("#jhs-page-commandbar, #jhs-commandbar-parking").length) continue;
+            collected.push({ element: item[0], parent: null, next: null });
+        }
+        return collected;
+    }
+
+    /** 卸载桌面命令栏并把被收拢的控件移入隐藏 parking，避免 compact 下与 FAB 双 Surface 共存。 */
+    unmountDesktopCommandBar() {
+        let parking = $("#jhs-commandbar-parking");
+        if (!parking.length) {
+            parking = $('<div id="jhs-commandbar-parking" hidden></div>').appendTo("body");
+        }
+        const existing = new Set((this._commandBarSources || []).map((source) => source.element));
+        for (const source of this.collectDesktopCommandSources()) {
+            if (!existing.has(source.element)) this._commandBarSources.push(source);
+        }
+        const sources = [ ...(this._commandBarSources || []) ];
+        for (const source of sources) {
+            const element = source.element;
+            if (element?.isConnected) parking.append(element);
+        }
+        this._commandBarSources = [];
+        $("#jhs-page-commandbar").remove();
+        $(document).off("click.jhsCommandbar");
+    }
+    /** 将列表页分散的 JHS 控件收敛为单一命令栏。 */
+    buildCommandBar() {
+        if (!window.isListPage || $("#jhs-page-commandbar").length) return;
+        this._commandBarSources = [];
+        const commandbar = $(`
+            <div id="jhs-page-commandbar" class="jhs-page-commandbar jhs-ui" role="toolbar" aria-label="JHS 页面工具">
+                <div class="jhs-commandbar__left"></div>
+                <div class="jhs-commandbar__right"></div>
+            </div>`);
+        const listBox = r ? $(this.getSelector().boxSelector).first() : $(".masonry").first();
+        if (!listBox.length) return void clog.warn("JHS 页面工具栏未创建：列表容器尚未就绪");
+        listBox.before(commandbar);
+        this.collectCommandControls(commandbar);
     }
     /** 获取详情页番号 */
     getCarNum() {
         try {
-            const basePlugin = this.getBean("DetailPageButtonPlugin");
-            if (basePlugin?.parseMovieId) return basePlugin.parseMovieId(location.href);
-            const el = document.querySelector(".header, #video_id, .video-id");
-            if (el) return el.textContent.trim();
+            return this.getRuntimeService("host").readMovieRef?.()?.carNum || null;
         } catch (e) { clog.debug("移动端详情番号解析失败，已回退", e); }
         return null;
     }
     createMenu() {
-        const item = (action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = content => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
+        const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
+        const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = !!this.getOptionalDependency("ListPagePlugin"), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = !!this.getOptionalDependency("BlacklistPlugin"), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = !!this.getOptionalDependency("HistoryPlugin");
         let items;
         if (window.isListPage) {
-            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getBean("ListPagePlugin")?.activeQuickFilter),
+            const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter),
                 filterOptions = [ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
                 sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
-            items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
+            items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
         } else if (window.isDetailPage) {
             const statusDefs = [ { action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" } ];
-            items = group(statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("")) + divider + group(item("magnetFilter", "磁力过滤") + item("magnet", "磁力搜索") + item("subtitle", "字幕")) + divider + group(item("logger", "运行日志") + item("setting", "设置"));
-        } else items = group(item("logger", "运行日志") + item("setting", "设置"));
+            items = group(hasDetailPageButton ? statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("") : "") + divider + group((hasHighlightMagnet ? item("magnetFilter", "磁力过滤") : "") + (hasMagnetHub ? item("magnet", "磁力搜索") : "") + (hasDetailPageButton ? item("subtitle", "字幕") : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
+        } else items = group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
         return $(`<div id="jhs-fab-menu" class="jhs-fab-menu" role="menu" aria-hidden="true">${items}</div>`);
     }
     /** 刷新详情页菜单的状态指示 */
@@ -292,20 +408,19 @@ class MobileBottomBarPlugin extends BasePlugin {
             const car = await storageManager.getCar(carNum);
             const menu = $(".jhs-fab-menu");
             const colors = { filter: "var(--jhs-status-filter)", fav: "var(--jhs-status-fav)", down: "var(--jhs-status-down)", watch: "var(--jhs-status-watch)" };
-            const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set([
-                flags.blocked && "filter", flags.favorite && "fav", flags.downloaded && "down", flags.watched && "watch"
-            ].filter(Boolean));
-            menu.find(".jhs-fab-status-dot").each(function () {
-                const key = $(this).data("status-key");
-                const item = $(this).closest(".jhs-fab-menu-item");
+            const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set();
+            flags.blocked && activeKeys.add("filter"), flags.favorite && activeKeys.add("fav"), flags.downloaded && activeKeys.add("down"), flags.watched && activeKeys.add("watch");
+            menu.find(".jhs-fab-status-dot").each(((/** @type {number} */ index, /** @type {HTMLElement} */ element) => {
+                const key = String($(element).data("status-key") || ""), item = $(element).closest(".jhs-fab-menu-item");
                 if (activeKeys.has(key)) {
-                    $(this).css({ background: colors[key] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
+                    $(element).css({ background: colors[/** @type {keyof typeof colors} */ (key)] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
                 } else {
-                    $(this).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
+                    $(element).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
                 }
-            });
+            }));
         } catch (e) { clog.warn("移动端详情状态刷新失败", e); }
     }
+    /** @param {any} fab @param {any} backdrop */
     bindEvents(fab, backdrop) {
         const menu = $(".jhs-fab-menu"), filterMenu = menu.find(".jhs-mobile-filter-menu"), sortMenu = menu.find(".jhs-mobile-sort-menu"), filterTrigger = menu.find('[data-action="quickFilter"]'), sortTrigger = menu.find('[data-action="sort"]'), closeFilterMenu = (returnFocus = !1) => {
             menu.removeClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "false"), returnFocus && filterTrigger.trigger("focus");
@@ -331,10 +446,10 @@ class MobileBottomBarPlugin extends BasePlugin {
                 backdrop.addClass("jhs-fab-backdrop-visible");
                 // 刷新排序标签
                 if (window.isListPage) {
-                    const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
-                    const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
+                    const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
+                    const sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod];
                     menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
-                    this.getBean("ListPagePlugin")?.syncQuickFilterUi();
+                    this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
                 }
                 // 刷新详情页状态
                 if (window.isDetailPage) void this.refreshDetailStatus().catch((error => clog.warn("移动端详情状态刷新失败", error)));
@@ -343,19 +458,19 @@ class MobileBottomBarPlugin extends BasePlugin {
                 const self = this;
                 const items = menu.find(".jhs-fab-menu-item");
                 items.first().trigger("focus");
-                items.each(function (i) {
-                    const el = $(this);
+                items.each(((/** @type {number} */ i, /** @type {Element} */ element) => {
+                    const el = $(element);
                     setTimeout(() => {
                         if (gen === self._fabGeneration) el.addClass("jhs-fab-item-visible");
                     }, 30 + i * 35);
-                });
+                }));
             }
         };
         // FAB 点击切换
         fab.on("click", toggleMenu);
         // 遮罩点击关闭
         backdrop.on("click", (() => closeMenu(!0)));
-        menu.on("keydown", ".jhs-fab-menu-item", (event => {
+        menu.on("keydown", ".jhs-fab-menu-item", ((/** @type {any} */ event) => {
             const items = menu.find(".jhs-fab-menu-item"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), closeMenu(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
@@ -363,30 +478,41 @@ class MobileBottomBarPlugin extends BasePlugin {
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         }));
-        filterMenu.on("keydown", ".jhs-mobile-filter-option", (event => {
+        filterMenu.on("keydown", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             const items = filterMenu.find(".jhs-mobile-filter-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), closeFilterMenu(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })).on("click", ".jhs-mobile-filter-option", (event => {
-            event.stopPropagation(), this.getBean("ListPagePlugin").setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
+        })).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
+            event.stopPropagation(), this.getOptionalDependency("ListPagePlugin")?.setQuickFilter?.($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
-        sortMenu.on("keydown", ".jhs-mobile-sort-option", (event => {
+        sortMenu.on("keydown", ".jhs-mobile-sort-option", ((/** @type {any} */ event) => {
             const items = sortMenu.find(".jhs-mobile-sort-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), closeSortMenu(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })).on("click", ".jhs-mobile-sort-option", (event => {
+        })).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
             event.stopPropagation();
             const value = $(event.currentTarget).data("jhs-sort");
-            localStorage.setItem("jhs_sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), void this.getBean("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
+            const previousItem = sortMenu.find('.jhs-mobile-sort-option[aria-checked="true"]').first();
+            sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true");
+            try {
+                // 自有榜单页走页内覆盖（不写全局设置），普通列表页写全局 sortMethod
+                await this.getOptionalDependency("ListPageButtonPlugin")?.selectSortMethod?.(value);
+            } catch (error) {
+                sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true");
+                clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
+                return;
+            }
+            const sortLabels = /** @type {Record<string, string>} */ ({ default: "默认", rateCount: "评价人数", date: "时间" });
+            menu.find('[data-action="sort"]').text(`排序: ${sortLabels[String(value)] ?? value}`), closeMenu(!0);
         }));
         // 菜单项点击
-        menu.on("click", ".jhs-fab-menu-item", (e) => {
+        menu.on("click", ".jhs-fab-menu-item", (/** @type {any} */ e) => {
             const action = $(e.currentTarget).data("action");
             if ("quickFilter" === action) {
                 e.stopPropagation(), menu.addClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "true");
@@ -402,17 +528,21 @@ class MobileBottomBarPlugin extends BasePlugin {
             void this.handleAction(action).catch((error => clog.error(`移动端操作 ${action || "unknown"} 失败`, error)));
         });
     }
+    /** @param {unknown} action */
     async handleAction(action) {
         switch (action) {
             // 列表页操作
             case "check":
-                await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.();
+                await this.getOptionalDependency("ListPageButtonPlugin")?.openWaitCheck?.();
                 break;
             case "newVideo":
-                this.getBean("NewVideoPlugin")?.openDialog();
+                this.getOptionalDependency("NewVideoPlugin")?.openDialog?.();
                 break;
             case "blacklist":
-                this.getBean("BlacklistPlugin")?.openBlacklistDialog();
+                this.getOptionalDependency("BlacklistPlugin")?.openBlacklistDialog?.();
+                break;
+            case "history":
+                await this.getOptionalDependency("HistoryPlugin")?.openHistory?.();
                 break;
             case "sort":
                 break;
@@ -440,7 +570,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                 break;
             // 通用
             case "setting":
-                await this.getBean("SettingPlugin")?.openQuickSetting();
+                await this.getOptionalDependency("SettingPlugin")?.openQuickSetting();
                 break;
             case "logger":
                 clog.openDialog?.();

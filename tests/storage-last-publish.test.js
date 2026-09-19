@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -10,12 +11,12 @@ function createStorage(initial) {
     };
     const context = vm.createContext({
         console, localforage: { INDEXEDDB: "indexeddb", createInstance: () => forage }, i: (target, key, value) => target[key] = value,
-        clog: { log: vi.fn(), error: vi.fn(), debug: vi.fn() }, utils: { getNowStr: () => "2026-08-23 13:00:00" }, show: { error: vi.fn() },
+        clog: { log: vi.fn(), html: vi.fn(), error: vi.fn(), debug: vi.fn() }, utils: { getNowStr: () => "2026-08-23 13:00:00" }, show: { error: vi.fn() },
         navigator: { locks: { request: async (key, callback) => callback() } }, window: { location: { origin: "https://javdb.com" }, jhsEventBus: { emit }, clean_cacheSettingObj() {}, cleanCache_filter_actor_actress_car_list() {} }, B: "actor", P: "actress",
         normalizeCarNum: value => String(value || "").trim().toUpperCase().replace(/[_\s]+/g, "-"), escapeHtml: value => String(value || ""), d: "filter",
         CURRENT_DATA_VERSION: 2, PORTABLE_DATA_KEYS: [], hasPortableUserData: async () => false, validatePortableData() {}, runDataMigrations: async () => {}, stateService: {}
     });
-    const source = [ "../src/core/storage-index.js", "../src/core/storage.js" ].map(file => readFileSync(join(import.meta.dirname, file), "utf8")).join("\n");
+    const source = [ "../src/core/storage-index.js", "../src/core/storage.js" ].map(file => readTestFile(join(import.meta.dirname, file), "utf8")).join("\n");
     vm.runInContext(`${source};globalThis.Storage=StorageManager`, context);
     return { storage: new context.Storage, data, emit };
 }

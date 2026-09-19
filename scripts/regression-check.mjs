@@ -18,13 +18,14 @@ function extractMetadata(source, key) {
   return source.match(new RegExp(`^// @${key}\\s+(.+)$`, "m"))?.[1]?.trim();
 }
 
-function extractRegistryArray(registrySource, name) {
-  const match = registrySource.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\];`));
-  assert(match, `Missing registry array: ${name}`);
-  return match[1]
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+function extractContributionOrder(registrySource, site) {
+  return registrySource.split(/\r?\n/).flatMap((line) => {
+    const match = line.match(/manifest\("[^"]+",\s*"[^"]+",\s*(\w+),\s*\[([^\]]+)\],\s*\{([^}]+)\}(?:,\s*\[[^\]]*\])?(?:,\s*\{[^}]*\})?\)/);
+    if (!match || !match[2].includes(`"${site}"`)) return [];
+    const order = match[3].match(new RegExp(`(?:^|,\\s*)\\s*(?:"${site}"|${site})\\s*:\\s*(\\d+)`));
+    assert(order, `Missing ${site} order for ${match[1]}`);
+    return [{ plugin: match[1], order: Number(order[1]) }];
+  }).filter((item) => item.order > 0).sort((left, right) => left.order - right.order).map((item) => item.plugin);
 }
 
 function assertIncludes(source, token, label) {
@@ -48,9 +49,12 @@ const migration = await read("src/core/migration.js");
 const stateService = await read("src/core/state-service.js");
 const registry = await read("src/plugins/registry.js");
 const detailWorkspace = await read("src/plugins/status/detail-workspace.js");
+const fc2DetailWorkspace = await read("src/ui/detail/fc2-detail-workspace.js");
+const javDbHostAdapter = await read("src/platform/hosts/javdb-host-adapter.js");
 const unifiedOffline = await read("src/plugins/offline/unified-offline.js");
 const hitShow = await read("src/plugins/external-search/hit-show.js");
 const listPageButton = await read("src/plugins/status/list-page-button.js");
+const listFiltersSource = await read("src/features/list/list-filters.js");
 const fc2 = await read("src/plugins/external-search/fc2.js");
 const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
 const uiPrimitives = await read("src/core/ui-primitives.js");
@@ -111,13 +115,15 @@ for (const legacyBrand of legacyBrands) {
 
 assertIncludes(ciWorkflow, "npm run check", "CI workflow");
 assertIncludes(ciWorkflow, "git diff --exit-code -- JHS.user.js", "CI tracked artifact check");
-assertIncludes(ciWorkflow, "workflow_dispatch:", "release recovery trigger");
+assertIncludes(ciWorkflow, "workflow_dispatch:", "manual CI trigger");
 assertIncludes(ciWorkflow, "node-version: 20", "minimum Node compatibility check");
 assertIncludes(ciWorkflow, "node-version: 22", "full Node check");
-assertIncludes(ciWorkflow, "needs: [node20, check]", "release check dependency");
+assertIncludes(ciWorkflow, "needs: [node20, check, browser-smoke]", "release check dependency");
 assertIncludes(ciWorkflow, "contents: write", "release write permission");
 assertIncludes(ciWorkflow, "--base-ref", "version-change release detection");
-assertIncludes(ciWorkflow, "--force-release", "release recovery contract");
+assertIncludes(ciWorkflow, "github.ref == 'refs/heads/main'", "release restricted to main pushes");
+assertIncludes(packageJson.scripts["check:release"] ?? "", "check:browser", "browser release gate");
+assertIncludes(packageJson.scripts["check:release"] ?? "", "check:visual", "visual release gate");
 assertIncludes(ciWorkflow, "queue: max", "release concurrency queue");
 assertIncludes(ciWorkflow, "cancel-in-progress: false", "release concurrency preservation");
 assertIncludes(ciWorkflow, "git tag -a", "annotated release tag");
@@ -125,11 +131,12 @@ assertIncludes(ciWorkflow, "gh release create", "immutable release creation");
 assert(!ciWorkflow.includes("--clobber"), "release workflow must not overwrite an existing asset");
 assert(!ciWorkflow.includes("gh release upload"), "release workflow must not update an existing release");
 assert(!ciWorkflow.includes("JHS-dev.user.js"), "release workflow must not build dev artifacts");
-assertIncludes(buildScript, "bundle: true", "readable bundled build");
-assertIncludes(buildScript, "keepNames: true", "readable bundled build");
-assertIncludes(buildScript, "minifySyntax: false", "readable bundled build");
-assertIncludes(buildScript, "minifyWhitespace: false", "readable bundled build");
-assertIncludes(buildScript, "minifyIdentifiers: false", "readable bundled build");
+assertIncludes(buildScript, "bundle: true", "performance bundled build");
+assertIncludes(buildScript, "keepNames: true", "performance bundled build");
+assertIncludes(buildScript, "minifySyntax: true", "performance bundled build");
+assertIncludes(buildScript, "minifyWhitespace: true", "performance bundled build");
+assertIncludes(buildScript, "minifyIdentifiers: true", "performance bundled build");
+assertIncludes(buildScript, 'contents.replace(/\\/\\*\\*[\\s\\S]*?\\*\\//g, "")', "production bundle strips source-only JSDoc");
 
 const stableReleaseChecks = [
   ["storage database identity", storage, 'name: "JAV-JHS"'],
@@ -145,14 +152,12 @@ const stableReleaseChecks = [
   ["export format compatibility", storage, "async exportData()"],
   ["export format compatibility", storage, "exportPortableData"],
   ["build source chain", buildScript, 'const srcPath = join(repoRoot, "src", "main.js")'],
-  ["build source chain", buildScript, "const corePaths = ["],
-  ["build source chain", buildScript, 'join(repoRoot, "src", "core", file)'],
-  ["build source chain", buildScript, "const pluginPaths = ["],
-  ["build source chain", buildScript, 'join(repoRoot, "src", "plugins", file)'],
+  ["build source chain", buildScript, "entryPoints: [srcPath]"],
+  ["build source chain", buildScript, "bundle: true"],
   ["build output chain", buildScript, 'const distPath = join(distDir, "JHS.user.js")'],
   ["build output chain", buildScript, 'const rootPath = join(repoRoot, "JHS.user.js")'],
-  ["build output chain", buildScript, 'writeFile(distPath, output, "utf8")'],
-  ["build output chain", buildScript, 'writeFile(rootPath, output, "utf8")']
+  ["build output chain", buildScript, "for (const outputPath of outputPaths)"],
+  ["build output chain", buildScript, 'writeFile(outputPath, output, "utf8")']
 ];
 
 for (const [label, source, token] of stableReleaseChecks) {
@@ -168,17 +173,18 @@ assert(!eventBus.includes("this.channel.postMessage(event);\n        await this.
 
 // List page function signature assertions
 const listPageSource = await read("src/plugins/status/list-page.js");
-assertIncludes(listPageSource, "applyVisibility()", "list page function signature");
+assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
-assertIncludes(listPageSource, "async doFilter()", "list page function signature");
-assertIncludes(detailWorkspace, 'controller.find("#magnets-content")', "protected JavDB resource boundary");
+assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
+assertIncludes(javDbHostAdapter, 'querySelector("#magnets-content")', "protected JavDB resource boundary");
+assert(!detailWorkspace.includes('controller.find("#magnets-content")'), "detail workspace must use the JavDB HostAdapter resource boundary");
 assert(!/routeSections|moveToSection|movePanelToSection/.test(detailWorkspace), "detail workspace must not remount host sections");
 assertIncludes(detailWorkspace, 'jhsEventBus.emit("magnet-items-updated"', "magnet lifecycle event");
 assertIncludes(detailWorkspace, "{ broadcast: !1 }", "DOM lifecycle events must stay local");
 assert(!/\.jhs-detail-host-workspace\s*\{[^}]*display\s*:\s*flex/.test(detailWorkspace), "host workspace must not force flex layout");
 assert(!/data-jhs-host-region[^}]*order\s*:/.test(detailWorkspace), "semantic host markers must not control layout order");
 for (const token of ['$("#magnets-content").detach()', '$("#magnet-table").detach()']) assert(!detailWorkspace.includes(token), "host resource DOM must not be detached");
-assertIncludes(detailWorkspace, '[ "summary", "影片概览" ], [ "gallery", "预览与剧照" ], [ "resources", "资源" ], [ "reviews", "评论" ], [ "related", "相关清单" ]', "FC2 fixed section order");
+assertIncludes(fc2DetailWorkspace, '[ "summary", "影片概览" ], [ "gallery", "预览与剧照" ], [ "resources", "资源" ], [ "reviews", "评论" ], [ "related", "相关清单" ]', "FC2 fixed section order");
 assert(!unifiedOffline.includes("$('a[href^=\"magnet:\"],a[href^=\"ed2k:\"]')"), "unified offline must not scan the whole page");
 assert(!unifiedOffline.includes("link.after("), "unified offline must inject through adapter action targets");
 assert(!hitShow.includes('target="_blank"'), "hit-show cards must use shared detail navigation");
@@ -187,8 +193,10 @@ for (const [label, source] of [["FC2", fc2], ["FC2/123AV", fc2By123Av]]) {
   assert(!source.includes("layer.closeAll("), `${label} state actions must not close unrelated layers`);
   assert(!source.includes("stateService.patch("), `${label} state actions must use toggle semantics`);
 }
-assertIncludes(fc2, "detailStateController.bind", "shared FC2 detail state controller");
-assertIncludes(fc2By123Av, 'this.getBean("Fc2Plugin").openFc2Dialog', "123AV must reuse FC2 state and shell ownership");
+assertIncludes(fc2, "this.getDetailStateController().bind", "declared-state FC2 detail controller");
+assert(!fc2.includes("import { detailStateController }"), "FC2 must not import a module-level detail state controller");
+assertIncludes(fc2, '"123av" === context.source ? void this.load123AvDetail(context)', "FC2 controller must own 123AV detail orchestration");
+assert(!fc2By123Av.includes('getDependency("Fc2Plugin")'), "123AV data source must not depend on the FC2 UI plugin");
 assert(!uiPrimitives.includes('.trigger("change")'), "JhsSelect must dispatch one native change without jQuery double fire");
 for (const [label, source] of [["123", one23Offline], ["115", one115Offline]]) {
   assert(!source.includes("injectJavDbButtons"), `${label} provider must not inject JavDB UI`);
@@ -197,19 +205,21 @@ for (const [label, source] of [["123", one23Offline], ["115", one115Offline]]) {
 assert(!history.slice(history.indexOf("async editRecord")).includes("projectLegacyStatus"), "history editor must not project a legacy single status");
 assert(!history.slice(history.indexOf("async editRecord")).includes("legacyActionToFlag"), "history editor must patch four flags directly");
 assertIncludes(storage.slice(storage.indexOf("async getSetting("), storage.indexOf("async saveSetting(")), "Object.prototype.hasOwnProperty.call(", "settings must preserve explicit falsey values");
-assertIncludes(await read("src/plugins/backup/setting.js"), '.off("change.jhsResource", "input, select")', "cloud settings must persist selects through delegated binding");
+const settingPluginSource = await read("src/plugins/backup/setting.js");
+assertIncludes(settingPluginSource, "renderCloudSettings(root, cloud)", "cloud settings must render through the shared catalog");
+assertIncludes(settingPluginSource, "bindSettingRows(host, descriptors, { settings })", "cloud settings must persist through the shared binding");
 for (const retiredVisibilityToken of [ "shouldHideInDefaultView", "settingHidden", "data-jhs-setting-hide" ])
   assert(!listPageSource.includes(retiredVisibilityToken), `retired all-view visibility rule returned: ${retiredVisibilityToken}`);
 for (const retiredSetting of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem" ])
   assert(!listPageSource.includes(retiredSetting) && !settingFormsSource.includes(retiredSetting) && !settingTemplatesSource.includes(retiredSetting), `retired list visibility setting returned: ${retiredSetting}`);
 assertIncludes(listPageSource, "getIndexedItems(payload.carNums || [])", "precise list DOM index lookup");
 assertIncludes(listPageSource, "scheduleRecount()", "frame-coalesced status recount");
-assertIncludes(listPageSource, "normalizeQuickFilterKey", "quick filter compatibility boundary");
+assertIncludes(listFiltersSource, "normalizeQuickFilterKey", "quick filter compatibility boundary");
 assertIncludes(listPageSource, "collectCurrentPageSummary", "single current-page summary collector");
 assertIncludes(listPageSource, "hardHidden || R.push(t)", "hard-hidden cards must stay out of the default translation queue");
-assert((listPageSource.match(/"filter"/g) || []).length === 1, "legacy quick-filter key must only appear in normalizeQuickFilterKey");
+assert((listFiltersSource.match(/"filter"/g) || []).length === 1, "legacy quick-filter key must only appear in normalizeQuickFilterKey");
 for (const forbidden of [ 'data-jhs-filter="filter"', 'setQuickFilter("filter")', 'filter === "filter"', '"filter" === filter' ])
-  assert(!listPageSource.includes(forbidden) && !mobileSource.includes(forbidden) && !statsSource.includes(forbidden), `legacy quick-filter business key returned: ${forbidden}`);
+  assert(!listFiltersSource.includes(forbidden) && !listPageSource.includes(forbidden) && !mobileSource.includes(forbidden) && !statsSource.includes(forbidden), `legacy quick-filter business key returned: ${forbidden}`);
 assert(!statsSource.includes("#jhs-quick-filter"), "Stats must use ListPagePlugin.setQuickFilter instead of filter DOM");
 for (const filter of [ "all", "favorite", "hasDown", "hasWatch", "blockedItems", "waitCheck" ])
   assert(!statsSource.includes(`data-filter="${filter}"`), `full-library Stats metric must not navigate to current-page filter ${filter}`);
@@ -218,11 +228,11 @@ assertIncludes(statsSource, 'action: "filter", filter: "blockedItems"', "Stats c
 assertIncludes(statsSource, 'title: "统计"', "Stats dialog title");
 assert(!mobileSource.includes("activeQuickFilter ="), "mobile filter actions must use ListPagePlugin.setQuickFilter");
 assert(!mobileSource.includes('$("#waitCheckBtn").click()'), "mobile identification must call ListPageButtonPlugin.openWaitCheck directly");
-assertIncludes(mobileSource, 'await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.()', "mobile identification API");
+assertIncludes(mobileSource, 'await this.getOptionalDependency("ListPageButtonPlugin")?.openWaitCheck?.()', "mobile identification API");
 assert(!/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "command-bar filters must not clip popovers with horizontal overflow");
 assert(!/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "tablet command bar must wrap instead of scrolling horizontally");
 assert(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap\s*:\s*wrap[^}]*overflow\s*:\s*visible/.test(mobileSource), "tablet command bar must wrap with visible overflow");
-assert(/@media \(max-width:\s*768px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display\s*:\s*none/.test(mobileSource), "mobile command bar must stay hidden");
+assert(/@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display\s*:\s*none/.test(mobileSource), "mobile command bar must stay hidden");
 assert(!listPageButton.includes(":visible") && !listPageButton.includes("span.tag:contains"), "start identification must use card data across the full list");
 assert(!listPageSource.includes("currentPageBlockedItemCount"), "unused blocked-item counter must stay removed");
 assert((newVideoTaskSource.match(/锁任务出现错误:/g) || []).length === 1, "background lock failures must be logged once");
@@ -248,7 +258,7 @@ assertIncludes(unifiedOffline, "preferredProviderId", "offline retries must pref
 assert(!statusImport.includes("$.ajax("), "multi-page import must use one awaited promise chain");
 assertIncludes(statusImport, "return this.parseMovieList(nextPage, result)", "multi-page import recursion must be awaited by return");
 assert(!history.includes('$(".layui-layer-content")'), "history events must be scoped to their own layer");
-assertIncludes(history, "stateService.toggle(a, flag", "single history actions must toggle state");
+assertIncludes(history, "this.historyRepository.toggle(a, flag", "single history actions must toggle state through HistoryRepository");
 assert(!review.includes('id="reviews'), "review panels must not expose fixed instance ids");
 assert(!related.includes('id="related'), "related panels must not expose fixed instance ids");
 assertIncludes(statusImport, 'this.flag = "watched"', "JavDB watched import mapping");
@@ -276,6 +286,7 @@ const expectedPlugins = [
   ["blacklist/blacklist.js", "BlacklistPlugin", "BlacklistPlugin"],
   ["status/list-page-button.js", "ListPageButtonPlugin", "ListPageButtonPlugin"],
   ["status/list-page.js", "ListPagePlugin", "ListPagePlugin"],
+  ["status/fc2-navigation.js", "Fc2NavigationPlugin", "Fc2NavigationPlugin"],
   ["status/auto-page.js", "AutoPagePlugin", "AutoPagePlugin"],
   ["backup/setting.js", "SettingPlugin", "SettingPlugin"],
   ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin", "BusPreviewVideoPlugin"],
@@ -310,20 +321,19 @@ for (const [file, className, pluginName] of expectedPlugins) {
   assertIncludes(source, `return "${pluginName}"`, file);
 }
 
-const javdbPlugins = extractRegistryArray(registry, "DEFAULT_JAVDB_PLUGINS");
-const javbusPlugins = extractRegistryArray(registry, "DEFAULT_JAVBUS_PLUGINS");
+const javdbPlugins = extractContributionOrder(registry, "javdb");
+const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
   javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
   "JavBus plugin registration order changed"
 );
-assertIncludes(registry, "context.is123Pan", "shared registry");
-assertIncludes(registry, "plugins: [ OneTwoThreeOfflinePlugin ]", "shared registry");
-assertIncludes(registry, "context.isJavTrailers", "shared registry");
-assertIncludes(registry, "context.isSubtitleCat", "shared registry");
+assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
+assertIncludes(registry, 'JavTrailersPlugin, ["javtrailers"]', "shared registry");
+assertIncludes(registry, 'SubTitleCatPlugin, ["subtitlecat"]', "shared registry");
 const siteContext = await read("src/core/site-context.js");
 for (const [metadataToken, runtimeToken] of [
   ["javdb", "JAVDB_HOST_PATTERN"],
@@ -352,7 +362,7 @@ sourceByFile.set("core/migration.js", migration);
 sourceByFile.set("core/state-service.js", stateService);
 sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.js"));
 sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
-sourceByFile.set("backup/webdav-client.js", await read("src/plugins/backup/webdav-client.js"));
+sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
 sourceByFile.set("backup/setting-templates.js", await read("src/plugins/backup/setting-templates.js"));
@@ -371,7 +381,7 @@ const regressionMatrix = [
   ["黑名单检测", [["blacklist/blacklist.js", "BlacklistPlugin"], ["blacklist/filter-title-keyword.js", "FilterTitleKeywordPlugin"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["stats/stats.js", "StatsPlugin"], ["stats/stats.js", "coverageStart"], ["stats/stats.js", "6.4.0"]]],
   ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
-  ["WebDAV 备份", [["backup/webdav-client.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["backup/webdav-client.js", "PROPFIND"]]],
+  ["WebDAV 备份", [["services/webdav-service.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["services/webdav-service.js", "PROPFIND"]]],
   ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],
   ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["external-search/other-site.js", "detectOtherSites"]]],
   ["多标签页同步", [["core/event-bus.js", "eventId"], ["core/event-bus.js", "originId"], ["status/list-page.js", "list-items-added"]]],
@@ -421,7 +431,7 @@ const workspaceSource = sourceByFile.get("status/detail-workspace.js");
 const reviewSource = sourceByFile.get("external-search/review.js");
 assertIncludes(fc2Source, "mountFc2Detail", "FC2 owned workspace");
 assertIncludes(fc2Source, "magnetHubPromise ||=", "FC2 lazy magnet single-flight");
-assertIncludes(workspaceSource, "createFc2DetailContext", "FC2 owned workspace");
+assertIncludes(fc2DetailWorkspace, "createFc2DetailContext", "FC2 owned workspace");
 assertIncludes(fc2By123AvSource, "loadDetail(context, url)", "123AV FC2 adapter");
 assert(!fc2Source.includes("organizeJhsOwnedDetailWorkspace"), "FC2 must render directly into owned slots");
 assert(!fc2By123AvSource.includes("organizeJhsOwnedDetailWorkspace"), "123AV FC2 must reuse the owned shell");

@@ -1,63 +1,47 @@
-/** 磁力评分：基于做种数/分辨率/字幕/新鲜度/完整性，返回 0-100 分 */
-function calcMagnetScore(e) {
-    let t = 0;
-    const n = (e.seeders || 0);
-    const seedersScore = n >= 50 ? 35 : n >= 10 ? 25 : n >= 1 ? 15 : 3;
-    t += seedersScore;
-    const a = (e.title || "").toLowerCase(), resolution = String(e.resolution || "").toLowerCase();
-    const resolutionScore = /4k|2160p/.test(resolution) || /4k|2160p/.test(a) ? 25 : /1080p/.test(resolution) || /1080p/.test(a) ? 20 : /720p/.test(resolution) || /720p/.test(a) ? 15 : 5;
-    t += resolutionScore;
-    const subtitleScore = e.hasSubtitle || /-c\b|-uc\b|chinese|中字|字幕/.test(a) ? 20 : 0;
-    t += subtitleScore;
-    const i = e.date ? _daysSince(e.date) : 999;
-    const freshnessScore = i <= 7 ? 15 : i <= 30 ? 12 : i <= 90 ? 8 : 3;
-    t += freshnessScore;
-    const completenessScore = /sample|预告|trailer/.test(a) ? -15 : 0;
-    t += completenessScore;
-    return { total: Math.max(0, Math.min(100, t)), seeders: seedersScore, resolution: resolutionScore, subtitle: subtitleScore, freshness: freshnessScore, completeness: completenessScore };
-}
-function _daysSince(e) {
-    try {
-        const t = new Date(e);
-        if (isNaN(t.getTime())) return 999;
-        return Math.max(0, Math.floor((Date.now() - t.getTime()) / 864e5));
-    } catch (t) { return 999; }
-}
+// @ts-check
 
-class MagnetHubPlugin extends BasePlugin {
+import { CACHE_TTL, ProviderError } from "../../core/cache-policy.js";
+import { escapeHtml, l, r } from "../../core/constants.js";
+import { mapLimit } from "../../core/feature-helpers.js";
+import { calcMagnetScore } from "../../core/magnet-quality.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { createMovieContext } from "../../core/movie-context.js";
+import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService } from "../../services/resource-settings-service.js";
+import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, parseCustomMagnetResponse, parseNativeMagnets, validateCustomMagnetSource } from "../../services/magnet-source-registry.js";
+
+/** @typedef {any} JQueryHandle */
+/** @typedef {{ id: string, name: string, enabled?: boolean, applicable?: boolean, priority?: number, baseUrl?: string, search: (keyword: string, root?: JQueryHandle | Document) => Promise<MagnetResult[]>, targetUrl: (keyword: string) => string, targetPage?: string, parseHtml?: Function, parseJson?: Function, url?: string }} MagnetSource */
+/** @typedef {{ title: string, magnet: string, size?: string | number, date?: string, seeders?: number, tags?: string[], customTagWeight?: number, filterPenalty?: number, hidden?: boolean, _score?: any, [key: string]: any }} MagnetResult */
+/** @typedef {{ id: string, name: string, enabled?: boolean, searchUrlTemplate: string, targetUrlTemplate: string, parserType?: string, [key: string]: any }} CustomSource */
+/** @typedef {{ root?: JQueryHandle | Element, method?: string, body?: unknown, headers?: Record<string, string>, responseType?: string, ttlMs?: number, custom?: boolean, hosts?: string[] }} MagnetRequestOptions */
+/** @typedef {{ movieContext?: import("../../core/movie-context.js").MovieContext, root?: JQueryHandle | Element }} MagnetHubOptions */
+
+export class MagnetHubPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
+        super(...arguments);
+        /** @type {MagnetSourceRegistry} */ this.sourceRegistry = new MagnetSourceRegistry();
+        /** @type {MagnetSource[]} */ this.searchEngines = [];
     }
     async initializeSources() {
-        const settings = new ResourceSettingsService(), overrides = await settings.getBuiltInSources(), custom = await settings.getMagnetSources();
-        const configured = id => ({ ...(BUILT_IN_MAGNET_SOURCES.find((source => source.id === id)) || {}), ...(overrides.find((source => source.id === id)) || {}) });
-        const baseUrl = (id, fallback) => String(configured(id).baseUrl || fallback).replace(/\/$/, "");
-        this.sourceRegistry = new MagnetSourceRegistry([ {
-            name: "JavDB 本站", id: "native-javdb", applicable: r, enabled: r, priority: 1, search: async (keyword, root = document) => parseNativeMagnets(root?.jquery ? root[0] : root, "javdb"), targetUrl: () => window.location.href
-        }, { name: "JavBus 本站", id: "native-javbus", applicable: l, enabled: l, priority: 2, search: async (keyword, root = document) => parseNativeMagnets(root?.jquery ? root[0] : root, "javbus"), targetUrl: () => window.location.href
-        }, {
-            name: "U9A9",
-            id: "u9a9",
-            url: "https://u9a9.com/?type=2&search={keyword}",
-            targetPage: "https://u9a9.com/?type=2&search={keyword}",
-            priority: 10, search: keyword => this.searchTorrentSource("u9a9", `${baseUrl("u9a9", "https://u9a9.com")}/?type=2&search={keyword}`, keyword), targetUrl: keyword => `${baseUrl("u9a9", "https://u9a9.com")}/?type=2&search=${encodeURIComponent(keyword)}`
-        }, {
-            name: "U3C3",
-            id: "u3c3",
-            url: "https://u3c3.com/?search2=a8lr16lo&search={keyword}",
-            targetPage: "https://u3c3.com/?search2=a8lr16lo&search={keyword}",
-            priority: 20, search: keyword => this.searchTorrentSource("u3c3", `${baseUrl("u3c3", "https://u3c3.com")}/?search2=a8lr16lo&search={keyword}`, keyword), targetUrl: keyword => `${baseUrl("u3c3", "https://u3c3.com")}/?search2=a8lr16lo&search=${encodeURIComponent(keyword)}`
-        }, {
-            name: "Sukebei",
-            id: "sukebei",
-            url: "https://sukebei.nyaa.si/?f=0&c=0_0&q={keyword}",
-            targetPage: "https://sukebei.nyaa.si/?f=0&c=0_0&q={keyword}",
-            priority: 30, search: keyword => this.searchTorrentSource("sukebei", `${baseUrl("sukebei", "https://sukebei.nyaa.si")}/?f=0&c=0_0&q={keyword}`, keyword), targetUrl: keyword => `${baseUrl("sukebei", "https://sukebei.nyaa.si")}/?f=0&c=0_0&q=${encodeURIComponent(keyword)}`
-        }, { name: "BTSOW", id: "btsow", priority: 40, search: keyword => this.searchBtsow(keyword, baseUrl("btsow", "https://btsow.lol")), targetUrl: keyword => `${baseUrl("btsow", "https://btsow.lol")}/search/${encodeURIComponent(keyword)}` }
+        const settings = new ResourceSettingsService(), magnet = this.getRuntimeService("magnet"), overrides = await settings.getBuiltInSources(), custom = await settings.getMagnetSources();
+        const integrationSources = magnet.getBuiltInSources(), catalog = [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...integrationSources];
+        const configured = (/** @type {string} */ id) => ({ ...(catalog.find((/** @type {MagnetSource} */ source) => source.id === id) || {}), ...(overrides.find((/** @type {MagnetSource} */ source) => source.id === id) || {}) });
+        const externalSources = integrationSources.map(((/** @type {MagnetSource} */ source) => {
+            const config = configured(source.id), baseUrl = String(config.baseUrl || source.baseUrl).replace(/\/$/, "");
+            return {
+                ...source, ...config,
+                search: async (/** @type {string} */ keyword) => magnet.searchSource(source.id, keyword, { baseUrl, scope: await this.getRuntimeService("scope")() }),
+                targetUrl: (/** @type {string} */ keyword) => magnet.getSourceTargetUrl(source.id, keyword, { baseUrl }),
+            };
+        }));
+        this.sourceRegistry = new MagnetSourceRegistry([{
+            name: "JavDB 本站", id: "native-javdb", applicable: r, enabled: r, priority: 1, search: async (/** @type {string} */ keyword, root = document) => parseNativeMagnets((/** @type {any} */ (root))?.jquery ? (/** @type {any} */ (root))[0] : root, "javdb"), targetUrl: () => window.location.href
+        }, { name: "JavBus 本站", id: "native-javbus", applicable: l, enabled: l, priority: 2, search: async (/** @type {string} */ keyword, root = document) => parseNativeMagnets((/** @type {any} */ (root))?.jquery ? (/** @type {any} */ (root))[0] : root, "javbus"), targetUrl: () => window.location.href
+        }, ...externalSources
         ].map((source => { const config = configured(source.id), applicable = source.applicable ?? true; return { ...source, ...config, enabled: applicable && (config.enabled ?? source.enabled ?? true), search: source.search, targetUrl: source.targetUrl }; })));
-        custom.filter((source => source.enabled)).forEach((config => this.sourceRegistry.register({ ...config, id: `custom:${config.id}`, search: keyword => this.searchCustomSource(config, keyword), targetUrl: keyword => config.targetUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword)) })));
+        custom.filter((/** @type {CustomSource} */ source) => source.enabled).forEach((/** @type {CustomSource} */ config) => this.sourceRegistry.register({ ...config, id: `custom:${config.id}`, search: (/** @type {string} */ keyword) => this.searchCustomSource(config, keyword), targetUrl: (/** @type {string} */ keyword) => config.targetUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword)) }));
         const enabled = this.sourceRegistry.getEnabledSources().map((source => ({ ...source, targetPage: source.targetUrl("{keyword}").replace("%7Bkeyword%7D", "{keyword}") })));
-        this.searchEngines = enabled.length ? [{ id: "all", name: "全部", priority: 0, targetPage: "#", search: keyword => this.searchAllSources(enabled, keyword) }, ...enabled] : [];
+        this.searchEngines = enabled.length ? [{ id: "all", name: "全部", priority: 0, targetPage: "#", targetUrl: () => "#", search: (/** @type {string} */ keyword) => this.searchAllSources(enabled, keyword) }, ...enabled] : [];
     }
     getName() {
         return "MagnetHubPlugin";
@@ -76,86 +60,105 @@ class MagnetHubPlugin extends BasePlugin {
             .magnet-copy { position:absolute; top:var(--jhs-space-2); right:var(--jhs-space-3); }
         </style>`;
     }
-    async createMagnetHub(e, options = {}) {
+    /** Create a magnet surface carrying the owning movie context to offline actions. */
+    /** @param {string | MagnetHubOptions} movie @param {MagnetHubOptions} [options] */
+    async createMagnetHub(movie, options = {}) {
         await this.initializeSources();
-        e = e.replace("FC2-", "");
-        const root = options.root ? $(options.root) : $(document), engines = [ ...this.searchEngines ];
-        const t = $('<div class="magnet-container jhs-ui"></div>'), n = $('<div class="magnet-tabs"></div>'), a = "jhs_magnetHub_selectedEngine", i = localStorage.getItem(a);
+        const input = typeof movie === "string" ? null : movie;
+        const movieContext = typeof movie === "string" ? createMovieContext({ carNum: movie }) : input?.movieContext;
+        if (!movieContext?.carNum) {
+            const empty = $('<div class="magnet-container jhs-ui"></div>');
+            return empty.append($('<div class="magnet-error"></div>').text("无法确定影片身份，未加载磁力"));
+        }
+        const keyword = movieContext.carNum.replace("FC2-", "");
+        const root = (options.root ?? input?.root) ? $(options.root ?? input?.root) : $(document), engines = [ ...this.searchEngines ];
+        const storage = this.getRuntimeService("storage"), t = $('<div class="magnet-container jhs-ui"></div>'), n = $('<div class="magnet-tabs"></div>'), a = "jhs_magnetHub_selectedEngine", i = storage.getLocal(a);
+        t.data("jhsMovieContext", movieContext);
         const o = $('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
-        let currentEngine = engines.find((engine => engine.id === i)) || engines[0] || null;
-        if (!currentEngine) return t.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
+        const initialEngine = engines.find((engine => engine.id === i)) || engines[0];
+        if (!initialEngine) return t.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
+        /** @type {MagnetSource} */
+        let currentEngine = initialEngine;
         engines.forEach((engine => o.append($('<button type="button" class="jhs-btn magnet-tab" role="tab" aria-selected="false" tabindex="-1"></button>').attr("data-engine", engine.id).text(engine.name).toggleClass("active", engine.id === currentEngine.id))));
-        const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))).toggle("all" !== currentEngine.id);
+        const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(keyword))).toggle("all" !== currentEngine.id);
         n.append(o), n.append(target),
         o.find(".magnet-tab.active").attr({ "aria-selected": "true", tabindex: "0" }),
         t.append(n);
         const r = $('<div class="magnet-results"></div>');
-        return t.append(r), t.on("click", ".magnet-tab", (n => {
+        return t.append(r), t.on("click", ".magnet-tab", ((/** @type {MouseEvent} */ n) => {
             const i = $(n.target).data("engine");
-            currentEngine = engines.find((e => e.id === i)), t.find('[data-jhs-role="magnet-target"]').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))).toggle("all" !== currentEngine.id),
-            localStorage.setItem(a, i), t.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }),
-            this.searchEngine(r, currentEngine, e, root);
-        })), t.on("keydown", ".magnet-tab", (e => {
+            currentEngine = engines.find((engine => engine.id === i)) || currentEngine;
+            if (!currentEngine) return;
+            t.find('[data-jhs-role="magnet-target"]').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(keyword))).toggle("all" !== currentEngine.id),
+            storage.setLocal(a, i), t.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }),
+            this.searchEngine(r, currentEngine, keyword, root);
+        })), t.on("keydown", ".magnet-tab", ((/** @type {KeyboardEvent} */ e) => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;
             e.preventDefault();
             const n = t.find(".magnet-tab"), a = n.index(e.currentTarget);
             let i = "Home" === e.key ? 0 : "End" === e.key ? n.length - 1 : "ArrowRight" === e.key ? (a + 1) % n.length : (a - 1 + n.length) % n.length;
             n.eq(i).trigger("click").trigger("focus");
-        })), this.searchEngine(r, currentEngine, e, root), t;
+        })), this.searchEngine(r, currentEngine, keyword, root), t;
     }
+    /** @param {JQueryHandle} e @param {MagnetSource} t @param {string} n @param {JQueryHandle} [root] */
     async searchEngine(e, t, n, root = $(document)) {
         e.html(`<div class="magnet-loading">正在从 ${escapeHtml(t.name)} 搜索 "${escapeHtml(n)}"...</div>`);
         const a = `${t.name}_${n}`;
         if (t.search) try {
-            return void this.displayResults(e, await this.applyRuntimeRules(deduplicateMagnetResults(await t.search(n, root))), t.name);
+            return void this.displayResults(e, await this.applyRuntimeRules(/** @type {MagnetResult[]} */ (deduplicateMagnetResults(await t.search(n, root)))), t.name);
         } catch (error) {
             clog.error(`磁力源 ${t.name} 请求失败`, error);
             return void e.html(`<div class="magnet-error">${escapeHtml(t.name)} 请求失败</div>`);
         }
         if (t.parseHtml) try {
-            const i = t.url.replace("{keyword}", encodeURIComponent(n)), s = await storageManager.cachedRequest(`magnet:${t.id}:${n}`, 216e5, (() => gmHttp.get(i).then((e => t.parseHtml.call(this, e, n)))));
+            const i = /** @type {string} */ (t.url).replace("{keyword}", encodeURIComponent(n)), payload = await this.requestSource(t.id, i, { ttlMs: 216e5 }), s = t.parseHtml.call(this, payload, n);
             return void this.displayResults(e, s, t.name);
         } catch (s) {
-            return void e.html(`<div class="magnet-error">解析 ${escapeHtml(t.name)} 结果失败: ${escapeHtml(s.message)}</div>`);
+            return void e.html(`<div class="magnet-error">解析 ${escapeHtml(t.name)} 结果失败: ${escapeHtml(s instanceof Error ? s.message : String(s))}</div>`);
         }
         t.parseJson && await t.parseJson.call(this, e, t, n, a);
     }
-    async searchTorrentSource(source, template, keyword) {
-        const url = template.replace("{keyword}", encodeURIComponent(keyword));
-        return storageManager.cachedRequest(`magnet:${source}:${keyword}`, CACHE_TTL.magnet, (async () => {
-            const html = await gmHttp.get(url);
-            return this.parseTorrentList(html, keyword).map((item => ({ ...item, source, files: [] })));
-        }));
-    }
+    /** @param {string} keyword */
     async searchCustomSources(keyword) {
         const configs = JSON.parse(await storageManager.getSetting("customMagnetSources", "[]"));
-        const enabled = configs.filter((config => config.enabled)).map(validateCustomMagnetSource);
-        const groups = await mapLimit(enabled, 4, (async config => {
+        const enabled = configs.filter((/** @type {CustomSource} */ config) => config.enabled).map(validateCustomMagnetSource);
+        const groups = await mapLimit(enabled, 4, (async (/** @type {CustomSource} */ config) => {
             const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
             try {
-                const payload = await storageManager.cachedRequest(`magnet:custom:${config.id}:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.get(url)));
+                const payload = await this.requestSource(config.id, url, { ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
                 const parsed = "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload;
                 return parseCustomMagnetResponse(config, parsed, config.id);
-            } catch (cause) { clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, cause._cfBlocked ? "CF_BLOCKED" : "HTTP_ERROR", cause.message, { cause, url, status: cause.status })); return []; }
+            } catch (cause) { const error = /** @type {{ code?: string, message?: string, status?: number, retryable?: boolean }} */ (cause); clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, error.code || "HTTP_ERROR", error.message || String(cause), { cause, url, status: error.status, retryable: error.retryable })); return []; }
         }));
         return deduplicateMagnetResults(groups.flat());
     }
+    /** @param {CustomSource} config @param {string} keyword */
     async searchCustomSource(config, keyword) {
         const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
-        const payload = await storageManager.cachedRequest(`magnet:custom:${config.id}:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.get(url)));
+        const payload = await this.requestSource(config.id, url, { ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
         return parseCustomMagnetResponse(config, "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload, config.id);
     }
+    /** @param {MagnetSource[]} sources @param {string} keyword */
     async searchAllSources(sources, keyword) { const groups = await mapLimit(sources, 3, (async source => { try { return await source.search(keyword); } catch (error) { clog.warn(`磁力源 ${source.name} 聚合失败`, error); return []; } })); return deduplicateMagnetResults(groups.flat()); }
-    async searchBtsow(keyword, baseUrl = "https://btsow.lol") {
-        const payload = await storageManager.cachedRequest(`magnet:btsow:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.gmRequest("POST", `${baseUrl}/search`, JSON.stringify([{ search: keyword }, 50, 1]), {}, { "Content-Type": "application/json" })));
-        const value = "string" === typeof payload ? JSON.parse(payload) : payload;
-        return (value?.data || []).map((item => normalizeMagnetResult({ title: item.name, magnet: `magnet:?xt=urn:btih:${item.hash}`, size: `${(Number(item.size) / 1073741824).toFixed(2)} GB`, date: utils.formatDate(new Date(1e3 * item.lastUpdateTime)) }, "btsow"))).filter(Boolean);
+    /** 通过统一 HTTP/URL Policy 边界请求磁力来源。 */
+    /** @param {string} sourceId @param {string} url @param {MagnetRequestOptions} [options] */
+    async requestSource(sourceId, url, options = {}) {
+        const scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({
+            providerId: `magnet:${sourceId}`, method: options.method || "GET", url, body: options.body,
+            headers: options.headers, responseType: options.responseType || "text",
+            cacheScope: options.method && options.method !== "GET" ? "none" : "public", ttlMs: options.ttlMs ?? CACHE_TTL.magnet,
+            urlPolicy: options.custom ? { trustClass: "custom-public" } : { trustClass: "builtin-public", hosts: options.hosts || [new URL(url).hostname] },
+        }, scope);
+        return response.data;
     }
+    /** @param {MagnetResult[]} results */
     async applyRuntimeRules(results) {
         const service = new ResourceSettingsService(), [tags, filters] = await Promise.all([service.getMagnetTagRules(), service.getMagnetFilterRules()]);
-        return results.map((result => applyMagnetRules(result, tags, filters.filter((rule => (rule.target || "title") === "title")), filters.filter((rule => rule.target === "file"))))).filter((result => !result.hidden));
+        return /** @type {MagnetResult[]} */ (/** @type {unknown} */ (results.map((result => applyMagnetRules(result, tags, filters.filter((rule => (rule.target || "title") === "title")), filters.filter((rule => rule.target === "file"))))).filter((result => !result.hidden))));
     }
+    /** @param {JQueryHandle} e @param {MagnetResult[]} t @param {string} n */
     async displayResults(e, t, n) {
+        /** @param {JQueryHandle} e */
         function a(e) {
             const t = e.text();
             e.addClass("copied").text("已复制"), setTimeout((() => {
@@ -173,29 +176,12 @@ class MagnetHubPlugin extends BasePlugin {
             item.find(".copy-btn").removeClass("magnet-hub-btn").addClass("jhs-btn--secondary");
             copyBox.append(`<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${safeMagnet}">离线</button>`);
             item.appendTo(e);
-        })), e.on("click", ".copy-btn", (async function() {
-            const e = $(this), t = e.data("magnet");
+        })), e.on("click", ".copy-btn", (async (/** @type {MouseEvent} */ event) => {
+            const e = $(event.currentTarget), t = e.data("magnet");
             await utils.copyToClipboard("磁力链接", t) && a(e);
         }))) : e.append('<div class="magnet-error">没有找到相关结果</div>');
     }
-    parseTorrentList(e, t) {
-        const n = utils.htmlTo$dom(e), a = [];
-        return n.find(".torrent-list tbody tr").each(((e, n) => {
-            const i = $(n);
-            if (i.text().includes("置顶")) return;
-            const s = i.find("td:nth-child(2) a").attr("title") || i.find("td:nth-child(2) a").text().trim();
-            if (!s.toLowerCase().includes(t.toLowerCase())) return;
-            const o = i.find("td:nth-child(3) a[href^='magnet:']").attr("href"), r = i.find("td:nth-child(4)").text().trim(), l = i.find("td:nth-child(5)").text().trim(), c = parseInt(i.find("td:nth-child(6)").text().trim()) || 0, d = parseInt(i.find("td:nth-child(7)").text().trim()) || 0;
-            o && a.push({
-                title: s,
-                magnet: o,
-                size: r,
-                date: l,
-                seeders: c,
-                leechers: d
-            });
-        })), a;
-    }
+    /** @param {MagnetResult} e */
     calcMagnetScore(e) {
         return calcMagnetScore(e);
     }

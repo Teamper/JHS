@@ -1,0 +1,33 @@
+// @ts-check
+
+/**
+ * @param {{root?: any, carNum?: string, translation: import("../../services/translation-service.js").TranslationService, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean}} options
+ */
+export async function renderTranslatedTitle(options) {
+    // Double gate: never create DOM or start a network request when the feature
+    // is already disabled at call time.
+    if (options.isActive && options.isActive() === false) return;
+    const jq = /** @type {any} */ (globalThis).$;
+    const root = options.root ? jq(options.root) : jq(document);
+    let title = root.find(".origin-title").first();
+    if (!title.length) title = root.find(".current-title").first();
+    if (!title.length) title = root.find("h3").first();
+    if (!title.length) return;
+    const sourceText = title.text().trim();
+    if (!sourceText) throw new TypeError("获取标题失败, 无法进行翻译");
+    let translatedNode = title.nextAll(".translated-title").first();
+    if (!translatedNode.length) translatedNode = jq('<div class="translated-title"></div>').insertAfter(title);
+    translatedNode.removeClass("is-error").text("翻译中...");
+    try {
+        const translated = await options.translation.translate(sourceText, { cacheAlias: options.carNum, scope: options.scope });
+        if (options.isActive && !options.isActive()) return;
+        if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
+        translatedNode.text(translated);
+    } catch (error) {
+        if (options.isActive && !options.isActive()) return;
+        if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
+        const message = error instanceof Error ? error.message : String(error);
+        /** @type {any} */ (globalThis).clog?.error("翻译失败:", error);
+        translatedNode.addClass("is-error").text(`翻译失败: ${message}`);
+    }
+}

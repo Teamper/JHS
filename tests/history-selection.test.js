@@ -1,9 +1,12 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { HistorySelectionModel } from "../src/features/history/history-selection-model.js";
+import { HistoryRepository } from "../src/features/history/history-repository.js";
 
 function createRecords(count = 120) {
     return Array.from({ length: count }, ((_, index) => ({
@@ -37,20 +40,21 @@ function loadHistory(records = createRecords()) {
     </body>`, { url: "https://javdb.com/users/collection_codes" });
     const $ = jqueryFactory(dom.window), getCarList = vi.fn().mockImplementation((async () => records.map((item => ({ ...item }))))),
         patch = vi.fn().mockResolvedValue({ changed: records.map((item => item.carNum)) }), remove = vi.fn().mockResolvedValue({ changed: [] }),
-        confirmation = vi.fn(((event, message, callback) => callback())), close = vi.fn(), show = {
+        confirmation = vi.fn(((event, message, callback) => callback())), close = vi.fn(), layer = { open: vi.fn(), close }, show = {
             ok: vi.fn(),
             info: vi.fn(),
             error: vi.fn()
         };
+    const stateService = { patch, remove, toggle: vi.fn() };
     const context = vm.createContext({
         document: dom.window.document,
         window: dom.window,
         $,
-        BasePlugin: class {},
+        BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } },
+        HistorySelectionModel, HistoryRepository,
         Tabulator: class {},
-        layer: {},
+        layer,
         storageManager: { getCarList },
-        stateService: { patch, remove, toggle: vi.fn() },
         normalizeCarNum: value => String(value || "").trim().toUpperCase(),
         normalizeStateFlags: flags => ({ favorite: !1, downloaded: !1, watched: !1, blocked: !1, ...flags }),
         hasAnyState: flags => Object.values(flags || {}).some(Boolean),
@@ -71,7 +75,7 @@ function loadHistory(records = createRecords()) {
         y: "下载",
         k: "观看"
     });
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
     const plugin = new context.History, root = $("#history");
     const table = {
         currentData: records.slice(0, 50),
@@ -105,7 +109,7 @@ describe("History cross-page selection", () => {
         expect(page.dataList).toHaveLength(50);
         expect(page.totalCount).toBe(120);
 
-        plugin.historySelectAll = true;
+        plugin.historySelectionModel.selectAllFiltered();
         const selected = await plugin.getHistoryBatchSelection();
         expect(selected).toHaveLength(120);
         expect(selected.at(-1).carNum).toBe("ABC-120");
@@ -117,21 +121,21 @@ describe("History cross-page selection", () => {
         const checkbox = plugin.createHistorySelectAllCheckbox();
         checkbox.checked = true;
         checkbox.dispatchEvent(new checkbox.ownerDocument.defaultView.Event("change"));
-        expect(plugin.historySelectAll).toBe(true);
+        expect(plugin.isHistoryAllFiltered()).toBe(true);
         expect(table.selectedData).toHaveLength(50);
 
         checkbox.checked = false;
         checkbox.dispatchEvent(new checkbox.ownerDocument.defaultView.Event("change"));
-        expect(plugin.historySelectAll).toBe(false);
+        expect(plugin.isHistoryAllFiltered()).toBe(false);
         expect(table.selectedData).toHaveLength(0);
     });
 
     it("restores visible selection after paging and honors exclusions", async () => {
         const { plugin, table } = loadHistory();
         await plugin.getDataList(1, 50, []);
-        plugin.historySelectAll = true;
-        plugin.historyExcludedCarNums.add("ABC-052");
-        plugin.historyExcludedCarNums.add("ABC-053");
+        plugin.historySelectionModel.selectAllFiltered();
+        plugin.historySelectionModel.excluded.add("ABC-052");
+        plugin.historySelectionModel.excluded.add("ABC-053");
         table.currentData = createRecords().slice(50, 100);
 
         plugin.syncHistoryPageSelection();
@@ -148,62 +152,63 @@ describe("History cross-page selection", () => {
     it("keeps ordinary selection limited to selected rows on the current page", async () => {
         const { plugin, table } = loadHistory();
         table.selectedData = table.currentData.slice(0, 3);
+        table.selectedData.forEach((item => plugin.historySelectionModel.set(item, true)));
         expect(await plugin.getHistoryBatchSelection()).toEqual(table.selectedData);
     });
 
     it("clears selection for filtering but preserves it while sorting", async () => {
         const { plugin, root, table } = loadHistory();
-        plugin.historySelectAll = true;
-        plugin.historyExcludedCarNums.add("ABC-002");
+        plugin.historySelectionModel.selectAllFiltered();
+        plugin.historySelectionModel.excluded.add("ABC-002");
         await plugin.getDataList(1, 50, [ { field: "carNum", dir: "desc" } ]);
-        expect(plugin.historySelectAll).toBe(true);
-        expect(plugin.historyExcludedCarNums.has("ABC-002")).toBe(true);
+        expect(plugin.isHistoryAllFiltered()).toBe(true);
+        expect(plugin.historySelectionModel.excluded.has("ABC-002")).toBe(true);
 
         root.find("#searchCarNum").val("ABC-1");
         await plugin.reloadTable();
-        expect(plugin.historySelectAll).toBe(false);
-        expect(plugin.historyExcludedCarNums.size).toBe(0);
+        expect(plugin.isHistoryAllFiltered()).toBe(false);
+        expect(plugin.historySelectionModel.excluded.size).toBe(0);
         expect(table.setPage).toHaveBeenCalledWith(1);
     });
 
     it("uses the same full selection for confirmation and batch mutation", async () => {
         const { plugin, root, patch, confirmation } = loadHistory();
         await plugin.getDataList(1, 50, []);
-        plugin.historySelectAll = true;
-        plugin.historyExcludedCarNums.add("ABC-002");
-        plugin.historyExcludedCarNums.add("ABC-003");
+        plugin.historySelectionModel.selectAllFiltered();
+        plugin.historySelectionModel.excluded.add("ABC-002");
+        plugin.historySelectionModel.excluded.add("ABC-003");
         plugin.bindHistoryActions(root);
         root.find(".multiple-history-favoriteBtn").trigger("click");
 
         await vi.waitFor((() => expect(patch).toHaveBeenCalledOnce()));
         expect(patch.mock.calls[0][0]).toHaveLength(118);
         expect(confirmation.mock.calls[0][1]).toContain("已选择 118 条，排除 2 条");
-        expect(plugin.historySelectAll).toBe(false);
+        expect(plugin.isHistoryAllFiltered()).toBe(false);
     });
 
     it("retains the full selection when a batch mutation fails", async () => {
         const { plugin, root, patch, show } = loadHistory();
         await plugin.getDataList(1, 50, []);
-        plugin.historySelectAll = true;
-        plugin.historyExcludedCarNums.add("ABC-002");
+        plugin.historySelectionModel.selectAllFiltered();
+        plugin.historySelectionModel.excluded.add("ABC-002");
         patch.mockRejectedValueOnce(new Error("write failed"));
         plugin.bindHistoryActions(root);
         root.find(".multiple-history-favoriteBtn").trigger("click");
 
         await vi.waitFor((() => expect(show.error).toHaveBeenCalledWith("操作失败，请稍后重试")));
-        expect(plugin.historySelectAll).toBe(true);
-        expect(plugin.historyExcludedCarNums.has("ABC-002")).toBe(true);
+        expect(plugin.isHistoryAllFiltered()).toBe(true);
+        expect(plugin.historySelectionModel.excluded.has("ABC-002")).toBe(true);
     });
 
     it("retains selection when a delete resolves without changing records", async () => {
         const { plugin, root, remove, show } = loadHistory();
         await plugin.getDataList(1, 50, []);
-        plugin.historySelectAll = true;
+        plugin.historySelectionModel.selectAllFiltered();
         plugin.bindHistoryActions(root);
         root.find(".multiple-history-deleteBtn").trigger("click");
 
         await vi.waitFor((() => expect(show.error).toHaveBeenCalledWith("提供的番号中没有一个存在于列表中。")));
         expect(remove.mock.calls[0][0]).toHaveLength(120);
-        expect(plugin.historySelectAll).toBe(true);
+        expect(plugin.isHistoryAllFiltered()).toBe(true);
     });
 });

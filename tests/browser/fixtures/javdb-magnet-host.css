@@ -1,0 +1,17 @@
+/* Relevant rules read from https://javdb.com/packs/css/app-ab5ba15c.css on 2026-09-08.
+   Used with the historical columns DOM; current authenticated detail DOM was unavailable. */
+.column { display:block; flex:1 1 0px; padding:.75rem; }
+.columns { margin-left:-.75rem; margin-right:-.75rem; margin-top:-.75rem; }
+@media print, screen and (min-width:769px) { .column.is-four-fifths { flex:0 0 auto; width:80%; } }
+@media screen and (min-width:1024px) { .columns.is-desktop { display:flex; } }
+.button { appearance:none; align-items:center; border:1px solid transparent; border-radius:0; box-shadow:none; display:inline-flex; font-size:1rem; height:2.5em; justify-content:flex-start; line-height:1.5; padding:calc(.5em - 1px) calc(.75em - 1px); position:relative; vertical-align:top; }
+.button { background-color:#fff; border-color:#dbdbdb; border-width:1px; color:#363636; cursor:pointer; justify-content:center; padding:calc(.5em - 1px) 1em; text-align:center; white-space:nowrap; }
+.button.is-small { font-size:.75rem; }
+.buttons { align-items:center; display:flex; flex-wrap:wrap; justify-content:flex-start; }
+.buttons .button { margin-bottom:.5rem; }
+.buttons .button:not(:last-child):not(.is-fullwidth) { margin-right:.5rem; }
+.video-panel .magnet-links .item { padding:.6rem .75rem; }
+.video-panel .magnet-links .item .magnet-name { line-height:1.2rem; font-size:.9rem; text-align:left; }
+.video-panel .magnet-links .item .magnet-name .name { font-weight:700; word-break:break-all; }
+.video-panel .magnet-links .item .buttons { justify-content:flex-start; margin-top:.5rem; margin-bottom:0; }
+.video-panel .magnet-links .item .buttons .button { margin-bottom:0; }

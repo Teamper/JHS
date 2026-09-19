@@ -1,9 +1,16 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import vm from "node:vm";
+import { JSDOM } from "jsdom";
+import jqueryFactory from "jquery";
+import { describe, expect, it, vi } from "vitest";
 
-const storage = readFileSync(join(process.cwd(), "src/core/storage.js"), "utf8");
-const settingForms = readFileSync(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
+const storage = readTestFile(join(process.cwd(), "src/core/storage.js"), "utf8");
+const settingsService = readTestFile(join(process.cwd(), "src/services/settings-service.js"), "utf8");
+const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
+const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
+const settingTemplates = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
 
 function methodBody(source, start, end) {
     return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
@@ -17,9 +24,83 @@ describe("settings invalidation ownership", () => {
         expect(saveSettingItem).not.toContain("clean_cacheSettingObj");
     });
 
-    it("lets settings-changed be the only TaskPlugin refresh path after form save", () => {
-        const saveForm = methodBody(settingForms, "async function saveSettingForm", "function addLabelTag");
-        expect(saveForm).toContain("storageManager.saveSetting");
+    it("routes the settings form through the SettingsService ownership patch", () => {
+        const saveForm = methodBody(settingForms, "async function saveSettingForm", "async function collectManualSettingPatch");
+        expect(saveForm).toContain("dependencies.settings.update");
+        expect(saveForm).not.toContain("dependencies.settings.replace");
+        expect(saveForm).not.toContain("dependencies.settings.patch");
+        expect(saveForm).not.toContain("{ ...dependencies.settings.snapshot() }");
+        expect(saveForm).not.toContain("changedValues");
+        expect(saveForm).not.toContain("storageManager.saveSetting(");
         expect(saveForm).not.toContain("invalidateConfig");
+        expect(settingForms).toContain("MANUAL_FORM_SETTING_KEYS");
+        expect(settingForms).toContain("dependencies.newVideo?.resetBtnTip?.()");
+        expect(settingForms).toContain("dependencies.blacklist?.resetBtnTip?.()");
+        expect(settingForms).toContain("dependencies.blacklist?.reloadTable?.()");
+    });
+
+    it("writes settings through a lock-scoped read-modify-write in SettingsService", () => {
+        const update = settingsService.slice(settingsService.indexOf("async update("));
+        expect(update).toContain("jhs_setting_lock");
+        expect(update).toContain("this.storage.get(storageKey)");
+        expect(update).toContain("this.storage.set(storageKey, next)");
+        expect(update).toContain("this.writeChain");
+        expect(update).not.toContain("this.snapshotValue, ...values");
+    });
+
+    it("keeps legacy StorageManager as the fallback but routes through the single entry when available", () => {
+        const saveSetting = methodBody(storage, "async saveSetting(e)", "async saveSettingItem");
+        const saveSettingItem = methodBody(storage, "async saveSettingItem", "async getSetting");
+        expect(saveSetting).toContain("globalThis.settingsService?.replace");
+        expect(saveSettingItem).toContain("globalThis.settingsService?.set");
+        expect(saveSettingItem).not.toContain("clean_cacheSettingObj");
+    });
+
+    it("opens and closes Settings without requiring CoverButtonPlugin", () => {
+        const openDialog = methodBody(settingPlugin, "async openSettingDialog", "renderTaskStatuses()");
+        expect(openDialog).not.toContain('getDependency("CoverButtonPlugin")');
+        expect(settingPlugin).toContain('getBean("CoverButtonPlugin")?.enableSvgBtn?.()');
+        expect(settingTemplates).not.toContain("coverButtonPlugin");
+    });
+
+    it("uses the EventBus binding initialized after form import and isolates UI refresh failures", async () => {
+        const dom = new JSDOM("<div></div>"), $ = jqueryFactory(dom.window), bus = { emit: async () => { throw new Error("bus unavailable"); } };
+        const newVideo = { resetBtnTip: () => { throw new Error("new-video unavailable"); } };
+        const blacklist = { resetBtnTip: vi.fn(), reloadTable: vi.fn() };
+        const context = vm.createContext({
+            window: dom.window, document: dom.window.document, $, C: "no", _: "yes", r: true, jhsEventBus: undefined,
+            storageManager: { getReviewFilterKeywordList: async () => [], getTitleFilterKeyword: async () => [] },
+            utils: {}, clog: { error: vi.fn() },
+        });
+        vm.runInContext(`${settingForms}; globalThis.saveSettingFormForTest = saveSettingForm;`, context);
+        context.jhsEventBus = bus;
+        const settings = { snapshot: () => ({ trustedLocalOrigins: [] }), update: async updater => updater({ trustedLocalOrigins: [] }) };
+        await expect(context.saveSettingFormForTest({ settings, newVideo, blacklist, movie: {} }, $(dom.window.document.querySelector("div")))).resolves.toEqual({ ok: true });
+        expect(blacklist.resetBtnTip).toHaveBeenCalledOnce();
+        expect(blacklist.reloadTable).toHaveBeenCalledOnce();
+        expect(context.clog.error).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe("migration write ownership", () => {
+    const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
+    const migration = readFileSync(join(process.cwd(), "src/core/settings-migration.js"), "utf8");
+
+    it("bootstrap local-origin migration is deferred to an atomic settings update", () => {
+        expect(bootstrap).toContain("async function resolveLocalOrigins");
+        expect(bootstrap).toContain("async function persistLocalOriginMigration");
+        expect(bootstrap).not.toContain("saveSetting({ ...settings");
+    });
+
+    it("runtime screenshot migration uses one atomic update and never replace()s", () => {
+        expect(migration).toContain("settings.update");
+        expect(migration).toContain("draft.enableScreenSvg");
+        expect(migration).not.toContain("settings.replace");
+    });
+
+    it("async_merge_other uses updateSetting instead of whole-object saveSetting(e)", () => {
+        const merge = methodBody(storage, "async async_merge_other", "merge_blacklist");
+        expect(merge).toContain("this.updateSetting");
+        expect(merge).not.toContain("await this.saveSetting(e)");
     });
 });

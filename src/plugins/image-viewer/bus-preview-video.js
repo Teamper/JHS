@@ -1,90 +1,93 @@
-const ENCRYPTION_SALT = "x7k9p3";
+// @ts-check
 
-async function getEncryptionKey() {
-    const enc = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(ENCRYPTION_SALT + ".jhs.v1"), {
-        name: "PBKDF2"
-    }, false, [ "deriveKey" ]);
-    return crypto.subtle.deriveKey({
-        name: "PBKDF2",
-        salt: enc.encode("jhs-backup"),
-        iterations: 1e5,
-        hash: "SHA-256"
-    }, keyMaterial, {
-        name: "AES-GCM",
-        length: 256
-    }, false, [ "encrypt", "decrypt" ]);
-}
+import { L } from "../../core/constants.js";
+import { safePlay } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { Z, canUseDmmPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
-function arrayBufferToBase64(e) {
-    const t = new Uint8Array(e), n = 0x8000;
-    let a = "";
-    for (let i = 0; i < t.length; i += n) a += String.fromCharCode.apply(null, t.subarray(i, i + n));
-    return btoa(a);
-}
-
-function base64ToArrayBuffer(e) {
-    const t = atob(e), n = new Uint8Array(t.length);
-    for (let a = 0; a < t.length; a++) n[a] = t.charCodeAt(a);
-    return n;
-}
-
-async function encryptData(e) {
-    const t = await getEncryptionKey(), n = crypto.getRandomValues(new Uint8Array(12)), a = new TextEncoder(), i = await crypto.subtle.encrypt({
-        name: "AES-GCM",
-        iv: n
-    }, t, a.encode(e)), s = new Uint8Array(n.length + i.byteLength);
-    return s.set(n), s.set(new Uint8Array(i), n.length), arrayBufferToBase64(s);
-}
-
-async function decryptData(e) {
-    const t = await getEncryptionKey(), n = base64ToArrayBuffer(e), a = n.slice(0, 12), i = n.slice(12), s = await crypto.subtle.decrypt({
-        name: "AES-GCM",
-        iv: a
-    }, t, i);
-    return new TextDecoder().decode(s);
-}
-
-const CREDENTIAL_PREFIX = "AES:";
-
-async function encryptCredential(e) {
-    return e && !e.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(e) : e;
-}
-
-async function decryptCredential(e) {
-    return e && e.startsWith(CREDENTIAL_PREFIX) ? await decryptData(e.slice(CREDENTIAL_PREFIX.length)) : e;
-}
-
-class BusPreviewVideoPlugin extends BasePlugin {
+export class BusPreviewVideoPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments);
+        /** @type {number} */ this._busPreviewGeneration = 0;
+    }
     getName() {
         return "BusPreviewVideoPlugin";
     }
     async initCss() {
         return "\n            .bus-preview-modal { position:fixed; inset:0; z-index:var(--jhs-z-modal); display:flex; align-items:center; justify-content:center; visibility:hidden; opacity:0; background:rgba(0,0,0,.95); transition:opacity var(--jhs-motion-base) var(--jhs-ease); }\n            .bus-preview-modal.is-open { visibility:visible; opacity:1; }\n            .bus-preview-modal-content { position:relative; display:flex; max-width:95%; max-height:95%; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }\n            .video-player-wrapper { position:relative; width:80vw; max-width:100%; max-height:85vh; aspect-ratio:16/9; background:#000; }\n            .video-player-wrapper #preview-video { position:absolute; inset:0; }\n        ";
     }
-    initModal() {
+    /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
+    initModal(scope) {
         if (0 === $("#bus-preview-modal").length) {
             $("body").append('\n                <div id="bus-preview-modal" class="bus-preview-modal">\n                    <div class="bus-preview-modal-content">\n                        </div>\n                </div>\n            ');
             const e = $("#bus-preview-modal");
-            e.on("click", (e => {
-                "bus-preview-modal" === e.target.id && this.closeVideoModal();
-            })), $(document).on("keydown", (t => {
-                "Escape" === t.key && e.hasClass("is-open") && this.closeVideoModal();
+            e.on("click", ((/** @type {MouseEvent} */ e) => {
+                e.target instanceof Element && "bus-preview-modal" === e.target.id && this.closeVideoModal();
+            }));
+            scope.listen(document, "keydown", ((/** @type {Event} */ event) => {
+                event instanceof KeyboardEvent && "Escape" === event.key && e.hasClass("is-open") && this.closeVideoModal();
+            }));
+            scope.addCleanup((() => {
+                e.off();
+                e.remove();
             }));
         }
     }
     closeVideoModal() {
         const e = $("#preview-video");
-        e.length > 0 && e[0].pause(), $("#bus-preview-modal").removeClass("is-open");
+        e.length > 0 && /** @type {HTMLVideoElement} */ (e[0]).pause(), $("#bus-preview-modal").removeClass("is-open");
+    }
+    /** 总开关 OFF：卸载 JHS 预览入口（宿主无原生预览可保留，直接删除自有 UI）。 */
+    unmountPreview() {
+        this._busPreviewMounted = false;
+        this.closeVideoModal();
+        $("#bus-preview-modal").remove();
+        $(".preview-video-container").off("click.jhsBusPreview").remove();
     }
     async handle() {
         if (!isDetailPage) return;
-        this.initModal();
-        const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`\n            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">\n                <div class="photo-frame jhs-layout-87db2275">\n                    <img src="${e}" class="video-cover" alt="">\n                    <div class="play-icon jhs-play-overlay">\n                        ▶\n                    </div>\n                </div>\n            </button>`);
+        const settingsService = this.getRuntimeService("settings");
+        if (!this._busScope) this._busScope = await this.getRuntimeService("scope")();
+        if (!this._settingsListenerBound) {
+            this._settingsListenerBound = true;
+            const onSettingsChanged = (/** @type {any} */ event) => {
+                const names = /** @type {string[] | undefined} */ (event.detail?.names);
+                if (!names?.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) return;
+                this.reconfigure();
+            };
+            settingsService.addEventListener("settings.changed", onSettingsChanged);
+            this._busScope.addCleanup((() => {
+                settingsService.removeEventListener("settings.changed", onSettingsChanged);
+                this._settingsListenerBound = false;
+            }));
+        }
+        this.reconfigure();
+    }
+    /** 统一 reconfigure：JavBus 无宿主原生预览，整个 JHS 入口只有 DMM 能力 → 必须 Preview+DMM 都 ON。 */
+    reconfigure() {
+        this._busPreviewGeneration++;
+        const settings = this.getRuntimeService("settings").snapshot();
+        if (!canUseDmmPreview(settings)) return void this.unmountPreview();
+        this.mountPreview();
+    }
+    /** 幂等挂载：modal、入口按钮、DMM 预载。 */
+    mountPreview() {
+        if (this._busPreviewMounted) return;
+        this._busPreviewMounted = true;
+        const scope = this._busScope;
+        this.initModal(scope);
+        const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`
+            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">
+                <div class="photo-frame jhs-layout-87db2275">
+                    <img src="${e}" class="video-cover" alt="">
+                    <div class="play-icon jhs-play-overlay">
+                        ▶
+                    </div>
+                </div>
+            </button>`);
         $("#sample-waterfall").prepend(t);
-        "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum).catch((e => clog.warn("预加载 DMM 失败", e)));
         let n = !1, a = $(".preview-video-container");
-        a.on("click", (async e => {
+        a.on("click", (async (/** @type {MouseEvent} */ e) => {
             if (e.preventDefault(), e.stopPropagation(), n) show.info("正在加载中, 勿重复点击"); else {
                 n = !0;
                 try {
@@ -96,14 +99,17 @@ class BusPreviewVideoPlugin extends BasePlugin {
         })), window.location.href.includes("autoPlay=1") && a.trigger("click");
     }
     async handleVideo() {
+        const generation = this._busPreviewGeneration;
         const e = $("#bus-preview-modal"), t = e.find(".bus-preview-modal-content");
         let n = $("#preview-video");
+        if (generation !== this._busPreviewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return;
         if (n.length > 0) return e.addClass("is-open"), void await safePlay(n[0], {
             context: "JavBus 预览视频",
             notify: !0
         });
         let a = this.getPageInfo().carNum;
-        const {sources: i, error: previewError} = await fetchDmmPreview(a);
+        const scope = await this.getRuntimeService("scope")(), {sources: i, error: previewError} = await fetchDmmPreviewIfEnabled(a, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, this.getRuntimeService("settings").snapshot());
+        if (generation !== this._busPreviewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return;
         i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t),
         n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), await safePlay(n[0], {
             context: "JavBus 预览视频",
@@ -111,27 +117,27 @@ class BusPreviewVideoPlugin extends BasePlugin {
             message: "REGION_BLOCKED" === previewError?.code ? previewError.message : "当前视频源无法播放"
         })) : show.error("视频播放器创建失败。")) : show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未找到可用的视频源。");
     }
-    async createVideoPlayerAndControls(e, t) {
-        let n = await storageManager.getSetting("videoQuality");
+    async createVideoPlayerAndControls(/** @type {Record<string, string>} */ e, /** @type {any} */ t) {
+        let n = this.getRuntimeService("settings").snapshot().videoQuality;
         n = Z(Object.keys(e), n);
         let a = e[n];
-        t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" class="jhs-video-player" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">\n                </div>\n        `);
+        const wrapper = $('<div class="video-player-wrapper"></div>'), video = $('<video id="preview-video" class="jhs-video-player" controls playsinline></video>'), source = $(document.createElement("source")).attr("src", a), toolbar = $('<div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质"></div>');
+        video.append(source), wrapper.append(video), t.empty().append(wrapper, toolbar);
         const i = $("#preview-video"), s = i.find("source"), o = t.find(".jhs-video-quality-list");
         if (!i.length || !s.length) return;
-        const r = i[0], l = localStorage.getItem("jhs_videoMuted");
-        r.muted = !l || "yes" === l, i.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (function() {
-            localStorage.setItem("jhs_videoMuted", r.muted ? "yes" : "no");
+        const settings = this.getRuntimeService("settings"), r = /** @type {HTMLVideoElement} */ (i[0]), muted = settings.snapshot().videoMuted;
+        r.muted = muted == null || muted === !0, i.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
+            void settings.set("videoMuted", r.muted).catch(((/** @type {unknown} */ error) => clog.error("保存视频静音设置失败", error)));
         }));
-        let c = "";
-        L.forEach((t => {
+        L.forEach(((/** @type {{quality: string, text: string}} */ t) => {
             let a = e[t.quality];
             if (a) {
-                const e = n === t.quality;
-                c += `\n                    <button type="button" class="jhs-btn jhs-video-quality-btn${e ? " active" : ""}" \n                            data-quality="${t.quality}"\n                            data-video-src="${a}"\n                            aria-pressed="${e ? "true" : "false"}">\n                        ${t.text}\n                    </button>\n                `;
+                const active = n === t.quality, button = $('<button type="button" class="jhs-btn jhs-video-quality-btn"></button>');
+                active && button.addClass("active"), button.attr({ "data-quality": t.quality, "data-video-src": a, "aria-pressed": active ? "true" : "false" }).text(t.text), o.append(button);
             }
-        })), o.html(c);
+        }));
         const d = o.find(".jhs-video-quality-btn");
-        o.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async e => {
+        o.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (/** @type {MouseEvent} */ e) => {
             try {
                 const t = $(e.currentTarget);
                 if (t.hasClass("active")) return;

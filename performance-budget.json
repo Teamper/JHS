@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "bundle": {
+    "baselineBytes": 1170844,
+    "referenceCommit": "4ea5536",
+    "referenceBytes": 1170844,
+    "maximumGrowthRatio": 0.12,
+    "reason": "Pinned to the refactor/6.5@4ea5536 RC artifact; 6.5.0 keeps the 12% growth cap fixed"
+  },
+  "browserFixture": {
+    "maximumInitialRequests": {
+      "JavDB": 0,
+      "JavBus": 2
+    },
+    "startupMedianMilliseconds": {
+      "JavDB": 220,
+      "JavBus": 230
+    },
+    "startupBaselineReason": "Five-sample median from the deterministic desktop-wide Windows Edge fixture harness",
+    "ciStartupMedianMilliseconds": {
+      "JavDB": 315,
+      "JavBus": 315
+    },
+    "ciStartupBaselineReason": "Thirty independent-context sample medians from GitHub Actions ubuntu-24.04 Chromium at refactor/6.5@9cadaef: JavDB 314.8ms and JavBus 313.7ms; kept separate because runner and browser costs are not comparable with Windows Edge",
+    "startupRegressionRatio": 0.1
+  }
+}

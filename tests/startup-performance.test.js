@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -20,7 +21,7 @@ function loadPluginClasses() {
     clog: { error: vi.fn() },
     i: (target, key, value) => (target[key] = value)
   });
-  const source = `${readFileSync(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = PluginManager; globalThis.TestBasePlugin = BasePlugin;`;
+  const source = `${readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = PluginManager; globalThis.TestBasePlugin = BasePlugin;`;
   vm.runInContext(source, context);
   return { PluginManager: context.TestPluginManager, BasePlugin: context.TestBasePlugin, idleCallbacks, insertStyle };
 }
@@ -34,7 +35,7 @@ function loadStorageManager(forage) {
     },
     i: (target, key, value) => (target[key] = value)
   });
-  const source = `${readFileSync(join(repoRoot, "src/core/storage.js"), "utf8")}\nglobalThis.TestStorageManager = StorageManager;`;
+  const source = `${readTestFile(join(repoRoot, "src/core/storage.js"), "utf8")}\nglobalThis.TestStorageManager = StorageManager;`;
   vm.runInContext(source, context);
   return new context.TestStorageManager();
 }
@@ -55,18 +56,23 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     show: { info: vi.fn(), error: vi.fn() },
     utils: { ...defaultUtils, ...overrides.utils },
-    storageManager: overrides.storageManager || {},
+    storageManager: overrides.storageManager || { getSetting: vi.fn(async () => ({})) },
+    selectLatestPublishTime: values => values.filter(Boolean).sort().at(-1) || "",
     $: () => ({ text: vi.fn() })
   });
-  const parsers = readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8");
-  const source = `${parsers}\n${readFileSync(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
+  const parsers = ["src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
+  const source = `${parsers}\n${readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
   vm.runInContext(source, context);
-  return new context.TestTaskPlugin();
+  const task = new context.TestTaskPlugin();
+  task.getRuntimeService = name => name === "actressInfo" ? {
+    collection: async (_integrationId, input) => gmHttp.get(input.pageUrl)
+  } : name === "scope" ? async () => null : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" } : null;
+  return task;
 }
 
 function loadStorageQueue() {
   const context = vm.createContext({ clog: { error: vi.fn() } });
-  const queueSource = readFileSync(join(repoRoot, "src/plugins/external-search/other-site.js"), "utf8").split("class OtherSitePlugin")[0];
+  const queueSource = readTestFile(join(repoRoot, "src/core/storage-queue.js"), "utf8");
   vm.runInContext(`${queueSource}\nglobalThis.TestStorageQueue = StorageQueue;`, context);
   return { Queue: context.TestStorageQueue, error: context.clog.error };
 }
@@ -91,15 +97,13 @@ function loadHttpManager(requestHandler) {
     console,
     URL,
     URLSearchParams,
-    Utils: TestUtils,
-    StorageManager: TestStorage,
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     GM_xmlhttpRequest: requestHandler
   };
   context.window = context;
   context.unsafeWindow = context;
-  vm.runInContext(readFileSync(join(repoRoot, "src/core/http.js"), "utf8"), vm.createContext(context));
-  return context.gmHttp;
+  vm.runInContext(`${readTestFile(join(repoRoot, "src/core/http.js"), "utf8")};globalThis.TestGmHttp=GmHttp`, vm.createContext(context));
+  return new context.TestGmHttp({ utils: new TestUtils(), storageManager: new TestStorage() });
 }
 
 describe("startup scheduling", () => {
@@ -152,6 +156,23 @@ describe("startup scheduling", () => {
     expect(manager.getStartupReport()).toMatchObject({ idlePending: 0, idleCompleted: 1 });
   });
 
+  it("binds idle-plugin event entrances before scheduling storage decoration", async () => {
+    const { PluginManager, BasePlugin, idleCallbacks } = loadPluginClasses();
+    const events = [];
+    class IdlePlugin extends BasePlugin {
+      getName() { return "IdlePlugin"; }
+      getStartupMode() { return "idle"; }
+      bindImmediateEvents() { events.push("bind"); }
+      async handle() { events.push("idle"); }
+    }
+    const manager = new PluginManager();
+    manager.register(IdlePlugin);
+    await manager.processPlugins();
+    expect(events).toEqual(["bind"]);
+    await idleCallbacks[0]();
+    expect(events).toEqual(["bind", "idle"]);
+  });
+
   it("shares immutable icon strings through the base prototype", () => {
     const { PluginManager, BasePlugin } = loadPluginClasses();
     class FirstPlugin extends BasePlugin { getName() { return "FirstPlugin"; } }
@@ -190,9 +211,9 @@ describe("startup scheduling", () => {
   });
 
   it("does not include removed legacy service integrations", () => {
-    const mainSource = readFileSync(join(repoRoot, "src/main.js"), "utf8");
-    const registrySource = readFileSync(join(repoRoot, "src/plugins/registry.js"), "utf8");
-    const utilsSource = readFileSync(join(repoRoot, "src/core/utils.js"), "utf8");
+    const mainSource = readTestFile(join(repoRoot, "src/main.js"), "utf8");
+    const registrySource = readTestFile(join(repoRoot, "src/plugins/registry.js"), "utf8");
+    const utilsSource = readTestFile(join(repoRoot, "src/core/utils.js"), "utf8");
 
     expect(mainSource).not.toContain("parallel_GM_xmlhttpRequest.js");
     expect(mainSource).not.toContain("@connect      127.0.0.1");
@@ -210,7 +231,7 @@ describe("startup scheduling", () => {
       "src/plugins/image-viewer/screenshot.js",
       "src/plugins/status/auto-page.js"
     ];
-    const source = sourceFiles.map((file) => readFileSync(join(repoRoot, file), "utf8")).join("\n");
+    const source = sourceFiles.map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     const removedMethods = [
       "getUsedDomains", "postForm", "postFileFormData", "downloadFileInChunks",
       "getActressMap", "getThirdPartyCacheStats", "resetCacheHitStats",
@@ -257,7 +278,6 @@ describe("blocked network task termination", () => {
   it("initializes direct task entrypoints without relying on idle startup", async () => {
     const task = loadTaskPlugin({ get: vi.fn() });
     task.loadConfig = vi.fn(async () => { task.taskConfig = { checkConcurrencyCount: 2 }; });
-    task.getBean = vi.fn(() => ({ getJavDbUrl: vi.fn(async () => "https://javdb.example") }));
 
     await task.ensureReady();
 
@@ -299,6 +319,22 @@ describe("blocked network task termination", () => {
 
     await expect(task.parsePage(dom, "javdb", "actor-1", "演员", [], new Set())).rejects.toThrow("新作品检测-解析列表失败");
     expect(updateFavoriteActress).not.toHaveBeenCalled();
+  });
+
+  it("does not count a dismissed decision as fresh on a later actor scan", async () => {
+    const updateFavoriteActress = vi.fn(async () => true), task = loadTaskPlugin({ get: vi.fn() }, {
+      storageManager: { getCarMap: vi.fn(async () => new Map()), updateFavoriteActress }
+    });
+    task.getRuntimeService = name => name === "state" ? {
+      getNewVideoDecisions: vi.fn(async () => ({ "A-1": { action: "dismissed" } }))
+    } : name === "scope" ? async () => null : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" } : null;
+
+    await expect(task.parseActorMovies([
+      { carNum: "A-1", title: "A", publishTime: "2026-08-01" }
+    ], "actor", "Actor", [], new Set())).resolves.toBe(0);
+    expect(updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
+      newVideoList: [expect.objectContaining({ carNum: "A-1" })]
+    }));
   });
 
   it("stops pagination after the first blocked page", async () => {

@@ -1,11 +1,16 @@
-class BusNavBarPlugin extends BasePlugin {
+// @ts-check
+
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class BusNavBarPlugin extends BasePlugin {
     getName() {
         return "BusNavBarPlugin";
     }
     handle() {
+        if (!this.getOptionalDependency("SearchByImagePlugin")) return;
         $("#navbar > div > div > span").append('\n            <button class="jhs-btn btn btn-default jhs-layout-638cb2c9" id="search-img-btn">识图</button>\n       '),
         $("#search-img-btn").on("click", (() => {
-            this.getBean("SearchByImagePlugin").open();
+            this.getOptionalDependency("SearchByImagePlugin")?.open?.();
         }));
     }
 }

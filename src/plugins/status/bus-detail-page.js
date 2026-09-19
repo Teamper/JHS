@@ -1,4 +1,8 @@
-class BusDetailPagePlugin extends BasePlugin {
+// @ts-check
+
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class BusDetailPagePlugin extends BasePlugin {
     getName() {
         return "BusDetailPagePlugin";
     }
@@ -14,9 +18,10 @@ class BusDetailPagePlugin extends BasePlugin {
                 t.css("position", "initial"), t.insertBefore(t.parent());
             }
         }
-        $(".genre a").each((function() {
-            const e = $(this).attr("href");
-            e && (e.startsWith("http://") || e.startsWith("https://") || e.startsWith("/")) && $(this).attr("target", "_blank");
+        $(".genre a").each(((/** @type {number} */ _index, /** @type {HTMLAnchorElement} */ element) => {
+            const node = $(element), e = node.attr("href");
+            if (!e) return;
+            try { ["http:", "https:"].includes(new URL(e, window.location.href).protocol) && node.attr("target", "_blank"); } catch {}
         })), this.addCopyCarNumBtn();
     }
     addCopyCarNumBtn() {
@@ -37,7 +42,7 @@ class BusDetailPagePlugin extends BasePlugin {
                             this.textContent = "复制";
                         }), 1500);
                     })();
-                })), t.parentNode.insertBefore(n, t.nextSibling);
+                })), t.parentNode?.insertBefore(n, t.nextSibling);
             }
         }
     }

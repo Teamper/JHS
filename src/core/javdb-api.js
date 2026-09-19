@@ -1,53 +1,36 @@
-const U = "https://jdforrepam.com/api";
-const javDbMovieIdRequests = new Map();
+// @ts-check
 
-/** 生成 JavDB API 请求签名 (HMAC-时间戳+盐+MD5, 20秒缓存) */
-function O() {
-    const e = "jhs_review_ts", t = "jhs_review_sign", n = Math.floor(Date.now() / 1e3);
-    if (n - (localStorage.getItem(e) || 0) <= 20) return localStorage.getItem(t);
-    const a = `${n}.lpw6vgqzsp.${md5(`${n}71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa`)}`;
-    return localStorage.setItem(e, n), localStorage.setItem(t, a), a;
+import { decryptData } from "./credential-crypto.js";
+
+export const U = "https://jdforrepam.com/api";
+let signatureSecond = 0, signatureValue = "";
+const wantWatchStateCache = new Map();
+async function readJavDbToken() {
+    const runtime = /** @type {any} */ (globalThis);
+    if (runtime.credentialService?.get) return runtime.credentialService.get("jhs_appAuthorization");
+    const encrypted = localStorage.getItem("jhs_appAuthorization");
+    return encrypted ? decryptData(encrypted) : "";
 }
 
-/** 按规范化番号精确解析 JavDB movieId，并合并同番号并发请求。 */
-async function resolveJavDbMovieId(carNum) {
-    const normalized = normalizeCarNum(carNum);
-    if (!normalized) return null;
-    if (javDbMovieIdRequests.has(normalized)) return javDbMovieIdRequests.get(normalized);
-    const request = storageManager.cachedRequest(`javdb-movie-id:${normalized}`, 7 * 864e5, (async () => {
-        const response = await gmHttp.get(`${U}/v2/search`, {
-            q: normalized,
-            page: 1,
-            type: "movie",
-            limit: 20,
-            movie_type: "all",
-            from_recent: "false",
-            movie_filter_by: "all",
-            movie_sort_by: "relevance"
-        }, {
-            "user-agent": "Dart/3.5 (dart:io)",
-            "accept-language": "zh-TW",
-            host: "jdforrepam.com",
-            jdsignature: await O()
-        });
-        if (!Array.isArray(response?.data?.movies)) throw new Error(response?.message || "JavDB 番号解析失败");
-        const match = response.data.movies.find((movie => normalizeCarNum(movie.number) === normalized));
-        return match?.id ? { __jhsCacheTtl: 7 * 864e5, data: { movieId: String(match.id) } } : { __jhsCacheTtl: 6 * 36e5, data: { miss: !0 } };
-    })).then((value => value?.miss ? null : value?.movieId || null));
-    javDbMovieIdRequests.set(normalized, request);
-    try {
-        return await request;
-    } finally {
-        javDbMovieIdRequests.get(normalized) === request && javDbMovieIdRequests.delete(normalized);
-    }
+/** @param {unknown} value @returns {Record<string, any>} */
+function asResponseRecord(value) {
+    return value && "object" == typeof value ? /** @type {Record<string, any>} */ (value) : {};
+}
+
+/** 生成 JavDB API 请求签名 (HMAC-时间戳+盐+MD5, 20秒缓存) */
+export function O() {
+    const now = Math.floor(Date.now() / 1e3);
+    if (signatureValue && now - signatureSecond <= 20) return signatureValue;
+    signatureSecond = now;
+    signatureValue = `${now}.lpw6vgqzsp.${md5(`${now}71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa`)}`;
+    return signatureValue;
 }
 
 /** 将影片加入当前 JavDB 账号的“想看”，使用与移动端功能相同的登录凭据。 */
-async function markJavDbWantWatch(movieId) {
-    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
+export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
+    const id = String(movieId || "").trim(), token = await readJavDbToken();
     if (!token) {
-        const error = new Error("请先登录 JavDB 账号");
-        throw error.code = "LOGIN_REQUIRED", error;
+        throw Object.assign(new Error("请先登录 JavDB 账号"), { code: "LOGIN_REQUIRED" });
     }
     if (!id) throw new Error("JavDB 影片 ID 无效");
     const boundary = "----jhs-javdb-want-watch", body = [ [ "status", "want_watch" ], [ "score", "0" ], [ "content", "" ] ].map((([ name, value ]) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)).join("") + `--${boundary}--\r\n`;
@@ -61,31 +44,40 @@ async function markJavDbWantWatch(movieId) {
         });
         if (0 === response?.success) throw response;
         await storageManager.deleteCachedRequest(`movie-detail:${id}`);
+        wantWatchStateCache.set(id, true);
         return response;
     } catch (error) {
-        if (401 === error?.status || "JWTVerificationError" === error?.action || /未登录|登录|unauthorized|jwt/i.test(error?.message || "")) {
-            localStorage.removeItem("jhs_appAuthorization");
-            const loginError = new Error("JavDB 登录已失效，请重新登录");
-            throw loginError.code = "LOGIN_REQUIRED", loginError;
+        const failure = asResponseRecord(error);
+        if (401 === failure.status || "JWTVerificationError" === failure.action || /未登录|登录|unauthorized|jwt/i.test(failure.message || "")) {
+            const runtime = /** @type {any} */ (globalThis);
+            runtime.credentialService?.remove ? await runtime.credentialService.remove("jhs_appAuthorization") : localStorage.removeItem("jhs_appAuthorization");
+            throw Object.assign(new Error("JavDB 登录已失效，请重新登录"), { code: "LOGIN_REQUIRED" });
         }
-        throw error instanceof Error ? error : new Error(error?.message || "加入 JavDB 想看失败");
+        throw error instanceof Error ? error : new Error(failure.message || "加入 JavDB 想看失败");
     }
 }
 
-const R = async (e, t = 1, n = 20) => {
-    let a = `${U}/v1/movies/${e}/reviews`, i = {
-        jdSignature: await O()
-    };
-    return await storageManager.cachedRequest(`reviews:${e}:${t}:${n}`, 864e5, (async () => {
-        const e = await gmHttp.get(a, {
-            page: t,
-            sort_by: "hotly",
-            limit: n
-        }, i);
-        if (!e?.data?.reviews) throw new Error(e?.message || "获取评论失败");
-        return e.data.reviews;
-    }));
-}, V = async e => {
+/** Reads the authenticated account's current want-watch state; null means not logged in. */
+export async function getJavDbWantWatchState(/** @type {unknown} */ movieId) {
+    const id = String(movieId || "").trim(), token = await readJavDbToken();
+    if (!token) return null;
+    if (!id) throw new Error("JavDB 影片 ID 无效");
+    if (wantWatchStateCache.has(id)) return wantWatchStateCache.get(id);
+    const limit = 48;
+    for (let page = 1; page <= 100; page++) {
+        const url = `${U}/v2/users/review_movies?status=want_watch&type=0&sort_by=create&order_by=desc&page=${page}&limit=${limit}`;
+        const response = await gmHttp.gmRequest("GET", url, null, {}, {
+            "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", authorization: `Bearer ${token}`, jdsignature: await O()
+        });
+        const movies = response?.data?.movies ?? response?.movies;
+        if (!Array.isArray(movies)) throw new Error("JavDB 想看状态响应无效");
+        if (movies.some((/** @type {any} */ movie) => String(movie.id) === id)) return wantWatchStateCache.set(id, true), true;
+        if (movies.length < limit) return wantWatchStateCache.set(id, false), false;
+    }
+    return false;
+}
+
+export const V = async (/** @type {string} */ e) => {
     let t = `${U}/v4/movies/${e}`, n = {
         jdSignature: await O()
     };
@@ -95,8 +87,10 @@ const R = async (e, t = 1, n = 20) => {
         return e;
     }));
     if (!a.data) throw show.error("获取视频详情失败: " + a.message), new Error(a.message);
-    const i = a.data.movie, s = i.preview_images, o = [];
-    return s.forEach((e => {
+    const i = a.data.movie, s = i.preview_images;
+    /** @type {string[]} */
+    const o = [];
+    return s.forEach(((/** @type {{large_url: string}} */ e) => {
         o.push(e.large_url.replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"));
     })), {
         movieId: i.id,
@@ -109,33 +103,14 @@ const R = async (e, t = 1, n = 20) => {
         watchedCount: i.watched_count,
         imgList: o
     };
-}, K = async (e, t = 1, n = 20) => {
-    let a = `${U}/v1/lists/related?movie_id=${e}&page=${t}&limit=${n}`, i = {
-        jdSignature: await O()
-    };
-    const s = await storageManager.cachedRequest(`related:${e}:${t}:${n}`, 864e5, (async () => {
-        const e = await gmHttp.get(a, null, i);
-        if (!e?.data?.lists) throw new Error(e?.message || "获取相关清单失败");
-        return e;
-    })), o = [];
-    return s.data.lists.forEach((e => {
-        o.push({
-            relatedId: e.id,
-            name: e.name,
-            movieCount: e.movies_count,
-            collectionCount: e.collections_count,
-            viewCount: e.views_count,
-            createTime: utils.formatDate(e.created_at)
-        });
-    })), o;
-}, W = async (e = "daily", t = "high_score") => {
+}, W = async (/** @type {string} */ e = "daily", /** @type {string} */ t = "high_score") => {
     let n = `${U}/v1/rankings/playback?period=${e}&filter_by=${t}`, a = {
         jdSignature: await O()
     };
     return (await gmHttp.get(n, null, a)).data.movies;
-}, q = async (e = "all", t = "", n = 1, a = 40) => {
+}, q = async (/** @type {string} */ e = "all", /** @type {string} */ t = "", /** @type {number} */ n = 1, /** @type {number} */ a = 40) => {
     let i = `${U}/v1/movies/top?start_rank=1&type=${e}&type_value=${t}&ignore_watched=false&page=${n}&limit=${a}`;
-    const l = localStorage.getItem("jhs_appAuthorization"), c = l ? await decryptData(l) : "";
+    const c = await readJavDbToken();
     let s = {
         "user-agent": "Dart/3.5 (dart:io)",
         "accept-language": "zh-TW",

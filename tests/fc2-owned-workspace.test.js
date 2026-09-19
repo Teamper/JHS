@@ -1,48 +1,50 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import javdbManifest, { createJavDbAdapter } from "../src/integrations/javdb/manifest.js";
+import { createIntegrationRequestFacade } from "../src/app/integration-registry.js";
+import { HttpService } from "../src/services/http-service.js";
+import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
+import { CacheService } from "../src/services/cache-service.js";
+import { assessMagnetQuality } from "../src/core/magnet-quality.js";
+import { Fc2Plugin } from "../src/plugins/external-search/fc2.js";
 
 const repoRoot = join(import.meta.dirname, "..");
-const fc2Source = readFileSync(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
-const fc2By123AvSource = readFileSync(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
-const screenshotSource = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-const listPageSource = readFileSync(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
-const historySource = readFileSync(join(repoRoot, "src/plugins/status/history.js"), "utf8");
-const stateServiceSource = readFileSync(join(repoRoot, "src/core/state-service.js"), "utf8");
-const titleFilterSource = readFileSync(join(repoRoot, "src/plugins/blacklist/filter-title-keyword.js"), "utf8");
-const highlightMagnetSource = readFileSync(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
-const primitivesSource = readFileSync(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
-const magnetHubSource = readFileSync(join(repoRoot, "src/plugins/external-search/magnet-hub.js"), "utf8");
-const loggerSource = readFileSync(join(repoRoot, "src/core/logger.js"), "utf8");
-const top250Source = readFileSync(join(repoRoot, "src/plugins/external-search/top250.js"), "utf8");
+const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
+const fc2ViewSource = readTestFile(join(repoRoot, "src/ui/detail/fc2-workspace-view.js"), "utf8");
+const fc2NavigationSource = readTestFile(join(repoRoot, "src/plugins/status/fc2-navigation.js"), "utf8");
+const fc2By123AvSource = readTestFile(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
+const screenshotSource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
+const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
+const historySource = readTestFile(join(repoRoot, "src/plugins/status/history.js"), "utf8");
+const stateServiceSource = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8");
+const titleFilterSource = readTestFile(join(repoRoot, "src/plugins/blacklist/filter-title-keyword.js"), "utf8");
+const highlightMagnetSource = readTestFile(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
+const primitivesSource = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
+const loggerSource = readTestFile(join(repoRoot, "src/core/logger.js"), "utf8");
+const top250Source = readTestFile(join(repoRoot, "src/plugins/external-search/top250.js"), "utf8");
 
 function loadWorkspace() {
     const dom = new JSDOM('<main id="host"></main>', { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window);
     const context = vm.createContext({ window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, $, BasePlugin: class {}, r: true, l: false,
         normalizeCarNum: value => String(value || "").trim().toUpperCase() || null, jhsEventBus: { emit: vi.fn() }, utils: {}, JhsSelect: {} });
-    const source = readFileSync(join(repoRoot, "src/plugins/status/detail-workspace.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/ui/detail/fc2-detail-workspace.js"), "utf8");
     vm.runInContext(`${source};globalThis.createShell=createFc2DetailShell;globalThis.createContext=createFc2DetailContext`, context);
     return { $, context };
 }
 
 function loadResolver(responseFactory) {
-    const cacheCalls = [], get = vi.fn(responseFactory), storageManager = {
-        async cachedRequest(key, ttl, loader) {
-            const loaded = await loader();
-            cacheCalls.push({ key, ttl, loaded });
-            return loaded?.data ?? loaded;
-        }
-    }, local = new Map(), context = vm.createContext({
-        storageManager, gmHttp: { get }, localStorage: { getItem: key => local.get(key) || null, setItem: (key, value) => local.set(key, value) }, md5: String,
-        normalizeCarNum: value => String(value || "").trim().toUpperCase().replace("FC2-PPV-", "FC2-") || null,
-        utils: { formatDate: String }, show: { error: vi.fn() }
-    });
-    const source = readFileSync(join(repoRoot, "src/core/javdb-api.js"), "utf8");
-    vm.runInContext(`${source};globalThis.resolveId=resolveJavDbMovieId`, context);
-    return { resolveId: context.resolveId, get, cacheCalls };
+    const requests = [], get = vi.fn(responseFactory), port = { request: async options => {
+        requests.push(options);
+        return { status: 200, data: await get(options), finalUrl: options.url };
+    } };
+    const http = new HttpService(port, new ExternalUrlPolicy(), { cache: new CacheService() });
+    const adapter = createJavDbAdapter(createIntegrationRequestFacade(http, javdbManifest), () => "signature");
+    return { resolveId: carNum => adapter.resolveMovie({ carNum }).then(value => value?.movieId || null), get, requests };
 }
 
 function loadWantApi({ encryptedToken = "encrypted", response = { success: 1 } } = {}) {
@@ -50,24 +52,35 @@ function loadWantApi({ encryptedToken = "encrypted", response = { success: 1 } }
         storageManager: { deleteCachedRequest }, gmHttp: { gmRequest }, localStorage: { getItem: key => local.get(key) || null, setItem: (key, value) => local.set(key, value), removeItem: key => local.delete(key) }, decryptData: vi.fn(async value => `token:${value}`), md5: String,
         normalizeCarNum: String, utils: { formatDate: String }, show: { error: vi.fn() }
     });
-    const source = readFileSync(join(repoRoot, "src/core/javdb-api.js"), "utf8");
-    vm.runInContext(`${source};globalThis.markWant=markJavDbWantWatch`, context);
-    return { markWant: context.markWant, gmRequest, deleteCachedRequest };
+    const source = readTestFile(join(repoRoot, "src/core/javdb-api.js"), "utf8");
+    vm.runInContext(`${source};globalThis.markWant=markJavDbWantWatch;globalThis.getWantState=getJavDbWantWatchState`, context);
+    return { markWant: context.markWant, getWantState: context.getWantState, gmRequest, deleteCachedRequest };
 }
 
 function loadImageViewer() {
     const dom = new JSDOM('<div id="gallery"><img src="a.jpg"><img src="b.jpg"></div>'), $ = jqueryFactory(dom.window), instances = [];
     class ViewerMock {
-        constructor(host, options) { this.host = host, this.options = options, this.viewerData = { width: 1000, height: 800 }, this.imageData = { width: 400, height: 200 }, this.zoomTo = vi.fn(), this.moveTo = vi.fn(), this.prev = vi.fn(), this.next = vi.fn(), instances.push(this); }
+        constructor(host, options) { this.host = host, this.options = options, this.viewerData = { width: 1000, height: 800 }, this.imageData = { width: 400, height: 200 }, this.zoomTo = vi.fn(), this.moveTo = vi.fn(), this.resize = vi.fn(), this.prev = vi.fn(), this.next = vi.fn(), this.destroy = vi.fn(), instances.push(this); }
         show() {}
         destroy() {}
     }
-    const marker = loggerSource.indexOf("}(), function() {", loggerSource.indexOf("unsafeWindow.show")), start = loggerSource.indexOf("function() {", marker), end = loggerSource.indexOf("}(), window.ImageHoverPreview", start), viewerIife = loggerSource.slice(start, end + 1), context = vm.createContext({ window: dom.window, document: dom.window.document, $, Viewer: ViewerMock, JHS_Z_INDEX: { viewer: 100 }, setTimeout: vi.fn() });
-    vm.runInContext(`(${viewerIife})();`, context);
-    return { dom, instances };
+    const marker = loggerSource.indexOf("}(), function() {", loggerSource.indexOf("unsafeWindow.show")), start = loggerSource.indexOf("function() {", marker), end = loggerSource.indexOf("}(), window.ImageHoverPreview", start), viewerIife = loggerSource.slice(start, end + 1), context = vm.createContext({ window: dom.window, document: dom.window.document, $, Viewer: ViewerMock, JHS_Z_INDEX: { viewer: 100 }, AbortController: dom.window.AbortController, MutationObserver: dom.window.MutationObserver, setTimeout: vi.fn() });
+    const scopeSource = readFileSync(join(repoRoot, "src/core/lifecycle-scope.js"), "utf8").replace("export class", "class");
+    vm.runInContext(`${scopeSource}; const scope = new LifecycleScope("viewer-test"); globalThis.testScope=scope; (${viewerIife})();`, context);
+    return { dom, instances, scope: context.testScope };
 }
 
 describe("FC2 owned detail workspace", () => {
+    it("never builds a private FC2 URL without a resolved movie id", async () => {
+        const openPage = vi.fn();
+        vi.stubGlobal("utils", { openPage });
+        const plugin = new Fc2Plugin();
+        expect(() => plugin.createFc2PageUrl(null, "FC2-123", "/v/abc")).toThrow("movieId");
+        await plugin.openFc2Page(null, "FC2-123", "/v/abc", { newTab: true });
+        expect(openPage).toHaveBeenCalledWith("/v/abc", "FC2-123", true, { newTab: true });
+        vi.unstubAllGlobals();
+    });
+
     it("passes Layer an HTML string instead of a raw DOM node", () => {
         expect(fc2Source).toContain('content: \'<div class="jhs-fc2-dialog-host"></div>\'');
         expect(fc2Source).not.toContain("content: host[0]");
@@ -84,7 +97,7 @@ describe("FC2 owned detail workspace", () => {
     it("lets sections keep their content height and opens gallery thumbnails in the viewer", () => {
         expect(fc2Source).toMatch(/\.jhs-fc2-workspace \{[^}]*grid-auto-rows:max-content;[^}]*align-content:start;/);
         expect(fc2Source).toMatch(/\.jhs-fc2-gallery-grid \{[^}]*minmax\(112px,144px\)/);
-        expect(fc2Source).toContain('class=\\"jhs-btn jhs-fc2-gallery-item\\"');
+        expect(fc2ViewSource).toContain('class="jhs-btn jhs-fc2-gallery-item"');
         expect(fc2Source).toContain('showImageViewer(image, "", { galleryRoot: gallery[0] })');
         expect(fc2Source).not.toContain('"data-fancybox"');
         expect(loggerSource).toContain("initialViewIndex");
@@ -97,12 +110,65 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("opens the selected gallery image with navigation and centers it in both axes", () => {
-        const { dom, instances } = loadImageViewer(), gallery = dom.window.document.querySelector("#gallery"), selected = gallery.querySelectorAll("img")[1];
+        const { dom, instances, scope } = loadImageViewer(), gallery = dom.window.document.querySelector("#gallery"), selected = gallery.querySelectorAll("img")[1];
         dom.window.showImageViewer(selected, "", { galleryRoot: gallery });
         const viewer = instances[0];
         expect(viewer.host).toBe(gallery), expect(viewer.options.initialViewIndex).toBe(1), expect(viewer.options.toolbar.prev).toBe(1), expect(viewer.options.toolbar.next).toBe(1);
         viewer.options.viewed();
         expect(viewer.moveTo).toHaveBeenCalledWith(300, 300);
+        scope.dispose(); dom.window.close();
+    });
+
+    it("replaces an opening viewer and ignores its late callbacks", () => {
+        const {dom,instances,scope}=loadImageViewer(), images=dom.window.document.querySelectorAll("img");
+        dom.window.showImageViewer(images[0]);
+        dom.window.showImageViewer(images[1]);
+        expect(instances[0].destroy).toHaveBeenCalledOnce();
+        instances[1].options.shown();
+        instances[0].options.shown(); instances[0].options.viewed(); instances[0].options.hidden();
+        expect(instances[0].zoomTo).not.toHaveBeenCalled();
+        expect(instances[1].destroy).not.toHaveBeenCalled();
+        expect(dom.window.document.body.style.overflow).toBe("hidden");
+        scope.dispose();
+        expect(instances[1].destroy).toHaveBeenCalledOnce();
+        expect(dom.window.document.body.style.overflow).toBe("");
+        dom.window.close();
+    });
+
+    it("contains FC2 previews in their owner and shares screenshots without eager full image loading", () => {
+        const { dom, instances, scope } = loadImageViewer(), document = dom.window.document;
+        document.body.innerHTML = '<div class="layui-layer"><div class="layui-layer-content"><div class="jhs-fc2-workspace"><div data-jhs-slot="gallery"><div id="gallery"><img src="https://example.test/a.jpg"><img src="https://example.test/b.jpg"></div><button><img id="sheet" src="https://example.test/sheet.jpg"></button></div></div></div></div>';
+        const selected = document.querySelector("#sheet"), workspace = document.querySelector(".jhs-fc2-workspace");
+        dom.window.showImageViewer(selected);
+        const viewer = instances[0];
+        expect(viewer.host.closest(".layui-layer-content")).not.toBeNull();
+        expect(viewer.options.inline).toBe(true);
+        expect(viewer.options.initialViewIndex).toBe(2);
+        expect(viewer.options.url).toBe("data-jhs-viewer-source");
+        expect([...viewer.host.querySelectorAll("img")].map(image => image.getAttribute(viewer.options.url))).toEqual(["https://example.test/a.jpg", "https://example.test/b.jpg", "https://example.test/sheet.jpg"]);
+        expect([...viewer.host.querySelectorAll("img")].every(image => image.src.startsWith("data:image/"))).toBe(true);
+        expect(workspace.inert).toBe(true);
+        viewer.options.viewed();
+        expect(viewer.zoomTo).not.toHaveBeenCalled();
+        expect(viewer.resize).toHaveBeenCalledOnce();
+        scope.dispose();
+        expect(document.querySelector(".jhs-image-viewer-host")).toBeNull();
+        expect(document.querySelector(".jhs-image-viewer-owner")).toBeNull();
+        expect(workspace.inert).toBeFalsy();
+        dom.window.close();
+    });
+
+    it("releases per-viewer subscriptions on repeated close and preserves unrelated scroll styles", () => {
+        const {dom,instances,scope}=loadImageViewer();
+        dom.window.document.body.style.overflow="clip";
+        for(let i=0;i<5;i++) {
+            dom.window.showImageViewer("https://example.test/image.png");
+            instances[i].options.shown(); instances[i].options.hidden();
+            expect(scope.cleanups.size).toBe(0);
+            expect(dom.window.document.querySelectorAll(".temporary-container")).toHaveLength(0);
+            expect(dom.window.document.body.style.overflow).toBe("clip");
+        }
+        scope.dispose(); dom.window.close();
     });
 
     it("renders screenshot-provider results as the smallest thumbnail until opened", () => {
@@ -122,33 +188,45 @@ describe("FC2 owned detail workspace", () => {
     it("propagates an explicit FC2 source without guessing from URL text", () => {
         expect(fc2Source).not.toContain('url.includes("123av")');
         expect(fc2By123AvSource).toContain('data-jhs-fc2-source="123av"');
-        expect(listPageSource).toContain("{ source: fc2Source }");
+        expect(fc2NavigationSource).toContain("fc2Source || (await fc2.resolveFc2Source");
+        expect(fc2NavigationSource).toContain("resolveMovieIdForRecord(carNum, aHref)");
         expect(historySource).toContain("resolveFc2Source(t)");
         expect(stateServiceSource).toContain('"fc2Source"');
-        expect(fc2Source).toContain("&source=${encodeURIComponent(source)}");
+        expect(fc2Source).toContain('target.searchParams.set("source", source)');
+    });
+
+    it("keeps the native FC2 entry free of a hard list.core dependency so disabling ListPagePlugin stays safe", () => {
+        expect(fc2Source).not.toContain('getBean("ListPagePlugin")');
+        expect(fc2Source).toContain('o.includes("collection_codes?movieId")');
+        expect(fc2Source).toContain("openFc2Dialog(");
+        expect(fc2NavigationSource).toContain("protectFc2Navigation(root, fc2)");
+        expect(fc2NavigationSource).toContain('this.getBean("Fc2Plugin")');
+        expect(listPageSource).not.toContain("protectFc2Navigation(root)");
+        expect(listPageSource).not.toContain('getBean("Fc2Plugin")');
     });
 
     it("restores source links, magnet metadata and scoped quality filtering", () => {
-        expect(fc2Source).toContain("FC2PPVDB");
-        expect(fc2Source).toContain("FC2 市场");
-        expect(fc2Source).toContain("item.hd && tags.append");
-        expect(fc2Source).toContain("item.cnsub && tags.append");
-        expect(fc2Source).toContain("item.created_at");
+        expect(fc2ViewSource).toContain("FC2PPVDB");
+        expect(fc2ViewSource).toContain("FC2 市场");
+        expect(fc2Source).toContain("item.hasHdTag && tags.append");
+        expect(fc2Source).toContain("item.hasSubtitleTag && tags.append");
+        expect(fc2Source).toContain("item.createdAt");
         expect(fc2Source).toContain('data-jhs-action="filter-native-magnets"');
-        expect(highlightMagnetSource).toContain("assessMagnet({");
+        expect(fc2Source).toContain("magnetService.assess({");
     });
 
     it("assesses explicit HD and subtitle tags even when the title has no marker", () => {
-        const context = vm.createContext({ BasePlugin: class {}, clog: { debug: vi.fn() } });
-        vm.runInContext(`${magnetHubSource.slice(0, magnetHubSource.indexOf("class MagnetHubPlugin"))}\n${highlightMagnetSource};globalThis.Highlighter=HighlightMagnetPlugin`, context);
-        const highlighter = Object.create(context.Highlighter.prototype), assessed = highlighter.assessMagnet({ title: "FC2-123", hasHdTag: true, hasSubtitleTag: true, seeders: 0 });
+        const assessed = assessMagnetQuality({ title: "FC2-123", hasHdTag: true, hasSubtitleTag: true, seeders: 0 });
         expect(assessed.highQuality).toBe(true), expect(assessed.subtitle).toBe(true), expect(assessed.score.resolution).toBe(20), expect(assessed.score.subtitle).toBe(20);
     });
 
     it("shares the 123AV movie resolver and keeps summary retry local", () => {
-        expect(fc2By123AvSource).toContain("fc2Plugin.mountPanels(context, movieIdPromise)");
-        expect(fc2By123AvSource).toContain("fc2Plugin.configureJavDbWantButton(context, movieIdPromise)");
-        expect(fc2By123AvSource).toContain("movieIdPromise.then");
+        expect(fc2Source).toContain("this.mountPanels(context, movieIdPromise)");
+        expect(fc2Source).toContain("this.configureJavDbWantButton(context, movieIdPromise)");
+        expect(fc2Source).toContain("movieIdPromise.then");
+        expect(fc2By123AvSource).not.toContain("mountPanels(context");
+        expect(fc2By123AvSource).not.toContain("configureJavDbWantButton(context");
+        expect(fc2By123AvSource).not.toContain('getBean("Fc2Plugin")');
         expect(fc2By123AvSource).toContain("loadSummary(context, url)");
         expect(fc2By123AvSource).not.toContain("() => void this.loadDetail(context, url)");
     });
@@ -158,6 +236,9 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain("markJavDbWantWatch(movieId)");
         expect(fc2Source).toContain('this.getBean("TOP250Plugin")');
         expect(top250Source).toContain('"function" === typeof onSuccess ? await onSuccess()');
+        expect(top250Source).not.toContain("hasStoredEncryptedCredential");
+        expect(top250Source).not.toContain("removeStoredEncryptedCredential");
+        expect(top250Source).not.toContain("storeEncryptedCredential");
     });
 
     it("supports exact layer closing, reusable MagnetHub and hardened mobile layout", () => {
@@ -172,14 +253,20 @@ describe("FC2 owned detail workspace", () => {
     it("keeps asynchronous error variables inside their catch callbacks", () => {
         expect(fc2Source).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
         expect(fc2By123AvSource).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
-        expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && sitesGroup.remove()');
-        expect(fc2By123AvSource).toContain('catch((error => {\n            context.isAlive() && fc2Plugin.setState');
+        expect(fc2Source).toMatch(/catch\(\(\/\*\* @type \{unknown\} \*\/ error\) => \{\n\s+if \(!context\.isAlive\(\) \|\| generation !== context\.otherSiteGeneration\) return;\n\s+sitesGroup\.show\(\);/);
+        expect(fc2Source).toContain("renderFc2State(context.root.find('[data-jhs-role=\"other-sites\"]'), \"外部站点加载失败\")");
+        expect(fc2Source).toContain('catch((/** @type {unknown} */ error) => {');
     });
 
-    it("initializes screenshot providers once per owned render and removes empty spacing", () => {
-        expect(screenshotSource).toContain("getScreenshotFromInitializedProviders(carNum)");
+    it("initializes screenshot through the single ScreenshotService-owned view and keeps stable slots", () => {
+        expect(screenshotSource).toContain("renderScreenshotPanel");
+        expect(screenshotSource).toContain('service.isEnabled(this.getSettingsSnapshot())');
+        expect(fc2Source).toContain('screenshotService.isEnabled(settings.snapshot())');
         expect(fc2Source).toContain(".jhs-fc2-screenshot:empty");
-        expect(fc2Source).toContain("if (context.isAlive() && !box) sitesGroup.remove()");
+        expect(fc2Source).toContain("box ? sitesGroup.show() : sitesGroup.hide()");
+        expect(fc2Source).toContain("sitesGroup.hide();");
+        expect(fc2Source).not.toContain("if (!result && !screenshot.children().length) screenshot.remove()");
+        expect(fc2Source).not.toContain('settings.snapshot().enableLoadScreenShot !== "no" && screenshot.remove()');
     });
 
     it("creates fixed slots in display order and keeps two contexts isolated", () => {
@@ -204,18 +291,25 @@ describe("JavDB exact movie resolver", () => {
         const first = loaded.resolveId("FC2-123"), second = loaded.resolveId("fc2-123");
         release({ data: { movies: [ { id: "wrong", number: "FC2-1234" }, { id: "right", number: "FC2-123" } ] } });
         await expect(Promise.all([ first, second ])).resolves.toEqual([ "right", "right" ]), expect(loaded.get).toHaveBeenCalledOnce();
-        expect(loaded.cacheCalls[0].loaded.__jhsCacheTtl).toBe(7 * 864e5);
+        expect(loaded.requests).toHaveLength(1);
+        expect(loaded.requests[0]).toMatchObject({ providerId: "javdb", cacheScope: "public", ttlMs: 7 * 864e5 });
     });
 
     it("uses a short negative cache value but does not convert network errors into misses", async () => {
         const miss = loadResolver(async () => ({ data: { movies: [ { id: "near", number: "FC2-999" } ] } }));
-        await expect(miss.resolveId("FC2-123")).resolves.toBeNull(), expect(miss.cacheCalls[0].loaded).toEqual({ __jhsCacheTtl: 6 * 36e5, data: { miss: true } });
+        await expect(miss.resolveId("FC2-123")).resolves.toBeNull(), expect(miss.get).toHaveBeenCalledOnce();
         const failed = loadResolver(async () => { throw new Error("network"); });
-        await expect(failed.resolveId("FC2-123")).rejects.toThrow("network"), expect(failed.cacheCalls).toHaveLength(0);
+        await expect(failed.resolveId("FC2-123")).rejects.toThrow("network"), expect(failed.get).toHaveBeenCalledOnce();
     });
 });
 
 describe("JavDB native want action", () => {
+    it("reads an existing authenticated want-watch state before enabling the action", async () => {
+        const api = loadWantApi({ response: { data: { movies: [ { id: "movie-123" } ] } } });
+        await expect(api.getWantState("movie-123")).resolves.toBe(true);
+        expect(api.gmRequest).toHaveBeenCalledWith("GET", expect.stringContaining("/v2/users/review_movies?status=want_watch"), null, {}, expect.objectContaining({ authorization: "Bearer token:encrypted" }));
+    });
+
     it("submits want_watch to the JavDB account and invalidates cached details", async () => {
         const api = loadWantApi();
         await expect(api.markWant("movie-123")).resolves.toEqual({ success: 1 });

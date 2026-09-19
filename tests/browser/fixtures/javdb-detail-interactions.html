@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>JavDB fixture</title></head>
+<body>
+  <main class="container">
+    <section class="movie-panel-info"><div class="panel-block first-block"><span class="value">ABC-123</span></div></section>
+    <div class="video-meta-panel"><div class="columns"><div class="column column-video-cover"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt=""></div><div class="column column-video-info"><a title="複製番號" data-clipboard-text="ABC-123">ABC-123</a><h1>ABC-123 Browser Fixture</h1></div></div></div>
+    <!-- Historical host structure; authenticated live DOM verification is still blocked. -->
+<section class="video-panel"><div class="magnet-links" data-controller="magnet-sort">
+<select data-action="change->magnet-sort#sort"><option value="0">默认排序</option><option value="1">日期排序</option></select>
+<div id="magnets-content"><div class="item columns is-desktop">
+<div class="magnet-name column is-four-fifths"><a href="magnet:?xt=urn:btih:fixture"><span class="name">ABC-123 fixture resource with a long name</span></a><div>高清 · 6.70GB</div></div>
+<div class="buttons column"><button class="button is-small copy-to-clipboard" data-clipboard-text="magnet:?xt=urn:btih:fixture">复制</button><a class="button is-small" href="magnet:?xt=urn:btih:fixture">下载</a></div>
+<div class="date column">2026-09-08</div></div></div></div></section>
+    <section id="reviews">Fixture reviews</section>
+  <div class="preview-images"><a class="preview-video-container" href="#preview-video">预览</a></div><video id="preview-video" style="display:none"></video></main>
+</body>
+</html>

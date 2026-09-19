@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JavDB ranking with native search results</title>
+  <style>.native-search-results { min-height: 2400px; }</style>
+</head>
+<body>
+  <nav class="main-tabs"><a href="/rankings/playback">热播</a><a href="/rankings/top">TOP250</a></nav>
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">高级搜索</h2>
+      <div class="box">宿主筛选表单</div>
+      <div class="movie-list h cols-4 vcols-8 native-search-results">
+        <div class="item" id="native-search-result">
+          <a class="box" href="/v/native-search-result">
+            <div class="cover"><img src="https://c0.jdbstatic.com/thumbs/native.jpg" alt="Native fixture"></div>
+            <div class="video-title"><strong>NATIVE-001</strong> Native search result</div>
+            <div class="score"><span class="value">0.0</span><span class="count">1</span></div>
+            <div class="meta">2026-09-18</div>
+          </a>
+        </div>
+      </div>
+      <nav class="pagination" data-native-pagination><a class="pagination-next" href="/advanced_search?page=2">下一页</a></nav>
+    </div>
+  </section>
+  <footer id="native-footer">Host footer</footer>
+</body>
+</html>

@@ -1,8 +1,23 @@
-document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: var(--jhs-z-loading);\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    ');
+import { escapeHtml } from "./constants.js";
+import { JHS_Z_INDEX } from "./theme.js";
+import { LifecycleScope } from "./lifecycle-scope.js";
 
-unsafeWindow.loading = window.loading = function() {
+let loggerRuntime;
+
+/** @param {import("./lifecycle-scope.js").LifecycleScope} scope @param {{ clogMsgCount?: number }} [options] */
+export function initializeLoggerRuntime(scope, { clogMsgCount = 2000 } = {}) {
+if (loggerRuntime) return loggerRuntime;
+
+const maxLogCount = Math.min(3000, Math.max(100, Number(clogMsgCount) || 2000));
+/** @type {any} */
+let loggerClog;
+
+document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: var(--jhs-z-loading);\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    ');
+document.head.insertAdjacentHTML("beforeend", '<style>@media (prefers-reduced-motion:reduce){.loading-animation,.loading-animation:before,.loading-animation:after{animation:none}}</style>');
+
+window.loading = function() {
     const e = document.createElement("div");
-    e.className = "loading-container";
+    e.className = "loading-container", e.setAttribute("role", "status"), e.setAttribute("aria-live", "polite"), e.setAttribute("aria-label", "处理中"), e.setAttribute("aria-busy", "true");
     const t = document.createElement("div");
     return t.className = "loading-animation", e.appendChild(t), document.body.appendChild(e),
     {
@@ -13,7 +28,7 @@ unsafeWindow.loading = window.loading = function() {
 }, function() {
     const e = (e, t, n, a, i) => {
         let s;
-        "object" == typeof n ? s = n : (s = "object" == typeof a ? a : i || {}, s.gravity = n || "top",
+        "object" == typeof n ? (s = n, s.gravity || (s.gravity = "top"), s.position || (s.position = "center")) : (s = "object" == typeof a ? a : i || {}, s.gravity = n || "top",
         s.position = "string" == typeof a ? a : "center"), s.gravity && "center" !== s.gravity || (s.offset = {
             y: "calc(50vh - 150px)"
         });
@@ -57,32 +72,133 @@ unsafeWindow.loading = window.loading = function() {
             m.toastElement.remove();
         }, m;
     };
-    unsafeWindow.show = window.show = {
+    window.show = {
         ok: (t, n = "center", a, i) => e(t, "success", n, a, i),
         error: (t, n = "center", a, i) => e(t, "error", n, a, i),
         info: (t, n = "center", a, i) => e(t, "info", n, a, i)
     };
 }(), function() {
-    function e(e = 10) {
-        setTimeout((() => {
-            const e = document.querySelectorAll(".layui-layer-shade").length;
-            document.documentElement.style.overflow = e > 0 ? "hidden" : "";
-        }), e);
-    }
+    let activeViewer = null;
+    document.head.insertAdjacentHTML("beforeend", `<style>
+        .jhs-image-viewer-owner { position:relative; overflow:hidden!important; }
+        .jhs-image-viewer-host { position:absolute; inset:0; overflow:hidden; }
+        .jhs-fc2-image-viewer .viewer-canvas { overflow:hidden!important; }
+        .jhs-fc2-image-viewer .viewer-footer { padding:8px; box-sizing:border-box; background:var(--jhs-surface); }
+        .jhs-image-viewer-toolbar { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; }
+        .jhs-fc2-image-viewer .jhs-btn { min-width:44px; min-height:44px; }
+        .jhs-image-viewer-nav,.jhs-image-viewer-close { position:absolute; z-index:var(--jhs-z-local-popover); padding:0; width:44px; height:44px; font-size:28px; }
+        .jhs-image-viewer-nav { top:calc(50% - 22px); }
+        .jhs-image-viewer-prev { left:8px; }
+        .jhs-image-viewer-next { right:8px; }
+        .jhs-image-viewer-close { right:8px; top:8px; }
+        .jhs-image-viewer-count { min-width:48px; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+    </style>`);
     document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .viewer-canvas {\n                overflow: auto !important;\n            }\n            \n            .viewer-close {\n                background: rgba(222, 51, 51, 0.6) !important; /* 状态红 --jhs-status-filter 半透明弱化 */\n            }\n            .viewer-close:hover {\n                background: rgba(222, 51, 51, 0.8) !important;\n            }\n        </style>\n    "),
     window.showImageViewer = function(t, n = "", options = {}) {
         let a = null, i = !1;
-        "string" == typeof t || t instanceof String ? (a = $('<div class="temporary-container jhs-layout-c8be1ccb">').append(`<img src="${t}" alt="${n}">`).appendTo("body"),
-        i = !0) : a = $(t);
-        const galleryRoot = options.galleryRoot ? $(options.galleryRoot) : null, viewerHost = galleryRoot?.length ? galleryRoot : a, selectedImage = "string" == typeof t || t instanceof String ? a.find("img")[0] : a[0], galleryImages = viewerHost.find("img").addBack("img").toArray(), initialViewIndex = Math.max(0, galleryImages.indexOf(selectedImage)), hasGallery = galleryImages.length > 1;
+        if ("string" == typeof t || t instanceof String) {
+            const container = document.createElement("div"), image = document.createElement("img");
+            container.className = "temporary-container jhs-layout-c8be1ccb", image.src = String(t), image.alt = String(n), container.appendChild(image), document.body.appendChild(container), a = $(container), i = !0;
+        } else a = $(t);
+        const selectedImage = a.is("img") ? a[0] : a.find("img")[0], workspace = selectedImage?.closest(".jhs-fc2-workspace"), fc2Gallery = workspace?.querySelector('[data-jhs-slot="gallery"]');
+        const galleryRoot = fc2Gallery?.contains(selectedImage) ? $(fc2Gallery) : options.galleryRoot ? $(options.galleryRoot) : null;
+        let viewerHost = galleryRoot?.length ? galleryRoot : a;
+        const galleryImages = viewerHost.find("img").addBack("img").toArray(), initialViewIndex = Math.max(0, galleryImages.indexOf(selectedImage)), hasGallery = galleryImages.length > 1;
+        if (!selectedImage || !viewerHost.length || !selectedImage.isConnected || scope.disposed) return void (i && a.remove());
+        activeViewer?.close(false);
+        const owner = selectedImage.closest(".layui-layer"), focusTarget = selectedImage.closest("button,a,[tabindex]") || document.activeElement, mount = workspace && owner?.querySelector(".layui-layer-content");
+        const viewScope = new LifecycleScope("ui:image-viewer"), htmlOverflow = document.documentElement.style.overflow, bodyOverflow = document.body.style.overflow;
+        let o, releaseRuntime, overlay, counter;
+        const wasInert = workspace?.inert, hadOwnerClass = mount?.classList.contains("jhs-image-viewer-owner");
+        const session = { close(restoreFocus = true) {
+            if (viewScope.disposed) return;
+            viewScope.dispose();
+            releaseRuntime?.();
+            try { o?.destroy(); }
+            finally {
+                overlay?.remove();
+                if (mount) { mount.classList.toggle("jhs-image-viewer-owner", hadOwnerClass); workspace.inert = wasInert; }
+                i && a.remove();
+                if (activeViewer === session) {
+                    activeViewer = null;
+                    document.documentElement.style.overflow = document.querySelector(".layui-layer-shade") ? "hidden" : owner ? "" : htmlOverflow;
+                    document.body.style.overflow = bodyOverflow;
+                    if (restoreFocus && focusTarget?.isConnected) focusTarget.focus?.({ preventScroll: true });
+                }
+            }
+        } };
+        activeViewer = session;
+        releaseRuntime = scope.addCleanup(() => session.close(false));
+        // Layer 的实例编号会叠加到基础层级；固定 viewer 令牌无法覆盖反复打开的详情。
+        const viewerZ = [...document.querySelectorAll(".layui-layer")].reduce((value, root) => {
+            const style = window.getComputedStyle(root), z = Number(style.zIndex);
+            return style.display !== "none" && Number.isFinite(z) ? Math.max(value, z + 1) : value;
+        }, JHS_Z_INDEX.viewer);
+        if (mount) {
+            overlay = document.createElement("div");
+            overlay.className = "jhs-image-viewer-host";
+            overlay.style.zIndex = String(viewerZ);
+            const images = document.createElement("div");
+            images.hidden = true;
+            galleryImages.forEach(source => {
+                const image = document.createElement("img");
+                // Inline Viewer waits for every source image; placeholders let the selected full image load independently.
+                image.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E";
+                image.setAttribute("data-jhs-viewer-source", source.currentSrc || source.src); image.alt = source.alt;
+                images.appendChild(image);
+            });
+            overlay.appendChild(images); mount.classList.add("jhs-image-viewer-owner"); mount.appendChild(overlay);
+            workspace.inert = true;
+            viewerHost = $(images);
+        }
+        const navigate = direction => direction < 0 ? o?.prev(Boolean(workspace)) : o?.next(Boolean(workspace));
+        /** Keep the FC2 controls in the same bounded viewer as the image. */
+        const bindFc2Controls = () => {
+            if (viewScope.disposed || !o?.viewer) return;
+            const viewer = o.viewer, toolbar = document.createElement("div");
+            toolbar.className = "jhs-image-viewer-toolbar";
+            viewer.setAttribute("role", "dialog"); viewer.setAttribute("aria-label", "图片预览");
+            const button = (label, text, className, action, target = viewer) => {
+                const node = document.createElement("button");
+                node.type = "button"; node.className = `jhs-btn jhs-btn--secondary ${className}`;
+                node.setAttribute("aria-label", label); node.textContent = text;
+                viewScope.listen(node, "click", event => { event.preventDefault(); event.stopPropagation(); action(); });
+                target.appendChild(node); return node;
+            };
+            const close = button("关闭图片", "×", "jhs-image-viewer-close", () => session.close());
+            if (hasGallery) {
+                button("上一张", "‹", "jhs-image-viewer-nav jhs-image-viewer-prev", () => navigate(-1));
+                button("下一张", "›", "jhs-image-viewer-nav jhs-image-viewer-next", () => navigate(1));
+            }
+            button("放大图片", "放大", "", () => o.zoom(.1), toolbar);
+            button("缩小图片", "缩小", "", () => o.zoom(-.1), toolbar);
+            button("适应窗口", "适应", "", () => o.reset(), toolbar);
+            counter = document.createElement("span"); counter.className = "jhs-image-viewer-count";
+            counter.setAttribute("aria-live", "polite"); toolbar.appendChild(counter); o.footer.appendChild(toolbar);
+            let lastWheelAt = -Infinity;
+            viewScope.listen(viewer, "wheel", event => {
+                if (!hasGallery || event.ctrlKey || !event.deltaY) return;
+                event.preventDefault(); event.stopPropagation();
+                if (event.timeStamp - lastWheelAt < 180) return;
+                lastWheelAt = event.timeStamp; navigate(Math.sign(event.deltaY));
+            }, { passive: false });
+            if (mount && typeof ResizeObserver !== "undefined") {
+                const resize = new ResizeObserver(() => { if (o?.ready && !viewScope.disposed) o.resize(); });
+                resize.observe(overlay); viewScope.ownObserver(resize);
+            }
+            close.focus({ preventScroll: true });
+        };
         const s = {
-            zIndex: JHS_Z_INDEX.viewer,
+            zIndex: viewerZ,
+            // Scoped reduced-motion CSS removes transitionend; Viewer must not wait for it to enable zoom.
+            ...(workspace ? { className: `jhs-fc2-image-viewer jhs-ui${mount ? " viewer-in" : ""}`, inline: Boolean(mount), zIndexInline: viewerZ, minWidth: 0, minHeight: 0, button: false, transition: false, initialCoverage: .9, ready: bindFc2Controls } : {}),
+            ...(mount ? { url: "data-jhs-viewer-source" } : {}),
             navbar: !1,
             initialViewIndex,
             zoomOnWheel: !1,
             zoomRatio: .1,
             toggleOnDblclick: !1,
-            toolbar: {
+            toolbar: workspace ? false : {
                 prev: hasGallery ? 1 : 0,
                 zoomIn: 1,
                 zoomOut: 1,
@@ -96,30 +212,38 @@ unsafeWindow.loading = window.loading = function() {
             title: !1,
             keyboard: !1,
             viewed() {
+                if (viewScope.disposed) return;
+                if (workspace) { o.resize(); counter && (counter.textContent = `${o.index + 1} / ${galleryImages.length}`); return; }
                 o.zoomTo(1.4);
                 const x = (o.viewerData.width - o.imageData.width) / 2, y = (o.viewerData.height - o.imageData.height) / 2;
                 o.moveTo(x, y);
             },
             shown() {
-                i && a.remove(), document.documentElement.style.overflow = "hidden", document.body.style.overflow = "hidden",
-                o.handleKeydown = function(t) {
-                    if (hasGallery && "ArrowLeft" === t.key) return t.preventDefault(), t.stopPropagation(), void o.prev();
-                    if (hasGallery && "ArrowRight" === t.key) return t.preventDefault(), t.stopPropagation(), void o.next();
-                    "Escape" !== t.key && " " !== t.key || (t.preventDefault(), t.stopPropagation(),
-                    o.destroy(), document.removeEventListener("keydown", o.handleKeydown), document.documentElement.style.overflow = "",
-                    document.body.style.overflow = "", e());
-                }, document.addEventListener("keydown", o.handleKeydown);
+                if (viewScope.disposed) return;
+                document.documentElement.style.overflow = "hidden", document.body.style.overflow = "hidden";
             },
-            hidden() {
-                o && o.handleKeydown && document.removeEventListener("keydown", o.handleKeydown),
-                o.destroy(), document.documentElement.style.overflow = "", document.body.style.overflow = "",
-                e();
-            }
-        }, o = new Viewer(viewerHost[0], s);
-        o.show();
+            hidden() { session.close(); }
+        };
+        try {
+            viewScope.listen(document, "keydown", t => {
+                if (hasGallery && "ArrowLeft" === t.key) return t.preventDefault(), t.stopPropagation(), void navigate(-1);
+                if (hasGallery && "ArrowRight" === t.key) return t.preventDefault(), t.stopPropagation(), void navigate(1);
+                if (workspace && "Tab" === t.key && o?.viewer) {
+                    const controls = [...o.viewer.querySelectorAll("button")], index = controls.indexOf(document.activeElement);
+                    t.preventDefault(); controls[(index + (t.shiftKey ? -1 : 1) + controls.length) % controls.length]?.focus(); return;
+                }
+                if ("Escape" === t.key || !workspace && " " === t.key) { t.preventDefault(); t.stopPropagation(); session.close(); }
+            }, true);
+            viewScope.observe(document.body, () => {
+                if (!selectedImage.isConnected || owner && !owner.isConnected) session.close(false);
+            }, { childList: true, subtree: true });
+            o = new Viewer(viewerHost[0], s);
+            o.show();
+        } catch (error) { session.close(false); throw error; }
     };
 }(), window.ImageHoverPreview = class {
     constructor(config = {}) {
+        this.scope = new LifecycleScope(`ui:image-hover:${Date.now()}`);
         this.config = {
             selector: ".hover-preview",
             dataAttribute: "data-full",
@@ -127,7 +251,10 @@ unsafeWindow.loading = window.loading = function() {
             maxHeight: 1e3,
             offsetX: 20,
             offsetY: 20,
-            zIndex: JHS_Z_INDEX.tooltip,
+            zIndex: JHS_Z_INDEX.hoverPreview,
+            owner: null,
+            resolveOwner: null,
+            zIndexStrategy: "fixed",
             transition: .2,
             hideDelay: 100,
             loadedUrlLimit: 128,
@@ -149,12 +276,15 @@ unsafeWindow.loading = window.loading = function() {
         this.pendingUrl = null;
         this.loadedUrls = new Map;
         this.eventsBound = !1;
+        this.overlayObserver = null;
         this.onMouseEnter = event => this.handleMouseEnter(event);
         this.onMouseLeave = event => this.handleMouseLeave(event);
         this.onMouseMove = event => this.handleMouseMove(event);
         this.onDocumentOver = event => this.handleDocumentOver(event);
         this.onDocumentOut = event => this.handleDocumentOut(event);
         this.onDocumentMove = event => this.handleDocumentMove(event);
+        this.onDocumentScroll = () => this.handleDocumentScroll();
+        this.suppressUntilMouseMove = !1;
         this.init();
     }
     init() {
@@ -204,20 +334,75 @@ unsafeWindow.loading = window.loading = function() {
     createPreviewElement() {
         this.preview = document.createElement("div");
         this.preview.className = "image-hover-preview";
-        this.preview.style.zIndex = String(this.config.zIndex);
+        this.preview.style.zIndex = String(this.resolvePreviewZIndex());
         this.preview.style.setProperty("--jhs-hover-transition", `${this.config.transition}s`);
         document.body.appendChild(this.preview);
     }
+    resolveOwnerElement() {
+        const owner = typeof this.config.resolveOwner === "function" ? this.config.resolveOwner() : this.config.owner;
+        return owner?.jquery ? owner[0] : owner;
+    }
+    resolvePreviewZIndex() {
+        let value = Number(this.config.zIndex) || JHS_Z_INDEX.hoverPreview;
+        if (this.config.zIndexStrategy !== "owner" && !this.resolveOwnerElement()) return value;
+        let owner = this.resolveOwnerElement();
+        while (owner) {
+            const computed = typeof getComputedStyle === "function" ? getComputedStyle(owner).zIndex : "";
+            const candidate = Number(owner.style?.zIndex || computed);
+            if (Number.isFinite(candidate) && candidate > 0) {
+                value = candidate + 1;
+                break;
+            }
+            owner = owner.parentElement;
+        }
+        return value;
+    }
+    refreshOwnerZIndex() {
+        if (this.preview && (this.config.zIndexStrategy === "owner" || this.resolveOwnerElement())) {
+            const value = String(this.resolvePreviewZIndex());
+            if (this.preview.style.zIndex !== value) this.preview.style.zIndex = value;
+        }
+    }
+    isOwnerUncovered() {
+        const owner = this.resolveOwnerElement();
+        if (!owner) return this.config.zIndexStrategy !== "owner";
+        if (!owner.isConnected || !this.currentTarget?.isConnected || !owner.contains(this.currentTarget)) return false;
+        const ownerLayer = owner.closest(".layui-layer"), ownerZ = Number(ownerLayer && window.getComputedStyle(ownerLayer).zIndex) || 0;
+        return ![...document.querySelectorAll(".layui-layer, .viewer-container, .fancybox-container, .loading-container")].some(root => {
+            if (root === ownerLayer || root.contains(owner)) return false;
+            const style = window.getComputedStyle(root);
+            if (!root.getClientRects().length || style.display === "none" || style.visibility === "hidden") return false;
+            return !root.matches(".layui-layer") || Number(style.zIndex) >= ownerZ;
+        });
+    }
+    watchOwnerOverlays() {
+        if (!this.resolveOwnerElement() || this.overlayObserver) return;
+        // 仅在悬停会话内观察：弹窗/遮罩出现时及时隐藏，不能靠固定 viewer 层级封顶。
+        this.overlayObserver = this.scope.observe(document.body, () => {
+            if (!this.isOwnerUncovered()) this.hidePreview();
+            else this.refreshOwnerZIndex();
+        }, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
+    }
     bindEvents() {
         if (this.eventsBound || this.destroyed) return;
-        document.addEventListener("mouseover", this.onDocumentOver), document.addEventListener("mouseout", this.onDocumentOut),
-        document.addEventListener("mousemove", this.onDocumentMove), this.eventsBound = !0;
+        this.scope.listen(document, "mouseover", this.onDocumentOver), this.scope.listen(document, "mouseout", this.onDocumentOut),
+        this.scope.listen(document, "mousemove", this.onDocumentMove),
+        // 滚动会让光标下的卡片变化，浏览器补发的边界 mouse 事件会造成预览反复闪现
+        this.scope.listen(document, "scroll", this.onDocumentScroll, { capture: !0, passive: !0 }),
+        this.scope.listen(document, "wheel", this.onDocumentScroll, { passive: !0 }),
+        this.eventsBound = !0;
+    }
+    handleDocumentScroll() {
+        if (this.destroyed || !this.currentTarget) return;
+        // 立即隐藏，并抑制到下一次真实鼠标移动为止
+        this.suppressUntilMouseMove = !0, clearTimeout(this.timer), this.timer = null, this.hidePreview();
     }
     findTarget(event) {
         const target = event.target;
         return target?.closest ? target.closest(this.config.selector) : null;
     }
     handleDocumentOver(event) {
+        if (this.suppressUntilMouseMove) return;
         const target = this.findTarget(event);
         target && (!event.relatedTarget || !target.contains(event.relatedTarget)) && this.handleMouseEnter(event, target);
     }
@@ -226,14 +411,18 @@ unsafeWindow.loading = window.loading = function() {
         target && (!event.relatedTarget || !target.contains(event.relatedTarget)) && this.handleMouseLeave();
     }
     handleDocumentMove(event) {
+        this.suppressUntilMouseMove = !1;
         if (!this.currentTarget) return;
         (event.target === this.currentTarget || this.currentTarget.contains(event.target)) && this.handleMouseMove(event);
     }
     handleMouseEnter(event, delegatedTarget = event.currentTarget) {
         if (this.destroyed || !this.preview) return;
+        this.refreshOwnerZIndex();
         clearTimeout(this.timer);
         this.timer = null;
         this.currentTarget = delegatedTarget;
+        if (!this.isOwnerUncovered()) return this.hidePreview();
+        this.watchOwnerOverlays();
         this.pointer = {
             x: event.clientX,
             y: event.clientY
@@ -244,7 +433,11 @@ unsafeWindow.loading = window.loading = function() {
         if (source === this.currentUrl && this.imgElement) return this.showCurrentPreview();
         if (source === this.pendingUrl) return void this.preview.classList.add("active");
         const cached = this.loadedUrls.get(source);
-        if (cached) return this.loadedUrls.delete(source), this.loadedUrls.set(source, cached), void this.commitPreview(source, cached);
+        if (cached) {
+            // 缓存命中同样要递增代际并解绑在途加载，否则先悬停的慢图完成后会“劫持”当前预览
+            return ++this.loadGeneration, this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null),
+            this.pendingImage = null, this.pendingUrl = null, this.loadedUrls.delete(source), this.loadedUrls.set(source, cached), void this.commitPreview(source, cached);
+        }
         const generation = ++this.loadGeneration;
         this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null);
         this.pendingUrl = source;
@@ -281,6 +474,7 @@ unsafeWindow.loading = window.loading = function() {
     }
     showCurrentPreview() {
         if (!this.preview || !this.pointer || !this.imgElement) return;
+        if (!this.isOwnerUncovered()) return this.hidePreview();
         const width = this.preview.offsetWidth, height = this.preview.offsetHeight;
         this.placement = this.choosePlacement(this.pointer.x, this.pointer.y, width, height), this.preview.classList.add("active"), this.schedulePosition();
     }
@@ -343,6 +537,8 @@ unsafeWindow.loading = window.loading = function() {
     }
     hidePreview() {
         if (!this.preview) return;
+        clearTimeout(this.timer);
+        if (this.overlayObserver) this.scope.releaseObserver(this.overlayObserver), this.overlayObserver = null;
         ++this.loadGeneration, this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null),
         this.pendingImage = null, this.pendingUrl = null, this.preview.classList.remove("active", "loading"), this.currentTarget = null,
         this.pointer = null, this.placement = null, this.timer = null;
@@ -356,17 +552,17 @@ unsafeWindow.loading = window.loading = function() {
         this.animationFrame = null;
         this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null);
         this.pendingImage = null;
-        this.eventsBound && (document.removeEventListener("mouseover", this.onDocumentOver), document.removeEventListener("mouseout", this.onDocumentOut),
-        document.removeEventListener("mousemove", this.onDocumentMove), this.eventsBound = !1);
+        this.eventsBound && (this.scope.dispose(), this.eventsBound = !1);
+        this.overlayObserver = null;
         this.loadedUrls.clear();
         this.preview?.remove();
         this.preview = null;
         this.currentTarget = null;
     }
-}, async function() {
-    document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .console-logger-container {\n                position: fixed;\n                bottom: 0;\n                right: 0;\n                z-index: var(--jhs-z-loading);\n                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n                display: flex;\n                flex-direction: column; \n                align-items: flex-end;\n                width: fit-content;\n            }\n\n            .console-logger-toggle {\n                width: 40px;\n                height: 30px;\n                background: var(--jhs-accent);\n                border-radius: 120px 10px 0 0;\n                display: flex;\n                align-items: center;\n                justify-content: center;\n                cursor: pointer;\n                box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);\n                transition: all 0.3s ease;\n                color: var(--jhs-accent-text-on);\n                font-size: 16px;\n            }\n\n            .console-logger-toggle:hover {\n                background: var(--jhs-accent-hover);\n            }\n\n            .console-logger-toggle::after {\n                content: '▼';\n                transition: transform 0.3s ease;\n            }\n\n            .console-logger-toggle.collapsed::after {\n                content: '▲';\n            }\n\n            .console-logger-window {\n                width: 400px;\n                height: 400px;\n                background: var(--jhs-surface);\n                border-radius: 10px 0 10px 10px;\n                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);\n                display: flex;\n                flex-direction: column;\n                overflow: hidden;\n                transform: translateY(0);\n                opacity: 1;\n                /* 简化过渡属性 */\n                transition: width 0.3s ease, height 0.3s ease, opacity 0.3s ease, transform 0.3s ease;\n            }\n\n            .console-logger-window.maximized {\n                width: 600px !important;\n                height: 85vh !important;\n                border-radius: 10px 0 0 10px; /* 调整圆角以匹配右下角 */\n            }\n\n            .console-logger-window.collapsed {\n                height: 0 !important;\n                min-height: 0 !important; \n                opacity: 0;\n            }\n\n            .console-logger-header {\n                background: var(--jhs-accent);\n                color: var(--jhs-accent-text-on);\n                padding: 12px 15px;\n                display: flex;\n                justify-content: space-between;\n                align-items: center;\n                flex-shrink: 0;\n            }\n\n            .console-logger-title {\n                font-weight: 600;\n                font-size: 16px;\n            }\n\n            .console-logger-controls {\n                display: flex;\n                gap: 10px;\n            }\n\n            .console-logger-controls button {\n                background: transparent;\n                border: 1px solid rgba(255, 255, 255, 0.3);\n                padding: 5px 10px;\n                font-size: 12px;\n                color: var(--jhs-accent-text-on);\n                border-radius: 4px;\n                cursor: pointer;\n                transition: background 0.3s;\n            }\n\n            .console-logger-controls button:hover {\n                background: rgba(255, 255, 255, 0.1);\n            }\n\n            /* 新增的按钮样式 */\n            .console-logger-maximize-toggle {\n                line-height: 1;\n                font-size: 14px !important; /* 使箭头看起来更大 */\n                padding: 5px 8px !important;\n            }\n            .console-logger-maximize-toggle::before {\n                content: '⇱'; /* Unicode symbol for maximized */\n            }\n            .console-logger-maximize-toggle.active::before {\n                content: '⇲'; /* Unicode symbol for minimized */\n            }\n\n\n            .console-logger-filters {\n                display: flex;\n                align-items: center;\n                gap: 5px;\n                padding: 10px;\n                background: var(--jhs-surface-2);\n                border-bottom: 1px solid var(--jhs-border);\n                flex-shrink: 0;\n                overflow-x: hidden; \n            }\n\n            /* 新增: 过滤器按钮组的容器，负责滚动 */\n            .console-logger-filter-group {\n                display: flex;\n                gap: 5px;\n                overflow-x: auto; /* 允许过滤器按钮滚动 */\n                flex-grow: 1; /* 占据剩余空间 */\n                padding-right: 10px; /* 避免滚动条影响按钮 */\n            }\n\n            .console-logger-filter {\n                padding: 5px 10px;\n                font-size: 12px;\n                border-radius: 15px;\n                background: var(--jhs-input-bg);\n                color: var(--jhs-text-muted);\n                border: 1px solid var(--jhs-border);\n                cursor: pointer;\n                transition: all 0.3s;\n                white-space: nowrap;\n                flex-shrink: 0; /* 确保不被压缩 */\n            }\n\n            .console-logger-filter.active {\n                background: var(--jhs-accent);\n                color: var(--jhs-accent-text-on);\n                border-color: var(--jhs-accent);\n            }\n\n            /* 新增: 滚动到底部按钮的样式 (位于 filtersContainer 内部右侧) */\n            .console-logger-scroll-to-bottom {\n                background: var(--jhs-accent);\n                border: none;\n                padding: 5px 10px;\n                font-size: 12px;\n                color: var(--jhs-accent-text-on);\n                border-radius: 4px;\n                cursor: pointer;\n                transition: background 0.3s;\n                line-height: 1;\n                height: fit-content;\n                white-space: nowrap;\n                margin-left: auto; /* 将按钮推到最右侧 */\n                flex-shrink: 0; /* 确保不被压缩 */\n            }\n\n            .console-logger-scroll-to-bottom:hover {\n                background: var(--jhs-accent-hover);\n            }\n\n\n            .console-logger-content {\n                flex: 1;\n                overflow-y: auto;\n                padding: 10px;\n                background: var(--jhs-surface);\n                word-wrap: break-word;\n                text-align: left;\n            }\n\n            .console-logger-entry {\n                padding: 8px 10px;\n                margin-bottom: 3px;\n                border-radius: 4px;\n                font-size: 12px;\n                line-height: 1.4;\n                /*animation: consoleFadeIn 0.3s ease;*/\n                border-left: 3px solid transparent;\n            }\n\n            @keyframes consoleFadeIn {\n                from { opacity: 0; transform: translateY(5px); }\n                to { opacity: 1; transform: translateY(0); }\n            }\n\n            .console-logger-timestamp {\n                color: var(--jhs-text-muted);\n                font-size: 11px;\n                margin-right: 2px;\n            }\n\n            @media (max-width: 768px) {\n                .console-logger-container {\n                    right: 10px;\n                    bottom: 10px;\n                }\n\n                .console-logger-window {\n                    width: calc(100vw - 20px);\n                    height: 300px;\n                }\n            }\n            \n            .console-logger-message[data-type=\"json\"] {\n                white-space: pre-wrap; \n            }\n        </style>\n    ");
+}, function() {
+    document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .console-logger-container {\n                position: fixed;\n                bottom: 0;\n                right: 0;\n                z-index: var(--jhs-z-loading);\n                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n                display: flex;\n                flex-direction: column; \n                align-items: flex-end;\n                width: fit-content;\n            }\n\n            .console-logger-toggle {\n                width: 40px;\n                height: 30px;\n                background: var(--jhs-accent);\n                border-radius: 120px 10px 0 0;\n                display: flex;\n                align-items: center;\n                justify-content: center;\n                cursor: pointer;\n                box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);\n                transition: all 0.3s ease;\n                color: var(--jhs-accent-text-on);\n                font-size: 16px;\n            }\n\n            .console-logger-toggle:hover {\n                background: var(--jhs-accent-hover);\n            }\n\n            .console-logger-toggle::after {\n                content: '▼';\n                transition: transform 0.3s ease;\n            }\n\n            .console-logger-toggle.collapsed::after {\n                content: '▲';\n            }\n\n            .console-logger-window {\n                width: 400px;\n                height: 400px;\n                background: var(--jhs-surface);\n                border-radius: 10px 0 10px 10px;\n                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);\n                display: flex;\n                flex-direction: column;\n                overflow: hidden;\n                transform: translateY(0);\n                opacity: 1;\n                /* 简化过渡属性 */\n                transition: width 0.3s ease, height 0.3s ease, opacity 0.3s ease, transform 0.3s ease;\n            }\n\n            .console-logger-window.maximized {\n                width: 600px !important;\n                height: 85vh !important;\n                border-radius: 10px 0 0 10px; /* 调整圆角以匹配右下角 */\n            }\n\n            .console-logger-window.collapsed {\n                height: 0 !important;\n                min-height: 0 !important; \n                opacity: 0;\n            }\n\n            .console-logger-header {\n                background: var(--jhs-accent);\n                color: var(--jhs-accent-text-on);\n                padding: 12px 15px;\n                display: flex;\n                justify-content: space-between;\n                align-items: center;\n                flex-shrink: 0;\n            }\n\n            .console-logger-title {\n                font-weight: 600;\n                font-size: 16px;\n            }\n\n            .console-logger-controls {\n                display: flex;\n                gap: 10px;\n            }\n\n            .console-logger-controls button {\n                background: transparent;\n                border: 1px solid rgba(255, 255, 255, 0.3);\n                padding: 5px 10px;\n                font-size: 12px;\n                color: var(--jhs-accent-text-on);\n                border-radius: 4px;\n                cursor: pointer;\n                transition: background 0.3s;\n            }\n\n            .console-logger-controls button:hover {\n                background: rgba(255, 255, 255, 0.1);\n            }\n\n            /* 新增的按钮样式 */\n            .console-logger-maximize-toggle {\n                line-height: 1;\n                font-size: 14px !important; /* 使箭头看起来更大 */\n                padding: 5px 8px !important;\n            }\n            .console-logger-maximize-toggle::before {\n                content: '⇱'; /* Unicode symbol for maximized */\n            }\n            .console-logger-maximize-toggle.active::before {\n                content: '⇲'; /* Unicode symbol for minimized */\n            }\n\n\n            .console-logger-filters {\n                display: flex;\n                align-items: center;\n                gap: 5px;\n                padding: 10px;\n                background: var(--jhs-surface-2);\n                border-bottom: 1px solid var(--jhs-border);\n                flex-shrink: 0;\n                overflow-x: hidden; \n            }\n\n            /* 新增: 过滤器按钮组的容器，负责滚动 */\n            .console-logger-filter-group {\n                display: flex;\n                gap: 5px;\n                overflow-x: auto; /* 允许过滤器按钮滚动 */\n                flex-grow: 1; /* 占据剩余空间 */\n                padding-right: 10px; /* 避免滚动条影响按钮 */\n            }\n\n            .console-logger-filter {\n                padding: 5px 10px;\n                font-size: 12px;\n                border-radius: 15px;\n                background: var(--jhs-input-bg);\n                color: var(--jhs-text-muted);\n                border: 1px solid var(--jhs-border);\n                cursor: pointer;\n                transition: all 0.3s;\n                white-space: nowrap;\n                flex-shrink: 0; /* 确保不被压缩 */\n            }\n\n            .console-logger-filter.active {\n                background: var(--jhs-accent);\n                color: var(--jhs-accent-text-on);\n                border-color: var(--jhs-accent);\n            }\n\n            /* 新增: 滚动到底部按钮的样式 (位于 filtersContainer 内部右侧) */\n            .console-logger-scroll-to-bottom {\n                background: var(--jhs-accent);\n                border: none;\n                padding: 5px 10px;\n                font-size: 12px;\n                color: var(--jhs-accent-text-on);\n                border-radius: 4px;\n                cursor: pointer;\n                transition: background 0.3s;\n                line-height: 1;\n                height: fit-content;\n                white-space: nowrap;\n                margin-left: auto; /* 将按钮推到最右侧 */\n                flex-shrink: 0; /* 确保不被压缩 */\n            }\n\n            .console-logger-scroll-to-bottom:hover {\n                background: var(--jhs-accent-hover);\n            }\n\n\n            .console-logger-content {\n                flex: 1;\n                overflow-y: auto;\n                padding: 10px;\n                background: var(--jhs-surface);\n                word-wrap: break-word;\n                text-align: left;\n            }\n\n            .console-logger-entry {\n                padding: 8px 10px;\n                margin-bottom: 3px;\n                border-radius: 4px;\n                font-size: 12px;\n                line-height: 1.4;\n                /*animation: consoleFadeIn 0.3s ease;*/\n                border-left: 3px solid transparent;\n            }\n\n            @keyframes consoleFadeIn {\n                from { opacity: 0; transform: translateY(5px); }\n                to { opacity: 1; transform: translateY(0); }\n            }\n\n            .console-logger-timestamp {\n                color: var(--jhs-text-muted);\n                font-size: 11px;\n                margin-right: 2px;\n            }\n\n            @media (max-width: 767px) {\n                .console-logger-container {\n                    right: 10px;\n                    bottom: 10px;\n                }\n\n                .console-logger-window {\n                    width: calc(100vw - 20px);\n                    height: 300px;\n                }\n            }\n            \n            .console-logger-message[data-type=\"json\"] {\n                white-space: pre-wrap; \n            }\n        </style>\n    ");
     document.head.insertAdjacentHTML("beforeend", `<style>
-        .console-logger-container { font-family:inherit; }
+        .console-logger-container { font-family:inherit; z-index:var(--jhs-z-debug); }
         .console-logger-toggle { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) var(--jhs-radius-md) 0 0; box-shadow:var(--jhs-shadow-sm); transition:background-color var(--jhs-motion-fast) ease; }
         .console-logger-toggle::after { transition:transform var(--jhs-motion-fast) ease; }
         .console-logger-window { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) 0 var(--jhs-radius-md) var(--jhs-radius-md); box-shadow:var(--jhs-shadow-lg); transition:width var(--jhs-motion-fast) ease,height var(--jhs-motion-fast) ease,opacity var(--jhs-motion-fast) ease,transform var(--jhs-motion-fast) ease; }
@@ -402,7 +598,7 @@ unsafeWindow.loading = window.loading = function() {
         warn: [ "warn" ],
         error: [ "error" ],
         debug: [ "base", "warn", "error", "debug" ]
-    }, n = await storageManager.getSetting("clogMsgCount", 2e3), a = "jhs_clog_maximize", i = "jhs_clog_expand", s = "jhs_clog_filter";
+    }, n = maxLogCount, a = "jhs_clog_maximize", i = "jhs_clog_expand", s = "jhs_clog_filter";
     class o {
         constructor() {
             const t = localStorage.getItem(s);
@@ -420,7 +616,7 @@ unsafeWindow.loading = window.loading = function() {
             this.container = document.createElement("div"), this.container.className = "console-logger-container jhs-ui",
             this.container.style.display = "none", this.toggleBtn = document.createElement("button"), this.toggleBtn.type = "button", this.toggleBtn.setAttribute("aria-label", "展开或收起运行日志"),
             this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn),
-            window.matchMedia?.("(max-width: 768px)").matches && (this.toggleBtn.hidden = !0, this.toggleBtn.style.display = "none"),
+            window.matchMedia?.("(max-width: 767px)").matches && (this.toggleBtn.hidden = !0, this.toggleBtn.style.display = "none"),
             this.window = document.createElement("div"), this.window.className = "console-logger-window collapsed";
             const t = document.createElement("div");
             t.className = "console-logger-header";
@@ -485,6 +681,12 @@ unsafeWindow.loading = window.loading = function() {
             this.window.classList.contains("collapsed") || (this.content.scrollTop = this.content.scrollHeight);
         }
         addLog(t, a = "base", ...i) {
+            return this._appendLog(false, t, a, ...i);
+        }
+        addHtmlLog(t, a = "base", ...i) {
+            return this._appendLog(true, t, a, ...i);
+        }
+        _appendLog(htmlMode, t, a = "base", ...i) {
             const s = this.tryInitialize();
             let o, r = [];
             e[a] ? (o = a, r = i) : (o = "base", r = [ a, ...i ]), o = e[o] ? o : "base";
@@ -499,24 +701,25 @@ unsafeWindow.loading = window.loading = function() {
                 } else d.push(String(e));
             }));
             let h = d.join("  ");
-            h = h.replace(/(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi, (e => {
-                const t = e.startsWith("http") || e.startsWith("ftp"), n = e.startsWith("//"), a = e.startsWith("www.");
-                let i = e;
-                return n ? i = `http:${e}` : !t && a && (i = `http://${e}`), `<a href="${escapeHtml(i)}" target="_blank">${escapeHtml(e)}</a>`;
-            }));
+            if (htmlMode) {
+                h = h.replace(/(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi, (e => {
+                    const t = e.startsWith("http") || e.startsWith("ftp"), n = e.startsWith("//"), a = e.startsWith("www.");
+                    let i = e;
+                    return n ? i = `http:${e}` : !t && a && (i = `http://${e}`), `<a href="${escapeHtml(i)}" target="_blank">${escapeHtml(e)}</a>`;
+                }));
+            }
             const g = {
                 message: h,
                 messageType: c,
                 type: o,
+                html: htmlMode,
                 timestamp: new Date,
                 id: Date.now() + Math.random()
             };
             if (this.logs.push(g), this.logs.length > n) {
-                const e = this.logs[0];
-                if (s) {
-                    const t = this.content.querySelector(`.console-logger-entry[data-id="${e.id}"]`);
-                    t && (this.logs.shift(), this.content.removeChild(t));
-                }
+                this.logs.shift();
+                const e = this.content.querySelector(".console-logger-entry");
+                e && e.remove();
             }
             s && this.renderLog(g);
         }
@@ -524,6 +727,18 @@ unsafeWindow.loading = window.loading = function() {
             const [t, ...n] = e;
             setTimeout((() => {
                 this.addLog(t, "base", ...n);
+            }), 0);
+        }
+        html(...e) {
+            const [t, ...n] = e;
+            setTimeout((() => {
+                this.addHtmlLog(t, "base", ...n);
+            }), 0);
+        }
+        htmlDebug(...e) {
+            const [t, ...n] = e;
+            setTimeout((() => {
+                this.addHtmlLog(t, "debug", ...n);
             }), 0);
         }
         error(...e) {
@@ -569,8 +784,36 @@ unsafeWindow.loading = window.loading = function() {
             const a = e[t.type] || e.base;
             n.style.borderLeft = "3px solid " + a.borderLeftColor, n.style.background = a.background;
             const i = (t.timestamp instanceof Date ? t.timestamp : new Date(t.timestamp)).toTimeString().split(" ")[0];
-            return n.innerHTML = `\n                <span class="console-logger-timestamp">[${i}]</span>\n                <span class="console-logger-message" data-type="${t.messageType}">${t.message}</span>\n            `,
-            n;
+            const timestamp = document.createElement("span");
+            timestamp.className = "console-logger-timestamp";
+            timestamp.textContent = `[${i}]`;
+            const message = document.createElement("span");
+            message.className = "console-logger-message";
+            message.dataset.type = t.messageType;
+            if (t.html) {
+                message.innerHTML = t.message;
+            } else {
+                const text = t.message.replace(/<br\s*\/?>/gi, "\n");
+                const urlPattern = /(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi;
+                let lastIndex = 0;
+                let match;
+                while ((match = urlPattern.exec(text))) {
+                    if (match.index > lastIndex) message.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+                    let url = match[0];
+                    let href = url;
+                    if (url.startsWith("//")) href = `http:${url}`;
+                    else if (url.startsWith("www.")) href = `http://${url}`;
+                    const anchor = document.createElement("a");
+                    anchor.href = href;
+                    anchor.target = "_blank";
+                    anchor.textContent = url;
+                    message.appendChild(anchor);
+                    lastIndex = match.index + match[0].length;
+                }
+                if (lastIndex < text.length) message.appendChild(document.createTextNode(text.slice(lastIndex)));
+            }
+            n.append(timestamp, message);
+            return n;
         }
         setFilter(e) {
             if (this.currentFilter === e) return;
@@ -615,24 +858,25 @@ unsafeWindow.loading = window.loading = function() {
         }
     }
     try {
-        unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.clog = unsafeWindow.parent.clog : window.clog = unsafeWindow.clog = new o;
+        unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? loggerClog = unsafeWindow.parent.clog : loggerClog = new o;
     } catch (r) {
-        console.error("创建日志控制台出现异常", r), window.clog = unsafeWindow.clog = new o;
+        console.error("创建日志控制台出现异常", r), loggerClog = new o;
     }
     !function() {
-        const e = window.clog || console;
-        window.addEventListener("error", (function(t) {
+        // 运行时再解析 window.clog：IIFE 执行早于 window.clog 赋值，此处若提前捕获会恒为 console
+        const resolveClog = () => window.clog || console;
+        scope.listen(window, "error", (function(t) {
             const n = t.filename, a = t.message;
-            n.includes("javdb") || n.includes("javbus") || e.error(`[全局 Error 异常捕获] ${a} 来源: ${n}`);
-        })), window.addEventListener("unhandledrejection", (function(t) {
-            const n = t.reason, a = (null == n ? void 0 : n.message) ?? "";
+            "string" == typeof n && (n.includes("javdb") || n.includes("javbus")) || resolveClog().error(`[全局 Error 异常捕获] ${a} 来源: ${n ?? "未知"}`);
+        })), scope.listen(window, "unhandledrejection", (function(t) {
+            const e = resolveClog(), n = t.reason, a = (null == n ? void 0 : n.message) ?? "";
             if ([ "NotAllowedError", "AbortError", "NotSupportedError" ].includes(n?.name) || a.includes("play()") || a.includes("The element has no supported sources")) return e.warn("[全局媒体播放异常] 当前媒体源无法播放", n),
             void t.preventDefault();
             if (a.includes("<span>1005</span>") && a.includes("fc2ppvdb")) return;
             const i = `[全局 Promise 异常捕获] ${n.message || n}`;
             e.error(i, n), t.preventDefault();
         }));
-    }(), document.addEventListener("mousedown", (e => {
+    }(), scope.listen(document, "mousedown", (e => {
         const t = window.clog;
         if (!t.isInitialized || !t.container) return;
         const n = e.target, a = [ ".console-logger-container", ".layui-layer-shade", ".loading-container" ].join(",");
@@ -677,7 +921,7 @@ unsafeWindow.loading = window.loading = function() {
     }
     document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .js-tooltip {\n                position: fixed;\n                padding: 8px 12px;\n                border: 1px solid var(--jhs-border);\n                border-radius: var(--jhs-radius-sm);\n                white-space: normal;\n                max-width: 600px;\n                pointer-events: none;\n                font-size: 14px;\n                line-height: 1.5;\n                z-index: var(--jhs-z-tooltip);\n                background: var(--jhs-surface-2);\n                color: var(--jhs-text);\n                box-shadow: var(--jhs-shadow-md);\n                display: none;\n            }\n            .js-tooltip.is-active {\n                display: block !important;\n            }\n        </style>\n    ");
     const t = "[data-tip-top], [data-tip-bottom], [data-tip-left], [data-tip-right], [data-tip]";
-    document.addEventListener("mouseover", (n => {
+    scope.listen(document, "mouseover", (n => {
         const a = n.target.closest(t);
         if (a && !a.tooltipElement) {
             let t, n = "top";
@@ -691,10 +935,20 @@ unsafeWindow.loading = window.loading = function() {
                 a.matches(":hover") && !a.tooltipElement && e(a, t, n);
             }), 50);
         }
-    })), document.addEventListener("mouseout", (e => {
+    })), scope.listen(document, "mouseout", (e => {
         const n = e.target.closest(t);
         var a;
         n && (n.hoverTimeout && (clearTimeout(n.hoverTimeout), n.hoverTimeout = null), n.contains(e.relatedTarget) || n.tooltipElement && ((a = n.tooltipElement) && a.parentNode && a.remove(),
         n.tooltipElement = null));
     }));
 }();
+const loggerLoading = window.loading;
+const loggerShow = window.show;
+loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog });
+// The frozen runtime object is the source of truth for bootstrap/compatibility;
+// window/globalThis only keep compatibility mirrors for legacy code.
+window.loading = loggerRuntime.loading;
+window.show = loggerRuntime.show;
+window.clog = loggerRuntime.clog;
+return loggerRuntime;
+}

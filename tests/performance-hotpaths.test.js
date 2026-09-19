@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -8,37 +9,49 @@ import { describe, expect, it, vi } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
-    const listeners = new Map(), documentListeners = new Map(), setTimeoutSpy = vi.fn(() => 1), clearTimeoutSpy = vi.fn();
+    const listeners = new Map(), documentListeners = new Map(), setTimeoutSpy = vi.fn(() => 1), clearTimeoutSpy = vi.fn(), cleanups = [];
     const location = new URL("https://javdb.com/v/test"), window = {
-        location, isListPage, addEventListener: (type, listener) => listeners.set(type, listener)
+        location, isListPage, addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type)
     }, document = {
-        hidden, addEventListener: (type, listener) => documentListeners.set(type, listener)
+        hidden, addEventListener: (type, listener) => documentListeners.set(type, listener), removeEventListener: type => documentListeners.delete(type)
     }, locks = { request: vi.fn(async (key, options, callback) => callback({ key })) };
+    const storage = { getLocal: vi.fn(), setLocal: vi.fn() }, scope = {
+        listen(target, type, listener) { target.addEventListener(type, listener); cleanups.push(() => target.removeEventListener(type, listener)); },
+        addCleanup(cleanup) { cleanups.push(cleanup); },
+        dispose() { [...cleanups].reverse().forEach(cleanup => cleanup()); }
+    };
     const context = vm.createContext({
         console, URL, window, document, navigator: { locks }, setTimeout: setTimeoutSpy, clearTimeout: clearTimeoutSpy,
         localStorage: { getItem: vi.fn(), setItem: vi.fn() }, $: () => ({ length: 0 }), l: true, _: "yes",
-        T: "javdb", I: "javbus", D: "censored", A: "uncensored", BasePlugin: class {},
+        T: "javdb", I: "javbus", D: "censored", A: "uncensored", BasePlugin: class { getRuntimeService(name) { return "storage" === name ? storage : "scope" === name ? () => scope : "movie" === name ? { externalSiteOrigin: () => "https://javdb.com" } : null; } },
         StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
-        storageManager: {}, utils: { sleep: vi.fn(), getNowStr: vi.fn(), getHourDifference: vi.fn() },
+        storageManager: { getSetting: vi.fn(async () => ({})) }, utils: { sleep: vi.fn(), getNowStr: vi.fn(), getHourDifference: vi.fn() },
         clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() },
         i: (target, key, value) => (target[key] = value)
     });
     const source = [
-        readFileSync(join(repoRoot, "src/core/site-context.js"), "utf8"),
-        readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8"),
-        readFileSync(join(repoRoot, "src/plugins/new-video/task.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/core/site-context.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/integrations/javdb/parser.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/integrations/host-list/parser.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8"),
         "globalThis.TestTaskPlugin=TaskPlugin;"
     ].join("\n");
     vm.runInContext(source, context);
-    return { plugin: new context.TestTaskPlugin(), window, document, listeners, documentListeners, locks, setTimeoutSpy };
+    return { plugin: new context.TestTaskPlugin(), window, document, listeners, documentListeners, locks, setTimeoutSpy, scope };
 }
 
 function loadListObserver() {
     const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     dom.window.isListPage = true;
-    const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ translation: "译文" }) })), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { getSetting: vi.fn(async () => "yes") };
+    const translate = vi.fn(async () => "译文"), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { car_list_key: "car_list", getSetting: vi.fn(async () => "yes"), _invalidateCache: vi.fn() };
     class BasePlugin {
         getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }; }
+        getBean() { return null; }
+        getRuntimeService(name) {
+            if (name === "translation") return { translate };
+            if (name === "settings") return { snapshot: () => ({ translateTitle: "yes" }) };
+            return async () => undefined;
+        }
     }
     const context = vm.createContext({
         console, window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver,
@@ -49,15 +62,21 @@ function loadListObserver() {
         normalizeStateFlags: flags => Object.fromEntries([ "favorite", "downloaded", "watched", "blocked" ].map((key => [ key, !0 === flags?.[key] ]))),
         hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key]))
     });
-    vm.runInContext(`${readFileSync(join(repoRoot, "src/plugins/status/list-page.js"), "utf8")};globalThis.TestListPagePlugin=ListPagePlugin;`, context);
-    return { dom, plugin: new context.TestListPagePlugin(), $, fetch, mapLimit, storageManager, clog: context.clog };
+    const source = [
+        readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8"),
+        "globalThis.TestListPagePlugin=ListPagePlugin;"
+    ].join("\n");
+    vm.runInContext(source, context);
+    return { dom, plugin: new context.TestListPagePlugin(), $, translate, mapLimit, storageManager, clog: context.clog };
 }
 
 function initializeAccessibilityDom(html) {
-    const dom = new JSDOM(html), source = readFileSync(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
+    const dom = new JSDOM(html), source = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
         document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask
     });
-    vm.runInContext(`${source.slice(start, end)};initializeUiAccessibility();`, context);
+    context.lifecycleScope = { observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); return observer.observe(target, options), observer; } };
+    vm.runInContext(`${source.slice(start, end)};initializeUiAccessibility(lifecycleScope);`, context);
     return dom;
 }
 
@@ -72,11 +91,16 @@ describe("background task lifecycle", () => {
     });
 
     it("runs once on a visible list page and schedules the next visible check", async () => {
-        const { plugin, setTimeoutSpy } = loadTaskLifecycle({ isListPage: true });
+        const { plugin, setTimeoutSpy, scope, listeners, documentListeners } = loadTaskLifecycle({ isListPage: true });
         plugin.doTask = vi.fn(async () => {});
         await plugin.handle();
         expect(plugin.doTask).toHaveBeenCalledTimes(1);
         expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3e5);
+        expect(listeners.has("pagehide")).toBe(true);
+        expect(documentListeners.has("visibilitychange")).toBe(true);
+        scope.dispose();
+        expect(listeners.size).toBe(0);
+        expect(documentListeners.size).toBe(0);
     });
 
     it("keeps hidden list pages dormant and retains the cross-tab lock", async () => {
@@ -87,17 +111,40 @@ describe("background task lifecycle", () => {
 
         const visible = loadTaskLifecycle({ isListPage: true });
         visible.plugin.loadConfig = vi.fn(async () => visible.plugin.taskConfig = { enableCheckBlacklist: "no" });
-        visible.plugin.getBean = () => ({ getJavDbUrl: vi.fn(async () => "https://javdb.com") });
         await visible.plugin.doTask();
         expect(visible.locks.request).toHaveBeenCalledTimes(1);
     });
 });
 
 describe("list mutation hot path", () => {
+    it("reruns the latest refresh after an in-flight refresh becomes stale", async () => {
+        const { plugin } = loadListObserver();
+        let releaseFirst;
+        plugin.doFilter = vi.fn()
+            .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
+            .mockResolvedValueOnce(true);
+        const first = plugin.requestListRefresh({ reason: "test-first", full: true });
+        await vi.waitFor(() => expect(plugin.doFilter).toHaveBeenCalledOnce());
+        const second = plugin.requestListRefresh({ reason: "test-latest", full: true });
+        releaseFirst(true);
+        await expect(first).resolves.toBe(true);
+        await expect(second).resolves.toBe(true);
+        expect(plugin.doFilter).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not commit visibility from a stale list generation", () => {
+        const { plugin } = loadListObserver(), applyVisibility = vi.spyOn(plugin, "applyVisibility"), stale = plugin.advanceListGeneration();
+        plugin.advanceListGeneration();
+        expect(plugin.reconcileListItems(null, stale)).toBe(false);
+        expect(applyVisibility).not.toHaveBeenCalled();
+        expect(plugin.reconcileListItems(null, plugin.captureListRevision())).toBe(true);
+        expect(applyVisibility).toHaveBeenCalledOnce();
+    });
+
     it("processes an appended card once and ignores later sort-style moves", async () => {
         const { dom, plugin } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
         plugin.processAddedItems = vi.fn(async (items) => items.forEach((item => item.dataset.jhsProcessed = "true")));
-        plugin.checkDom();
+        plugin.checkDom({ observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); observer.observe(target, options); return observer; } });
         const item = dom.window.document.createElement("div");
         item.className = "item", container.append(item);
         await new Promise((resolve => setTimeout(resolve, 140)));
@@ -109,21 +156,14 @@ describe("list mutation hot path", () => {
         expect(plugin.processAddedItems).toHaveBeenCalledTimes(1);
     });
 
-    it("bounds translation concurrency and deduplicates an in-flight car number", async () => {
-        const { dom, plugin, $, fetch, mapLimit } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
+    it("bounds translation concurrency and delegates translation to the service", async () => {
+        const { dom, plugin, $, translate, mapLimit } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
         container.innerHTML = '<div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div><div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div>';
-        const items = $(container).find(".item").toArray().map((item => $(item)));
+        const items = $(container).find(".item").toArray();
         await plugin.translateListItems(items);
         expect(mapLimit).toHaveBeenCalledWith(items, 3, expect.any(Function));
-        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(translate).toHaveBeenCalledTimes(2);
         expect($(items[0]).attr("data-jhs-translation-key")).toBe("ABC-123");
-    });
-
-    it("recovers from a damaged translation cache", () => {
-        const { dom, plugin, clog } = loadListObserver();
-        dom.window.localStorage.setItem("jhs_translate", "{");
-        expect(plugin.getTranslationCache()).toEqual({});
-        expect(clog.warn).toHaveBeenCalledTimes(1);
     });
 
     it("collects one current-page summary with hard-hidden union and debug reasons", () => {
@@ -150,7 +190,8 @@ describe("list mutation hot path", () => {
         await plugin.createQuickFilter();
         $("body").append('<span class="jhs-mobile-filter-label"></span><button class="jhs-mobile-filter-option" data-jhs-filter="blockedItems" aria-checked="false"></button>');
         plugin.setQuickFilter("all");
-        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);
+        // "全部"是包含 hard-hidden 的真全集
+        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(2);
         const appended = $('<div class="item" data-jhs-flags=\'{"downloaded":true}\' data-jhs-visibility="{}"></div>').appendTo(container);
         plugin.applyVisibility(appended);
         expect(appended.css("display")).not.toBe("none");

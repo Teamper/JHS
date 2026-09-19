@@ -1,9 +1,10 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 
-const httpSource = readFileSync(join(import.meta.dirname, "../src/core/http.js"), "utf8");
+const httpSource = readTestFile(join(import.meta.dirname, "../src/core/http.js"), "utf8");
 
 function loadHttp(onRequest = null) {
     const context = vm.createContext({
@@ -13,14 +14,12 @@ function loadHttp(onRequest = null) {
         unsafeWindow: {},
         window: {},
         clog: { warn() {}, error() {} },
-        Utils: class {},
-        StorageManager: class {},
         storageManager: { getSetting: async (key, fallback) => fallback },
         utils: { retry: async (operation) => operation() },
         GM_xmlhttpRequest: (options) => onRequest?.(options)
     });
-    vm.runInContext(httpSource, context);
-    return context.window.gmHttp;
+    vm.runInContext(`${httpSource};globalThis.TestGmHttp=GmHttp`, context);
+    return new context.TestGmHttp({ utils: context.utils, storageManager: context.storageManager });
 }
 
 describe("HTTP Cloudflare detection", () => {
@@ -43,7 +42,7 @@ describe("HTTP Cloudflare detection", () => {
     });
 
     it("does not classify the normal 123AV listing fixture as a challenge", () => {
-        const html = readFileSync(join(import.meta.dirname, "fixtures/123av-cards.html"), "utf8");
+        const html = readTestFile(join(import.meta.dirname, "fixtures/123av-cards.html"), "utf8");
         expect(gmHttp._isCloudflareChallenge(html, 200)).toBe(false);
     });
 });

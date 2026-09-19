@@ -1,8 +1,14 @@
+// @ts-check
+
+import { L, r } from "../../core/constants.js";
+import { buildQuickSettingsHtml } from "../../ui/settings/setting-control-renderer.js";
+
 /**
  * Build the plugin categories configuration shared between inject and render.
- * Returns { categories, corePlugins }.
+ * Returns the presentation categories; disableability comes from Feature manifests through Diagnostics.
  */
-function getPluginCategories() {
+export function getPluginCategories() {
+    /** @type {Record<string, [string, string]>} */
     const pluginMeta = {
         SettingPlugin:["设置中心","core"], StatsPlugin:["统计中心","core"], MobileBottomBarPlugin:["工具栏与移动操作","core"],
         ListPagePlugin:["列表状态处理","list"], NavBarPlugin:["JavDB 导航","list"], BusNavBarPlugin:["JavBus 导航","list"], ListPageButtonPlugin:["列表操作","list"], HighlightMagnetPlugin:["磁力标记","list"], FoldCategoryPlugin:["分类折叠","list"], AutoPagePlugin:["自动翻页","list"], HitShowPlugin:["热播榜单","list"], TOP250Plugin:["TOP 250","list"],
@@ -11,17 +17,18 @@ function getPluginCategories() {
         HistoryPlugin:["鉴定记录","data"], BlacklistPlugin:["黑名单","data"], FilterTitleKeywordPlugin:["关键词筛选","data"], FavoriteActressesPlugin:["演员收藏","data"], NewVideoPlugin:["新作品检测","data"], TaskPlugin:["定时任务","data"],
         OtherSitePlugin:["外部站点","network"], Fc2Plugin:["FC2 详情","network"], Fc2By123AvPlugin:["FC2 123AV","network"], MagnetHubPlugin:["磁力聚合","network"], JavTrailersPlugin:["预告片","network"], SubTitleCatPlugin:["字幕搜索","network"], OneTwoThreeOfflinePlugin:["123 云盘离线","network"]
     };
-    const group = (key, label) => ({ label, plugins:Object.entries(pluginMeta).filter((e => e[1][1] === key)).map((e => e[0])) });
+    const group = (/** @type {string} */ key, /** @type {string} */ label) => ({ label, plugins:Object.entries(pluginMeta).filter((e => e[1][1] === key)).map((e => e[0])) });
     return {
         categories: {
             core:group("core", "基础核心"), list:group("list", "列表页"), detail:group("detail", "详情页"),
             media:group("media", "媒体"), data:group("data", "数据"), network:group("network", "网络")
         },
-        corePlugins: ["SettingPlugin","StatsPlugin","MobileBottomBarPlugin"], pluginMeta
+        pluginMeta
     };
 }
 
 /** Build the HTML for the cache items grid in the settings dialog. */
+/** @param {Array<{ text: string, key: string, title: string }>} cacheItems */
 function buildCacheItemsHtml(cacheItems) {
     return cacheItems.map(e => `
             <div class="cache-item">
@@ -48,7 +55,8 @@ function buildVideoQualityOptions() {
 }
 
 /** Build the main settings dialog HTML template. */
-function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
+/** @param {string} activePanel @param {Array<{ text: string, key: string, title: string }>} cacheItems */
+export function buildSettingDialogHtml(activePanel, cacheItems) {
     const n = buildCacheItemsHtml(cacheItems);
     const a = buildVideoQualityOptions();
     return `
@@ -163,54 +171,10 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label">
-                                    封面快捷按钮
+                                    功能开关
                                 </span>
                             </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.screenSvg}长缩略图:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableScreenSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.videoSvg}预览视频:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableVideoSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.handleSvg}鉴定按钮:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableHandleSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.siteSvg}第三方跳转:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableSiteSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.copySvg}复制按钮:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableCopySvg" class="mini-switch">
-                                </div>
-                            </div>
+                            <div id="jhs-live-settings" class="jhs-live-settings"></div>
 
 
 
@@ -320,8 +284,6 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                     </select>
                                 </div>
                             </div>
-                            <div class="jhs-setting-row ${r ? "" : "do-hide"}"><span class="setting-label">加载女优信息</span><div class="form-content"><input type="checkbox" id="enableLoadActressInfo" class="mini-switch"></div></div>
-                            <div class="jhs-setting-row"><span class="setting-label">竖图模式</span><div class="form-content"><input type="checkbox" id="enableVerticalModel" class="mini-switch"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面列数：<span id="showContainerColumns"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerColumns" min="2" max="10" step="1"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面宽度：<span id="showContainerWidth"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerWidth" min="0" max="30" step="1"></div></div>
                         </div></section>
@@ -556,6 +518,7 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                         </div>
 
                     <div class="jhs-setting-footer">
+                        <span id="settings-hydration-status" class="jhs-caption" aria-live="polite"></span>
                         <button type="button" id="saveBtn" class="jhs-btn jhs-btn--primary">保存设置</button>
                         <button id="clean-all" class="jhs-btn jhs-btn--danger jhs-is-hidden">清理全部缓存</button>
                     </div>
@@ -565,7 +528,7 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
 }
 
 /** Inject the Data Health sidebar item and panel HTML into the dialog. */
-function injectHealthPanel() {
+export function injectHealthPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="health-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="health-panel" aria-controls="health-panel">数据体检</button>');
     const t = $(".content-panel").parent();
@@ -583,7 +546,7 @@ function injectHealthPanel() {
 }
 
 /** Inject the Plugin Management sidebar item and panel HTML into the dialog. */
-function injectPluginMgmtPanel() {
+export function injectPluginMgmtPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="plugin-mgmt-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="plugin-mgmt-panel" aria-controls="plugin-mgmt-panel">插件管理</button>');
     const t = $(".content-panel").parent();
@@ -607,7 +570,7 @@ function injectPluginMgmtPanel() {
 }
 
 /** Inject the Snapshot sidebar item and panel HTML into the dialog. */
-function injectSnapshotPanel() {
+export function injectSnapshotPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="snapshot-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="snapshot-panel" aria-controls="snapshot-panel">恢复点</button>');
     const t = $(".content-panel").parent();
@@ -617,7 +580,7 @@ function injectSnapshotPanel() {
 }
 
 /** Inject the Network/External Requests sidebar item and panel HTML into the dialog. */
-function injectNetworkPanel() {
+export function injectNetworkPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="network-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="network-panel" aria-controls="network-panel">外部请求</button>');
     const t = $(".content-panel").parent();
@@ -634,7 +597,7 @@ function injectNetworkPanel() {
     t.append(n);
 }
 
-function injectResourceSourcesPanel() {
+export function injectResourceSourcesPanel() {
     if ($("#resource-sources-panel").length) return;
     $(".content-panel").last().after(`<div id="resource-sources-panel" class="content-panel">
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>磁力来源</h3><p>聚合多个来源搜索磁力结果，优先级数字越小越靠前。</p></header><div id="builtin-magnet-source-list" class="jhs-resource-card-list"></div><div class="jhs-toolbar"><h4>自定义来源</h4><button type="button" id="add-custom-magnet-source" class="jhs-btn jhs-btn--primary">+ 添加来源</button></div><div id="custom-magnet-source-list" class="jhs-resource-card-list"></div></section>
@@ -642,29 +605,20 @@ function injectResourceSourcesPanel() {
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>截图来源</h3><p>自动选择会按优先级依次尝试可用来源。</p></header><div class="jhs-setting-group"><label class="jhs-setting-row"><span>自动选择</span><input type="radio" name="screenshotMode" value="auto"></label><label class="jhs-setting-row"><span>手动选择</span><input type="radio" name="screenshotMode" value="manual"></label></div><div id="screenshot-source-list" class="jhs-resource-card-list"></div></section>
       <details class="jhs-setting-section jhs-resource-advanced"><summary>高级 · 导入 / 导出配置</summary><p class="jhs-setting-help">高级功能：错误修改可能导致自定义来源不可用，保存前会校验配置。</p><div class="jhs-toolbar"><button type="button" id="export-resource-config" class="jhs-btn">导出资源配置</button><button type="button" id="edit-resource-config" class="jhs-btn">编辑原始 JSON</button><button type="button" id="import-resource-config" class="jhs-btn jhs-btn--primary">校验并导入</button></div><textarea id="advanced-resource-json" class="jhs-textarea" rows="10" aria-label="高级资源配置 JSON"></textarea></details>
     </div>
-    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>统一离线服务</h3><p>115 状态：<span id="one-one-five-state" class="jhs-badge">未知</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>服务不可用时会在提交前显示原因。</small></header><label class="jhs-setting-row"><span><strong>123 云盘离线</strong><small>支持 Magnet，需要先在 123 云盘页面同步授权。</small></span><input type="checkbox" id="enable123Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>支持 Magnet 与 ED2K。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span>默认服务</span><select id="offlineProviderMode" class="jhs-select-source"><option value="ask">每次询问</option><option value="123">优先 123</option><option value="115">优先 115</option></select></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>未登录时提供登录入口</strong><small>提交失败时显示 115 登录地址。</small></span><input type="checkbox" id="enable115LoginRedirect" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数</span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）</span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label></section></div>
+    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>统一离线服务</h3><p>115 状态：<span id="one-one-five-state" class="jhs-badge">未知</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>服务不可用时会在提交前显示原因。</small></header><div id="cloud-settings-catalog" class="jhs-setting-group" aria-label="云盘服务设置"></div></section></div>
     <div id="data-tools-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>番号列表导入</h3><p>支持换行、空格、逗号分隔番号。必须先解析预览，再确认导入。</p></header><label class="jhs-setting-group"><span>番号</span><textarea id="car-number-import" class="jhs-textarea" rows="8" placeholder="ABC-001&#10;ABC-002&#10;FC2-1234567"></textarea></label><label class="jhs-setting-row"><span>导入为</span><select id="car-number-import-status" class="jhs-select-source"><option value="">请选择</option><option value="favorite">收藏</option><option value="hasDown">已下载</option><option value="hasWatch">已观看</option><option value="filter">屏蔽</option></select></label><div class="jhs-toolbar"><button type="button" id="preview-car-number-import" class="jhs-btn">解析预览</button><button type="button" id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled>确认导入</button></div><div id="car-number-import-preview" class="jhs-card" aria-live="polite"></div></section></div>`);
     const sidebar = $(".jhs-mobile-sidebar,.setting-sidebar").first();
     sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="resource-sources-panel" aria-controls="resource-sources-panel">资源来源</button><button type="button" class="jhs-btn side-menu-item" data-panel="cloud-services-panel" aria-controls="cloud-services-panel">云盘服务</button><button type="button" class="jhs-btn side-menu-item" data-panel="data-tools-panel" aria-controls="data-tools-panel">数据工具</button>');
 }
 
 /** Build the shared quick-settings content for desktop and mobile. */
-function buildQuickSettingHtml() {
-    const rows = [
-        [ "鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。" ],
-        [ "瀑布流", "autoPage", "连续加载列表；启用后普通列表只支持默认排序。" ],
-        [ "标题翻译", "translateTitle", "翻译列表和详情页标题。" ],
-        [ "悬浮大图", "hoverBigImg", "鼠标悬停封面时显示大图。" ],
-        [ "外部站点", "enableLoadOtherSite", "在详情页提供第三方站点入口。" ],
-        [ "长缩略图", "enableLoadScreenShot", "在详情页图片区加载长缩略图。" ],
-        [ "高画质预览", "enableLoadPreviewVideo", "解析更高画质的预览视频。" ]
-    ];
+/** @param {any} [registry] @param {{ disabledContributions?: Set<string> }} [options] */
+export function buildQuickSettingHtml(registry = undefined, options = {}) {
+    const list = registry ? buildQuickSettingsHtml(registry, options) : null;
     return `
         <div class="simple-setting__panel jhs-ui">
             <div class="simple-setting__scroll jhs-scrollbar">
-                <div class="simple-setting__list">
-                    ${rows.map((e => `<label class="jhs-setting-row" for="${e[1]}"><span class="jhs-setting-row__copy"><span class="jhs-setting-row__label">${e[0]}</span><span class="jhs-setting-row__description">${e[2]}</span></span><span class="jhs-setting-row__control"><input type="checkbox" id="${e[1]}" class="mini-switch"></span></label>`)).join("")}
-                </div>
+                ${list ? list.prop("outerHTML") : '<div class="simple-setting__list"></div>'}
             </div>
             <footer class="simple-setting__footer">
                 <button type="button" id="moreBtn" class="jhs-btn jhs-btn--ghost">完整设置 <span aria-hidden="true">›</span></button>

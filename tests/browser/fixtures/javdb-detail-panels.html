@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Detail panels fixture</title>
+<!-- Sanitized structure and relevant host geometry measured in the logged-in MD0325 iframe, 2026-09-09. -->
+<style>
+body { margin:0; } .video-detail { margin:16px; } .columns { margin:-12px -12px 12px; } .column { padding:12px; }
+.message { background:#f5f5f5; margin-bottom:24px; } .message-body { padding:20px 24px; } .magnet-links .item { background:#f5f5f5; } .magnet-links .item.odd { background:white; }
+h3 { font-weight:400; } .name { font-weight:700; } .magnet-sort { margin-bottom:2px; }
+</style></head><body><main class="container"><div class="video-detail">
+<div class="video-meta-panel"><div class="movie-panel-info"><div class="panel-block first-block"><span class="value">ABC-123</span></div></div></div>
+<div class="columns"><div class="column"><div id="magnets" data-controller="magnet-sort"><article class="message video-panel"><div class="message-body"><div id="magnets-content" class="magnet-links">
+<div class="magnet-sort"><select data-action="change->magnet-sort#sort"><option value="0">默认排序</option><option value="1">日期排序</option></select></div>
+<div class="item odd"><div class="magnet-name"><a href="magnet:?xt=urn:btih:fixture"><span class="name">ABC-123 长资源名称与字幕说明</span></a><div>1.30GB, 183个文件</div></div><div class="date">2024-09-01</div><div class="buttons"><button class="copy-to-clipboard" data-clipboard-text="magnet:?xt=urn:btih:fixture">复制</button><a href="https://example.invalid/download">下载</a></div></div>
+<div class="item"><div class="magnet-name"><a href="magnet:?xt=urn:btih:fixture2"><span class="name">ABC-123 资源二</span></a><div>700MB</div></div><div class="date">2026-09-01</div><div class="buttons"><button class="copy-to-clipboard" data-clipboard-text="magnet:?xt=urn:btih:fixture2">复制</button><a href="https://example.invalid/download2">下载</a></div></div>
+</div></div></article></div></div></div></div></main></body></html>

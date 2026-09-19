@@ -1,8 +1,10 @@
+// @ts-check
+
 /** JHS 原生 UI 组件基座：现代桌面工具风格，不依赖宿主站点或第三方框架。 */
-function buildUiPrimitivesCss() {
+export function buildUiPrimitivesCss() {
     return `
 <style id="jhs-ui-primitives">
-    :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) {
+    :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) {
         color: var(--jhs-text);
         font-family: var(--jhs-font);
         font-size: var(--jhs-font-size-md);
@@ -93,6 +95,27 @@ function buildUiPrimitivesCss() {
         background: transparent;
         color: var(--jhs-text-muted);
     }
+    .jhs-btn--dark {
+        border-color: var(--jhs-border-strong);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text);
+    }
+    .jhs-btn--dark:hover {
+        background: var(--jhs-surface-hover);
+    }
+    /* 图片查看器的离屏临时容器（showImageViewer 字符串入口） */
+    .temporary-container {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+    }
+    /* 识图结果等面板内通用块容器 */
+    .jhs-layout-c8be1ccb { display: block; width: 100%; min-width: 0; }
     .jhs-btn--ghost:hover {
         border-color: transparent;
         background: var(--jhs-surface-2);
@@ -115,6 +138,7 @@ function buildUiPrimitivesCss() {
     .jhs-video-toolbar > .jhs-toolbar {
         margin-left: auto;
     }
+    body:has(.fancybox-content #video-bottom-toolbar) #jhs-fab { visibility:hidden; }
     .jhs-video-quality-list {
         display: flex;
         align-items: center;
@@ -192,8 +216,8 @@ function buildUiPrimitivesCss() {
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input:not([type]), .jhs-ui input[type="text"], .jhs-ui input[type="number"], .jhs-ui input[type="url"], .jhs-ui input[type="password"],
         .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input:not([type]), .layui-layer-content input[type="text"], .layui-layer-content input[type="number"],
-        .layui-layer-content input[type="url"], .layui-layer-content input[type="password"], .layui-layer-content select, .layui-layer-content textarea) {
+        .jhs-dialog .layui-layer-content input:not([type]), .jhs-dialog .layui-layer-content input[type="text"], .jhs-dialog .layui-layer-content input[type="number"],
+        .jhs-dialog .layui-layer-content input[type="url"], .jhs-dialog .layui-layer-content input[type="password"], .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea) {
         box-sizing: border-box;
         min-height: var(--jhs-control-height);
         padding: var(--jhs-space-2) var(--jhs-space-3);
@@ -210,12 +234,12 @@ function buildUiPrimitivesCss() {
     }
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input, .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input, .layui-layer-content select, .layui-layer-content textarea):hover:not(:disabled) {
+        .jhs-dialog .layui-layer-content input, .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea):hover:not(:disabled) {
         border-color: var(--jhs-accent);
     }
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input, .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input, .layui-layer-content select, .layui-layer-content textarea):focus-visible {
+        .jhs-dialog .layui-layer-content input, .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea):focus-visible {
         border-color: var(--jhs-accent);
         outline: 2px solid var(--jhs-accent-tint);
         outline-offset: 1px;
@@ -224,11 +248,11 @@ function buildUiPrimitivesCss() {
     :where(.jhs-field, .jhs-select, .jhs-textarea,
         .jhs-ui input[type="text"], .jhs-ui input[type="number"], .jhs-ui input[type="url"],
         .jhs-ui select, .jhs-ui textarea,
-        .layui-layer-content input[type="text"], .layui-layer-content input[type="number"],
-        .layui-layer-content input[type="url"], .layui-layer-content select, .layui-layer-content textarea):hover:not(:focus) {
+        .jhs-dialog .layui-layer-content input[type="text"], .jhs-dialog .layui-layer-content input[type="number"],
+        .jhs-dialog .layui-layer-content input[type="url"], .jhs-dialog .layui-layer-content select, .jhs-dialog .layui-layer-content textarea):hover:not(:focus) {
         border-color: var(--jhs-border-strong);
     }
-    :where(.jhs-textarea, .jhs-ui textarea, .layui-layer-content textarea) {
+    :where(.jhs-textarea, .jhs-ui textarea, .jhs-dialog .layui-layer-content textarea) {
         min-height: 76px;
         resize: vertical;
     }
@@ -265,7 +289,7 @@ function buildUiPrimitivesCss() {
         transform: translateX(18px);
     }
 
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"]) {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"]) {
         appearance: none;
         width: 100%;
         height: 22px;
@@ -275,12 +299,12 @@ function buildUiPrimitivesCss() {
         background: transparent;
         cursor: pointer;
     }
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"])::-webkit-slider-runnable-track {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"])::-webkit-slider-runnable-track {
         height: 4px;
         border-radius: var(--jhs-radius-pill);
         background: var(--jhs-border);
     }
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"])::-webkit-slider-thumb {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"])::-webkit-slider-thumb {
         appearance: none;
         width: 18px;
         height: 18px;
@@ -290,7 +314,7 @@ function buildUiPrimitivesCss() {
         background: var(--jhs-accent);
         box-shadow: 0 0 0 1px var(--jhs-accent), var(--jhs-shadow-xs);
     }
-    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"]):disabled {
+    :where(.jhs-range, .jhs-ui input[type="range"], .jhs-dialog .layui-layer-content input[type="range"]):disabled {
         cursor: not-allowed;
         opacity: .55;
     }
@@ -531,6 +555,10 @@ function buildUiPrimitivesCss() {
     .jhs-state__content { display:grid; gap:var(--jhs-space-1); justify-items:center; }
     .jhs-state__title { margin:0; color:inherit; font-size:var(--jhs-font-size-md); font-weight:700; }
     .jhs-state__description { margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+    .jhs-panel-state { padding:var(--jhs-space-4) 0; color:var(--jhs-text-muted); text-align:center; }
+    .jhs-task-status { padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+    .jhs-task-status__name { color:var(--jhs-text); font-weight:700; }
+    .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
     .jhs-is-hidden { display: none !important; }
     .jhs-dialog-title { padding: 0 var(--jhs-space-2); }
     .jhs-pagination__summary { margin-left: var(--jhs-space-3); color: var(--jhs-text-muted); font-size: var(--jhs-font-size-sm); }
@@ -551,12 +579,34 @@ function buildUiPrimitivesCss() {
     }
 
     .layui-layer {
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
         border: 1px solid var(--jhs-border);
         border-radius: var(--jhs-radius-lg) !important;
         background: var(--jhs-surface);
         color: var(--jhs-text);
         box-shadow: var(--jhs-shadow-lg) !important;
+    }
+    /* 内容区占满标题/按钮栏以下的剩余空间，配合表格 height:100% 让尾行与分页条始终可达；
+       auto 高度的 layer（消息/确认框）中 flex 退化为自然高度，不受影响 */
+    .jhs-dialog .layui-layer-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        box-sizing: border-box;
+    }
+    /* 表格类弹窗（黑名单/历史/备份）的通用全高布局，配合 Tabulator height:100% 让尾行与分页条始终可达 */
+    .jhs-table-dialog {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        padding: var(--jhs-space-3) var(--jhs-space-4);
+    }
+    .jhs-table-dialog .jhs-table-dialog__content,
+    .jhs-table-dialog #table-container {
+        flex: 1;
+        min-height: 0;
     }
     .layui-layer-title {
         min-height: 48px;
@@ -750,7 +800,7 @@ function buildUiPrimitivesCss() {
         color: var(--jhs-status-down-text) !important;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 767px) {
         :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn, .jhs-icon-btn, .card-btn) {
             min-height: var(--jhs-touch-target);
         }
@@ -829,7 +879,6 @@ function buildUiPrimitivesCss() {
 
         .jhs-layout-294497f1 { top:-15px }
 
-        .jhs-layout-2afc43dc { min-width:120px; }
 
         .jhs-layout-2e003268 { margin-bottom:5px }
 
@@ -844,13 +893,11 @@ function buildUiPrimitivesCss() {
 
         .jhs-layout-3b6a3a65 { cursor:pointer }
 
-        .jhs-layout-3f0d74e1 { min-width:120px; }
 
         .jhs-layout-3fed2a7e { margin-left:5px; }
 
         .jhs-layout-3fefafab { overflow-y:auto;height:calc(100% - 40px); }
 
-        .jhs-layout-44293084 { width:120px;text-align:center;padding:8px 0; }
 
 
 
@@ -863,7 +910,6 @@ function buildUiPrimitivesCss() {
         .jhs-layout-598afa5a { margin-bottom:25px; }
 
 
-        .jhs-layout-5c319329 { min-width:120px; }
 
 
         .jhs-layout-5f3e3549 { width:140px;text-align:center;padding:8px 0; }
@@ -983,20 +1029,56 @@ function buildUiPrimitivesCss() {
         .jhs-layout-f5f47b30 { margin-left:100px;width:400px; }
 
     @media (prefers-reduced-motion: reduce) {
-        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *,
-        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *::before,
-        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *::after {
+        :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) *,
+        :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) *::before,
+        :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) *::after {
             scroll-behavior: auto !important;
             transition-duration: 0.01ms !important;
             animation-duration: 0.01ms !important;
             animation-iteration-count: 1 !important;
         }
     }
+    .jhs-state-actions { container:jhs-state-actions / inline-size; width:100%; min-width:0; flex:1 1 344px; }
+    .jhs-state-actions__buttons { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); }
+    .jhs-state-actions .jhs-state-action { min-width:80px; width:auto; padding:0 var(--jhs-space-3); }
+    .jhs-state-action[aria-pressed="true"] { border-color:currentColor; box-shadow:inset 0 0 0 1px currentColor; }
+    .jhs-state-actions[data-jhs-state-count="2"] { width:auto; flex:0 1 auto; container-type:normal; }
+    .jhs-fc2-toolbar > .jhs-state-actions { grid-column:1 / -1; flex-basis:100%; }
+    @container jhs-state-actions (max-width:479px) {
+        .jhs-state-actions[data-jhs-state-count="4"] .jhs-state-actions__buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    .jhs-detail-btn-row { gap:var(--jhs-space-4); }
+    :is(.jhs-detail-owned-slot,.jhs-review-panel,.jhs-related-panel) { background:var(--jhs-surface); color:var(--jhs-text); }
+    .jhs-detail-btn-row > :not(.jhs-state-actions) { gap:var(--jhs-space-2); }
+    .jhs-btn[aria-busy="true"] { cursor:progress; }
+    .jhs-table .tabulator-cell .jhs-btn { min-height:var(--jhs-control-height-sm); font-size:var(--jhs-font-size-xs); padding:0 var(--jhs-space-2); }
+    .jhs-dialog.layui-layer { display:flex; flex-direction:column; box-sizing:border-box; overflow:hidden; border-radius:var(--jhs-radius-md); }
+    .jhs-dialog > .layui-layer-title { flex:0 0 auto; padding-right:52px; }
+    .jhs-dialog > .layui-layer-content { min-height:0; min-width:0; flex:1 1 auto; overflow:auto; }
+    .jhs-dialog[data-jhs-dialog-body="table"] > .layui-layer-content { display:flex; flex-direction:column; overflow:hidden; }
+    .jhs-dialog[data-jhs-dialog-body="media"] > .layui-layer-content { display:flex; flex-direction:column; overflow:hidden; }
+    .jhs-dialog > .layui-layer-content > iframe { min-height:0; width:100%; max-width:100%; }
+    .jhs-dialog > .layui-layer-btn { flex:0 0 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--jhs-space-2); padding:var(--jhs-space-4); }
+    .jhs-dialog > .layui-layer-btn > a { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:var(--jhs-control-height); margin:0; padding:0 var(--jhs-space-3); border-radius:var(--jhs-radius-sm); font-size:var(--jhs-font-size-sm); }
+    .jhs-dialog .layui-layer-setwin { top:0; right:0; }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close { display:block; width:44px; height:44px; margin:0; background-position:center; }
+    :is(.jhs-ui,.jhs-dialog) label:has(> :is(input[type="checkbox"],.jhs-switch,.mini-switch)) { display:inline-flex; align-items:center; min-height:var(--jhs-control-height); gap:var(--jhs-space-2); }
+    @media (max-width:767px), (pointer:coarse) {
+        :is(.jhs-btn,.jhs-filter-btn,.jhs-select-trigger,.jhs-field,.jhs-input,.jhs-select,.jhs-icon-btn,.card-btn), .jhs-table .tabulator-cell .jhs-btn,
+        .jhs-dialog > .layui-layer-btn > a { min-height:var(--jhs-touch-target); }
+        :is(.jhs-ui,.jhs-dialog) label:has(> :is(input[type="checkbox"],.jhs-switch,.mini-switch)) { min-height:var(--jhs-touch-target); }
+        .jhs-dialog .layui-layer-close { width:44px!important; height:44px!important; }
+        .jhs-dialog .layui-layer-close::before,.jhs-dialog .layui-layer-close::after { top:21px; left:13px; }
+    }
 </style>`;
 }
 
-/** 在现有容器内渲染安全的 loading、empty 或 error 状态。 */
-function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
+/**
+ * 在现有容器内渲染安全的 loading、empty 或 error 状态。
+ * @param {any} container
+ * @param {{ type?: string, title?: string, description?: string, actionLabel?: string, onAction?: (() => unknown) | null }} [options]
+ */
+export function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
     const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
     title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
     if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
@@ -1004,9 +1086,11 @@ function renderStateView(container, { type = "empty", title = "", description = 
 }
 
 /** 为动态注入的 JHS 控件补齐可访问名称与图标按钮语义。 */
-function initializeUiAccessibility() {
+/** @param {import("./lifecycle-scope.js").LifecycleScope} lifecycleScope */
+export function initializeUiAccessibility(lifecycleScope) {
+    if (!lifecycleScope || "function" != typeof lifecycleScope.observe) throw new TypeError("UI accessibility requires an app LifecycleScope");
     const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
-    const enhance = (e) => {
+    const enhance = (/** @type {any} */ e) => {
         const t = e.nodeType === Node.ELEMENT_NODE && e.matches?.(selector) ? [ e ] : [];
         const n = e.querySelectorAll ? [ ...e.querySelectorAll(selector) ] : [];
         [ ...t, ...n ].forEach((e => {
@@ -1023,23 +1107,35 @@ function initializeUiAccessibility() {
         const all = [ ...pending ], roots = all.filter((e => !all.some((t => t !== e && t.contains?.(e)))));
         pending.clear(), roots.forEach(enhance);
     };
-    new MutationObserver((records => {
+    return lifecycleScope.observe(document.documentElement, (records => {
         records.forEach((record => record.addedNodes.forEach((node => {
             node.nodeType === Node.ELEMENT_NODE && pending.add(node);
         }))));
         pending.size && !scheduled && (scheduled = !0, queueMicrotask(flush));
-    })).observe(document.documentElement, {
+    }), {
         childList: true,
         subtree: true
     });
 }
 
 /** 以隐藏原生 select 为值源的统一 JHS 选择器。 */
-class JhsSelect {
+export class JhsSelect {
+    /** @type {WeakMap<object, JhsSelect>} */
     static instances = new WeakMap;
+    /** @type {boolean} */
+    static _globalClickBound = !1;
+    static _ensureGlobalClickHandler() {
+        if (JhsSelect._globalClickBound) return;
+        JhsSelect._globalClickBound = !0, $(document).on("click.jhsSelect", ((/** @type {any} */ event) => {
+            $(event.target).closest(".jhs-select-control").length || JhsSelect.closeAll();
+        }));
+    }
+    /** @param {any} select */
     constructor(select) {
         this.source = $(select);
-        if (!this.source.length || JhsSelect.instances.has(this.source[0])) return JhsSelect.instances.get(this.source[0]);
+        if (!this.source.length) return;
+        const existing = JhsSelect.instances.get(this.source[0]);
+        if (existing) return existing;
         const initiallyHidden = this.source.hasClass("jhs-is-hidden") || "none" === this.source[0].style.display;
         this.control = $('<div class="jhs-select-control"></div>');
         this.trigger = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-select-trigger" aria-haspopup="menu" aria-expanded="false"><span class="jhs-select-value"></span></button>');
@@ -1048,71 +1144,76 @@ class JhsSelect {
         this.source.addClass("jhs-select-source-native").attr({ "aria-hidden": "true", tabindex: "-1" }), initiallyHidden && this.control.addClass("jhs-is-hidden"),
         JhsSelect.instances.set(this.source[0], this), this.render(), this.bind(), this.refresh();
     }
+    /** @param {any} [root] */
     static enhance(root = document) {
         const scope = $(root), selects = scope.is("select.jhs-select-source") ? scope : scope.find("select.jhs-select-source");
-        selects.each(((_, select) => new JhsSelect(select)));
+        selects.each(((/** @type {number} */ _, /** @type {HTMLSelectElement} */ select) => new JhsSelect(select)));
         return selects;
     }
+    /** @param {any} select */
     static get(select) {
         const element = $(select)[0];
         return element ? JhsSelect.instances.get(element) || new JhsSelect(element) : null;
     }
+    /** @param {any} select @param {any} value @param {boolean} [emit] */
     static setValue(select, value, emit = !1) {
         const instance = JhsSelect.get(select);
         if (!instance) return;
         instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
     }
+    /** @param {any} select */
     static refresh(select) {
         JhsSelect.get(select)?.refresh();
     }
+    /** @param {any} [root] */
     static refreshAll(root = document) {
-        JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((_, select) => JhsSelect.refresh(select)));
+        JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((/** @type {number} */ _, /** @type {HTMLSelectElement} */ select) => JhsSelect.refresh(select)));
     }
+    /** @param {any} select @param {boolean} visible */
     static setVisible(select, visible) {
         const instance = JhsSelect.get(select);
         instance?.control.toggleClass("jhs-is-hidden", !visible);
     }
+    /** @param {JhsSelect | null} [except] */
     static closeAll(except = null) {
-        $(".jhs-select-control.is-open").each(((_, control) => {
+        $(".jhs-select-control.is-open").each(((/** @type {number} */ _, /** @type {HTMLElement} */ control) => {
             const source = $(control).children("select.jhs-select-source")[0], instance = source && JhsSelect.instances.get(source);
             instance && instance !== except && instance.close();
         }));
     }
     render() {
         this.menu.empty();
-        const appendOption = (option, target) => {
+        const appendOption = (/** @type {HTMLOptionElement} */ option, /** @type {any} */ target) => {
             const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-select-option" role="menuitemradio" tabindex="-1"></button>');
             button.attr({ "data-value": option.value, "aria-checked": option.selected ? "true" : "false" }).prop("disabled", option.disabled).text(option.text), target.append(button);
         };
-        this.source.children().each(((_, child) => {
+        this.source.children().each(((/** @type {number} */ _, /** @type {HTMLOptionElement | HTMLOptGroupElement} */ child) => {
             if ("OPTGROUP" === child.tagName) {
                 const group = $('<div class="jhs-select-group" role="group"></div>').attr("aria-label", child.label), label = $('<div class="jhs-select-group__label"></div>').text(child.label);
-                group.append(label), $(child).children("option").each(((_, option) => appendOption(option, group))), this.menu.append(group);
-            } else "OPTION" === child.tagName && appendOption(child, this.menu);
+                group.append(label), $(child).children("option").each(((/** @type {number} */ _, /** @type {HTMLOptionElement} */ option) => appendOption(option, group))), this.menu.append(group);
+            } else "OPTION" === child.tagName && appendOption(/** @type {HTMLOptionElement} */ (child), this.menu);
         }));
     }
     bind() {
-        this.trigger.on("click", (event => {
+        this.trigger.on("click", ((/** @type {any} */ event) => {
             event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
-        })).on("keydown", (event => {
+        })).on("keydown", ((/** @type {any} */ event) => {
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
-            event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
+            event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "Home" === event.key ? "first" : "selected");
         }));
-        this.menu.on("click", ".jhs-select-option", (event => {
+        this.menu.on("click", ".jhs-select-option", ((/** @type {any} */ event) => {
             event.preventDefault(), this.choose($(event.currentTarget));
-        })).on("keydown", ".jhs-select-option", (event => {
+        })).on("keydown", ".jhs-select-option", ((/** @type {any} */ event) => {
             const items = this.options(), index = items.index(event.currentTarget);
-            if ("Escape" === event.key) return event.preventDefault(), this.close(!0);
-            if ("Tab" === event.key) return void this.close();
+            if ("Escape" === event.key) return event.preventDefault(), event.stopPropagation(), this.close(!0);
+            if ("Tab" === event.key) return void this.close(!0);
             if ([ "Enter", " " ].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         }));
-        this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", (event => {
-            $(event.target).closest(this.control).length || this.close();
-        }));
+        this.source.on("change.jhsSelect", (() => this.refresh())), JhsSelect._ensureGlobalClickHandler();
     }
     options() {
         return this.menu.find(".jhs-select-option:not(:disabled)");
@@ -1120,11 +1221,12 @@ class JhsSelect {
     open(focus = "selected") {
         JhsSelect.closeAll(this), this.control.addClass("is-open"), this.menu.addClass("is-open"), this.trigger.attr("aria-expanded", "true");
         const items = this.options(), selected = items.filter('[aria-checked="true"]');
-        ("last" === focus ? items.last() : selected.length ? selected.first() : items.first()).trigger("focus");
+        ("last" === focus ? items.last() : "first" === focus ? items.first() : selected.length ? selected.first() : items.first()).trigger("focus");
     }
     close(focus = !1) {
         this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");
     }
+    /** @param {any} item */
     choose(item) {
         if (item.prop("disabled")) return;
         this.source.val(item.attr("data-value")), this.emitChange(), this.close(!0);
@@ -1138,6 +1240,6 @@ class JhsSelect {
     refresh() {
         const selected = this.source.find("option:selected").first(), value = this.source.val();
         this.trigger.find(".jhs-select-value").text(selected.text()), this.trigger.prop("disabled", this.source.prop("disabled")),
-        this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((_, item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
+        this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((/** @type {number} */ _, /** @type {HTMLElement} */ item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
     }
 }
