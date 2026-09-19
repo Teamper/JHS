@@ -18,10 +18,10 @@
     },
     "startupBaselineReason": "Five-sample median from the deterministic desktop-wide Windows Edge fixture harness",
     "ciStartupMedianMilliseconds": {
-      "JavDB": 380,
-      "JavBus": 390
+      "JavDB": 315,
+      "JavBus": 315
     },
-    "ciStartupBaselineReason": "Thirty-sample medians from GitHub Actions ubuntu-24.04 Chromium at refactor/6.5@5805f4d; kept separate because runner and browser costs are not comparable with Windows Edge",
+    "ciStartupBaselineReason": "Thirty independent-context sample medians from GitHub Actions ubuntu-24.04 Chromium at refactor/6.5@9cadaef: JavDB 314.8ms and JavBus 313.7ms; kept separate because runner and browser costs are not comparable with Windows Edge",
     "startupRegressionRatio": 0.1
   }
 }
