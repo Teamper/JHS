@@ -7,9 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
-## [6.5.0](../../compare/v6.4.1...v6.5.0) - 待发布
-
-> 当前仍是候选版本。正式发布时填写日期并创建 `v6.5.0` 标签。
+## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-09-19
 
 ### 新增
 

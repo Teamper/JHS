@@ -21,7 +21,7 @@ for (const [label, url] of [
 ]) {
   test(`${label} fixture startup remains within the reviewed median`, async ({ browser, context }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-wide", "one deterministic desktop project owns startup timing");
-    const cold = process.env.JHS_STARTUP_MODE === "cold";
+    const cold = process.env.JHS_STARTUP_MODE !== "warm";
     if (!cold) await fulfillHostFixtures(context);
     const samples = [], phaseSamples = [];
     for (let index = 0; index < SAMPLE_COUNT; index += 1) {
@@ -44,10 +44,14 @@ for (const [label, url] of [
       if (cold) await sampleContext.close();
     }
     const actualMedian = median(samples);
-    const baseline = budget.browserFixture.startupMedianMilliseconds[label];
+    const baselineGroup = process.env.CI
+      ? budget.browserFixture.ciStartupMedianMilliseconds
+      : budget.browserFixture.startupMedianMilliseconds;
+    const baseline = baselineGroup[label];
     const maximum = baseline * (1 + budget.browserFixture.startupRegressionRatio);
     const actualP95 = percentile(samples, 0.95);
-    const report = `${label} fixture startup P50 ${actualMedian.toFixed(1)}ms P95 ${actualP95.toFixed(1)}ms; baseline ${baseline}ms; samples ${samples.map((value) => value.toFixed(1)).join(", ")}`;
+    const environment = process.env.CI ? "GitHub Ubuntu Chromium" : "Windows Edge";
+    const report = `${label} fixture startup P50 ${actualMedian.toFixed(1)}ms P95 ${actualP95.toFixed(1)}ms; ${environment} baseline ${baseline}ms; samples ${samples.map((value) => value.toFixed(1)).join(", ")}`;
     const harnessPhases = Object.keys(phaseSamples[0]?.harness || {}).map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample.harness?.[phase] || 0)).toFixed(1)}ms`).join(", ");
     const bootstrapPhases = Object.keys(phaseSamples[0] || {}).filter((phase) => phase !== "harness").map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample[phase] || 0)).toFixed(1)}ms`).join(", ");
     testInfo.annotations.push({ type: "startup-median", description: report });

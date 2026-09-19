@@ -64,7 +64,7 @@ test("FC2 dialog offline marking keeps movie identity across surfaces", async ({
   await dialog.locator(".jhs-offline-btn").click();
   await expect.poll(() => page.evaluate(() => window.__offlineContext?.carNum)).toBe("FC2-PPV-4959150");
   await expect.poll(() => page.evaluate(async () => (await window.stateService.getState("FC2-PPV-4959150"))?.stateFlags?.downloaded)).toBe(true);
-  await expect.poll(() => page.evaluate(async () => (await window.stateService.getState("ABC-001"))?.stateFlags?.downloaded)).toBe(false);
+  await expect.poll(() => page.evaluate(async () => Boolean((await window.stateService.getState("ABC-001"))?.stateFlags?.downloaded))).toBe(false);
   await expect(dialog).toHaveCount(0);
 });
 

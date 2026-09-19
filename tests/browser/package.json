@@ -7,7 +7,9 @@
   },
   "scripts": {
     "pretest": "node scripts/check-local-browser.mjs",
-    "test": "playwright test",
+    "test": "npm run test:startup && npm run test:functional",
+    "test:startup": "playwright test specs/startup-performance.spec.js --project=desktop-wide",
+    "test:functional": "playwright test --grep-invert \"fixture startup remains within the reviewed median\"",
     "test:visual": "node scripts/visual-gate.mjs"
   },
   "devDependencies": {
