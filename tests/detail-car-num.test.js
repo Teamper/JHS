@@ -1,4 +1,5 @@
 import { prepareDialogOptions } from "../src/core/dialog-shell.js";
+import { JHS_Z_INDEX } from "../src/core/theme.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -69,6 +70,7 @@ function loadUtils(url = "https://javdb.example/search?q=ABF-142") {
         layer,
         GM_openInTab: openTab,
         prepareDialogOptions,
+        JHS_Z_INDEX,
         normalizeCarNum: loadCarNumHelpers().normalize,
         i: (target, key, value) => (target[key] = value)
     });

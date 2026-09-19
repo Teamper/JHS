@@ -122,7 +122,8 @@ assertIncludes(ciWorkflow, "needs: [node20, check, browser-smoke]", "release che
 assertIncludes(ciWorkflow, "contents: write", "release write permission");
 assertIncludes(ciWorkflow, "--base-ref", "version-change release detection");
 assertIncludes(ciWorkflow, "github.ref == 'refs/heads/main'", "release restricted to main pushes");
-assertIncludes(packageJson.scripts["check:release"] ?? "", "check:release-smoke", "manual Tampermonkey release smoke gate");
+assertIncludes(packageJson.scripts["check:release"] ?? "", "check:browser", "browser release gate");
+assertIncludes(packageJson.scripts["check:release"] ?? "", "check:visual", "visual release gate");
 assertIncludes(ciWorkflow, "queue: max", "release concurrency queue");
 assertIncludes(ciWorkflow, "cancel-in-progress: false", "release concurrency preservation");
 assertIncludes(ciWorkflow, "git tag -a", "annotated release tag");

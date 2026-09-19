@@ -4,18 +4,12 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
 function loadTop250({ hitShow = null, movies = [], listPageButton = null, credential = null, dialog = null, html = '<section class="section"><div class="container"><h2 class="section-title">Top250</h2><div class="box"></div></div></section>', url = "https://javdb.com/advanced_search?handleTop=1&handleType=all&type_value=" } = {}) {
     const dom = new JSDOM(html, { url });
     const $ = jqueryFactory(dom.window), q = vi.fn(), loading = vi.fn(() => ({ close: loadingClose })), loadingClose = vi.fn();
-    // 对齐真实 JavDbHostAdapter：自有榜单页（/advanced_search）没有原生 .movie-list，
-    // locateListRoot/getListContainer 返回空，hookPage 必须能通过 getListLayoutContainer 兜底。
-    const host = {
-        locateListRoot: () => dom.window.document.querySelector(".movie-list"),
-        getListContainer: () => dom.window.document.querySelector(".movie-list")?.parentElement ?? null,
-        getListLayoutContainer: () => dom.window.document.querySelector("section .container"),
-        createOwnedListRoot(classes = []) { const root = dom.window.document.createElement("div"); root.classList.add("movie-list", ...classes); return root; },
-    };
+    const host = new JavDbHostAdapter(dom.window.document, dom.window.location);
     const hitShowMock = hitShow ? { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) } : null;
     const listPageButtonMock = listPageButton ?? { mountOwnedRankingControls: vi.fn(async () => {}) };
     const context = vm.createContext({
@@ -35,6 +29,21 @@ function loadTop250({ hitShow = null, movies = [], listPageButton = null, creden
 }
 
 describe("Top250Plugin handleTop loading lifecycle", () => {
+    it("replaces native search results and pagination without duplicating the owned list on retry", async () => {
+        const { plugin, q, $, dom } = loadTop250({ hitShow: true });
+        $(".container").append('<div class="movie-list"><div class="item" id="native-result"></div></div><nav class="pagination"><a class="pagination-next" href="?page=2">Next</a></nav><aside id="host-extra">Keep</aside>');
+        q.mockResolvedValue({ success: 1, data: { movies: [{ number: "TOP-001" }] } });
+        await plugin.handleTop();
+        await plugin.handleTop();
+        expect(dom.window.document.querySelectorAll(".movie-list")).toHaveLength(1);
+        expect(dom.window.document.querySelector(".movie-list").classList.contains("jhs-top250-list")).toBe(true);
+        expect(dom.window.document.querySelector("#native-result")).toBeNull();
+        expect(dom.window.document.querySelectorAll("nav.pagination")).toHaveLength(1);
+        expect(dom.window.document.querySelector("nav.pagination .pagination-next").tagName).toBe("BUTTON");
+        expect(dom.window.document.querySelectorAll(".jhs-top250-filters")).toHaveLength(1);
+        expect(dom.window.document.querySelector("#host-extra")?.textContent).toBe("Keep");
+    });
+
     it("intercepts the native premium ranking link even when the favorite tab label is absent", async () => {
         const { plugin, $, dom } = loadTop250({ html: '<nav><a id="top-link" href="/rankings/top?t=y2025"><span>Top250</span></a></nav>', url: "https://javdb.com/" });
         plugin.checkLogin = vi.fn();
@@ -87,7 +96,7 @@ describe("Top250Plugin handleTop loading lifecycle", () => {
         // 筛选条必须紧跟标题并渲染在列表、分页之前（标题 → 筛选 → 列表 → 分页）
         const children = [...dom.window.document.querySelector(".container").children].map(node => node.className);
         expect(children.indexOf("jhs-top250-filters")).toBe(children.indexOf("section-title") + 1);
-        expect(children.indexOf("jhs-top250-filters")).toBeLessThan(children.indexOf("movie-list jhs-top250-list jhs-layout-d2c171b1"));
+        expect(children.indexOf("jhs-top250-filters")).toBeLessThan(children.findIndex(className => className.includes("jhs-top250-list")));
         expect(children.indexOf("jhs-top250-filters")).toBeLessThan(children.indexOf("pagination"));
     });
 

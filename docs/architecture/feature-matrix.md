@@ -18,13 +18,13 @@
 
 ## Route 与验证矩阵
 
-| Surface | HostAdapter route | Automated proof | RC manual proof |
+| Surface | HostAdapter route | Release proof | Known boundary |
 | --- | --- | --- | --- |
-| JavDB List | `list` | Vitest + real-origin Edge/Chromium fixture | Tampermonkey |
-| JavDB Detail | `detail` | Vitest + real-origin Edge/Chromium fixture | Tampermonkey |
-| JavBus List | `list` | Vitest + real-origin Edge/Chromium fixture | Tampermonkey |
-| JavBus Detail | `detail` | Vitest + real-origin Edge/Chromium fixture | Tampermonkey |
-| FC2 Owned Detail | `detail` | Vitest owned-surface contract | Tampermonkey |
-| Compact / landscape | profile-driven | Edge/Chromium fixture viewport matrix | Tampermonkey real viewport |
+| JavDB List | `list` | Vitest + real-origin Edge/Chromium fixture | 宿主页面可能变化 |
+| JavDB Detail | `detail` | Vitest + real-origin Edge/Chromium fixture | 登录态内容可能变化 |
+| JavBus List | `list` | Vitest + real-origin Edge/Chromium fixture | 宿主页面可能变化 |
+| JavBus Detail | `detail` | Vitest + real-origin Edge/Chromium fixture | 登录态内容可能变化 |
+| FC2 Owned Detail | `detail` | Vitest owned-surface contract + browser fixture | 第三方资源可能变化 |
+| Compact / landscape | profile-driven | Edge/Chromium fixture viewport matrix | 设备字体和浏览器 UI 可能不同 |
 
-性能与请求预算由 `performance-budget.json` 固化；架构债务位置由 `architecture-baseline.json` 固化；人工结果只允许记录在版本对应的 `docs/release/manual-smoke-v<version>.json`。
+性能与请求预算由 `performance-budget.json` 固化；架构债务位置由 `architecture-baseline.json` 固化。发布检查以同一提交上的自动门禁结果和跟踪构建产物为准。

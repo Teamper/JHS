@@ -7,134 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
-- 修复 FC2 图片预览脱离详情弹窗、手机端强制放大和翻页入口不明显的问题；图片在所属详情内适配可用尺寸，使用半透明背景保留详情上下文，剧照与长缩略图共用图集，支持滚轮、方向键及 44px 左右按钮切图；修正减少动画模式下缩放、适应窗口和页码不生效的问题，并在窗口尺寸变化、关闭和重开时恢复正确布局与焦点。
+## [6.5.0](../../compare/v6.4.1...v6.5.0) - 待发布
 
-- 修复反复打开 FC2 详情后，预览图与剧照查看器被详情遮挡、两个查看器同时存在的问题；图片层高于当前弹窗，入口互斥替换，关闭所属详情时释放查看器、键盘监听与滚动锁。使用固定 Layer 1.0.9 与 Viewer.js 1.11.1 验证真实渲染和两次 Escape 关闭顺序。
+> 当前仍是候选版本。正式发布时填写日期并创建 `v6.5.0` 标签。
 
-- 修复设置下拉和详情预览按 Escape 时连带关闭父弹窗的问题；下拉先关闭并恢复焦点，预览关闭后才允许下一次 Escape 关闭详情，隐藏或较低弹层的预览不阻挡顶层关闭。
+### 新增
 
-- 修复 123 令牌读取期间关闭服务或所属界面后仍提交的问题；实际提交前再次验证开关和生命周期，取消不记为云端失败。授权同步增加代次和写入前来源/目标核验，防止迟到同步覆盖新授权或恢复已清空凭证。
+- JavDB 和 JavBus 的搜索、列表页支持跨全部分页批量收藏、批量标记已下载。即使从第 2 页开始，也会回到第 1 页完整扫描当前搜索结果。
 
-- 修复评论关键词及同类确认框对外部文本的 HTML 注入；保留可信提示布局，使用固定版本真实 Layer 验证取消、确认及原文保存。
-- 修复云盘开关保存为 no 后仍被视为启用的回归；兼容历史布尔表示，提交前重新检查设置。115 匹配即时启停并丢弃迟到结果，匹配徽标重试不再触发卡片跳转。
-- 123 标记密文在缺失/错误密钥或内容损坏时判定为授权不可用，保留原数据，禁止将密文当作令牌；重新同步有效授权可恢复，兼容历史明文。
-- 相关清单展开状态同步跨标签及多个详情面板；关闭时取消所属请求和订阅，支持首次加载取消后重开及分页失败重试。
+### 主要调整
 
-- 根据登录后的 JavDB 详情 iframe 实测，统一磁力、评论与相关清单的面板底色、边框、圆角和左右留白；清理宿主磁力容器叠加间距，统一评论/清单标题与行密度，长清单标题可换行。保留宿主磁力节点与事件，补充六种宽度、浅深主题和折叠恢复回归。
-- 离线手动提交找不到候选服务时重新检查缓存的不可用状态，避免同步授权后仍被旧结果阻挡；失败提示区分未启用、资源格式不支持和授权不可用，不再只显示笼统提示。
-- 修复新作品数量漏算已清空状态但仍保留历史记录的影片；顶部计数与工作区“待处理”统一按状态标记判断，保留忽略/暂缓及去重规则。
-- 根据真实 Chrome 检查修复新作品窗口分页被埋在整页卡片末尾、窄屏任务状态挤压作品列表的问题；分页独立于卡片滚动，任务状态在窄屏横向滚动，保留原有控件与信息。新增多记录下的布局、翻页及视图切换回归。
-- 修复原生磁力行的 `.item` 被误认成影片卡片、导致 123/115 离线报“提取番号信息失败”的回归；只在实际列表容器中解析卡片，保留详情及 FC2 上下文优先级。补充两服务在直接详情和 iframe 详情的实际按钮 mock 回归。
-- 115 离线响应必须明确返回成功状态，缺失状态或结构异常时不再误报任务已创建。
-- 统一普通详情、FC2 和预览的状态控件与响应式布局，保留分类色及原状态行为；快进和磁力过滤使用独立的次级外观。
-- 统一增强区域磁力操作、表格行控件及触摸热区；弹窗集中处理安全边距、视口变化和键盘关闭，限定主题覆盖到自有区域。
-- 根据真实 Chrome 检查修复历史弹窗旧布局类导致的分页裁切，筛选区和表格正确分配高度；补充宽屏、窄屏及再次放宽的分页几何回归。
-- 补充跨宽度/主题几何、设置分类和外壳生命周期回归；真实 Chrome 已验证详情、磁力、设置及原生快进的有限路径，DMM 和人工 smoke 仍未完整验证，未声明 RC 就绪。
+- 重做 FC2 和 123AV-FC2 详情页。影片信息、剧照、资源、评论和相关清单分区显示，手机端也能正常使用；关闭详情后，未完成的请求不会再修改已经关闭的窗口。
+- 调整列表筛选。“全部”现在会显示收藏、已下载和已看作品，只排除真正被屏蔽的内容；原来四个容易造成重复过滤的显示开关已经移除。
+- 重做热播和 Top250 页面。筛选、排序、状态操作、批量操作和 FC2 详情都能正常使用；榜单排序只影响当前页面，不再改动普通列表的排序设置。
+- 调整新作品中心。手动移除只表示“不再显示这条新作”，不会再产生一条空的影片状态记录；同时修复待处理数量、分页位置和窄屏布局。
+- 设置页、快捷开关和移动端入口现在读取和保存同一份设置。支持实时生效的开关会同步到已打开的界面，保存失败时会恢复原来的状态。
+- 统一详情、磁力、历史记录、新作品和设置弹窗的按钮与布局，补齐手机端触摸尺寸、键盘操作、焦点返回和深色模式样式。
+- WebDAV 备份可以跨安装恢复，但不会把当前安装中的 WebDAV、123 或 115 凭证带到另一台设备；导入时保留目标设备原有凭证。
 
-- 根据 Chrome 实测修复已打开的详情弹窗不随视口收缩的问题，调整 iframe 可用高度并在关闭时释放监听；DMM 必须达到可播放状态才能接管暂停的原生预览，加载错误或 10 秒超时保留原生画面与暂停状态，画质切换同样验证加载结果。
-- 修复 JavDB 详情弹窗未打开预览就出现第二组屏蔽、收藏和快进的问题；预览工具栏按实际播放器会话挂载，关闭后清理异步回调与订阅。补齐无原生视频的 DMM 播放入口、原生快进、DMM 实时切换与进度恢复，并同步跨标签收藏和屏蔽状态。
-- 修复离线可用性检查期间连点重复提交，以及云端已成功却因本地历史保存失败提示“离线失败”的问题；取消、关闭和初始化失败释放操作标记，关闭自动关页不再误报。
-- 凭证迁移不再将无法认证的旧密文当明文保存；无法安全清理的旧页面凭证和密钥保留，GM 删除记录防止清空后重新导入旧值。读写失败保留原数据并提示，不阻断其他功能。
-- JavDB 磁力区按容器宽度排列为“信息、日期、操作”三列，窄屏有意堆叠；统一操作按钮尺寸并保留宿主排序、复制与下载事件。已补充宿主 CSS 条件回归，登录后真实 DOM、浏览器原生缩放和 Tampermonkey 人工验收仍待补证。
+### 问题修复
 
-- 修复深审确认的凭证、撤销与请求回归：GM 凭证改为单条版本化记录并在迁移清理前验证源值及解密结果，支持 `AES:` 开头的明文密码；WebDAV 只保存修改字段；撤销失败恢复原始日志及可重试状态。HTTP 恢复网络设置、释放半开探测、隔离清缓存前后的在途请求，并回收已销毁 scope 的消费者。
-- 恢复评论关键词的统一存储与旧错键合并、评论开关实时生效和请求取消、JavBus 翻译原文恢复、关闭 DMM 增强后的原生预览操作，以及批任务初始化失败后的释放和数字搜索全页扫描。补充故障注入与桌面/移动端浏览器回归。
-- 启动引导在首个资源请求前退出整包 IIFE 调用栈，减少浏览器同步源位置采集的开销；保持资源顺序、ready 条件、启动预算和 30 样本验收标准。凭证内部格式兼容升级读取，手动降级旧脚本可能需要重新填写凭证；portable 备份格式不变。
-- 深审收口：HTTP 逻辑请求熔断与 WebDAV 405/409 状态边界、GM 安全凭证迁移、v3 一次性数据迁移、按 namespace 隔离缓存、115 无会话缓存、Contribution 路由/Surface 契约及 schema 2 状态 journal。
-- 6.5 RC 阻断项收口：凭证迁移兼容 6.4.1 无前缀 AES-GCM、不可解密旧密文保留原数据并提示重新保存；Top250 失效 JWT 只清理一次并在登录成功后原地重试。
-- FC2 列表保留宿主主链接与次级链接原样，主链接按普通点击、键盘和新标签路径进入自有详情；共享评论/相关清单样式由核心 StyleRegistry 统一注册，补齐列表到 FC2 对话框的浅色/深色及移动端视觉回归。
-- 状态 journal、设置副作用和历史/兼容增强的空闲调度继续保持故障隔离；esbuild 开启语法与标识符压缩，保留既有性能预算与人工 smoke 门禁。
-- 6.5 RC 跨 Surface 收口：FC2 工作区通过显式 Movie Context 将磁力、离线提交与状态写入绑定到正确番号，状态写入后增加回读确认；新作品悬停预览改为按所属弹窗动态计算层级并在关闭时销毁；云盘控件迁入统一 Settings Catalog/Binding，数值在保存前规范化并持久化最终值。
-- 补充真实浏览器回归：HitShow→FC2→离线、FC2 收藏/观看、新作品预览及销毁、云盘依赖状态/保存重开/非法数值等 8 条 Cross-Surface 路径，并增加桌面云盘设置视觉基线。
+- 修复 FC2 来源和番号识别错误，避免磁力、离线任务或状态操作落到另一部影片；修复 JavBus、搜索结果和榜单中的 FC2 链接偶尔打不开。
+- 修复图片查看器、悬停预览、详情窗口和遮罩的层级问题。重复打开详情时只保留一个查看器，方向键、窗口缩放和分层 Escape 关闭可以正常工作。
+- 修复 123/115 在服务已关闭、授权已变化或窗口已关闭后仍继续提交的问题；阻止连点重复提交，并区分“云端提交失败”和“本地记录保存失败”。
+- 修复设置、列表筛选、自动翻页、翻译、DMM 预览、评论和相关清单中的旧请求回写问题。关闭功能或切换页面后，迟到结果不会把旧内容重新显示出来。
+- 修复热播空白、Top250 封面加载失败、榜单原生搜索结果与真实榜单同时出现，以及周期、类型和年份切换异常的问题。
+- 修复鉴定记录跨页全选只处理当前页、详情窗口被鉴定记录遮挡，以及历史记录和新作品窗口分页被内容挤出可视区域的问题。
+- 修复外部标题、评论关键词和确认提示可被当作 HTML 渲染的问题；修复旧凭证迁移、清空凭证和损坏密文可能覆盖有效数据的问题。
 
-## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-09-01
+### 开发与发布
 
-### Fixed
-
-- RC 收口修复备份与状态数据边界：WebDAV 新备份改用跨安装 portable key，凭证仍使用安装级密钥并兼容旧密文；NewVideo 手动移除改写为 `dismissed` 决策，不再污染 `car_list`，旧空墓碑仅按已提交且未撤销的移除活动证据幂等迁移；评论缺省开启，列表截图按钮与详情/FC2 自动加载恢复为独立开关；公共 HTTP 缓存增加 IndexedDB L2，清理第三方缓存时同步清除 L1/L2，冲突事务先归档 SHA-256 诊断证据再释放 journal。
-- 修复全量审计确认的榜单、弹窗、并发与设置回归：Top250 在自有榜单页恢复挂载，即使宿主页面缺少“猜你喜歡/猜你喜欢”标签也会拦截原生会员榜单路由；Top250 筛选栏恢复到列表上方，封面渲染优先使用接口明确返回的 `thumb_url`，并在 `cover_url` 缺失时安全回退，同时把 API 的 `/rhe951l4q/` 代理媒体路径还原到公开 CDN，避免图片请求静默失败。新片工作区使用独立弹窗内悬停预览，表格弹窗保持尾行与分页可达；熔断改为按逻辑请求统计且忽略普通 4xx，多标签状态写入、迁移、导入和缓存更新增加互斥与失效处理。历史跨页全选、瀑布流失败收敛、延迟创建的命令栏按钮、设置子面板与关键词重试、外部请求超时和凭证编码等路径同步修复，并为关键熔断与榜单场景补充回归测试。
-- 修复移动端 FAB 遮挡页面末尾交互控件、离线成功确认“已下载”后因状态刷新使触发按钮脱离 DOM、旧布尔设置不兼容、无 `window.opener`、父子 frame 脚本上下文隔离或资源子弹层所有权错误而无法关闭详情页，以及翻译结果仅使用页面内存缓存导致跨刷新重复请求、首次翻译误走高延迟 GM 传输的问题；翻译现在优先使用原生 `fetch` 并在受限环境自动回退 GM 请求。统一 JHS Layer 弹窗的语义层级，确保详情页图片查看器显示在普通弹窗之上，并让备份、导入、快照等 loading 反馈始终覆盖设置弹窗。Browser smoke 现在按平台维护 Chromium 视觉基线，并以更接近真实 Layui 的 fixture 校验尺寸与层级。
-- 补齐原生翻译超时回退、聚合缓存迁移与设置页完整清理，避免受限网络长期等待和逐标题 IndexedDB 访问；离线确认后的状态写入与详情关闭分别反馈失败。外部图片及视频地址改由 DOM 属性设置，Loading 增加状态语义和减少动态效果支持，Visual gate 只运行实际维护基线的项目并在浏览器缺失时快速失败。
-- 修复设置刷新与写入竞态导致内存快照回退、WebDAV 本地来源授权需重载才生效、快速切换失败覆盖最新界面状态，以及布局设置失败后仅恢复控件而未恢复实际页面布局的问题。
-- 收口 6.5 冻结阶段的三个回归边界：portable 备份不再携带安装级 WebDAV 凭证，导入时保留目标安装凭证；公共缓存 prune 改为分批后台调度并阻止清除后的在途响应回填；列表状态、规则、筛选和增量卡片刷新统一进入 coalescing 调度，确保最新状态最终提交。
-- 修复可选插件关闭场景的浏览器设置保存门禁仍监听旧 `settings.patch` 接口而稳定超时的问题。
-- 修复 JavDB 热播页因宿主没有原生列表节点而空白的问题，补充空数据、失败重试和真实 HostAdapter 回归覆盖；列表与热播封面现在先显示轻量缩略图，进入视口且缩略图完成后才升级高清图，避免首屏同时抢占大量大图请求。详情截图改为后台加载，JavBus DMM 预览改为点击后请求，减少详情启动阶段的网络竞争。
-- 修复热播与 Top250 榜单页在 6.5 路由重构后被判定为非列表页（`window.isListPage=false`），状态筛选判定与状态变更刷新监听整体失效的问题：JHS 自渲染榜单页（`handlePlayback`/`handleTop`）现在按列表页路由处理，恢复快速筛选条（全部/待鉴定/收藏/下载/已看/屏蔽项，默认沿用 `defaultQuickFilterTab` 设置），页内标记“已下载/已看”后卡片即时重筛并渲染状态徽章，筛选不再出现“全部与待鉴定无区别、已下载影片无处可寻”的回退。自渲染榜单渲染完成后广播 `list-items-added`，FC2 卡片的延迟保护与对话框导航随之挂载，修复热播/Top250 上 FC2 影片点击无反应的问题。热播/Top250 不再把列表操作按钮行注入页面 h2，改为经统一挂载通道挂进各自的自有标题/筛选容器，排序方式（默认/评价人数/时间）、开始鉴定与批量操作在两个榜单页照常可用并在渲染后自愈周期/年份工具栏；评分加载不再跳过被默认筛选隐藏的卡片，避免“已标记”影片缺少评价人数并在按评价人数排序时沉底。移动端（compact）FAB 菜单补回鉴定记录入口，修复桌面按钮被命令栏收拢后移动端无法打开鉴定记录的问题。
-- 修复悬停预览图层级高于详情弹窗的问题：ImageHoverPreview 默认层级从 tooltip 档（9999999999，实际被浏览器钳制到 2147483647，高于所有 JHS 弹窗）调整为新令牌 `--jhs-z-hover-preview`（介于宿主顶栏与 modal 之间），打开 FC2 详情或影片详情弹窗的瞬间预览图不再叠在弹窗之上，弹窗打开期间悬停预览始终被弹窗覆盖；tooltip 档保留给需要覆盖弹窗的原生提示。热播页浏览器测试新增“悬停预览层级必须低于 FC2 详情对话框”的门禁断言。
-- 热播浏览器测试补充“日/周/月榜周期切换”回归门禁：harness 的 rankings mock 支持按 period 返回不同片单，断言周期参数贯穿页面 URL → rankings 请求 query → 卡片渲染与激活标签，防止后续路由重构再次拍平榜单周期。
-- 热播/Top250 自有榜单页的排序改为页内状态：初始固定“默认”（榜单原始顺序），不再跟随全局排序设置；页内选择“评价人数/时间”只对当前页面生效并即时重排（评分补全后按需二次排序），不写回全局 `sortMethod`，普通列表页与移动端 FAB 在自有榜单页上同步遵循页内覆盖。
-
-### Changed
-
-- Utils、Storage、GM HTTP 与 StateService 的 legacy 实例改由 Bootstrap Composition Root 在 Vendor/GM 运行时验证后统一创建；Feature 通过 manifest 显式声明 `SERVICE.state`，不再直接导入模块级状态单例。
-- Legacy GM HTTP 的真实实现进入 strict checkJs，明确请求参数、熔断状态、Cloudflare 诊断和 Userscript 回调边界；生产源码类型覆盖率提升至 91.0%，最低覆盖门禁同步上调至 90.9%。
-- StateService 的真实事务实现进入 strict checkJs，删除同名宽泛声明遮蔽，并显式约束状态字段、活动日志、新作决策、journal 恢复与撤销数据边界；生产源码类型覆盖率提升至 91.5%，最低覆盖门禁同步上调至 91.5%。
-- History 真实运行时进入 strict checkJs，明确仓储记录、跨页选择、Tabulator 回调与状态编辑边界；生产源码类型覆盖率提升至 92.1%，最低覆盖门禁同步上调至 92%。
-- List 快速筛选规则迁入独立 Feature owner，List 按钮、MobileBottomBar 与 Settings 表单不再依赖页面插件实现并进入 strict checkJs；生产源码类型覆盖率提升至 93.8%，最低覆盖门禁同步上调至 93.5%。
-- Blacklist 真实运行时进入 strict checkJs，明确任务状态订阅、筛选记录、Tabulator 回调和跨页批量状态写入边界；生产源码类型覆盖率提升至 94.4%，最低覆盖门禁同步上调至 94%。
-- TaskPlugin 与 ListPagePlugin 真实运行时进入 strict checkJs，明确调度状态/结果、配置刷新、网络分页、列表增量索引、筛选视图和媒体导航边界；生产源码类型覆盖率提升至 95.5%，RC 最低覆盖门禁上调至 95%。
-- RC checkJs 剩余文件改为精确 allowlist，仅允许登记 compatibility/vendor glue、原因与清理版本；新增、移动或已消除但未移除的豁免都会失败。
-- 固化 11 个 Feature 的 kind、站点、启动方式、Contribution owner 与 List/Detail/compact 验证矩阵。
-- UI consistency audit 的版本契约改为校验稳定 SemVer 与 package/metadata 一致性，RC Freeze 后不再错误锁死 6.4.1。
-- 声明式 DI 对未列入 manifest `requires` 的 JHS token 访问改为立即抛出 `UNDECLARED_DEPENDENCY` 并写入 Diagnostics；Integration manifest 同时强制显式声明合法的 `createHostAdapter`。
-- Contribution manifest 支持显式历史插件 ID，修正 TOP250 构造器名与公开 `TOP250Plugin` ID 大小写不一致导致的 ownership 元数据偏差。
-- Detail 的 legacy Contribution 改为一插件一 ID；封面状态按钮、详情状态按钮、JavDB 预览以及 JavBus 原生详情/图片/预览现在保持各自独立的旧版禁用语义。
-- SubtitleCat Contribution 统一归属 `external-bridge`，并兼容开发期 `detail.subtitle`；FeatureRuntime 注册时拒绝跨 Feature 重复 Contribution owner。
-- Transitional PluginManager 的不可禁用属性改由 system Feature manifest 下发，删除 Settings、Stats 与移动工具栏的名称硬编码保护名单。
-- MobileBottomBar Contribution 显式依赖 ProfileService，并以 compact profile 取代 legacy User-Agent/宽度判断，触屏横屏设备可按 any-pointer 与短边规则正确激活。
-- Feature/Contribution/Integration manifest schema 现在拒绝空值、重复 ID/token 和非法 host；Integration cache policy 必须精确覆盖全部 capability，Adapter 必须声明 normalized contract，JavDB 补齐四项显式 no-cache 声明。
-- Browser Harness 增加 JavDB/JavBus 脱敏列表 fixture，以真实站点 origin 覆盖 List route、HostAdapter、列表运行时、移动工具入口与横向溢出。
-- 新增可单测的 Bootstrap Purity 架构门禁，禁止除 Composition Root 外的生产模块在导入阶段启动 DOM、网络、Storage、监听器、Observer 或定时器；原隐藏导航样式改为 Bootstrap 注入时才读取地址。
-- strict checkJs 继续覆盖自动翻页、设置样式/模板和 123AV-FC2 入口，并补齐分页空值、DOM 容器与 Integration 返回数据的显式契约。
-- 截图、宿主详情工作区、兼容增强与统一离线模块进入 strict checkJs；Provider availability、宿主资源边界、Observer 和 jQuery 兼容句柄均补充显式类型，覆盖率门禁同步上调至 84%。
-- FC2 详情、外部站点入口和详情操作栏进入 strict checkJs，明确宿主工作区、影片/磁力数据与遗留 Vendor 句柄边界，生产源码类型覆盖率提升至 86.4%。
-- 磁力聚合中心与列表封面操作进入 strict checkJs，补齐来源、磁力结果、卡片事件和媒体句柄契约，生产源码类型覆盖率提升至 87.5%，最低覆盖门禁同步上调至 87%。
-- DMM 预览、备份文件操作和设置诊断面板进入真实 strict checkJs，移除遮蔽生产实现的同名声明文件；生产源码类型覆盖率提升至 89.2%，最低覆盖门禁同步上调至 89%。
-- PluginManager 与 BasePlugin 的真实运行时实现进入 strict checkJs，移除宽泛的同名声明文件，并显式约束插件注册、启动时序、错误诊断、宿主信息读取与共享图标状态；生产源码类型覆盖率提升至 89.8%。
-- UI primitive 与 JhsSelect 的真实实现进入 strict checkJs，移除同名宽泛声明文件并明确动态容器、原生 Select、可访问性 Observer 和事件边界；生产源码类型覆盖率提升至 90.3%，最低覆盖门禁同步上调至 90%。
-- RC 发布门禁新增 Tampermonkey 人工 Smoke 记录校验；从 6.5.0 起必须记录实际 Edge/Chrome、Tampermonkey、全部强制 Smoke 检查和精确 UserScript SHA256，缺失或产物不匹配会阻止发布。
-
-### Fixed
-
-- 修复可选 List/Detail Contribution 被禁用时沿 legacy 硬依赖链级联移除核心运行时、Settings 表单 hydration 失败后仍可保存、插件禁用统计计入无效旧值，以及自定义 123AV 镜像在 History 中来源误标的问题；legacy 插件边现统一为显式可选依赖，并增加声明式 Runtime Service、禁用组合和加载重试门禁。
-- 修复禁用外部站点后设置弹窗初始化提前中断、内部按钮失效，以及 FC2 核心详情被可选插件同步异常阻断的问题；设置行为现先绑定并按区块降级，站点 URL 统一由 MovieIdentityService 提供，FC2 可选 Contribution 独立 fail-open。
-- 插件管理目录现在保留已禁用 Contribution 的描述信息，可在设置中重新启用；legacy 依赖新增必需/可选两种读取契约，缺失必需依赖会给出明确链路并写入 Diagnostics。
-- 修复 JavDB 高级搜索、想看和看过列表因 URL 白名单遗漏而未启动列表运行时的问题；HostAdapter 现在按宿主列表 DOM 能力识别路由。
-- 修复 FC2 等跨路由 legacy Contribution 借用 Detail Feature scope 后在列表页被判定为不可用的问题；每个 Contribution 现拥有独立生命周期，并将 FC2 原生卡片链接保护为 JHS owned detail page。
-- 修复 Settings 导航按钮委托范围不覆盖实际挂载节点、`settings.open` 依赖模拟 DOM 点击，以及禁用 CoverButton/Blacklist 后打开或保存失败的问题；入口、保存忙碌态与失败反馈现由 Settings owner 统一处理。
-- 修复新旧设置写入形成双状态源的问题；设置表单、快捷开关、主题、插件管理与资源设置统一写入 SettingsService，并同步刷新 legacy 缓存与当前 Runtime snapshot。
-- 恢复 123AV 自定义 HTTPS origin，搜索、详情、Cookie Partition 与 URL Policy 统一使用同一配置；搜索分页现使用已验证的 `page` 参数，旧镜像详情路径也可识别为 123AV 来源。
-- 修复 FC2 搜索 URL 被误解析为 `movieId=search` 以及 JavBus History 绕过统一 FC2 工作区的问题；只有明确 `/v/<id>` 路由直接取 ID，其余均按番号解析。
-- 修复 `mobileMode=on/off` 未进入 ProfileService、运行时切换不更新移动工具栏，以及移动详情状态误把 JavDB movieId 当番号的问题。
-- JavDB“想看”操作在已登录时先读取账户想看列表，已存在的作品不再重复提交。
-- 修复 JavBus masonry 在宿主未提供全局 border-box 时因 `width:100%` 叠加水平 padding 产生横向溢出的问题。
-- 修复 ESM 单入口迁移后核心主题、宿主布局与 UI primitive 样式未进入启动链的问题；样式模块现在保持导入无副作用，并由 Bootstrap 显式一次性注入。
-- 重新整理 FC2 与 123AV-FC2 详情页：影片信息、剧照、资源、评论和相关清单现在各有固定位置，关闭页面后旧请求不会再改动界面；同时补回来源链接、高清/字幕/日期标记与磁力筛选，123AV 详情也能加载对应的 JavDB 磁力。
-- 修复 FC2 详情来源识别、局部重试、标题右键关闭和移动端资源显示问题；更多磁力来源现在可以收起并复用已加载结果，空截图或空外部资源也不会留下多余区域。
-- FC2 详情重新提供 JavDB 账号的“想看”操作，并与 JHS 本地收藏分开；剧照放大后支持左右切换并默认居中显示。
-- 修复鉴定记录表头全选只处理当前分页的问题；现在会选择当前搜索和筛选条件下的全部记录，支持跨页保留、逐项排除，并让批量提示与实际处理数量一致。
-- 修复列表页“全部”仍被旧状态显示设置二次过滤的问题；收藏、已下载和已看作品会正常出现在“全部”中，硬屏蔽内容仍统一收在“屏蔽项”。
-- 修复 DMM/FANZA 外部链接检测分支因缓存键变量遮蔽站点配置而触发 TDZ 异常的问题，并增加构建产物回归测试。
-- 修复 JavBus 与列表封面请求 DMM 预览时未注入 MovieService 和 LifecycleScope、导致无缓存请求无法访问远端 Provider 的问题。
-- 修复批量操作从第 2/3 页启动时漏掉前面页面的问题；批量扫描现在总是先解析当前搜索条件的第一页（JavDB 删除 `page` 参数，JavBus 剥离 `/page/N` 与 `/star|genre|maker|actress|series|tag/<id>/N`），当前页即第一页时复用 DOM，随后从第一页扫描到最后一页。
-- 修复 Preview 关闭后异步回流：DMM 请求、卡片预览与 JavBus 预览在所有 await 边界后重新校验总开关/DMM 子开关与 generation，OFF 后在途请求不再重建播放器、工具栏或预览入口；JavDB 人工创建的预告片入口单独标记 `data-jhs-dmm-trigger`，DMM OFF 只移除该入口、不动宿主原生预览。
-- 修复列表与 FC2 标题翻译在 OFF 后旧请求返回仍写回译文的问题；列表翻译新增 translationGeneration 作废机制，标题渲染统一在写 DOM 前检查 isActive。
-- 修复外部站点面板在 OFF 后异步重新挂载的问题；OtherSite 新增 mountGeneration，并在 getSiteConfigs/mapLimit 等异步边界后重新校验挂载代次与 `enableLoadOtherSite` 设置，FC2 挂载同时合并 workspace 存活检查。
-- mobileMode 现在统一控制桌面命令栏、桌面设置入口与移动 FAB 三套 Surface：compact 只保留 FAB，regular/wide 只保留桌面工具栏与设置入口；桌面命令栏卸载时把收拢的控件放回宿主原位，再次开启可完整重建。
-- 批量交互收口：一键屏蔽只保留业务函数内的单次确认；批量写入阶段禁用取消按钮并提示“正在写入，无法取消”；批量按钮文案统一为“批量屏蔽 / 批量收藏 / 批量标记已下载”。
-- 修复旧版 `.search-image` 识图入口在 SearchByImagePlugin 禁用时仍被 clone/replace、导致宿主原生按钮失效的问题；插件 OFF 时完全不碰宿主 DOM。
-- 真正启用 PNG Visual Regression Release Gate：新增 `check:visual`（内部显式设置 `JHS_VISUAL_REGRESSION=1`），`check:release` 与 CI 均执行；提交 JavDB/JavBus/FC2/Settings 桌面与移动两组真实 baseline PNG，snapshot 路径不含平台后缀。
-- AutoPage 在 Feature 根 scope dispose 时补 `stop()` 清理，首次启动与重复启动统一走同一 waterfallPromise 管理。
-- 搜索/列表页（JavDB search、advanced_search、/tags；JavBus search、/genre、/director、/studio、/label 等）新增跨全部分页的「批量收藏 / 批量标记已下载」入口：批量逻辑改为 `batchSaveAllVideos(scope, flag)`，搜索条件批量不要求演员名、不把关键词写入 names，卡片自身有演员信息时逐条解析，并保留 FC2 来源字段。
-- JavBus 分页第一页解析下沉到 `JavBusHostAdapter.resolveFirstPageUrl`（JavDB 同步下沉到 `JavDbHostAdapter`），新增 search/director/studio/label 前缀与站点/语言前缀路径测试，`batch-scope` 只保留纯 URL 比较工具。
-- 修复 desktop↔compact 切换时桌面命令栏被先 remove 导致内部控件 `isConnected=false`、restore 被跳过而丢失按钮的问题；卸载现在先按逆序把控件放回原始 row/anchor（保留原 `.jhs-list-btn-row`），再移除命令栏外壳，切回桌面后按钮与事件 handler 完整保留。
-- FC2 第三方站点与剧照改为稳定 Feature Slot：OFF/无结果只清空或隐藏分组，错误渲染 error-state，不再 `.remove()`；只有整个 capability 插件缺失时才允许移除分组，OFF→ON 无需刷新即可重新挂载。
-- FC2 标题翻译收敛为唯一入口 `applyFc2Translation()`（native FC2、123AV 摘要、live ON 共用），增加 per-context in-flight 单飞与 generation/isActive 校验；`renderTranslatedTitle` 的 catch 分支同样检查 isActive 与节点连接，OFF 后请求成功或失败都不会再写回译文。
-- Preview 增加 capability 门禁（canUsePreview / canUseNativePreview / canUseDmmPreview / canUseCardPreview）：列表卡片 `.videoSvg` 与 JavBus JHS preview 在「Preview ON + DMM OFF」时不再创建/显示 DMM-only 死按钮，并同时监听 `enablePreviewVideo` 与 `enableLoadPreviewVideo`。
-- 批量任务改为模块级 Single Flight Coordinator：收藏/已下载/批量屏蔽共用同一任务锁，第二个任务不启动并提示「已有批量任务正在执行」，任务期间批量入口视觉禁用（aria-disabled + busy 样式）但仍可点击以给出明确提示；旧任务 finally 只清理自己的 run，不再误清新任务。
-- Settings 桌面导航的 `loopDetector` 增加 surface generation：compact 卸载后旧 timer/DOM 等待回调不再把桌面 nav 重新 append 回来。
-- OtherSite 挂载 generation 改为 per-context（WeakMap<root, number>），多个 FC2 context/dialog 并行时互不使对方失效；详情页与 `unmount()` 仍维护 document 级作废语义。
-- 列表按钮行改为 flex-wrap，窄屏（mobile）下新增的批量按钮不再造成横向溢出。
+- 6.5 重做了内部启动、模块依赖、网络请求和功能生命周期，目标是减少插件互相影响、重复监听和关闭后继续运行的问题。
+- 发布检查新增浏览器回归、视觉回归和启动性能门禁，自动检查失败时会阻止发布。
 
 ## [6.4.1](../../compare/v6.4.0...v6.4.1) - 2026-08-23
 

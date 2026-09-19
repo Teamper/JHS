@@ -276,6 +276,7 @@ window.loading = function() {
         this.pendingUrl = null;
         this.loadedUrls = new Map;
         this.eventsBound = !1;
+        this.overlayObserver = null;
         this.onMouseEnter = event => this.handleMouseEnter(event);
         this.onMouseLeave = event => this.handleMouseLeave(event);
         this.onMouseMove = event => this.handleMouseMove(event);
@@ -354,11 +355,33 @@ window.loading = function() {
             }
             owner = owner.parentElement;
         }
-        const viewerZ = Number(JHS_Z_INDEX.viewer) || Number.MAX_SAFE_INTEGER;
-        return Math.min(value, viewerZ - 1);
+        return value;
     }
     refreshOwnerZIndex() {
-        if (this.preview && (this.config.zIndexStrategy === "owner" || this.resolveOwnerElement())) this.preview.style.zIndex = String(this.resolvePreviewZIndex());
+        if (this.preview && (this.config.zIndexStrategy === "owner" || this.resolveOwnerElement())) {
+            const value = String(this.resolvePreviewZIndex());
+            if (this.preview.style.zIndex !== value) this.preview.style.zIndex = value;
+        }
+    }
+    isOwnerUncovered() {
+        const owner = this.resolveOwnerElement();
+        if (!owner) return this.config.zIndexStrategy !== "owner";
+        if (!owner.isConnected || !this.currentTarget?.isConnected || !owner.contains(this.currentTarget)) return false;
+        const ownerLayer = owner.closest(".layui-layer"), ownerZ = Number(ownerLayer && window.getComputedStyle(ownerLayer).zIndex) || 0;
+        return ![...document.querySelectorAll(".layui-layer, .viewer-container, .fancybox-container, .loading-container")].some(root => {
+            if (root === ownerLayer || root.contains(owner)) return false;
+            const style = window.getComputedStyle(root);
+            if (!root.getClientRects().length || style.display === "none" || style.visibility === "hidden") return false;
+            return !root.matches(".layui-layer") || Number(style.zIndex) >= ownerZ;
+        });
+    }
+    watchOwnerOverlays() {
+        if (!this.resolveOwnerElement() || this.overlayObserver) return;
+        // 仅在悬停会话内观察：弹窗/遮罩出现时及时隐藏，不能靠固定 viewer 层级封顶。
+        this.overlayObserver = this.scope.observe(document.body, () => {
+            if (!this.isOwnerUncovered()) this.hidePreview();
+            else this.refreshOwnerZIndex();
+        }, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
     }
     bindEvents() {
         if (this.eventsBound || this.destroyed) return;
@@ -398,6 +421,8 @@ window.loading = function() {
         clearTimeout(this.timer);
         this.timer = null;
         this.currentTarget = delegatedTarget;
+        if (!this.isOwnerUncovered()) return this.hidePreview();
+        this.watchOwnerOverlays();
         this.pointer = {
             x: event.clientX,
             y: event.clientY
@@ -449,6 +474,7 @@ window.loading = function() {
     }
     showCurrentPreview() {
         if (!this.preview || !this.pointer || !this.imgElement) return;
+        if (!this.isOwnerUncovered()) return this.hidePreview();
         const width = this.preview.offsetWidth, height = this.preview.offsetHeight;
         this.placement = this.choosePlacement(this.pointer.x, this.pointer.y, width, height), this.preview.classList.add("active"), this.schedulePosition();
     }
@@ -511,6 +537,8 @@ window.loading = function() {
     }
     hidePreview() {
         if (!this.preview) return;
+        clearTimeout(this.timer);
+        if (this.overlayObserver) this.scope.releaseObserver(this.overlayObserver), this.overlayObserver = null;
         ++this.loadGeneration, this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null),
         this.pendingImage = null, this.pendingUrl = null, this.preview.classList.remove("active", "loading"), this.currentTarget = null,
         this.pointer = null, this.placement = null, this.timer = null;
@@ -525,6 +553,7 @@ window.loading = function() {
         this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null);
         this.pendingImage = null;
         this.eventsBound && (this.scope.dispose(), this.eventsBound = !1);
+        this.overlayObserver = null;
         this.loadedUrls.clear();
         this.preview?.remove();
         this.preview = null;

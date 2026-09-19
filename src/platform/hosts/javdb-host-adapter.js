@@ -39,6 +39,14 @@ export class JavDbHostAdapter {
         root.classList.add("movie-list", "h", "cols-4", "vcols-8", ...classes);
         return root;
     }
+    /** 接管榜单容器，替换原生或旧榜单列表及其分页。 */
+    /** @param {Element} container @param {Element} root */
+    mountOwnedListRoot(container, root) {
+        for (const child of [...container.children]) {
+            if (child.matches(".movie-list, nav.pagination")) child.remove();
+        }
+        container.append(root);
+    }
     locateDetailRoot() { return this.document.querySelector(".video-detail") ?? this.document.querySelector(".movie-panel-info")?.closest(".container") ?? this.document.querySelector("main"); }
     locateDetailSlots() {
         const root = this.locateDetailRoot();

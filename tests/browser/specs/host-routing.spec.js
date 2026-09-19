@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import budget from "../../../performance-budget.json" with { type: "json" };
 import { assertNoHorizontalOverflow, fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -71,6 +72,38 @@ test("Top250 keeps filters above the list and restores API proxy cover URLs", as
   await expect(image).toHaveAttribute("data-full", "https://c0.jdbstatic.com/covers/top-fixture.jpg");
   await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
 });
+
+for (const [label, query, listClass, movieId] of [
+  ["HotShow", "handlePlayback=1&period=daily", "jhs-hitshow-list", "hot-owned"],
+  ["Top250", "handleTop=1&handleType=all&type_value=", "jhs-top250-list", "top-owned"],
+]) {
+  test(`${label} replaces native search results before rendering its owned ranking`, async ({ context, page }) => {
+    await fulfillHostFixtures(context);
+    const html = await readFile(new URL("../fixtures/javdb-ranking-native-results.html", import.meta.url), "utf8");
+    await context.route("https://javdb.com/advanced_search?**", route => route.fulfill({ status: 200, contentType: "text/html", body: html }));
+    await page.goto(`https://javdb.com/advanced_search?${query}`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("#native-search-result")).toHaveCount(1);
+    const movies = [{ id: movieId, number: "OWNED-001", origin_title: "Owned ranking fixture", release_date: "2026-09-18", cover_url: "https://c0.jdbstatic.com/covers/owned.jpg", has_cnsub: false, magnets_count: 1, new_magnets: false }];
+    await injectUserscriptRuntime(page, { rankingMovies: movies, topMovies: movies });
+    const card = page.locator(`.${listClass} #${movieId}`);
+    await expect(card).toBeVisible();
+    await expect(page.locator(".movie-list")).toHaveCount(1);
+    await expect(page.locator("#native-search-result, [data-native-pagination]")).toHaveCount(0);
+    await expect(page.locator("#native-footer")).toHaveCount(1);
+    await expect(page.locator("#jhs-quick-filter")).toHaveCount(1);
+    expect(await card.evaluate(node => node.getBoundingClientRect().top)).toBeLessThan(page.viewportSize().height);
+    await expect(page.locator("nav.pagination")).toHaveCount(label === "Top250" ? 1 : 0);
+    // Re-enter the same rendering path to cover error/login retries with an existing owned list.
+    await page.evaluate(async name => {
+      const plugin = window.unsafeWindow.pluginManager.getBean(name === "HotShow" ? "HitShowPlugin" : "TOP250Plugin");
+      await (name === "HotShow" ? plugin.handlePlayback() : plugin.handleTop());
+    }, label);
+    await expect(page.locator(".movie-list")).toHaveCount(1);
+    await expect(page.locator("#jhs-quick-filter")).toHaveCount(1);
+    await expect(card).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+  });
+}
 
 test("legacy disabled plugin migrates to one contribution only", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers storage migration");

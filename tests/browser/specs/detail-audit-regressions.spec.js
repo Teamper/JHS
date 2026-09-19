@@ -42,7 +42,7 @@ async function nativePlayer(frame) {
     plugin.getDmmPreview = async () => ({ sources: { "720": "https://example.invalid/test.mp4" }, error: null });
     let trigger = document.querySelector(".preview-video-container");
     if (!trigger) { trigger = document.createElement("button"); trigger.type = "button"; trigger.className = "preview-video-container"; trigger.textContent = "预览"; document.body.append(trigger); }
-    // Fixture host adapter models Fancybox mounting; media decoding remains a separate smoke gate.
+    // Fixture host adapter models Fancybox mounting; the test does not claim real media decoding.
     trigger.addEventListener("click", event => {
       event.preventDefault();
       const host = document.createElement("div"); host.className = "fancybox-content";

@@ -96,12 +96,12 @@ describe("ImageHoverPreview lifecycle", () => {
         expect(document.listeners.get("mouseover")?.size).toBe(0);
     });
 
-    it("derives the preview layer from its owning dialog and leaves room for the viewer", () => {
+    it.each([500, 999999994, 1000000050])("derives the preview layer from its owning dialog at z-index %i", (ownerZ) => {
         const { Preview, document, firstCover } = loadPreviewClass(), owner = new FakeElement("div");
-        owner.style.zIndex = "500";
+        owner.style.zIndex = String(ownerZ);
         document.body.appendChild(owner);
         const preview = new Preview({ selector: ".cover", owner, zIndexStrategy: "owner" });
-        expect(preview.preview.style.zIndex).toBe("501");
+        expect(preview.preview.style.zIndex).toBe(String(ownerZ + 1));
         preview.destroy();
         expect(document.body.children.includes(preview.preview)).toBe(false);
         void firstCover;

@@ -34,7 +34,7 @@ export class HitShowPlugin extends BasePlugin {
         this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-hitshow-list" ]));
         let e = $("h2.section-title");
         e.length || (e = $("<h2></h2>").addClass("section-title").prependTo(this.$contentBox)), e.contents().first().replaceWith("热播"), e.addClass("jhs-hitshow-title"), e.parent(".jhs-hitshow-heading").length || e.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(),
-        this.$contentBox.children(".box").remove(), this.$contentBox.children(".jhs-hitshow-list").remove(), this.$contentBox.append(this.$listRoot);
+        this.$contentBox.children(".box").remove(), host.mountOwnedListRoot(contentBox, this.$listRoot[0]);
     }
     async handlePlayback() {
         if (!isHitShowPage()) return;

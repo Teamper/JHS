@@ -60,6 +60,7 @@ export class Utils {
         let owningLayerIndex = null;
         layer.open(prepareDialogOptions({
             type: 2,
+            zIndex: JHS_Z_INDEX.layer,
             ui: { size: "workspace", body: "media" },
             title: t,
             content: destination.href,

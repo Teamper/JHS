@@ -15,6 +15,9 @@ export class Top250Plugin extends BasePlugin {
     getName() {
         return "TOP250Plugin";
     }
+    async initCss() {
+        return `<style>.jhs-top250-filters>.jhs-segmented{box-sizing:border-box;max-width:100%;overflow-x:auto}.jhs-top250-filters>.jhs-segmented>.jhs-segmented__item{flex-shrink:0;white-space:nowrap}</style>`;
+    }
     async handle() {
         const topTab = $('.main-tabs ul li:contains("猜你喜歡")').length ? $('.main-tabs ul li:contains("猜你喜歡")') : $('.main-tabs ul li:contains("猜你喜欢")');
         topTab.length && topTab.html('<a href="/rankings/top"><span>Top250</span></a>');
@@ -34,9 +37,9 @@ export class Top250Plugin extends BasePlugin {
         let e = $("h2.section-title");
         e.length || (e = $("<h2></h2>").addClass("section-title").prependTo(this.$contentBox)), e.contents().first().replaceWith("Top250"),
         $(".empty-message").remove(), this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(),
-        this.$contentBox.children(".jhs-top250-list").remove(), this.$contentBox.children(".jhs-top250-filters").remove(),
+        this.$contentBox.children(".jhs-top250-filters").remove(),
         this.$contentBox.children(".tool-box.jhs-layout-d2c171b1").remove(), this.$contentBox.children("nav.pagination").remove(),
-        this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'), this.$contentBox.append(this.$listRoot);
+        this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'), host.mountOwnedListRoot(contentBox, this.$listRoot[0]);
     }
     renderPagination() {
         const e = new URLSearchParams(window.location.search);

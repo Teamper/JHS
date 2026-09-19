@@ -5,6 +5,7 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
 function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", activeSortMethod = null, withListPage = true } = {}) {
     const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">榜单</h2><div class="box"></div></div></section>', { url: "https://javdb.com/advanced_search?handlePlayback=1&period=daily" });
@@ -20,12 +21,7 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
         }),
         cacheSet: vi.fn(async (key, value) => ttlStore.set(key, JSON.parse(JSON.stringify(value)))),
     }, settings = { snapshot: () => ({ sortMethod }) };
-    const host = {
-        locateListRoot: () => dom.window.document.querySelector(".movie-list"),
-        getListContainer: () => dom.window.document.querySelector(".movie-list")?.parentElement ?? null,
-        getListLayoutContainer: () => dom.window.document.querySelector("section .container"),
-        createOwnedListRoot(classes = []) { const root = dom.window.document.createElement("div"); root.classList.add("movie-list", ...classes); return root; },
-    };
+    const host = new JavDbHostAdapter(dom.window.document, dom.window.location);
     const loadingClose = vi.fn(), sortItems = vi.fn().mockResolvedValue(), mountOwnedRankingControls = vi.fn().mockResolvedValue(), listPage = {
         configureHoverPreview: vi.fn(), replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), createQuickFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), rebuildItemIndex: vi.fn(), bindMovieDetailNavigation: vi.fn(), getSelector: () => ({ itemSelector: ".movie-list .item" })
     }, coverButton = { addSvgBtn: vi.fn() };
@@ -51,6 +47,19 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
 const movie = id => ({ id, number: id.toUpperCase(), release_date: "2026-08-16", origin_title: id, cover_url: "https://c0.jdbstatic.com/covers/a.jpg", magnets_count: 0 });
 
 describe("HitShowPlugin lifecycle", () => {
+    it("replaces native search results and pagination when taking over the ranking page", async () => {
+        const { plugin, dom, $ } = loadHitShow({ movies: [movie("hot-only")] });
+        $(".container").append('<div class="movie-list"><div class="item" id="native-result"></div></div><nav class="pagination"><a class="pagination-next" href="?page=2">Next</a></nav><aside id="host-extra">Keep</aside>');
+        await plugin.handlePlayback();
+        await plugin.handlePlayback();
+        expect(dom.window.document.querySelectorAll(".movie-list")).toHaveLength(1);
+        expect(dom.window.document.querySelector(".movie-list").classList.contains("jhs-hitshow-list")).toBe(true);
+        expect(dom.window.document.querySelector("#native-result")).toBeNull();
+        expect(dom.window.document.querySelector("nav.pagination")).toBeNull();
+        expect(dom.window.document.querySelector("#host-extra")?.textContent).toBe("Keep");
+        expect(dom.window.document.querySelectorAll("#hot-only")).toHaveLength(1);
+    });
+
     it("creates its owned list when the host page has no native movie list", async () => {
         const { plugin, dom } = loadHitShow({ movies: [movie("a")] });
         expect(dom.window.document.querySelector(".movie-list")).toBeNull();
