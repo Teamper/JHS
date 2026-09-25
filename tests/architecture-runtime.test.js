@@ -73,7 +73,7 @@ describe("v6.5 architecture runtime contracts", () => {
         registerSitePlugins(javdb, createRuntime("javdb"), "javdb");
         expect(javdb.getPluginNames()).toEqual([
             "OneTwoThreeOfflinePlugin", "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin", "HistoryPlugin",
-            "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
+            "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin", "Fc2By123AvPlugin",
             "FilterTitleKeywordPlugin", "ActressInfoPlugin", "TranslatePlugin", "WantAndWatchedVideosPlugin", "BlacklistPlugin",
             "FavoriteActressesPlugin", "NewVideoPlugin", "TaskPlugin", "StatsPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin", "CompatibilityEnhancementsPlugin",
         ]);

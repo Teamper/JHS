@@ -1,121 +1,80 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { join } from "node:path";
-import vm from "node:vm";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
-import jqueryFactory from "jquery";
-import { describe, expect, it, vi } from "vitest";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
+import { Top250Plugin, hasChineseSubtitleMagnet } from "../src/plugins/external-search/top250.js";
 
-function loadTop250({ hitShow = null, movies = [], listPageButton = null, credential = null, dialog = null, html = '<section class="section"><div class="container"><h2 class="section-title">Top250</h2><div class="box"></div></div></section>', url = "https://javdb.com/advanced_search?handleTop=1&handleType=all&type_value=" } = {}) {
+const nativeHtml = `<section><div class="container">
+  <h2 class="section-title">Top250</h2>
+  <div class="tabs"><a id="category" href="/rankings/top?t=3">FC2</a>
+    <select id="year" data-url="/rankings/top?t=%25s"><option>2026</option></select></div>
+  <div class="movie-list">
+    <div class="item" id="with"><a class="box" href="/v/with"><span class="tags"><span class="tag is-warning">含中字磁链</span></span></a></div>
+    <div class="item" id="playable"><a class="box" href="/v/playable"><span class="tag-can-play cnsub">中字播放</span></a></div>
+    <div class="item" id="plain"><a class="box" href="/v/plain"><span class="tags"><span class="tag">其他</span></span></a></div>
+  </div><nav class="pagination"><a class="pagination-next" href="/rankings/top?page=2">下一页</a></nav>
+</div></section>`;
+
+function setup(url = "https://javdb.com/rankings/top?t=y2026&page=2", html = nativeHtml) {
     const dom = new JSDOM(html, { url });
-    const $ = jqueryFactory(dom.window), q = vi.fn(), loading = vi.fn(() => ({ close: loadingClose })), loadingClose = vi.fn();
+    vi.stubGlobal("window", dom.window);
+    vi.stubGlobal("document", dom.window.document);
     const host = new JavDbHostAdapter(dom.window.document, dom.window.location);
-    const hitShowMock = hitShow ? { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) } : null;
-    const listPageButtonMock = listPageButton ?? { mountOwnedRankingControls: vi.fn(async () => {}) };
-    const context = vm.createContext({
-        BasePlugin: class {
-            getBean(name) { return { HitShowPlugin: hitShowMock, ListPageButtonPlugin: listPageButtonMock }[name]; }
-            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: {}, settings: { snapshot: () => ({}) }, credential, dialog, account: { login: vi.fn() } }[name]; }
-        },
-        i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
-        URLSearchParams, q, loading,
-        show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), log: vi.fn(), warn: vi.fn() },
-        escapeHtml: value => $("<span></span>").text(String(value ?? "")).html(),
-        utils: { getResponsiveArea: vi.fn(() => ["360px", "auto"]) },
-    });
-    const source = readTestFile(join(process.cwd(), "src/plugins/external-search/top250.js"), "utf8");
-    vm.runInContext(`${source};globalThis.Top250Plugin=Top250Plugin`, context);
-    return { plugin: new context.Top250Plugin(), $, q, loading, loadingClose, show: context.show, hitShowMock, listPageButtonMock, dom };
+    const plugin = new Top250Plugin();
+    plugin.getRuntimeService = name => name === "host" ? host : undefined;
+    return { dom, plugin, host, document: dom.window.document };
 }
 
-describe("Top250Plugin handleTop loading lifecycle", () => {
-    it("replaces native search results and pagination without duplicating the owned list on retry", async () => {
-        const { plugin, q, $, dom } = loadTop250({ hitShow: true });
-        $(".container").append('<div class="movie-list"><div class="item" id="native-result"></div></div><nav class="pagination"><a class="pagination-next" href="?page=2">Next</a></nav><aside id="host-extra">Keep</aside>');
-        q.mockResolvedValue({ success: 1, data: { movies: [{ number: "TOP-001" }] } });
-        await plugin.handleTop();
-        await plugin.handleTop();
-        expect(dom.window.document.querySelectorAll(".movie-list")).toHaveLength(1);
-        expect(dom.window.document.querySelector(".movie-list").classList.contains("jhs-top250-list")).toBe(true);
-        expect(dom.window.document.querySelector("#native-result")).toBeNull();
-        expect(dom.window.document.querySelectorAll("nav.pagination")).toHaveLength(1);
-        expect(dom.window.document.querySelector("nav.pagination .pagination-next").tagName).toBe("BUTTON");
-        expect(dom.window.document.querySelectorAll(".jhs-top250-filters")).toHaveLength(1);
-        expect(dom.window.document.querySelector("#host-extra")?.textContent).toBe("Keep");
-    });
+afterEach(() => vi.unstubAllGlobals());
 
-    it("intercepts the native premium ranking link even when the favorite tab label is absent", async () => {
-        const { plugin, $, dom } = loadTop250({ html: '<nav><a id="top-link" href="/rankings/top?t=y2025"><span>Top250</span></a></nav>', url: "https://javdb.com/" });
-        plugin.checkLogin = vi.fn();
+describe("TOP250 native-list enhancement", () => {
+    it("preserves native ranks, card links, category and pagination", async () => {
+        const { plugin, document } = setup();
+        const cards = [...document.querySelectorAll(".movie-list .item")];
         await plugin.handle();
-        $(dom.window.document.querySelector("#top-link")).trigger("click");
-        expect(plugin.checkLogin).toHaveBeenCalledOnce();
-        expect(plugin.checkLogin.mock.calls[0][1].get("t")).toBe("y2025");
-        expect(dom.window.location.pathname).toBe("/");
+        await plugin.handle();
+        expect([...document.querySelectorAll(".movie-list .item")]).toEqual(cards);
+        expect(document.querySelector("#with a").getAttribute("href")).toBe("/v/with");
+        expect(document.querySelector("#category").getAttribute("href")).toBe("/rankings/top?t=3");
+        expect(document.querySelector(".pagination-next").getAttribute("href")).toBe("/rankings/top?page=2");
+        expect(document.querySelectorAll(".jhs-top250-subtitle")).toHaveLength(1);
     });
 
-    it("short-circuits without creating a loading overlay when HitShowPlugin is disabled", async () => {
-        const { plugin, q, loading, show } = loadTop250({ hitShow: null });
-        await expect(plugin.handleTop()).resolves.toBeUndefined();
-        expect(loading).not.toHaveBeenCalled();
-        expect(show.info).toHaveBeenCalledWith("热播列表功能已禁用");
-        expect(q).not.toHaveBeenCalled();
+    it("filters only loaded cards by the magnet tag and restores all cards", async () => {
+        const { plugin, document, dom } = setup();
+        await plugin.handle();
+        document.querySelector('button[data-jhs-subtitle="with"]').click();
+        expect(document.querySelector("#with").classList.contains("jhs-top250-subtitle-hidden")).toBe(false);
+        expect(document.querySelector("#playable").classList.contains("jhs-top250-subtitle-hidden")).toBe(true);
+        expect(document.querySelector("#plain").classList.contains("jhs-top250-subtitle-hidden")).toBe(true);
+        expect(dom.window.location.search).toContain("jhs_subtitle=with");
+        expect(document.querySelector(".pagination-next").getAttribute("href")).toContain("jhs_subtitle=with");
+        expect(document.querySelector("#category").getAttribute("href")).toContain("jhs_subtitle=with");
+        expect(document.querySelector("#year").getAttribute("data-url")).toContain("jhs_subtitle=with");
+        document.querySelector('button[data-jhs-subtitle="without"]').click();
+        expect(document.querySelector("#with").classList.contains("jhs-top250-subtitle-hidden")).toBe(true);
+        expect(document.querySelector("#playable").classList.contains("jhs-top250-subtitle-hidden")).toBe(false);
+        document.querySelector('button[data-jhs-subtitle="all"]').click();
+        expect([...document.querySelectorAll(".movie-list .item")].some(card => card.classList.contains("jhs-top250-subtitle-hidden"))).toBe(false);
+        expect(dom.window.location.search).not.toContain("jhs_subtitle");
     });
 
-    it("creates and closes exactly one loading overlay for a successful ranking render", async () => {
-        const hitShow = { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) };
-        const { plugin, q, loading, loadingClose, hitShowMock, dom } = loadTop250({ hitShow, movies: [{ number: "ABC-123", has_cnsub: "0" }] });
-        q.mockResolvedValue({ success: 1, data: { movies: [{ number: "ABC-123", has_cnsub: "0" }] } });
-        await expect(plugin.handleTop()).resolves.toBeUndefined();
-        expect(loading).toHaveBeenCalledOnce();
-        expect(loadingClose).toHaveBeenCalledOnce();
-        expect(q).toHaveBeenCalledOnce();
-        expect(hitShowMock.markDataListHtml).toHaveBeenCalledOnce();
-        expect(hitShowMock.loadScore).toHaveBeenCalledOnce();
-        expect(dom.window.document.querySelector(".movie-list")).not.toBeNull();
+    it("applies a migrated filter when the native page loads", async () => {
+        const { plugin, document } = setup("https://javdb.com/rankings/top?t=3&jhs_subtitle=without");
+        await plugin.handle();
+        expect(document.querySelector("#with").classList.contains("jhs-top250-subtitle-hidden")).toBe(true);
+        expect(document.querySelector('button[data-jhs-subtitle="without"]').getAttribute("aria-pressed")).toBe("true");
     });
 
-    it("mounts list action controls into the owned top250 filter container", async () => {
-        const { plugin, q, listPageButtonMock, dom } = loadTop250({ hitShow: { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) }, movies: [{ number: "ABC-123", has_cnsub: "0" }] });
-        q.mockResolvedValue({ success: 1, data: { movies: [{ number: "ABC-123", has_cnsub: "0" }] } });
-        await plugin.handleTop();
-        expect(listPageButtonMock.mountOwnedRankingControls).toHaveBeenCalledOnce();
-        const target = listPageButtonMock.mountOwnedRankingControls.mock.calls[0][0];
-        expect(target.is(".jhs-top250-filters")).toBe(true);
-        expect(dom.window.document.querySelector(".jhs-top250-filters")).not.toBeNull();
+    it("does not fabricate a list on a 404 page without a native container", async () => {
+        const { plugin, document } = setup("https://javdb.com/rankings/top", "<h1>404</h1>");
+        await expect(plugin.handle()).resolves.toBeUndefined();
+        expect(document.querySelector(".movie-list")).toBeNull();
+        expect(document.querySelector(".jhs-top250-subtitle")).toBeNull();
     });
 
-    it("renders on an owned ranking page without a native .movie-list node", async () => {
-        const hitShow = { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) };
-        const { plugin, q, dom, hitShowMock } = loadTop250({ hitShow });
-        q.mockResolvedValue({ success: 1, data: { movies: [{ number: "ABC-123", has_cnsub: "0" }] } });
-        await expect(plugin.handleTop()).resolves.toBeUndefined();
-        expect(hitShowMock.markDataListHtml).toHaveBeenCalledWith(expect.any(Array), { thumbnailFirst: true });
-        expect(dom.window.document.querySelector(".movie-list")).not.toBeNull();
-        expect(dom.window.document.querySelector(".jhs-top250-filters")).not.toBeNull();
-        // 筛选条必须紧跟标题并渲染在列表、分页之前（标题 → 筛选 → 列表 → 分页）
-        const children = [...dom.window.document.querySelector(".container").children].map(node => node.className);
-        expect(children.indexOf("jhs-top250-filters")).toBe(children.indexOf("section-title") + 1);
-        expect(children.indexOf("jhs-top250-filters")).toBeLessThan(children.findIndex(className => className.includes("jhs-top250-list")));
-        expect(children.indexOf("jhs-top250-filters")).toBeLessThan(children.indexOf("pagination"));
-    });
-
-    it("throws a clear error when neither list nor layout container exists", async () => {
-        const { plugin } = loadTop250({ hitShow: { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) } });
-        plugin.getRuntimeService = name => name === "host" ? { getListContainer: () => null, getListLayoutContainer: () => null, createOwnedListRoot: () => null } : {};
-        await expect(plugin.handleTop()).rejects.toThrow("JavDB 列表容器不可用");
-    });
-
-    it("removes an invalid GM credential and opens one login dialog without re-entering checkLogin", async () => {
-        const credential = { remove: vi.fn(async () => {}) }, dialog = { open: vi.fn(() => 1) };
-        const { plugin, q, show } = loadTop250({ hitShow: { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) }, credential, dialog });
-        q.mockResolvedValue({ success: 0, action: "JWTVerificationError", message: "JWT 已失效" });
-        plugin.checkLogin = vi.fn();
-        await plugin.handleTop();
-        expect(q).toHaveBeenCalledOnce();
-        expect(credential.remove).toHaveBeenCalledOnce();
-        expect(dialog.open).toHaveBeenCalledOnce();
-        expect(plugin.checkLogin).not.toHaveBeenCalled();
-        expect(show.error).toHaveBeenCalledOnce();
+    it("keeps playable subtitle badges separate from subtitle-magnet tags", () => {
+        const { document } = setup();
+        expect(hasChineseSubtitleMagnet(document.querySelector("#with"))).toBe(true);
+        expect(hasChineseSubtitleMagnet(document.querySelector("#playable"))).toBe(false);
     });
 });

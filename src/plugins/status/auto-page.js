@@ -171,7 +171,7 @@ export class AutoPagePlugin extends BasePlugin {
     async shouldDisablePaging() {
         if (!window.isListPage) return !0;
         const enabled = this.getRuntimeService("settings").snapshot().autoPage;
-        return enabled === "no" || [ "search?q", "handlePlayback=1", "handleTop=1", "/want_watch_videos", "/watched_videos", "/advanced_search?type=100" ].some((e => o.includes(e)));
+        return enabled === "no" || [ "search?q", "/rankings/movies", "/rankings/playback", "/rankings/top", "/want_watch_videos", "/watched_videos", "jhs_source=123av" ].some((e => o.includes(e)));
     }
     updatePageUrl(/** @type {string} */ e) {
         window.history.replaceState({}, "", e), l && (document.title = document.title.replace(/第\d+頁/, `第${this.currentPage}頁`));

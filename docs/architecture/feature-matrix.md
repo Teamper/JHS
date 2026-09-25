@@ -18,6 +18,20 @@
 
 ## Route 与验证矩阵
 
+JavDB 页面先按路径及该页面自己的参数识别语义（`src/core/site-context.js`），再由 HostAdapter 定位宿主 DOM。网页和 API 是读取渠道，不形成新的产品分类。
+
+| 页面 | 原生含义 | JHS 增强边界 |
+| --- | --- | --- |
+| `/rankings/movies?p=…&t=…` | 有码、无码、欧美、FC2 影片分类的日、周、月榜 | 保留原生类别、周期、排名及链接 |
+| `/rankings/playback?p=…&t=…` | 热播的日、周、月及高分、全部条件 | 保留原生列表；不解释为 Movies 的类型参数 |
+| `/rankings/top?t=…&page=…` | TOP250 总榜、类别榜、年份榜及分页 | 保留原生排名；字幕磁链只过滤当前已加载卡片 |
+| `/search_advanced` | 多条件进阶检索 | 增强检索，不归类为榜单 |
+| `/tags/fc2?c10=1` | JavDB FC2 分类片库 | 与 FC2 排行榜区分 |
+| `/rankings/actors`、`/rankings/fanza_award` | 演员榜、FANZA 奖项 | 不套用影片榜单处理 |
+| `/tags/fc2?c10=1&jhs_source=123av` | 123AV 外部 FC2 片库 | 明示来源，独立于 JavDB 榜单 |
+
+旧 `/advanced_search` 链接在插件挂载前迁到有效页面。旧 TOP250 每页 50 项、原生每页 40 项，迁移按旧页首名次定位；旧字幕参数只保留已加载条目的过滤含义。`movie.rankings()` 作为兼容入口查询 Playback，分类榜与 TOP250 不调用它。榜单算法及高分阈值没有原生说明，不在此定义。
+
 | Surface | HostAdapter route | Release proof | Known boundary |
 | --- | --- | --- | --- |
 | JavDB List | `list` | Vitest + real-origin Edge/Chromium fixture | 宿主页面可能变化 |

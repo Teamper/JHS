@@ -11,13 +11,20 @@ export async function fulfillHostFixtures(context) {
   const javbus = await readFile(join(browserRoot, "fixtures", "javbus-detail.html"), "utf8");
   const javdbList = await readFile(join(browserRoot, "fixtures", "javdb-list.html"), "utf8");
   const javdbFc2List = await readFile(join(browserRoot, "fixtures", "javdb-fc2-list.html"), "utf8");
-  const javdbHitShow = await readFile(join(browserRoot, "fixtures", "javdb-hit-show.html"), "utf8");
+  const javdbRanking = await readFile(join(browserRoot, "fixtures", "javdb-native-rankings.html"), "utf8");
   const javbusList = await readFile(join(browserRoot, "fixtures", "javbus-list.html"), "utf8");
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     if (request.isNavigationRequest()) {
-      if (url.hostname === "javdb.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname.startsWith("/v/") ? javdb : url.pathname === "/advanced_search" && url.searchParams.has("handlePlayback") ? javdbHitShow : url.pathname === "/advanced_search" ? javdbFc2List : javdbList });
+      if (url.hostname === "javdb.com") {
+        if (url.pathname === "/advanced_search") return route.fulfill({ status: 404, contentType: "text/html; charset=utf-8", body: "<!doctype html><title>404</title><h1>404 Not Found</h1>" });
+        const body = url.pathname.startsWith("/v/") ? javdb
+          : ["/rankings/movies", "/rankings/playback", "/rankings/top"].includes(url.pathname) ? javdbRanking
+          : url.pathname === "/search_advanced" || url.pathname === "/tags/fc2" ? javdbFc2List
+          : javdbList;
+        return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body });
+      }
       if (url.hostname === "www.javbus.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname === "/" ? javbusList : javbus });
     }
     if (url.hostname === "c0.jdbstatic.com" && url.pathname === "/thumbs/top-fixture.jpg") return route.fulfill({ status: 200, contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="3"><rect width="2" height="3" fill="#777"/></svg>' });
@@ -172,6 +179,11 @@ export async function injectUserscriptRuntime(page, options = {}) {
     };
   }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "", rankingMovies: options.rankingMovies || null, topMovies: options.topMovies || null });
   markPhase("fixture-setup");
+  if (options.expectRedirect) {
+    try { await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") }); }
+    catch (error) { if (!/Execution context was destroyed|Target closed|navigation/i.test(String(error))) throw error; }
+    return;
+  }
   await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
   markPhase("userscript-eval");
   try {

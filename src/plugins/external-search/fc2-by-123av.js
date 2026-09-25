@@ -2,6 +2,8 @@
 
 import { _, escapeHtml, o } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { classifyJavDbPage } from "../../core/site-context.js";
+import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
@@ -31,25 +33,35 @@ export class Fc2By123AvPlugin extends BasePlugin {
         return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
     async handle() {
-        $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'),
-        $('.tabs li:contains("FC2")').after('<li><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'),
-        o.includes("/advanced_search?type=100") && (this.hookPage(), await this.handleQuery());
+        const categoryLink = document.querySelector('#navbar-menu-hero a[href^="/tags/fc2"]');
+        if (categoryLink && !document.querySelector("#jhs-123av-nav")) {
+            const link = document.createElement("a");
+            link.id = "jhs-123av-nav";
+            link.className = "navbar-item";
+            link.href = "/tags/fc2?c10=1&jhs_source=123av";
+            link.textContent = "123AV · FC2片库";
+            categoryLink.after(link);
+        }
+        if (classifyJavDbPage(window.location).kind === "external-fc2-catalog") {
+            this.hookPage();
+            await this.handleQuery();
+        }
     }
     hookPage() {
         const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
         if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
         this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-123av-list", "jhs-layout-d2c171b1" ]));
-        let e = $("h2.section-title");
-        e.contents().first().replaceWith("123Av"), e.css("marginBottom", "0"), e.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '),
+        let e = this.$contentBox.find("h2.section-title").first();
+        if (!e.length) e = $("<h2></h2>").addClass("section-title").prependTo(this.$contentBox);
+        e.text("123AV · FC2片库"), e.css("marginBottom", "0"), e.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123AV FC2内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '),
         $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
             let e = String($("#search-123av-keyword").val() || "").trim();
             e && (this.keyword = e, utils.setHrefParam("keyword", e), this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), await this.handleQuery());
         })), $("#clear-123av-btn").on("click", (async () => {
             $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""),
             this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), $(".page-box").show(), await this.handleQuery();
-        })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), this.$contentBox.children(".box").remove(),
-        $("#sort-toggle-btn").remove(),
-        this.$contentBox.append(this.$listRoot),
+        })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(),
+        host.mountExternalFc2Catalog(this.$listRoot[0]),
         this.$contentBox.append('<div class="page-box"></div>');
         utils.setHrefParam("page", this.currentPage);
         $(".page-box").append('\n            <nav class="pagination">\n                <button type="button" class="jhs-btn pagination-previous">上一页</button>\n                <ul class="pagination-list"></ul>\n                <button type="button" class="jhs-btn pagination-next">下一页</button>\n            </nav>\n        '),
@@ -94,7 +106,10 @@ export class Fc2By123AvPlugin extends BasePlugin {
                 clog.error("123AV 获取数据失败");
             }
             let s = this.markDataListHtml(i);
-            this.$listRoot?.html(s), await utils.smoothScrollToTop();
+            this.$listRoot?.html(s);
+            const listPage = this.getOptionalDependency("ListPagePlugin");
+            if (listPage && this.$listRoot) await listPage.processAddedItems?.(this.$listRoot.find(".item").toArray());
+            await utils.smoothScrollToTop();
         } catch (t) {
             clog.error(t);
         } finally {
@@ -165,7 +180,7 @@ export class Fc2By123AvPlugin extends BasePlugin {
     markDataListHtml(e) {
         let t = "";
         return e.forEach((e => {
-            const href = e.url, imageUrl = e.imageUrl;
+            const href = normalizeHttpUrl(e.url), imageUrl = normalizeHttpUrl(e.imageUrl);
             if (!href) return;
             t += `\n                <div class="item" data-jhs-fc2-source="123av">\n                    <a href="${escapeHtml(href)}" class="box" title="${escapeHtml(e.title)}">\n                        <div class="cover ">${imageUrl ? `<img loading="lazy" src="${escapeHtml(imageUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(e.carNum)}</strong> ${escapeHtml(e.title)}</div>\n                        <div class="score"></div><div class="meta"></div><div class="jhs-toolbar"></div>\n                    </a>\n                </div>\n            `;
         })), t;

@@ -2,6 +2,7 @@
 
 import { prepareDialogOptions } from "../core/dialog-shell.js";
 import { initializeRuntimeConstants, l, r } from "../core/constants.js";
+import { detectSite, resolveLegacyJavDbUrl } from "../core/site-context.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { buildDetailPanelCss } from "../ui/detail/panel-styles.js";
 import { JhsError } from "../core/jhs-error.js";
@@ -109,6 +110,10 @@ async function resolveLocalOrigins(storageManager) {
 
 export async function bootstrapJhs() {
     try {
+        if (detectSite(window.location).isJavDB) {
+            const replacement = resolveLegacyJavDbUrl(window.location);
+            if (replacement) return void window.location.replace(replacement);
+        }
         const bootstrapStartedAt = performance.now(), diagnostics = globalThis.__jhsBrowserDiagnostics, markPhase = (phase) => diagnostics && ((diagnostics.bootstrapPhases ||= {})[phase] = performance.now() - bootstrapStartedAt);
         const siteContext = initializeRuntimeConstants(window.location);
         const vendors = getVendorRuntime();

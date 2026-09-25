@@ -2,7 +2,7 @@
 
 import { _, c, g, h, l, o, r } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { isHitShowPage } from "../../core/site-context.js";
+import { classifyJavDbPage } from "../../core/site-context.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { isHardHidden } from "../../features/list/list-filters.js";
 
@@ -13,15 +13,14 @@ import { isHardHidden } from "../../features/list/list-filters.js";
 export class ListPageButtonPlugin extends BasePlugin {
     constructor() {
         super();
-        /** @type {string | null} 页内排序覆盖：仅自有榜单页使用，初始固定“默认”，不写全局设置。 */
+        /** @type {string | null} 页内排序覆盖：仅原生影片榜单使用，初始固定“默认”，不写全局设置。 */
         this.ownedRankingSortOverride = null;
     }
     getName() {
         return "ListPageButtonPlugin";
     }
     async handle() {
-        // 热播/Top250 自渲染榜单由渲染方调用 mountHitShowControls 延迟挂载，启动期不注入页面 h2
-        if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
+        if (!window.isListPage) return;
         const scope = await this.getRuntimeService("scope")();
         const settings = this.getRuntimeService("settings");
         await this.createMenuBtn(scope), this.bindEvent();
@@ -32,15 +31,6 @@ export class ListPageButtonPlugin extends BasePlugin {
         };
         settings.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
-        await this.syncSortUi();
-    }
-    /** 自渲染榜单页由渲染方在自有标题/筛选容器就绪后调用：按钮行挂进传入容器（缺省为热播标题），排序/批量能力与普通列表页一致。 @param {any} [target] */
-    async mountOwnedRankingControls(target = null) {
-        const heading = target?.length ? target : $(".jhs-hitshow-heading");
-        if (!heading.length || $("#waitCheckBtn").length) return;
-        const scope = await this.getRuntimeService("scope")();
-        await this.createMenuBtn(scope, heading);
-        this.bindEvent();
         await this.syncSortUi();
     }
     /** 根据 autoPage 与当前站点能力同步排序控件；AutoPage ON 且不支持 live sorting 时明确进入“默认（瀑布流）”。 */
@@ -68,13 +58,13 @@ export class ListPageButtonPlugin extends BasePlugin {
         menu.find(`[data-sort-method="${method}"]`).attr("aria-checked", "true");
         await this.sortItems();
     }
-    /** @param {LifecycleScope} scope @param {any} [target] 自渲染榜单传入自有标题容器，避免注入页面 h2。 */
+    /** @param {LifecycleScope} scope @param {any} [target] 原生页面工具栏的可选挂载目标。 */
     async createMenuBtn(scope, target = null) {
         // 6.5 capability：功能被禁用时不渲染按钮，不留 disabled 死按钮。
         const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(this.getOptionalDependency("BlacklistPlugin")), hasListPage = Boolean(this.getOptionalDependency("ListPagePlugin"));
         if (r) {
             const e = o.includes("/actors/");
-            let t = $(".main-tabs, .tabs"), n = "加入黑名单", a = "jhs-btn--filter", s = null;
+            let t = $(".main-tabs, .tabs").first(), n = "加入黑名单", a = "jhs-btn--filter", s = null;
             if (e) {
                 t = $(".toolbar, .section-addition").filter(":last");
                 const e = await storageManager.getBlacklist(), i = this.getActressPageInfo();
@@ -90,7 +80,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             const r = o.includes("advanced_search");
             r && (t = target?.length ? target : $("h2.section-title"));
             const initialSort = this.activeSortMethod(), d = "当前排序方式: " + ("rateCount" === initialSort ? "评价人数" : "date" === initialSort ? "时间" : "默认");
-            t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n` : ""}\n                    ${hasListPage ? `\n<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n` : ""}\n                    ${o.includes("/tags") && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(initialSort, d)}\n                </div>\n            `);
+            t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n` : ""}\n                    ${hasListPage ? `\n<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button>\n<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button>\n` : ""}\n                    ${o.includes("/tags") && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(initialSort, d)}\n                </div>\n            `);
         }
         if (l) {
             const e = o.includes("/star/");
@@ -100,7 +90,7 @@ export class ListPageButtonPlugin extends BasePlugin {
                 e.find((/** @type {BlacklistRecord} */ e) => e.starId === a.starId) && (t = "已加入黑名单", n = "jhs-btn--muted");
             }
             const a = this.activeSortMethod();
-            $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n                    ` : ""}${hasListPage ? `    \n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n                    ` : ""}${!e && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${this.supportsSorting() ? this.sortMenuHtml(a) : ""}\n                </div>\n            `);
+            $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n                    ` : ""}${hasListPage ? `    \n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button>\n                    ` : ""}${!e && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${this.supportsSorting() ? this.sortMenuHtml(a) : ""}\n                </div>\n            `);
         }
         $("#waitCheckBtn > span").text("开始鉴定");
         const newVideoCount = $("#newVideoCount").detach(), newVideoLabel = $("#newVideoBtn > span");
@@ -207,18 +197,26 @@ export class ListPageButtonPlugin extends BasePlugin {
         "default" === t ? $(sortedElements).appendTo(d) : d.empty().append(sortedElements);
     }
     isHitShowPage() {
-        return isHitShowPage(window.location);
+        return classifyJavDbPage(window.location).kind === "playback-ranking";
     }
-    /** 自渲染榜单页（热播/Top250）：排序为页内状态，初始固定“默认”，与全局 sortMethod 解耦。 */
+    /** 原生影片榜单：排序为页内状态，初始固定“默认”，与全局 sortMethod 解耦。 */
     isOwnedRankingPage() {
-        return this.isHitShowPage() || window.location.search.includes("handleTop=1");
+        return r && ["movie-ranking", "playback-ranking", "top250-ranking"].includes(classifyJavDbPage(window.location).kind);
     }
-    /** 当前生效的排序方式：自有榜单页取页内覆盖（缺省默认），普通列表页取全局设置。 */
+    isExternalFc2CatalogPage() {
+        return r && classifyJavDbPage(window.location).kind === "external-fc2-catalog";
+    }
+    /** @param {"favorite" | "download"} action */
+    getBatchActionTip(action) {
+        const page = this.isOwnedRankingPage() ? "当前榜单页面" : this.isExternalFc2CatalogPage() ? "当前片库页面" : "当前搜索全部分页";
+        return action === "favorite" ? `收藏${page}中符合当前筛选的作品` : `标记${page}中符合当前筛选的作品为已下载`;
+    }
+    /** 当前生效的排序方式：原生榜单页取页内覆盖（缺省默认），普通列表页取全局设置。 */
     activeSortMethod() {
         if (this.isOwnedRankingPage()) return this.ownedRankingSortOverride || "default";
         return this.getRuntimeService("settings").snapshot().sortMethod || "default";
     }
-    /** 应用一次排序选择：自有榜单页只改页内覆盖，普通列表页写全局设置。 */
+    /** 应用一次排序选择：原生榜单页只改页内覆盖，普通列表页写全局设置。 */
     /** @param {string} method */
     async selectSortMethod(method) {
         if (this.isOwnedRankingPage()) {
@@ -230,21 +228,21 @@ export class ListPageButtonPlugin extends BasePlugin {
         await this.sortItems();
     }
     isFc2ListPage() {
-        return r && "/advanced_search" === window.location.pathname && "3" === new URLSearchParams(window.location.search).get("type");
+        return r && "/search_advanced" === window.location.pathname && "3" === new URLSearchParams(window.location.search).get("type");
     }
     supportsSorting() {
         if (this.supportsLiveSorting()) return true;
-        if (r && (o.includes("handle") || o.includes("advanced_search"))) return false;
+        if (r && window.location.pathname === "/search_advanced") return false;
         return true;
     }
     supportsLiveSorting() {
-        // 自有榜单页（热播/Top250）由渲染方加载评分数据，与 FC2 列表一样支持页内即时排序
+        // 原生影片榜单与 FC2 检索列表支持页内即时排序。
         return this.isOwnedRankingPage() || this.isFc2ListPage();
     }
     /** 构造批量任务范围：actor 页携带演员名，搜索/列表页不要求演员名且不写入搜索关键词。 */
     buildBatchScope() {
         const isActorPage = r ? o.includes("/actors/") : o.includes("/star/");
-        if (!isActorPage) return { kind: "search", displayName: "当前搜索条件", recordName: "" };
+        if (!isActorPage) return { kind: "search", displayName: this.isOwnedRankingPage() ? "当前榜单页面" : this.isExternalFc2CatalogPage() ? "当前片库页面" : "当前搜索条件", recordName: "" };
         const info = this.getActressPageInfo();
         return { kind: "actor", displayName: info?.name || "", recordName: info?.name || "" };
     }

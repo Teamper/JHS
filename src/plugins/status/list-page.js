@@ -6,7 +6,7 @@ import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readCardNames, readListItem } from "../../core/list-item-reader.js";
-import { isHitShowPage } from "../../core/site-context.js";
+import { classifyJavDbPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
@@ -156,10 +156,7 @@ export class ListPagePlugin extends BasePlugin {
             const items = this.getIndexedItems(payload.carNums || []);
             await this.requestListRefresh({ items, reason: "car-state-changed", full: true });
         })));
-        // 自有榜单页没有宿主列表 DOM 可劫持，DOM 管线由 HitShowPlugin.initializeRenderedList 驱动；
-        // Top250（handleTop）与 v6.4.1 一致走完整管线（其自有列表在同步前缀阶段已创建）；
-        // 但状态标记/黑名单/设置变更的刷新监听在两类页面都必须保持活跃，否则卡片标记永不更新。
-        if (isHitShowPage()) return;
+        // 原生榜单与普通列表共用卡片处理和状态刷新监听。
         const hoverBigImg = settingsService.snapshot().hoverBigImg;
         this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
         this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox();
@@ -324,8 +321,8 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {any} [scope] */
     checkDom(scope = null) {
-        // 自有榜单页（热播/Top250）由渲染方自行管理容器与增量，不走宿主容器探测
-        if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
+        // 原生榜单与普通列表均观察宿主列表容器。
+        if (!window.isListPage) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
         if (!scope) return;
@@ -570,12 +567,16 @@ export class ListPagePlugin extends BasePlugin {
         if (!stateFlag) throw new TypeError(`不支持的状态操作: ${flag}`);
         const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
         const actorScope = scope?.kind === "actor", recordName = actorScope ? String(scope.recordName || "") : "";
-        // 自有榜单页（热播/Top250）的分页是自绘按钮，跨页抓取不可用：批量语义收敛为“当前榜单页”
-        const isOwnedRankingPage = isHitShowPage(window.location) || window.location.search.includes("handleTop=1");
-        const confirmText = isOwnedRankingPage
+        // 榜单和外部片库保持各自的原生/来源分页，批量操作限定当前已加载页面。
+        const pageKind = classifyJavDbPage(window.location).kind;
+        const isRankingPage = ["movie-ranking", "playback-ranking", "top250-ranking"].includes(pageKind);
+        const isExternalCatalog = pageKind === "external-fc2-catalog";
+        const isPageScopedList = isRankingPage || isExternalCatalog;
+        const pageName = isExternalCatalog ? "当前片库页" : "当前榜单页";
+        const confirmText = isPageScopedList
             ? ("all" === normalized
-                ? "将处理当前榜单页内的所有作品，包括屏蔽项。"
-                : `将处理当前榜单页内符合「${filterLabel}」筛选的作品。`)
+                ? `将处理${pageName}内的所有作品，包括屏蔽项。`
+                : `将处理${pageName}内符合「${filterLabel}」筛选的作品。`)
             : ("all" === normalized
                 ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。"
                 : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`);
@@ -605,10 +606,11 @@ export class ListPagePlugin extends BasePlugin {
             this.setBatchButtonsDisabled(true);
             const records = await scanAllPages({
                 startDom: root ? $(root) : $(document),
-                currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href),
-                firstPageUrl: isOwnedRankingPage ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)),
+                currentUrl: isPageScopedList ? null : (root ? null : window.location.href),
+                firstPageUrl: isPageScopedList ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)),
                 itemSelector: this.getSelector().requestDomItemSelector,
                 nextPageSelector: this.getSelector().nextPageSelector,
+                maxPages: isPageScopedList ? 1 : 200,
                 fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, runtimeScope),
                 parseItem: (/** @type {any} */ item) => {
                     const parsed = readListItem(item);

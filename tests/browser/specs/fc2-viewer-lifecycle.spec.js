@@ -10,7 +10,7 @@ async function openFixture(page, context) {
         const sheet = route.request().url().endsWith("sheet.svg");
         return route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="${sheet ? 3600 : 720}"><rect width="1280" height="${sheet ? 3600 : 720}" fill="#678"/></svg>` });
     });
-    await page.goto("https://javdb.com/advanced_search?type=3");
+    await page.goto("https://javdb.com/search_advanced?type=3");
     const add = page.addScriptTag.bind(page);
     page.addScriptTag = async options => {
         if (options.path?.endsWith("JHS.user.js")) {

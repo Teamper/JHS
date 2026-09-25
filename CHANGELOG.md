@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [6.5.1](../../compare/v6.5.0...v6.5.1) - 2026-09-25
+
+### 修复
+
+- WebDAV 备份、列出与读取文件使用独立的 10 秒请求超时，修复 6.5.0 网络服务迁移后误用普通请求 5 秒默认值的问题；备份日志增加凭据读取、导出、加密、建目录和上传的安全耗时记录。
+- 榜单增强回归 JavDB 原生 Movies、Playback 和 TOP250 页面，保留原生类别、周期、年份、排名、分页及导航；页内排序和批量操作明确限定范围。
+- TOP250 字幕按钮仅筛选当前已加载卡片的“中字磁链”标记，筛选条件随原生分类和分页链接延续。
+- 旧 `/advanced_search` 热播、TOP250、进阶检索及 123AV 链接在插件挂载前迁至有效页面，修复旧路径 404；123AV 片库使用明确来源参数并放入 FC2 分类入口。
+- FC2 登录弹窗与 TOP250 解耦；外部片库卡片只接受 HTTP/HTTPS 地址。
+
 ## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-09-19
 
 ### 新增
@@ -649,7 +659,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: ../../compare/v6.5.0...HEAD
+[Unreleased]: ../../compare/v6.5.1...HEAD
 [6.2.1]: ../../compare/v6.2.0...v6.2.1
 [6.2.0]: ../../compare/v6.1.1...v6.2.0
 [6.1.1]: ../../compare/v6.1.0...v6.1.1

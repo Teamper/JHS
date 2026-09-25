@@ -45,6 +45,11 @@ export class MovieIdentityService {
     }
     /** @param {{period?: string, filter?: string, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async rankings(options = {}) {
+        return this.playbackRankings(options);
+    }
+    /** JavDB Playback data source; rankings() is retained for callers of the old interface. */
+    /** @param {{period?: string, filter?: string, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async playbackRankings(options = {}) {
         for (const manifest of this.integrations?.list("movie.ranking") ?? []) {
             const adapter = this.integrations?.getAdapter(manifest.id);
             if (typeof adapter?.listRankings === "function") return adapter.listRankings(options);

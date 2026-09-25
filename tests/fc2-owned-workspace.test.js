@@ -234,8 +234,10 @@ describe("FC2 owned detail workspace", () => {
     it("keeps JHS marks and restores a separate JavDB want action", () => {
         expect(fc2Source).toContain('data-jhs-action="javdb-want"');
         expect(fc2Source).toContain("markJavDbWantWatch(movieId)");
-        expect(fc2Source).toContain('this.getBean("TOP250Plugin")');
-        expect(top250Source).toContain('"function" === typeof onSuccess ? await onSuccess()');
+        expect(fc2Source).toContain("openJavDbLoginDialog({");
+        expect(fc2Source).not.toContain('this.getBean("TOP250Plugin")');
+        expect(fc2Source).toContain('openJavDbLoginDialog({');
+        expect(top250Source).not.toContain('openJavDbLoginDialog({');
         expect(top250Source).not.toContain("hasStoredEncryptedCredential");
         expect(top250Source).not.toContain("removeStoredEncryptedCredential");
         expect(top250Source).not.toContain("storeEncryptedCredential");

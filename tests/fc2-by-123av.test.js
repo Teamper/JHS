@@ -6,19 +6,22 @@ import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
 function loadFc2123Av({ search = "", page = 1 } = {}) {
-    const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">123Av</h2><div class="box"></div></div></section>', { url: `https://javdb.com/advanced_search?type=100&keyword=${encodeURIComponent(search)}&page=${page}` });
+    const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">123Av</h2><div class="box"></div></div></section>', { url: `https://javdb.com/tags/fc2?c10=1&jhs_source=123av&keyword=${encodeURIComponent(search)}&page=${page}` });
     const $ = jqueryFactory(dom.window), catalog = vi.fn(async () => ({ items: [], maxPage: 1 })), loadingClose = vi.fn(), setHrefParam = vi.fn();
     const host = {
         locateListRoot: () => dom.window.document.querySelector(".container"),
         getListContainer: () => dom.window.document.querySelector(".container"),
         createOwnedListRoot(classes = []) { const root = dom.window.document.createElement("div"); root.classList.add("movie-list", ...classes); return root; },
+        mountExternalFc2Catalog(root) { const container = dom.window.document.querySelector(".container"); container.querySelector(".box")?.remove(); container.append(root); },
     };
     const context = vm.createContext({
         BasePlugin: class {
             getBean() { return undefined; }
+            getOptionalDependency() { return null; }
             getRuntimeService(name) { return { host, scope: async () => ({}), movie: { catalog }, settings: { snapshot: () => ({ translateTitle: "_" }) }, translation: {} }[name]; }
         },
         _: "_", o: "", escapeHtml: value => $("<span></span>").text(String(value ?? "")).html(),
+        normalizeHttpUrl: (value, baseUrl = dom.window.location.href) => { try { const url = new URL(value, baseUrl); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } },
         renderTranslatedTitle: async () => {}, createFc2SourceLinks: () => "", renderFc2Gallery: () => {}, renderFc2State: () => {},
         $, document: dom.window.document, window: dom.window, URLSearchParams,
         loading: () => ({ close: loadingClose }), show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() },
@@ -80,11 +83,10 @@ describe("Fc2By123AvPlugin page-state handling", () => {
         let resolveFirst, resolveSecond;
         const first = new Promise(resolve => { resolveFirst = resolve; }), second = new Promise(resolve => { resolveSecond = resolve; });
         catalog.mockImplementationOnce(() => first).mockImplementationOnce(() => second);
-        const flush = () => new Promise(resolve => setTimeout(resolve, 0));
         const p1 = plugin.handleQuery();
-        await flush();
+        await vi.waitFor(() => expect(catalog).toHaveBeenCalledTimes(1));
         const p2 = plugin.handleQuery();
-        await flush();
+        await vi.waitFor(() => expect(catalog).toHaveBeenCalledTimes(2));
         resolveFirst({ items: [{ url: "/m/OLD", title: "old" }], maxPage: 10 });
         resolveSecond({ items: [{ url: "/m/NEW", title: "new" }], maxPage: 10 });
         await Promise.all([p1, p2]);

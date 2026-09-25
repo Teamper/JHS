@@ -17,6 +17,18 @@ function makeContext(cars) {
 }
 
 describe("cross-page batch scanner", () => {
+    it("keeps ranking and external-catalog batches on their loaded page", async () => {
+        const page = pageDom('<div class="item" data-id="R-001"></div><a class="next" href="/rankings/top?page=2"></a>');
+        const fetchHtml = vi.fn(async () => '<div class="item" data-id="R-002"></div>');
+        const records = await scanAllPages({
+            startDom: page, itemSelector: ".item", nextPageSelector: ".next", maxPages: 1,
+            fetchHtml, parseItem: item => ({ carNum: item.attr("data-id"), title: "" }),
+            evaluate: () => ({ matchesCurrentFilter: true }), pageDelayMs: 0,
+        });
+        expect(records.map(item => item.carNum)).toEqual(["R-001"]);
+        expect(fetchHtml).not.toHaveBeenCalled();
+    });
+
     it("collects only records matching the current filter across all pages", async () => {
         const page1 = pageDom('<div class="item" data-id="A-001"></div><div class="item" data-id="A-002"></div><a class="next" href="/p2"></a>');
         const page2Html = '<div class="item" data-id="A-003"></div><div class="item" data-id="A-004"></div><a class="next" href="/p3"></a>';

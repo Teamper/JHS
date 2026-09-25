@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>JavDB native rankings</title>
+<style>.movie-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.item{min-width:0}.item .cover img{width:100%;max-width:100%}.tabs a{margin-right:14px}</style></head>
+<body>
+  <nav id="navbar-menu-hero"><a href="/tags/fc2?c10=1">FC2分类</a></nav>
+  <nav class="main-tabs"><a href="/rankings/movies?p=daily&amp;t=censored">排行榜</a><a href="/rankings/playback?p=daily&amp;t=high_score">热播</a><a href="/rankings/top">TOP250</a></nav>
+  <section class="section"><div class="container">
+    <h2 class="section-title">原生榜单</h2>
+    <div class="tabs"><a id="movie-fc2" href="/rankings/movies?p=weekly&amp;t=fc2">FC2周榜</a><a id="playback-all" href="/rankings/playback?p=monthly&amp;t=all">热播全部月榜</a><a id="top-fc2" href="/rankings/top?t=3">TOP FC2</a><select id="top-year" data-url="/rankings/top?t=%25s"><option>2026</option></select></div>
+    <div class="movie-list h cols-4 vcols-8">
+      <div class="item" id="native-first"><a class="box" href="/v/native-first"><div class="cover"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='300'/%3E" alt=""></div><div class="video-title"><strong>ABC-001</strong> First</div><div class="score"><span class="count">2人评价</span></div><div class="meta">2026-01-01</div></a><div class="tags"><span class="tag is-warning">含中字磁链</span></div></div>
+      <div class="item" id="native-second"><a class="box" href="/v/native-second"><div class="cover"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='300'/%3E" alt=""></div><div class="video-title"><strong>ABC-002</strong> Second</div><div class="score"><span class="count">20人评价</span></div><div class="meta">2026-08-01</div><span class="tag-can-play cnsub">中字播放</span></a></div>
+      <div class="item" id="native-fc2" data-jhs-fc2-source="fc2"><a class="box" href="/v/native-fc2"><div class="cover"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='300'/%3E" alt=""></div><div class="video-title"><strong>FC2-PPV-4959150</strong> FC2</div><div class="score"><span class="count">1人评价</span></div><div class="meta">2026-06-01</div></a></div>
+    </div>
+    <nav class="pagination" data-native-pagination><a class="pagination-next" href="/rankings/top?t=y2026&amp;page=2">下一页</a></nav>
+  </div></section>
+  <footer id="native-footer">Host footer</footer>
+</body></html>

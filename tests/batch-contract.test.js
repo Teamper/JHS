@@ -11,8 +11,10 @@ describe("batch action contract (筛选后批量语义)", () => {
     it("scans every page from the first page through the shared scanner with the frozen filter snapshot", () => {
         expect(listPage).toContain("scanAllPages({");
         expect(listPage).toContain("startDom: root ? $(root) : $(document)");
-        expect(listPage).toContain("currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href)");
-        expect(listPage).toContain('firstPageUrl: isOwnedRankingPage ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href))');
+        expect(listPage).toContain('const isPageScopedList = isRankingPage || isExternalCatalog');
+        expect(listPage).toContain("currentUrl: isPageScopedList ? null : (root ? null : window.location.href)");
+        expect(listPage).toContain('firstPageUrl: isPageScopedList ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href))');
+        expect(listPage).toContain('maxPages: isPageScopedList ? 1 : 200');
         expect(blacklist).toContain('firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)');
         expect(listPage).toContain("itemSelector: this.getSelector().requestDomItemSelector");
         expect(listPage).toContain('evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized })');
@@ -34,7 +36,8 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listButtons).toContain("batchSaveAllVideos?.(scope, h)");
         expect(listButtons).toContain("batchSaveAllVideos?.(scope, g)");
         expect(listButtons).toContain("buildBatchScope()");
-        expect(listButtons).toContain('{ kind: "search", displayName: "当前搜索条件", recordName: "" }');
+        expect(listButtons).toContain('displayName: this.isOwnedRankingPage() ? "当前榜单页面" : this.isExternalFc2CatalogPage() ? "当前片库页面" : "当前搜索条件"');
+        expect(listButtons).toContain('this.getBatchActionTip("favorite")');
         expect(listButtons).not.toContain("一键收藏所有可见作品?");
         expect(listButtons).toContain("批量屏蔽");
         expect(listButtons).toContain("批量收藏");

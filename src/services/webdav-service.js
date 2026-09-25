@@ -21,7 +21,7 @@ export class WebDavClient {
         const url = new URL(path.replace(/^\/+/, ""), this.baseUrl);
         const response = await this.http.request({
             providerId: "webdav", method, url: url.href, headers: { ...this.authHeaders(), ...headers }, body,
-            responseType: "text", cacheScope: "none", ...requestOptions,
+            responseType: "text", cacheScope: "none", ...requestOptions, timeout: 10_000,
             urlPolicy: { trustClass: "user-local", expectedOrigin: this.baseUrl.origin },
         });
         return response.data ?? response.responseText ?? "";
@@ -31,8 +31,29 @@ export class WebDavClient {
         // Existing WebDAV collections report 405|409 and are valid outcomes.
         await this.request("MKCOL", folder, {}, undefined, { acceptableStatuses: [405, 409] });
     }
-    /** @param {string} folder @param {string} name @param {string} content */
-    async backup(folder, name, content) { await this.ensureFolder(folder); await this.request("PUT", `${folder}/${name}`, { "Content-Type": "text/plain" }, content); }
+    /** @param {string} folder @param {string} name @param {string} content @param {(event: {stage: string, result: string, durationMs: number, bytes?: number, code?: string, status?: number, timeoutMs: number}) => void} [onStage] */
+    async backup(folder, name, content, onStage) {
+        /** @template T @param {string} stage @param {() => Promise<T>} action @param {number} [bytes] @returns {Promise<T>} */
+        const runStage = async (stage, action, bytes) => {
+            const startedAt = performance.now();
+            let result = "success", code, status;
+            try { return await action(); }
+            catch (error) {
+                result = "error";
+                if (error && typeof error === "object") {
+                    const failure = /** @type {any} */ (error);
+                    code = typeof failure.code === "string" ? failure.code : undefined;
+                    status = Number.isFinite(failure.details?.status) ? failure.details.status : undefined;
+                }
+                throw error;
+            } finally {
+                try { onStage?.({ stage, result, durationMs: Math.round(performance.now() - startedAt), ...(bytes == null ? {} : { bytes }), ...(code ? { code } : {}), ...(status == null ? {} : { status }), timeoutMs: 10_000 }); }
+                catch { /* Diagnostics must not change the backup result. */ }
+            }
+        };
+        await runStage("建目录", () => this.ensureFolder(folder));
+        await runStage("上传", () => this.request("PUT", `${folder}/${name}`, { "Content-Type": "text/plain" }, content), content.length);
+    }
     /** @param {string} folder */
     async getFileList(folder) {
         const xml = String(await this.request("PROPFIND", folder, { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:iscollection/></d:prop></d:propfind>'));

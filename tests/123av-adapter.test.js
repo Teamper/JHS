@@ -15,15 +15,16 @@ describe("123AV Chinese adapter contract", () => {
         expect(integrationSource).toContain("/cn/search?keyword=${encodeURIComponent(keyword)}&page=${sourcePage}");
         expect(integrationSource).toContain("keyword ? [page]");
         expect(fc2Source).not.toContain('this.keyword && $(".page-box").hide()');
-        expect(fc2Source).not.toContain("123av.com");
+        expect(fc2Source).toContain("normalizeHttpUrl(e.url)");
         expect(otherSiteSource).toContain('providerId: "av123"');
         expect(otherSiteSource).toContain('getRuntimeService("movie").searchUrl');
     });
 
     it("removes obsolete 123AV selectors, routes and sorting controls", () => {
-        for (const obsolete of ["/ja", "/tags/fc2", "/dm4/tags/fc2", ".box-item", ".detail a", "img[data-src]", "img[title]", ".page-item", ".page-link", "リリース日:", "#player", "Movie({id", "conditionBox"]) {
+        for (const obsolete of ["/ja", "/dm4/tags/fc2", ".box-item", ".detail a", "img[data-src]", "img[title]", ".page-item", ".page-link", "リリース日:", "#player", "Movie({id", "conditionBox", "released_start=2099-09", "type=100"]) {
             expect(fc2Source).not.toContain(obsolete);
         }
+        expect(fc2Source).toContain("/tags/fc2?c10=1&jhs_source=123av");
         expect(otherSiteSource).not.toContain('getAv123Url() + "/ja"');
     });
 

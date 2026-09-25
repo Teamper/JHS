@@ -8,6 +8,7 @@ import { normalizeBtihHash } from "../../core/feature-helpers.js";
 import { extractJavDbMovieId } from "../../core/movie-identity.js";
 import { getJavDbWantWatchState, markJavDbWantWatch } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { openJavDbLoginDialog } from "./javdb-login-dialog.js";
 import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
 import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
 import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
@@ -122,9 +123,6 @@ export class Fc2Plugin extends BasePlugin {
         </style>`;
     }
     async handle() {
-        const fc2Href = "/advanced_search?type=3&score_min=0&d=1";
-        $('.navbar-item:contains("FC2")').attr("href", fc2Href), $('.tabs a:contains("FC2")').attr("href", fc2Href);
-        if (o.includes("advanced_search?type=3")) $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
         if (!o.includes("collection_codes?movieId")) return;
         const params = new URLSearchParams(window.location.search), requestedMovieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), host = $("section").first().empty();
         if (!carNum || !url) return void host.append($('<div class="jhs-fc2-state is-error"></div>').text("FC2 详情参数不完整"));
@@ -348,6 +346,7 @@ export class Fc2Plugin extends BasePlugin {
         }
     }
     /** @param {Fc2DetailContext} context @param {string} movieId @param {JQueryHandle} button */
+    /** @param {Fc2DetailContext} context @param {string} movieId @param {any} button @returns {Promise<unknown>} */
     async submitJavDbWant(context, movieId, button) {
         if (!context.isAlive() || button.data("jhsBusy") || "true" === button.attr("aria-pressed")) return;
         button.data("jhsBusy", !0).attr({ "aria-busy": "true", "aria-disabled": "true" }).text("正在加入想看…");
@@ -360,8 +359,11 @@ export class Fc2Plugin extends BasePlugin {
             const normalizedError = /** @type {{ code?: string, message?: string }} */ (error);
             if ("LOGIN_REQUIRED" === normalizedError?.code) {
                 button.attr("aria-disabled", "false").text("JavDB 想看");
-                const loginPlugin = this.getOptionalDependency("TOP250Plugin");
-                return loginPlugin?.openLoginDialog({ onSuccess: () => this.submitJavDbWant(context, movieId, button) });
+                return openJavDbLoginDialog({
+                    dialog: this.getRuntimeService("dialog"), account: this.getRuntimeService("account"),
+                    credential: this.getRuntimeService("credential"), getScope: this.getRuntimeService("scope"),
+                    onSuccess: () => this.submitJavDbWant(context, movieId, button),
+                });
             }
             button.attr("aria-disabled", "false").text("JavDB 想看"), show.error(normalizedError?.message || "加入 JavDB 想看失败"), clog.error("加入 JavDB 想看失败", error);
         } finally {

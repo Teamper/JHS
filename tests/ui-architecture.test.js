@@ -94,17 +94,11 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(commandbar).toMatch(/@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/);
     });
 
-    it("loads hot-ranking scores in the background with bounded concurrency and stable sorting data", () => {
-        expect(hitShow).toContain("void this.loadScore(movies, generation)");
-        expect(hitShow).toContain("Math.min(4, queue.length)");
-        expect(hitShow).not.toContain("document.hasFocus()");
-        expect(hitShow).toContain("data-jhs-rate-count");
-        expect(hitShow).toContain("data-jhs-publish-time");
-        expect(hitShow).toContain('id="jhs-hitshow-period"');
-        expect(hitShow).toContain("jhs-hitshow-heading");
-        expect(hitShow).toContain('aria-selected="${active === value ? "true" : "false"}"');
-        expect(hitShow).not.toMatch(/is-active|aria-current/);
-        expect(hitShow).not.toContain('class="tool-box"');
+    it("keeps playback on the native list and scopes its page meaning", () => {
+        expect(hitShow).toContain('page.kind !== "playback-ranking"');
+        expect(hitShow).toContain('root.setAttribute("data-jhs-ranking-period", page.period)');
+        expect(hitShow).not.toContain("preventDefault");
+        expect(hitShow).not.toContain("/advanced_search");
     });
 
     it("uses an idempotent translation node and a safe cache key", () => {
@@ -257,10 +251,12 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("routes JavDB login through AccountService without Feature credentials in URLs", () => {
+        const loginDialog = readTestFile(join(process.cwd(), "src/plugins/external-search/javdb-login-dialog.js"), "utf8");
         expect(top250).not.toContain("gmHttp");
         expect(top250).not.toContain("/v1/sessions");
         expect(top250).not.toContain("device_uuid");
-        expect(top250).toContain('account.login("javdb"');
+        expect(loginDialog).toContain('account.login("javdb"');
+        expect(loginDialog).toContain('credential.set("jhs_appAuthorization"');
     });
 
     it("uses an explicit unknown category without conflating it with all", () => {

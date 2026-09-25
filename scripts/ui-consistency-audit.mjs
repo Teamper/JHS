@@ -139,14 +139,8 @@ requireMatch(commandbar, /\[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" \]/,
 requireMatch(commandbar, /\[ "#statsBtn", "#blacklistBtn" \][\s\S]*jhs-commandbar__menu/, "statistics and blacklist must be grouped in more menu");
 requireMatch(commandbar, /#addBlacklistBtn[\s\S]*jhs-commandbar__context/, "actor context action must remain directly visible");
 requireMatch(commandbar, /#filterAllVideo[\s\S]*#favoriteAllVideo[\s\S]*#hasDownAllVideo/, "batch menu must contain exactly the three bulk actions");
-requireMatch(hitShow, /async handle\(\)[\s\S]*await this\.handlePlayback/, "hit show handle must await its data flow");
-requireMatch(hitShow, /jhs-hitshow-heading/, "hit show title and period must share a dedicated heading row");
-requireMatch(hitShow, /class="jhs-segmented__item \$\{[^}]+\? "active"/, "hit show period must use the active class");
-requireMatch(hitShow, /aria-selected="\$\{[^}]+\? "true" : "false"\}"/, "hit show period must expose aria-selected");
-forbidMatch(hitShow, /is-active|aria-current/, "hit show period must not retain legacy selected state");
-for (const field of ["data-jhs-rate-count", "data-jhs-publish-time", "data-original-index"])
-  requireMatch(hitShow, new RegExp(field), `hit show sorting field missing ${field}`);
-forbidMatch(hitShow, /tool-box|button is-small/, "hit show must use the shared segmented toolbar");
+requireMatch(hitShow, /classifyJavDbPage\(window\.location\)/, "playback enhancement must use the native page context");
+forbidMatch(hitShow, /preventDefault|handlePlayback|advanced_search/, "playback enhancement must not replace native navigation or list data");
 requireMatch(translate, /getRuntimeService\("translation"\)/, "translation feature must use the declared service");
 forbidMatch(translate, /localStorage|fetch\(/, "translation feature must not own network or cache persistence");
 requireMatch(translationUi, /nextAll\("\.translated-title"\)/, "translation output must update an existing node");

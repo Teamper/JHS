@@ -411,7 +411,7 @@ export async function applyImageMode(busImgPlugin = null, enableVerticalModel) {
         : enableVerticalModel;
     if (vertical === _) {
         let e = "100% 50% !important";
-        window.location.href.includes("/advanced_search?type=100") && (e = "50% 50% !important");
+        window.location.pathname === "/tags/fc2" && new URLSearchParams(window.location.search).get("jhs_source") === "123av" && (e = "50% 50% !important");
         const t = `
                 .cover {
                     aspect-ratio: 3 / 4.26;

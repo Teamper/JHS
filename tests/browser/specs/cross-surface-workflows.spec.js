@@ -3,7 +3,7 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
 
 async function openFc2DialogFixture(context, page, settingOverrides = {}) {
   await fulfillHostFixtures(context);
-  await page.goto("https://javdb.com/advanced_search?type=3", { waitUntil: "domcontentloaded" });
+  await page.goto("https://javdb.com/search_advanced?type=3", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { settingOverrides });
   await page.evaluate(() => {
     const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
@@ -21,7 +21,7 @@ async function openFc2DialogFixture(context, page, settingOverrides = {}) {
 test("FC2 dialog offline marking keeps movie identity across surfaces", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the cross-surface offline workflow");
   await fulfillHostFixtures(context);
-  await page.goto("https://javdb.com/advanced_search?handlePlayback=1&period=daily", { waitUntil: "domcontentloaded" });
+  await page.goto("https://javdb.com/rankings/playback?p=daily&t=high_score", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, {
     settingOverrides: { enableLoadReview: "no", enableLoadOtherSite: "no", enableLoadScreenShot: "no" },
     rankingMovies: [
@@ -34,13 +34,13 @@ test("FC2 dialog offline marking keeps movie identity across surfaces", async ({
     const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
     fc2.resolveMovieIdForRecord = async () => null;
     fc2.resolveFc2Source = async () => "fc2";
-    const card = document.querySelector(".jhs-hitshow-list .item");
+    const card = document.querySelector(".movie-list .item");
     const secondary = document.createElement("div");
     secondary.className = "item";
     secondary.innerHTML = '<a href="/v/abc-001"><div class="cover"><img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'2\' height=\'3\'/%3E"></div><div class="video-title"><strong>ABC-001</strong></div></a>';
     card?.parentElement?.append(secondary);
   });
-  const fc2Card = page.locator('.jhs-hitshow-list .item').filter({ hasText: "FC2-PPV-4959150" });
+  const fc2Card = page.locator('.movie-list .item').filter({ hasText: "FC2-PPV-4959150" });
   await expect(fc2Card.locator('a[data-jhs-fc2-primary="true"]')).toBeVisible();
   await fc2Card.locator('a[data-jhs-fc2-primary="true"]').click();
   const dialog = page.locator('.layui-layer').filter({ has: page.locator('.jhs-fc2-dialog-host') }).first();

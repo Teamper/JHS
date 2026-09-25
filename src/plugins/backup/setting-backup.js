@@ -10,6 +10,41 @@ import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 /** @typedef {any} DialogHandle */
 /** @param {unknown} error */
 const errorMessage = error => error instanceof Error ? error.message : String(error);
+/** @param {unknown} error */
+function backupErrorDetails(error) {
+    const candidate = /** @type {any} */ (error);
+    const code = typeof candidate?.code === "string" && /^[A-Z_]{2,32}$/.test(candidate.code) ? candidate.code : "UNKNOWN";
+    const status = Number(candidate?.details?.status);
+    return { code, ...(Number.isInteger(status) && status >= 100 && status <= 599 ? { status } : {}) };
+}
+/** @param {{stage: string, result: string, durationMs: number, bytes?: number, code?: string, status?: number, timeoutMs?: number}} event */
+function logBackupStage(event) {
+    const code = typeof event.code === "string" && /^[A-Z_]{2,32}$/.test(event.code) ? event.code : undefined;
+    const record = {
+        stage: event.stage, result: event.result, durationMs: Math.max(0, Math.round(event.durationMs)),
+        ...(event.bytes == null ? {} : { bytes: event.bytes }),
+        ...(event.timeoutMs == null ? {} : { timeoutMs: event.timeoutMs }),
+        ...(code ? { code } : {}),
+        ...(event.status == null ? {} : { status: event.status }),
+    };
+    try {
+        if (event.result === "error") clog.warn?.("[WebDAV备份]", record);
+        else clog.log?.("[WebDAV备份]", record);
+    }
+    catch { /* Logging must not change the backup result. */ }
+}
+/** @template T @param {string} stage @param {() => Promise<T>} action */
+async function measureBackupStage(stage, action) {
+    const startedAt = performance.now();
+    try {
+        const result = await action();
+        logBackupStage({ stage, result: "success", durationMs: performance.now() - startedAt });
+        return result;
+    } catch (error) {
+        logBackupStage({ stage, result: "error", durationMs: performance.now() - startedAt, ...backupErrorDetails(error) });
+        throw error;
+    }
+}
 /** @param {any} webdavService */
 async function resolveWebDavProfile(webdavService) {
     if (typeof webdavService?.getProfile === "function") return webdavService.getProfile();
@@ -56,22 +91,26 @@ export async function importSettingData(showDiffPreviewFn) {
 /** Create encrypted backup and upload via WebDAV. */
 /** @param {string} folderName @param {WebDavHandle} webdavService */
 export async function backupDataByWebDav(folderName, webdavService) {
-    const t = await resolveWebDavProfile(webdavService), n = t.url;
-    if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
-    const a = t.username;
-    if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-    if (!t.password) return void show.error("请填写webDav密码并保存后, 再试此功能");
     const r = loading();
+    const startedAt = performance.now();
+    let result = "error", bytes;
     try {
-        const i = t.password;
+        const t = await measureBackupStage("读取凭据", () => resolveWebDavProfile(webdavService)), n = t.url;
+        if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
+        const a = t.username;
+        if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
+        if (!t.password) return void show.error("请填写webDav密码并保存后, 再试此功能");
         const s = utils.getNowStr("_", "_") + ".json";
-        let o = JSON.stringify(await storageManager.exportData());
-        o = await encryptPortableBackup(o);
-        const e = webdavService.createClient({ url: n, username: a, password: i });
-        await e.backup(folderName, s, o), show.ok("备份完成");
+        const plain = await measureBackupStage("导出数据", async () => JSON.stringify(await storageManager.exportData()));
+        const encrypted = await measureBackupStage("加密", () => encryptPortableBackup(plain));
+        bytes = encrypted.length;
+        const client = webdavService.createClient({ url: n, username: a, password: t.password });
+        await client.backup(folderName, s, encrypted, logBackupStage);
+        result = "success", show.ok("备份完成");
     } catch (l) {
-        clog.error(l), show.error(errorMessage(l));
+        clog.error("[WebDAV备份失败]", backupErrorDetails(l)), show.error(errorMessage(l));
     } finally {
+        logBackupStage({ stage: "合计", result, durationMs: performance.now() - startedAt, ...(bytes == null ? {} : { bytes }) });
         r.close();
     }
 }

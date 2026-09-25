@@ -1,7 +1,7 @@
 // @ts-check
 
 import { normalizeMovieCarNum } from "../../core/movie-identity.js";
-import { isHitShowPage } from "../../core/site-context.js";
+import { classifyJavDbPage } from "../../core/site-context.js";
 
 export class JavDbHostAdapter {
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
@@ -20,10 +20,38 @@ export class JavDbHostAdapter {
     detectRoute() {
         if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
         if (this.location.pathname === "/users/collection_codes") return "owned-detail";
-        // JHS 自渲染榜单页（热播/Top250）没有原生列表节点，但语义是列表页（对齐 site-context.isListPage），
-        // 否则 window.isListPage=false 会让筛选判定与状态刷新监听整体失效。
-        if (this.location.pathname === "/advanced_search" && [ "handlePlayback", "handleTop" ].some((key => new URLSearchParams(this.location.search).get(key) === "1"))) return "list";
+        if (["actor-ranking", "award-ranking"].includes(this.getPageContext().kind)) return "other";
         return this.locateListRoot() ? "list" : "other";
+    }
+    getPageContext() { return classifyJavDbPage(this.location); }
+    getTop250FilterContainer() { return this.document.querySelector("section .container") ?? this.getListContainer(); }
+    locateTop250SubtitleCards() { return this.locateListItems(); }
+    /** @param {Element} controls */
+    mountTop250SubtitleControls(controls) {
+        const root = this.locateListRoot();
+        root?.parentElement?.insertBefore(controls, root);
+    }
+    /** @param {Element} root */
+    mountExternalFc2Catalog(root) {
+        const container = this.getListContainer();
+        if (!container) throw new Error("JavDB 列表容器不可用");
+        container.querySelector(":scope > .box")?.remove();
+        container.querySelector(":scope > .tool-box")?.remove();
+        this.mountOwnedListRoot(container, root);
+    }
+    /** Carry only the JHS local filter while native TOP250 controls change category, year or page. */
+    /** @param {string} value */
+    syncTop250SubtitleLinks(value) {
+        const container = this.getTop250FilterContainer();
+        if (!container) return;
+        for (const element of container.querySelectorAll('a[href^="/rankings/top"],select[data-url^="/rankings/top"]')) {
+            const attribute = element.matches("select") ? "data-url" : "href";
+            const original = element.getAttribute(attribute);
+            if (!original) continue;
+            const url = new URL(original, this.location.origin);
+            value === "all" ? url.searchParams.delete("jhs_subtitle") : url.searchParams.set("jhs_subtitle", value);
+            element.setAttribute(attribute, `${url.pathname}${url.search}`);
+        }
     }
     readMovieRef() {
         const carNum = this.document.querySelector(".panel-block.first-block .value, [data-car-number]")?.textContent?.trim() ?? null;

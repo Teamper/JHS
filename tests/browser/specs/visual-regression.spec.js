@@ -69,7 +69,7 @@ for (const theme of ["light", "dark"]) {
   test(`JavDB List → FC2 Dialog ${theme}`, async ({ context, page }, testInfo) => {
     test.skip(!ENABLED || !VISUAL_PROJECTS.has(testInfo.project.name), "visual regression is opt-in via JHS_VISUAL_REGRESSION=1 and pinned to desktop-wide/mobile");
     await fulfillHostFixtures(context);
-    await page.goto("https://javdb.com/advanced_search?type=3", { waitUntil: "domcontentloaded" });
+    await page.goto("https://javdb.com/search_advanced?type=3", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page, {
       settingOverrides: {
         enableLoadReview: "yes",
