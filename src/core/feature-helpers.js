@@ -121,19 +121,19 @@ function linkCommentImageReferences(/** @type {unknown} */ text, /** @type {numb
 }
 
 /** 安全播放媒体，统一处理浏览器播放拒绝并返回是否成功。 */
-export async function safePlay(/** @type {HTMLMediaElement | null | undefined} */ mediaElement, /** @type {{context?: string, notify?: boolean, message?: string}} */ { context = "视频", notify = !1, message = "当前视频源无法播放" } = {}) {
+export async function safePlay(/** @type {HTMLMediaElement | null | undefined} */ mediaElement, /** @type {{context?: string, notify?: boolean, message?: string, notifyUser?: (message: string) => void, warn?: (message: string, error?: unknown) => void}} */ { context = "视频", notify = !1, message = "当前视频源无法播放", notifyUser = (text) => show.error(text), warn = (text, error) => clog.warn(text, error) } = {}) {
     if (!mediaElement || "function" != typeof mediaElement.play) {
-        clog.warn(`${context}播放失败：媒体元素不可用`);
-        notify && show.error(message);
+        warn(`${context}播放失败：媒体元素不可用`);
+        notify && notifyUser(message);
         return !1;
     }
     try {
         await mediaElement.play();
         return !0;
     } catch (error) {
-        clog.warn(`${context}播放失败`, error);
+        warn(`${context}播放失败`, error);
         const name = error && "object" == typeof error && "name" in error ? String(error.name) : "";
-        notify && ![ "NotAllowedError", "AbortError" ].includes(name) && show.error(message);
+        notify && ![ "NotAllowedError", "AbortError" ].includes(name) && notifyUser(message);
         return !1;
     }
 }

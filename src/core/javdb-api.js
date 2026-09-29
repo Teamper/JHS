@@ -34,8 +34,9 @@ export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
     }
     if (!id) throw new Error("JavDB 影片 ID 无效");
     const boundary = "----jhs-javdb-want-watch", body = [ [ "status", "want_watch" ], [ "score", "0" ], [ "content", "" ] ].map((([ name, value ]) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)).join("") + `--${boundary}--\r\n`;
+    let response;
     try {
-        const response = await gmHttp.gmRequest("POST", `${U}/v1/movies/${encodeURIComponent(id)}/reviews`, body, {}, {
+        response = await gmHttp.gmRequest("POST", `${U}/v1/movies/${encodeURIComponent(id)}/reviews`, body, {}, {
             "user-agent": "Dart/3.5 (dart:io)",
             "accept-language": "zh-TW",
             authorization: `Bearer ${token}`,
@@ -43,9 +44,6 @@ export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
             "content-type": `multipart/form-data; boundary=${boundary}`
         });
         if (0 === response?.success) throw response;
-        await storageManager.deleteCachedRequest(`movie-detail:${id}`);
-        wantWatchStateCache.set(id, true);
-        return response;
     } catch (error) {
         const failure = asResponseRecord(error);
         if (401 === failure.status || "JWTVerificationError" === failure.action || /未登录|登录|unauthorized|jwt/i.test(failure.message || "")) {
@@ -55,6 +53,13 @@ export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
         }
         throw error instanceof Error ? error : new Error(failure.message || "加入 JavDB 想看失败");
     }
+    wantWatchStateCache.set(id, true);
+    try {
+        await storageManager.deleteCachedRequest(`movie-detail:${id}`);
+    } catch (error) {
+        try { /** @type {any} */ (globalThis).clog?.warn("JavDB 想看已提交，详情缓存清理失败", error); } catch { /* committed state must win */ }
+    }
+    return response;
 }
 
 /** Reads the authenticated account's current want-watch state; null means not logged in. */

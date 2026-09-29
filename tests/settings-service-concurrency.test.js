@@ -3,12 +3,15 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsService } from "../src/services/settings-service.js";
+import { StorageMutationCoordinator, STORAGE_MUTATION_LOCK } from "../src/core/storage-mutation-coordinator.js";
 
 /** A name-keyed mutex standing in for navigator.locks so read-modify-write serializes. */
 function createFakeLocks() {
     const queues = new Map();
     return {
+        names: [],
         request(name, callback) {
+            this.names.push(name);
             const previous = queues.get(name) || Promise.resolve();
             const run = previous.then(() => callback());
             queues.set(name, run.then(() => undefined, () => undefined));
@@ -42,6 +45,49 @@ describe("SettingsService single write entry", () => {
         ]);
         // A's change must survive B's concurrent write — the old snapshot-overwrite lost it.
         expect(storage.read()).toMatchObject({ sortMethod: "date", videoMuted: "yes" });
+    });
+
+    it("uses the shared storage mutation lock for settings read-modify-write", async () => {
+        const locks = createFakeLocks(), coordinator = new StorageMutationCoordinator({ lockManager: locks });
+        const storage = createSharedStorage({});
+        const tabA = new SettingsService(storage, { mutationCoordinator: coordinator });
+        const tabB = new SettingsService(storage, { mutationCoordinator: coordinator });
+        await Promise.all([ tabA.set("sortMethod", "date"), tabB.set("videoMuted", "yes") ]);
+        expect(storage.read()).toMatchObject({ sortMethod: "date", videoMuted: "yes" });
+        expect(locks.names.length).toBe(2);
+        expect(new Set(locks.names)).toEqual(new Set([ STORAGE_MUTATION_LOCK ]));
+    });
+
+    it("supports migration writes inside an already-held storage mutation lock", async () => {
+        const locks = createFakeLocks(), coordinator = new StorageMutationCoordinator({ lockManager: locks });
+        const storage = createSharedStorage({ legacyKey: "old" });
+        const service = new SettingsService(storage, { mutationCoordinator: coordinator });
+        await coordinator.runExclusive(() => service.updateWithoutLock((draft) => { draft.migratedKey = draft.legacyKey; delete draft.legacyKey; }));
+        expect(storage.read()).toEqual({ migratedKey: "old" });
+        expect(locks.names).toEqual([ STORAGE_MUTATION_LOCK ]);
+    });
+
+    it("does not deadlock a locked migration behind a queued settings writer", async () => {
+        const locks = createFakeLocks(), coordinator = new StorageMutationCoordinator({ lockManager: locks });
+        const storage = createSharedStorage({ legacyKey: "old" });
+        const service = new SettingsService(storage, { mutationCoordinator: coordinator });
+        let enterMigration, releaseMigration;
+        const migrationEntered = new Promise((resolve) => { enterMigration = resolve; });
+        const migrationGate = new Promise((resolve) => { releaseMigration = resolve; });
+        const migration = coordinator.runExclusive(async () => {
+            enterMigration();
+            await migrationGate;
+            await service.updateWithoutLock((draft) => { draft.migratedKey = draft.legacyKey; delete draft.legacyKey; });
+        });
+        await migrationEntered;
+
+        const normalWrite = service.set("sortMethod", "date");
+        while (locks.names.length < 2) await Promise.resolve();
+        releaseMigration();
+
+        await Promise.all([ migration, normalWrite ]);
+        expect(storage.read()).toEqual({ migratedKey: "old", sortMethod: "date" });
+        expect(locks.names).toEqual([ STORAGE_MUTATION_LOCK, STORAGE_MUTATION_LOCK ]);
     });
 
     it("still works without navigator.locks (node/jsdom fallback)", async () => {
@@ -115,6 +161,21 @@ describe("SettingsService single write entry", () => {
         await expect(service.refresh()).rejects.toThrow("read failed");
         await expect(service.set("themeMode", "dark")).resolves.toMatchObject({ themeMode: "dark" });
     });
+
+    it("does not report a committed setting as failed when post-commit diagnostics also fail", async () => {
+        const value = { setting: {} };
+        const afterPersist = vi.fn(async () => { throw new Error("broadcast failed"); });
+        vi.stubGlobal("clog", { error: vi.fn(() => { throw new Error("logger failed"); }) });
+        const service = new SettingsService({
+            async get(key) { return value[key]; },
+            async set(key, next) { value[key] = next; },
+        }, { afterPersist });
+
+        await expect(service.set("themeMode", "dark")).resolves.toMatchObject({ themeMode: "dark" });
+        expect(value.setting.themeMode).toBe("dark");
+        await expect(service.set("videoMuted", "yes")).resolves.toMatchObject({ themeMode: "dark", videoMuted: "yes" });
+        expect(afterPersist).toHaveBeenCalledTimes(2);
+    });
 });
 
 describe("legacy StorageManager delegation", () => {
@@ -148,10 +209,9 @@ describe("legacy StorageManager delegation", () => {
 
     it("falls back to the legacy locked path without SettingsService", async () => {
         const { adapter } = createStorageManager(null);
-        const getSetting = vi.fn(async () => ({ a: 1 }));
+        adapter.forage.getItem = vi.fn(async () => ({ a: 1 }));
         const saveSetting = vi.fn(async () => {});
-        adapter.getSetting = getSetting;
-        adapter.saveSetting = saveSetting;
+        adapter._saveSettingWithoutLock = saveSetting;
         await adapter.saveSettingItem("a", 2);
         expect(saveSetting).toHaveBeenCalledWith({ a: 2 });
     });

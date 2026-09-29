@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import jquery from "jquery";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CoverButtonPlugin } from "../src/plugins/image-viewer/cover-button.js";
-import { PreviewVideoPlugin } from "../src/plugins/image-viewer/preview-video.js";
-import { BusPreviewVideoPlugin } from "../src/plugins/image-viewer/bus-preview-video.js";
-import { TranslatePlugin } from "../src/plugins/translate/translate.js";
-import { HighlightMagnetPlugin } from "../src/plugins/status/highlight-magnet.js";
+import { CoverButtonController } from "../src/features/list/cover-button-controller.js";
+import { JavDbPreviewController as PreviewVideoPlugin } from "../src/features/detail/javdb-preview-controller.js";
+import { JavBusPreviewController } from "../src/features/detail/javbus-preview-controller.js";
+import { ExternalBridgeTranslationController } from "../src/features/translation/translation-controller.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { MagnetFilterController } from "../src/features/detail/magnet-filter-controller.js";
 
 const $ = jquery;
 const win = /** @type {any} */ (globalThis.window);
@@ -22,7 +23,10 @@ function makeSettings(initial) {
         snapshot: () => snapshot,
         set: async (key, value) => { snapshot = { ...snapshot, [key]: value }; emit([key]); return snapshot; },
         addEventListener: (name, handler) => listeners.push({ name, handler }),
-        removeEventListener: vi.fn(),
+        removeEventListener: vi.fn((name, handler) => {
+            const index = listeners.findIndex((item) => item.name === name && item.handler === handler);
+            if (index >= 0) listeners.splice(index, 1);
+        }),
         listeners,
     };
 }
@@ -44,14 +48,19 @@ describe("PreviewVideoPlugin live lifecycle", () => {
         const settings = makeSettings({ enablePreviewVideo: "no", enableLoadPreviewVideo: "yes" });
         const cleanups = [];
         const scope = { addCleanup: (fn) => cleanups.push(fn) };
+        let legacyPluginsReady;
+        const events = { on: vi.fn((name, handler) => { expect(name).toBe("jhs-features-ready"); legacyPluginsReady = handler; return () => { legacyPluginsReady = undefined; }; }) };
         const plugin = new PreviewVideoPlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "storage" ? {} : name === "movie" ? {} : null;
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "events" ? events : name === "scope" ? async () => scope : name === "storage" ? {} : name === "movie" ? {} : null;
         plugin.getPageInfo = () => ({ carNum: "ABC-123" });
         const unmountSpy = vi.spyOn(plugin, "unmountPreview").mockImplementation(() => { plugin._previewMounted = false; });
         const mountSpy = vi.spyOn(plugin, "mountPreview").mockImplementation(() => { plugin._previewMounted = true; });
 
         await plugin.handle();
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
+        expect(events.on).toHaveBeenCalledOnce();
+        expect(unmountSpy).not.toHaveBeenCalled();
+        legacyPluginsReady();
         expect(unmountSpy).toHaveBeenCalledTimes(1);
 
         for (let i = 0; i < 3; i++) {
@@ -61,6 +70,8 @@ describe("PreviewVideoPlugin live lifecycle", () => {
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
         expect(unmountSpy.mock.calls.length).toBe(4); // 初始 1 + 3 次 OFF
         expect(mountSpy).toHaveBeenCalledTimes(3);
+        cleanups.forEach((cleanup) => cleanup());
+        expect(legacyPluginsReady).toBeUndefined();
     });
 
     it("DMM sub-switch OFF destroys the JHS player and restores the native preview", () => {
@@ -123,73 +134,122 @@ describe("PreviewVideoPlugin live lifecycle", () => {
     });
 });
 
-describe("BusPreviewVideoPlugin live lifecycle", () => {
+describe("JavBusPreviewController lifecycle", () => {
     it("creates remote media controls without interpreting URL text as markup", async () => {
         doc.body.innerHTML = '<div id="target"></div>';
-        const settings = makeSettings({ videoQuality: "mhb_w", videoMuted: true }), plugin = new BusPreviewVideoPlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : null;
+        const settings = makeSettings({ videoQuality: "mhb_w", videoMuted: true });
+        const controller = new JavBusPreviewController({ document: doc, window: win, hostAdapter: { site: "javbus" }, route: "detail", settings, events: { on: () => () => {} }, storage: {}, movie: {}, ui: { jquery: $ }, diagnostics: { recordError: vi.fn() }, scope: new LifecycleScope("javbus-preview:xss") });
         const payload = 'https://example.test/video.mp4\" onerror=\"alert(1)\"><img class=\"injected\">';
-        await plugin.createVideoPlayerAndControls({ mhb_w: payload }, $("#target"));
+        await controller.createVideoPlayerAndControls({ mhb_w: payload }, $("#target"));
         expect(doc.querySelector(".injected")).toBeNull();
         expect(doc.querySelector("[onerror]")).toBeNull();
         expect($("#preview-video source").attr("src")).toBe(payload);
-        expect($(".jhs-video-quality-btn").attr("data-video-src")).toBe(payload);
+        expect($(".jhs-video-quality-btn").data("video-src")).toBe(payload);
     });
 
     it("registers one listener and dispatches mount/unmount on toggles", async () => {
-        win.isDetailPage = true;
+        doc.body.innerHTML = '<div id="sample-waterfall"><div class="sample-box"><div class="photo-frame"><img src="https://example.test/cover.jpg"></div></div></div>';
         const settings = makeSettings({ enablePreviewVideo: "no", enableLoadPreviewVideo: "yes" });
-        const cleanups = [];
-        const scope = { addCleanup: (fn) => cleanups.push(fn) };
-        const plugin = new BusPreviewVideoPlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "storage" ? {} : name === "movie" ? {} : null;
-        plugin.getPageInfo = () => ({ carNum: "ABC-123" });
-        const unmountSpy = vi.spyOn(plugin, "unmountPreview").mockImplementation(() => { plugin._busPreviewMounted = false; });
-        const mountSpy = vi.spyOn(plugin, "mountPreview").mockImplementation(() => { if (plugin._busPreviewMounted) return; plugin._busPreviewMounted = true; });
+        const scope = new LifecycleScope("javbus-preview:lifecycle");
+        let legacyPluginsReady;
+        const events = { on: vi.fn((name, handler) => { expect(name).toBe("jhs-features-ready"); legacyPluginsReady = handler; return () => { legacyPluginsReady = undefined; }; }) };
+        const controller = new JavBusPreviewController({ document: doc, window: win, hostAdapter: { site: "javbus", readMovieRef: () => ({ carNum: "ABC-123" }), locateNativeGallery: () => doc.querySelector("#sample-waterfall") }, route: "detail", settings, events, storage: {}, movie: {}, ui: { jquery: $ }, diagnostics: { recordError: vi.fn() }, scope });
+        const unmountSpy = vi.spyOn(controller, "unmountPreview"), mountSpy = vi.spyOn(controller, "mountPreview");
 
-        await plugin.handle();
+        expect(controller.start()).toBe(true);
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
+        expect(events.on).toHaveBeenCalledOnce();
+        expect(unmountSpy).not.toHaveBeenCalled();
+        expect(mountSpy).not.toHaveBeenCalled();
+        legacyPluginsReady();
         expect(unmountSpy).toHaveBeenCalledTimes(1);
 
         await settings.set("enablePreviewVideo", "yes");
         await settings.set("enableLoadPreviewVideo", "no");
         await settings.set("enablePreviewVideo", "no");
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
-        expect(mountSpy).toHaveBeenCalled(); // 幂等挂载（DMM 子开关切换会再次进入 reconfigure，但不会重复挂载）
-        // JavBus 无原生预览：DMM OFF 等于整个 JHS preview 入口不可用 → unmount（初始 OFF 1 次 + DMM OFF 1 次 + 总开关 OFF 1 次）
+        expect(mountSpy).toHaveBeenCalledTimes(1);
         expect(unmountSpy.mock.calls.length).toBe(3);
+        scope.dispose();
+        expect(legacyPluginsReady).toBeUndefined();
+        expect(settings.removeEventListener).toHaveBeenCalledOnce();
+        expect(doc.querySelector(".preview-video-container")).toBeNull();
+    });
+
+    it("cancels a pending DMM response when Preview turns OFF", async () => {
+        doc.body.innerHTML = '<div id="sample-waterfall"><div class="sample-box"><div class="photo-frame"><img src="https://example.test/cover.jpg"></div></div></div>';
+        const settings = makeSettings({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "yes", videoQuality: "mhb_w" });
+        const scope = new LifecycleScope("javbus-preview-pending-request");
+        let ready;
+        let resolvePreview;
+        let requestScope;
+        const events = { on: (_name, handler) => { ready = handler; return () => { ready = undefined; }; } };
+        const storage = { getLocal: () => null, setLocal: vi.fn() };
+        const movie = { preview: vi.fn((_provider, _identity, options) => {
+            requestScope = options.scope;
+            return new Promise((resolve) => { resolvePreview = resolve; });
+        }) };
+        const controller = new JavBusPreviewController({
+            document: doc, window: win,
+            hostAdapter: { site: "javbus", readMovieRef: () => ({ carNum: "ABC-123" }), locateNativeGallery: () => doc.querySelector("#sample-waterfall") },
+            route: "detail", settings, events, storage, movie, ui: { jquery: $ },
+            diagnostics: { recordError: vi.fn() }, scope,
+        });
+
+        controller.start();
+        ready();
+        const pending = controller.handleVideo();
+        await vi.waitFor(() => expect(movie.preview).toHaveBeenCalledOnce());
+        expect(requestScope.signal.aborted).toBe(false);
+
+        await settings.set("enablePreviewVideo", "no");
+        expect(requestScope.signal.aborted).toBe(true);
+        resolvePreview({ sources: { mhb_w: "https://example.test/late.mp4" }, pageUrl: "https://example.test/dmm", matchType: "single" });
+        await pending;
+
+        expect(doc.querySelector("#preview-video")).toBeNull();
+        expect(doc.querySelector("#bus-preview-modal.is-open")).toBeNull();
+        expect(doc.querySelector(".preview-video-container")).toBeNull();
+        scope.dispose();
     });
 });
 
-describe("CoverButtonPlugin listener accumulation", () => {
-    it("keeps exactly one settings listener across repeated handle() calls", async () => {
-        win.isListPage = true;
+describe("CoverButtonController lifecycle", () => {
+    it("mounts one settings listener and removes it with its Feature scope", async () => {
         const settings = makeSettings({ enablePreviewVideo: "yes" });
-        const cleanups = [];
-        const scope = { addCleanup: (fn) => cleanups.push(fn) };
-        const plugin = new CoverButtonPlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : {};
-        plugin.getOptionalDependency = () => null;
-        plugin.getSelector = () => ({ itemSelector: ".item", boxSelector: ".movie-list" });
+        const scope = new LifecycleScope("cover-button-test");
+        const plugin = new CoverButtonController({
+            document: doc, window: win,
+            list: { getSelector: () => ({ itemSelector: ".item" }), findCarNumAndHref: () => ({ carNum: "ABC-123" }), parseActressName: async () => [] },
+            settings, state: { patch: vi.fn() }, screenshot: { resolve: vi.fn() }, storage: {},
+            movie: { externalSiteOrigin: (key) => `https://${key}.example.test`, providerOrigin: () => "https://av123.example.test" }, scope,
+            ui: { jquery: $, confirm: vi.fn(), loading: () => ({ close() {} }), openImageViewer: vi.fn() },
+            clipboard: { copyText: vi.fn() }, notifications: { error: vi.fn(), ok: vi.fn() }, diagnostics: { recordError: vi.fn() },
+            navigation: { open: vi.fn() }, screenshotAvailable: true, isJavBus: false,
+        });
 
-        await plugin.handle();
-        await plugin.handle();
+        await plugin.start();
+        await plugin.start();
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
+        expect(doc.querySelectorAll(".jhs-cover-tools")).toHaveLength(0);
+        scope.dispose();
+        expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(0);
     });
 });
 
-describe("TranslatePlugin live lifecycle", () => {
+describe("native translation feature live lifecycle", () => {
     it("reverts on OFF and re-applies on ON with a single listener", async () => {
         win.isDetailPage = true;
         $("body").append('<h1 class="jhs-fc2-title"><strong class="current-title">ABC-123 タイトル</strong></h1>');
         const settings = makeSettings({ translateTitle: "yes" });
-        const cleanups = [];
-        const scope = { addCleanup: (fn) => cleanups.push(fn) };
-        const plugin = new TranslatePlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "translation" ? { translate: async () => "译名" } : null;
-        plugin.getOptionalDependency = () => null;
+        const scope = new LifecycleScope("translation-live-test");
+        const translation = { translate: vi.fn(async () => "译名") };
+        const controller = new ExternalBridgeTranslationController({
+            document: doc, window: win, route: "detail", hostAdapter: { readMovieRef: () => ({ carNum: "ABC-123" }) },
+            listPage: null, settings, translation, styles: { register: () => () => {} }, diagnostics: { recordError() {} }, scope,
+        });
 
-        await plugin.handle();
+        controller.start();
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
         await vi.waitFor(() => expect($(".translated-title").length).toBe(1));
         expect($(".translated-title").text()).toBe("译名");
@@ -200,28 +260,71 @@ describe("TranslatePlugin live lifecycle", () => {
         await settings.set("translateTitle", "yes");
         await vi.waitFor(() => expect($(".translated-title").length).toBe(1));
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
+        expect(translation.translate).toHaveBeenLastCalledWith("ABC-123 タイトル", expect.objectContaining({ cacheAlias: "ABC-123", scope }));
+        scope.dispose();
+        expect($(".translated-title").length).toBe(0);
+    });
+
+    it("does not render a request that returns after the setting turns OFF", async () => {
+        win.isDetailPage = true;
+        $("body").append('<h1><strong class="current-title">ABC-123 タイトル</strong></h1>');
+        const settings = makeSettings({ translateTitle: "yes" });
+        let finishTranslation;
+        const translation = { translate: vi.fn(() => new Promise((resolve) => { finishTranslation = resolve; })) };
+        const scope = new LifecycleScope("translation-late-response-test");
+        const controller = new ExternalBridgeTranslationController({
+            document: doc, window: win, route: "detail", hostAdapter: { readMovieRef: () => ({ carNum: "ABC-123" }) },
+            listPage: null, settings, translation, styles: { register: () => () => {} }, diagnostics: { recordError() {} }, scope,
+        });
+
+        controller.start();
+        await vi.waitFor(() => expect(translation.translate).toHaveBeenCalledOnce());
+        await settings.set("translateTitle", "no");
+        expect($(".translated-title").length).toBe(0);
+        finishTranslation("迟到译文");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect($(".translated-title").length).toBe(0);
+        scope.dispose();
     });
 });
 
-describe("HighlightMagnetPlugin live lifecycle", () => {
-    it("reconfigures on settings.changed and syncs the local button", async () => {
-        win.isDetailPage = true;
+describe("Detail Feature magnet filter lifecycle", () => {
+    it("filters host rows, restores them on OFF, and cleans listeners and score UI on stop", async () => {
+        doc.body.innerHTML = '<button id="enable-magnets-filter" class="do-hide"><span id="magnets-span"></span></button><div id="magnets-content"><div class="item" id="high"><span class="name" style="font-weight:600;color:purple">ABC-123 4K HDR</span></div><div class="item" id="low"><span class="name">普通资源</span></div><div class="item" id="sub" data-subtitle="yes"><span class="name">中字资源</span></div></div>';
         const settings = makeSettings({ enableMagnetsFilter: "yes" });
-        const cleanups = [];
-        const scope = { addCleanup: (fn) => cleanups.push(fn) };
-        const plugin = new HighlightMagnetPlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "host" ? { getDetailResourceBoundary: () => null } : null;
-        const filterSpy = vi.spyOn(plugin, "doFilterMagnet").mockImplementation(() => undefined);
-        const showAllSpy = vi.spyOn(plugin, "showAll").mockImplementation(() => undefined);
+        const scope = new LifecycleScope("magnet-filter-lifecycle");
+        const rows = [...doc.querySelectorAll("#magnets-content .item")];
+        const boundary = {
+            rows: () => rows,
+            getTitleTarget: (row) => row.querySelector(".name"),
+            hasSubtitleTag: (row) => row.dataset.subtitle === "yes",
+        };
+        const eventHandlers = new Map();
+        const events = { on: vi.fn((name, handler) => { eventHandlers.set(name, handler); return () => eventHandlers.delete(name); }) };
+        const controller = new MagnetFilterController({ document: doc, hostAdapter: { site: "javdb", getDetailResourceBoundary: () => boundary }, settings, events, scope });
 
-        await plugin.handle();
-        expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
-        expect(filterSpy).toHaveBeenCalledTimes(1);
+        expect(controller.start()).toBe(true);
+        expect(doc.querySelector("#high").classList.contains("high-quality")).toBe(true);
+        expect(doc.querySelector("#sub").classList.contains("high-quality")).toBe(true);
+        expect(doc.querySelector("#low").classList.contains("jhs-magnet-filter-hidden")).toBe(true);
+        expect(doc.querySelectorAll(".jhs-magnet-score")).toHaveLength(3);
+        expect(doc.querySelector("#enable-magnets-filter").getAttribute("aria-pressed")).toBe("true");
+        expect(doc.querySelector("#enable-magnets-filter").getAttribute("data-tip")).toContain("仅显示");
 
         await settings.set("enableMagnetsFilter", "no");
-        expect(showAllSpy).toHaveBeenCalledTimes(1);
+        expect(rows.every((row) => !row.classList.contains("jhs-magnet-filter-hidden"))).toBe(true);
+        expect(doc.querySelectorAll(".jhs-magnet-score")).toHaveLength(0);
+        expect(doc.querySelector("#high .name").style.color).toBe("purple");
+        expect(doc.querySelector("#enable-magnets-filter").getAttribute("aria-pressed")).toBe("false");
+        expect(doc.querySelector("#enable-magnets-filter").hasAttribute("data-tip")).toBe(false);
+
         await settings.set("enableMagnetsFilter", "yes");
-        expect(filterSpy.mock.calls.length).toBe(2);
-        expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
+        expect(doc.querySelector("#low").classList.contains("jhs-magnet-filter-hidden")).toBe(true);
+        eventHandlers.get("magnet-items-updated")();
+        scope.dispose();
+        expect(eventHandlers.size).toBe(0);
+        expect(settings.removeEventListener).toHaveBeenCalledOnce();
+        expect(doc.querySelectorAll(".jhs-magnet-score")).toHaveLength(0);
+        expect(rows.every((row) => !row.classList.contains("jhs-magnet-filter-hidden"))).toBe(true);
     });
 });

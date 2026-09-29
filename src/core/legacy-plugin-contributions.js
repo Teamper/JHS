@@ -4,6 +4,7 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     ListPagePlugin: "list.core",
     AutoPagePlugin: "list.auto-page",
     Fc2Plugin: "detail.fc2-owned",
+    Fc2NavigationPlugin: "detail.fc2-navigation",
     FoldCategoryPlugin: "list.fold-category",
     ListPageButtonPlugin: "list.actions",
     HistoryPlugin: "library.history",
@@ -48,6 +49,7 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
 });
 
 const LEGACY_SHARED_CONTRIBUTION_MAP = Object.freeze({
+    discovery: ["discovery.hit-show", "discovery.new-video", "discovery.scheduler"],
     "detail.subtitle": ["external-bridge.subtitle"],
     "detail.native": ["detail.javdb-native", "detail.javbus-native"],
     "detail.state-actions": ["detail.cover-state-actions", "detail.page-state-actions"],

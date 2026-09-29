@@ -2,6 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { ScreenshotService } from "../src/services/screenshot-service.js";
 
 describe("ScreenshotService", () => {
+    it("normalizes screenshot assets at the service boundary", () => {
+        const service = new ScreenshotService(null, null);
+        expect(service.normalizeAssetUrl("http://img.javstore.net/legacy.jpg")).toBe("https://img.javstore.net/legacy.jpg");
+        expect(service.normalizeAssetUrl("javascript:alert(1)")).toBeNull();
+    });
+
     it("keeps provider priority before integration fallback", async () => {
         const provider = { id: "preferred", resolve: vi.fn(async () => ["provider-image"]) };
         const providers = { getAvailable: vi.fn(async () => [provider]), updateHealth: vi.fn() };

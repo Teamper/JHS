@@ -10,10 +10,25 @@ import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 /** @typedef {{ state?: string, cooldownMs?: number, openTime?: number, failCount?: number }} CircuitBreakerRecord */
 /** @typedef {{ count: number, errors: number, lastUsed?: number }} DomainStatsRecord */
 /** @typedef {{ message: string, count: number }} HealthIssue */
+/** @typedef {{ jquery: (value: any) => any, legacyStorage: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window }} SettingsUiDependencies */
+
+/** Keep a completed restore or import distinct from notification and reload failures. */
+/** @param {SettingsUiDependencies} dependencies @param {string} message */
+function finishCommittedDataChange(dependencies, message) {
+    const { notifications: show, logger: clog, window } = dependencies;
+    try { show.ok(message); }
+    catch (error) { try { clog.warn("数据已写入，但完成提示失败", error); } catch { /* committed data wins */ } }
+    try { window.setTimeout(() => window.location.reload(), 1e3); }
+    catch (error) {
+        try { clog.error("数据已写入，但自动刷新失败", error); } catch { /* committed data wins */ }
+        try { show.info?.("操作已完成，请手动刷新页面"); } catch { /* committed data wins */ }
+    }
+}
 
 /** Render the network/external requests panel: circuit breaker status, domain stats. */
-/** @param {DiagnosticsHandle} diagnostics */
-export async function renderNetworkPanel(diagnostics) {
+/** @param {DiagnosticsHandle} diagnostics @param {SettingsUiDependencies} dependencies */
+export async function renderNetworkPanel(diagnostics, dependencies) {
+    const { jquery: $, legacyStorage: storageManager, notifications: show } = dependencies;
     const network = diagnostics.getNetworkDiagnostics(), e = /** @type {Record<string, CircuitBreakerRecord>} */ (network.circuitBreakers), t = /** @type {Record<string, DomainStatsRecord>} */ (network.domainStats), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
     // 仅首次水合：切换面板后重渲染不得覆盖用户尚未保存的编辑
     $("#circuitBreakerThreshold").each(((/** @type {number} */ _i, /** @type {HTMLInputElement} */ element) => {
@@ -41,16 +56,19 @@ export async function renderNetworkPanel(diagnostics) {
     } else $("#domain-stats-table").html('<p class="jhs-empty-note">暂无统计数据</p>');
     $(".reset-breaker").off("click").on("click", ((/** @type {MouseEvent} */ e) => {
         const t = $(e.target).data("domain");
-        diagnostics.resetCircuitBreaker(t), show.ok(`已重置 ${t} 的熔断状态`), renderNetworkPanel(diagnostics);
+        diagnostics.resetCircuitBreaker(t), show.ok(`已重置 ${t} 的熔断状态`), renderNetworkPanel(diagnostics, dependencies);
     })), $("#resetAllBreakersBtn").off("click").on("click", (() => {
-        diagnostics.resetAllCircuitBreakers(), show.ok("已重置全部熔断状态"), renderNetworkPanel(diagnostics);
+        diagnostics.resetAllCircuitBreakers(), show.ok("已重置全部熔断状态"), renderNetworkPanel(diagnostics, dependencies);
     })), $("#clearDomainStatsBtn").off("click").on("click", (() => {
-        diagnostics.clearDomainStats(), show.ok("已清空域名统计"), renderNetworkPanel(diagnostics);
+        diagnostics.clearDomainStats(), show.ok("已清空域名统计"), renderNetworkPanel(diagnostics, dependencies);
     }));
 }
 
 /** Render the snapshot list as a Tabulator table with restore/download/delete actions. */
-export async function renderSnapshotPanel() {
+/** @param {SettingsUiDependencies} dependencies */
+export async function renderSnapshotPanel(dependencies) {
+    const { jquery: $, legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
+    const loading = () => domUi.loading();
     const e = await storageManager.getSnapshotList(), t = {
         "manual": "手动创建",
         "auto-import": "导入前自动",
@@ -59,7 +77,7 @@ export async function renderSnapshotPanel() {
     };
     if (0 === e.length) return void $("#snapshot-list").html('<div class="jhs-empty-note">暂无快照，点击上方按钮创建</div>');
     $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
-    const n = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, "#snapshot-list", {
+    const n = createJhsTable(domUi.tableConstructor, "#snapshot-list", {
         pagination: !1,
         layout: "fitColumns",
         placeholder: "暂无数据",
@@ -79,10 +97,13 @@ export async function renderSnapshotPanel() {
                             utils.q(e, `恢复到快照「${escapeHtml(i.name)}」? 当前数据会自动备份。`, (async () => {
                                 let e = loading();
                                 try {
-                                    await storageManager.restoreSnapshot(i.id), show.ok("恢复成功, 页面将刷新"), setTimeout(() => location.reload(), 1e3);
+                                    await storageManager.restoreSnapshot(i.id);
                                 } catch (t) {
-                                    clog.error(t), show.error("恢复失败: " + (t instanceof Error ? t.message : String(t)));
-                                } finally { e.close(); }
+                                    try { clog.error(t); } catch { /* preserve the restore error */ }
+                                    try { show.error("恢复失败: " + (t instanceof Error ? t.message : String(t))); } catch { /* preserve the restore error */ }
+                                    return;
+                                } finally { try { e.close(); } catch (t) { try { clog.warn("恢复操作加载层关闭失败", t); } catch { /* committed data wins */ } } }
+                                finishCommittedDataChange(dependencies, "恢复成功, 页面将刷新");
                             }));
                         })), a && a.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                             let t = loading();
@@ -93,9 +114,19 @@ export async function renderSnapshotPanel() {
                             } catch (n) { show.error("下载失败: " + (n instanceof Error ? n.message : String(n))); } finally { t.close(); }
                         })), s && s.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                             utils.q(e, `删除快照「${escapeHtml(i.name)}」?`, (async () => {
-                                try {
-                                    await storageManager.deleteSnapshot(i.id), show.ok("已删除"), renderSnapshotPanel();
-                                } catch (t) { clog.error(t), show.error("删除失败: " + (t instanceof Error ? t.message : String(t))); }
+                                try { await storageManager.deleteSnapshot(i.id); }
+                                catch (t) {
+                                    try { clog.error(t); } catch { /* preserve the deletion error */ }
+                                    try { show.error("删除失败: " + (t instanceof Error ? t.message : String(t))); } catch { /* preserve the deletion error */ }
+                                    return;
+                                }
+                                try { show.ok("已删除"); }
+                                catch (t) { try { clog.warn("快照已删除，但完成提示失败", t); } catch { /* committed deletion wins */ } }
+                                try { await renderSnapshotPanel(dependencies); }
+                                catch (t) {
+                                    try { clog.error("快照已删除，但列表刷新失败", t); } catch { /* committed deletion wins */ }
+                                    try { show.error("快照已删除，请重新打开设置刷新列表"); } catch { /* committed deletion wins */ }
+                                }
                             }));
                         }));
                     })), '<button type="button" class="jhs-btn jhs-btn--primary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
@@ -106,8 +137,10 @@ export async function renderSnapshotPanel() {
 }
 
 /** Show a data diff preview dialog before importing data. */
-/** @param {any} e @param {any} t @param {any} n @param {DialogHandle} dialog */
-export function showDiffPreview(e, t, n = null, dialog) {
+/** @param {any} e @param {any} t @param {any} n @param {DialogHandle} dialog @param {SettingsUiDependencies} dependencies */
+export function showDiffPreview(e, t, n = null, dialog, dependencies) {
+    const { legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
+    const loading = () => domUi.loading();
     const a = e.summary, i = [];
     for (const [s, o] of Object.entries(e.stores)) {
         if ("unchanged" === o.status) continue;
@@ -143,21 +176,27 @@ export function showDiffPreview(e, t, n = null, dialog) {
             if (!hasChanges) return void dialog.close(s);
             let o = loading();
             try {
-                await storageManager.createSnapshot("导入前自动备份", "auto-import"),
-                n ? (await storageManager.importData(n), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3)) : t && (await storageManager.importData(t), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3));
+                await storageManager.createSnapshot("导入前自动备份", "auto-import");
+                if (!n && !t) return;
+                await storageManager.importData(n || t);
             } catch (r) {
-                clog.error(r), show.error("导入失败: " + (r instanceof Error ? r.message : String(r)));
-            } finally { o.close(); }
+                try { clog.error(r); } catch { /* preserve the import error */ }
+                try { show.error("导入失败: " + (r instanceof Error ? r.message : String(r))); } catch { /* preserve the import error */ }
+                return;
+            } finally { try { o.close(); } catch (r) { try { clog.warn("导入操作加载层关闭失败", r); } catch { /* committed data wins */ } } }
+            finishCommittedDataChange(dependencies, "导入成功!");
         }
     });
 }
 
 /** Render the plugin management panel: categorized plugin list, timing, errors, cache stats. */
-/** @param {DiagnosticsHandle} diagnostics */
-export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ settings = null) {
+/** @param {DiagnosticsHandle} diagnostics @param {any} settings @param {SettingsUiDependencies} dependencies */
+export async function renderPluginMgmtPanel(diagnostics, settings, dependencies) {
+    const { jquery: $, legacyStorage: storageManager, notifications: show, logger: clog } = dependencies;
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
-    const allNames = diagnosticSnapshot.legacyPlugins;
+    const configuredNames = (diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string}} */ item) => item.name);
+    const allNames = [...new Set([...configuredNames, ...(diagnosticSnapshot.legacyPlugins || [])])];
     const effectiveDisabledNames = (/** @type {string[]} */ values) => {
         const disabledSet = new Set(values);
         return allNames.filter(((/** @type {string} */ name) => disabledSet.has(name) || disabledSet.has(disabledIdForPlugin(name))));
@@ -205,26 +244,43 @@ export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ sett
         }
         if (!settings) throw new Error("SettingsService is unavailable");
         const renderState = (/** @type {string[]} */ disabledList) => {
-            const all = diagnosticSnapshot.legacyPlugins, currentDisabled = effectiveDisabledNames(disabledList);
-            $("#pm-total").text(all.length);
-            $("#pm-enabled").text(all.length - currentDisabled.length);
+            const currentDisabled = effectiveDisabledNames(disabledList);
+            $("#pm-total").text(allNames.length);
+            $("#pm-enabled").text(allNames.length - currentDisabled.length);
             $("#pm-disabled").text(currentDisabled.length);
         };
         renderState(list);
         try {
             await settings.set("disabledPlugins", JSON.stringify(list));
-            show.ok(`插件 "${name}" 已${nextEnabled ? "启用" : "禁用"}，刷新后生效`);
         } catch (error) {
             target.prop("checked", previousEnabled);
             const rollbackList = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
             renderState(rollbackList);
             clog.error("插件状态保存失败，已恢复", error), show.error(`插件 "${name}" 状态保存失败，已恢复`);
+            return;
+        }
+        try {
+            show.ok(`插件 "${name}" 已${nextEnabled ? "启用" : "禁用"}，刷新后生效`);
+        } catch (error) {
+            clog.error("插件状态已保存，但通知显示失败", error);
         }
     });
     const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;
+    const featureTimings = Object.entries(diagnosticSnapshot.startupTimings || {});
     const formatMs = (/** @type {number} */ value) => Number.isFinite(value) ? value.toFixed(1) : "0.0";
-    let startupHtml = startup ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
-    if (timings.length) {
+    const startupHtml = startup?.registeredPlugins ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
+    if (featureTimings.length) {
+        const activeFeatures = new Set(diagnosticSnapshot.activeFeatures);
+        const sorted = featureTimings.sort((a, b) => Number(b[1]) - Number(a[1]));
+        let tHtml = '<table class="jhs-data-table"><tr><th>功能</th><th class="is-right">激活耗时(ms)</th><th class="is-center">状态</th></tr>';
+        for (const [id, duration] of sorted) {
+            const elapsed = Number(duration);
+            const stateClass = elapsed > 500 ? "is-slow" : elapsed > 200 ? "is-warning" : "";
+            tHtml += `<tr><td class="${stateClass}">${escapeHtml(id)}</td><td class="is-right ${stateClass}">${formatMs(elapsed)}</td><td class="is-center">${activeFeatures.has(id) ? "已激活" : "未激活"}</td></tr>`;
+        }
+        tHtml += '</table><p class="jhs-caption">激活耗时包含异步依赖等待，不代表主线程执行时间。</p>';
+        $("#plugin-timing-table").html(tHtml);
+    } else if (timings.length) {
         const sorted = [...timings].sort(((/** @type {any} */ a, /** @type {any} */ b) => b.elapsed - a.elapsed));
         let tHtml = '<table class="jhs-data-table"><tr><th>插件</th><th class="is-center">阶段</th><th class="is-right">耗时(ms)</th><th class="is-center">状态</th></tr>';
         for (const t of sorted) {
@@ -237,11 +293,11 @@ export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ sett
     } else {
         $("#plugin-timing-table").html(startupHtml + '<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
-    const errorLog = diagnosticSnapshot.errors.filter((/** @type {any} */ error) => error.source === "legacy-plugin");
+    const errorLog = diagnosticSnapshot.errors;
     if (errorLog.length) {
-        let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>插件</th><th>阶段</th><th>错误信息</th></tr>';
+        let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>来源</th><th>阶段</th><th>错误信息</th></tr>';
         for (const err of [...errorLog].reverse()) {
-            eHtml += `<tr><td class="is-muted">${escapeHtml(String(err.timestamp || "").substring(11, 19))}</td><td>${escapeHtml(err.plugin)}</td><td>${escapeHtml(err.phase)}</td><td class="is-danger">${escapeHtml(err.message)}</td></tr>`;
+            eHtml += `<tr><td class="is-muted">${escapeHtml(String(err.timestamp || "").substring(11, 19))}</td><td>${escapeHtml(String(err.plugin || err.featureId || err.source || ""))}</td><td>${escapeHtml(String(err.phase || ""))}</td><td class="is-danger">${escapeHtml(String(err.message || ""))}</td></tr>`;
         }
         eHtml += '</table>';
         $("#plugin-error-log").html(eHtml);
@@ -253,7 +309,9 @@ export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ sett
 }
 
 /** Render the data health check panel with totals and issue breakdown. */
-export async function renderDataHealthPanel() {
+/** @param {SettingsUiDependencies} dependencies */
+export async function renderDataHealthPanel(dependencies) {
+    const { jquery: $, legacyStorage: storageManager, logger: clog } = dependencies;
     const e = $("#health-data-display");
     if (!e.length) return;
     e.text("体检中...");
@@ -278,9 +336,11 @@ export async function renderDataHealthPanel() {
 }
 
 /** Repair data health issues after auto-backing up current data. */
-export async function repairDataHealthWithBackup() {
+/** @param {SettingsUiDependencies} dependencies */
+export async function repairDataHealthWithBackup(dependencies) {
+    const { legacyStorage: storageManager, utilities: utils, notifications: show } = dependencies;
     const e = JSON.stringify(await storageManager.exportData()), t = `health-backup-${utils.getNowStr("_", "_")}.json`;
     utils.download(e, t);
     const n = await storageManager.repairDataHealth();
-    show.ok(`已修复 ${n.fixedGroups} 组数据问题，修复前备份已下载`), await renderDataHealthPanel();
+    show.ok(`已修复 ${n.fixedGroups} 组数据问题，修复前备份已下载`), await renderDataHealthPanel(dependencies);
 }

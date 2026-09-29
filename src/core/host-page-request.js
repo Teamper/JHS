@@ -14,6 +14,7 @@ export async function requestHostPage(http, input, scope) {
         url: url.href,
         responseType: "text",
         cacheScope: "none",
+        transport: "native-fetch",
         urlPolicy: { trustClass: "builtin-public", hosts: [window.location.hostname], expectedOrigin: window.location.origin },
     }, scope);
     return String(response.data ?? response.responseText ?? "");

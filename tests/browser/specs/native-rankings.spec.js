@@ -35,20 +35,34 @@ test.describe("JavDB native rankings", () => {
     await expect(page.locator("#native-first")).toBeVisible();
     await expect(page.locator(".movie-list .item")).toHaveCount(3);
     await expect(page.locator("#movie-fc2")).toHaveAttribute("href", "/rankings/movies?p=weekly&t=fc2");
-    await expect(page.locator(".main-tabs a").nth(1)).toHaveAttribute("href", "/rankings/playback?p=daily&t=high_score");
+    const playbackLink = page.locator('.section a[href="/rankings/playback"]');
+    await expect(playbackLink).toHaveCount(1);
     await expect(page.locator("#jhs-123av-nav")).toHaveAttribute("href", "/tags/fc2?c10=1&jhs_source=123av");
-    await expect(page.locator(".main-tabs #jhs-123av-nav")).toHaveCount(0);
+    await expect(page.locator(".section #jhs-123av-nav")).toHaveCount(0);
     expect(await page.locator(".movie-list").getAttribute("data-jhs-ranking")).toBeNull();
-    const popupPromise = context.waitForEvent("page");
-    await page.locator(".main-tabs a").nth(1).click({ modifiers: ["Control"] });
+    await playbackLink.evaluate((link) => {
+      link.addEventListener("click", (event) => {
+        window.__nativePlaybackClick = {
+          ctrlKey: event.ctrlKey, metaKey: event.metaKey, defaultPrevented: event.defaultPrevented,
+          href: link.href, target: link.target,
+        };
+      }, { capture: true });
+      window.addEventListener("click", (event) => {
+        if (link.contains(event.target)) window.__nativePlaybackClick.finalDefaultPrevented = event.defaultPrevented;
+      });
+    });
+    const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+    await playbackLink.click({ modifiers: ["Control"] });
     const popup = await popupPromise;
+    const clickState = await page.evaluate(() => window.__nativePlaybackClick);
+    expect(clickState).toMatchObject({ ctrlKey: true, defaultPrevented: false, finalDefaultPrevented: false, href: "https://javdb.com/rankings/playback" });
+    expect(popup, `Control-clicking the native ranking anchor should open a tab; click=${JSON.stringify(clickState)}, pages=${context.pages().length}`).not.toBeNull();
     await popup.waitForLoadState("domcontentloaded");
     expect(new URL(page.url()).pathname).toBe("/rankings/movies");
     expect(new URL(popup.url()).hostname).toBe("javdb.com");
     await popup.close();
-    await page.locator(".main-tabs a").nth(1).click();
-    await page.waitForURL(/\/rankings\/playback\?/);
-    expect(new URL(page.url()).searchParams.get("t")).toBe("high_score");
+    await playbackLink.click();
+    await page.waitForURL(/\/rankings\/playback(?:\?|$)/);
     await injectUserscriptRuntime(page);
     await expect(page.locator(".movie-list")).toHaveAttribute("data-jhs-ranking", "playback");
     await expect(page.locator("#native-first")).toBeVisible();
@@ -77,6 +91,51 @@ test.describe("JavDB native rankings", () => {
     await expect(page.locator("[data-native-pagination]")).toHaveCount(1);
   });
 
+  test("TOP250 subtitle controls remain scrollable on a narrow screen", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-small", "narrow-screen control layout");
+    await page.goto("https://javdb.com/rankings/top?t=y2026&page=2", { waitUntil: "domcontentloaded" });
+    await injectUserscriptRuntime(page);
+    const controls = page.locator(".jhs-top250-subtitle");
+    await expect(controls).toBeVisible();
+    const layout = await controls.evaluate((element) => ({
+      overflow: getComputedStyle(element).overflowX,
+      width: element.clientWidth,
+      contentWidth: element.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+    }));
+    expect(layout.overflow).toBe("auto");
+    expect(layout.width).toBeLessThanOrEqual(layout.viewport);
+    expect(layout.contentWidth).toBeGreaterThan(layout.width);
+    await controls.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+    await expect.poll(() => controls.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await page.locator('button[data-jhs-subtitle="with"]').click();
+    await expect(page.locator("#native-second")).toBeHidden();
+  });
+
+  test("TOP250 batch confirmation names the display-only subtitle filter", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-wide");
+    await page.goto("https://javdb.com/rankings/top?t=y2026&page=2", { waitUntil: "domcontentloaded" });
+    await injectUserscriptRuntime(page);
+    await page.locator('button[data-jhs-subtitle="with"]').click();
+    await expect(page.locator("#native-second")).toBeHidden();
+
+    await page.getByRole("button", { name: "批量操作" }).click();
+    await page.locator("#favoriteAllVideo").click();
+    const dialog = page.locator(".layui-layer").filter({ hasText: "当前字幕筛选只影响显示，不限制批量处理范围" });
+    await expect(dialog).toBeVisible();
+    await dialog.locator(".layui-layer-btn1").click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("the retained TOP250 disable ID disables only its feature-owned filter", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-wide");
+    await page.goto("https://javdb.com/rankings/top?t=y2026&page=2", { waitUntil: "domcontentloaded" });
+    await injectUserscriptRuntime(page, { disabledPlugins: ["TOP250Plugin"] });
+    await expect(page.locator(".movie-list .item")).toHaveCount(3);
+    await expect(page.locator(".jhs-top250-subtitle")).toHaveCount(0);
+    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("TOP250Plugin"))).toBe(false);
+  });
+
   test("a disabled Playback contribution does not disable shared list actions", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-wide");
     await page.goto("https://javdb.com/rankings/playback?p=monthly&t=all", { waitUntil: "domcontentloaded" });
@@ -85,6 +144,7 @@ test.describe("JavDB native rankings", () => {
     await expect(page.locator("#jhs-quick-filter")).toBeVisible();
     await expect(page.locator("#waitCheckBtn")).toBeVisible();
     await expect(page.locator(".movie-list")).not.toHaveAttribute("data-jhs-ranking", "playback");
+    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("HitShowPlugin"))).toBe(false);
   });
 
   test("123AV catalog mounts on the FC2 category route with its own source label", async ({ page }, testInfo) => {
@@ -95,5 +155,42 @@ test.describe("JavDB native rankings", () => {
     await expect(page.locator("h2.section-title")).toContainText("123AV · FC2片库");
     await expect(page.locator("#search-123av-keyword")).toBeVisible();
     await expect(page.locator(".movie-list")).toHaveCount(1);
+  });
+
+  test("stopping the 123AV catalog restores native controls before their following sibling", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-wide");
+    await page.goto("https://javdb.com/tags/fc2?c10=1&jhs_source=123av", { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => {
+      const pagination = document.createElement("nav");
+      pagination.className = "pagination";
+      pagination.dataset.nativePagination = "";
+      pagination.textContent = "Host pages";
+      const sentinel = document.createElement("div");
+      sentinel.id = "native-after-list";
+      document.querySelector("section .container").append(pagination, sentinel);
+    });
+    await injectUserscriptRuntime(page);
+    await expect(page.locator(".jhs-123av-list")).toHaveCount(1);
+    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("Fc2By123AvPlugin").dispose());
+    await expect(page.locator(".jhs-123av-list, .page-box, #search-123av-keyword")).toHaveCount(0);
+    await expect(page.locator('.movie-list .item[data-jhs-fc2-source="fc2"]')).toBeVisible();
+    expect(await page.locator("section .container").evaluate((container) => {
+      const list = container.querySelector(":scope > .movie-list");
+      const pagination = container.querySelector(":scope > nav[data-native-pagination]");
+      const sentinel = container.querySelector(":scope > #native-after-list");
+      return Boolean(list && pagination && sentinel
+        && (list.compareDocumentPosition(pagination) & Node.DOCUMENT_POSITION_FOLLOWING)
+        && (pagination.compareDocumentPosition(sentinel) & Node.DOCUMENT_POSITION_FOLLOWING));
+    })).toBe(true);
+  });
+
+  test("the retained FC2 123AV disable ID suppresses the migrated feature and compatibility bean", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-wide");
+    await page.goto("https://javdb.com/tags/fc2?c10=1&jhs_source=123av", { waitUntil: "domcontentloaded" });
+    await injectUserscriptRuntime(page, { disabledPlugins: ["Fc2By123AvPlugin"] });
+    await expect(page.locator(".movie-list .item")).toHaveCount(1);
+    await expect(page.locator(".jhs-123av-list, #jhs-123av-nav, #search-123av-keyword")).toHaveCount(0);
+    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("Fc2By123AvPlugin"))).toBe(false);
+    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("Fc2By123AvPlugin"))).toBeUndefined();
   });
 });

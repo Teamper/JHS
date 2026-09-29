@@ -4,10 +4,9 @@ import { prepareDialogOptions } from "../core/dialog-shell.js";
 import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { detectSite, resolveLegacyJavDbUrl } from "../core/site-context.js";
 import { injectCoreCss } from "../core/css-injection.js";
-import { buildDetailPanelCss } from "../ui/detail/panel-styles.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
-import { PluginManager } from "../core/plugin-manager.js";
+import { CompatibilityBeanRegistry } from "../core/compatibility-bean-registry.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
 import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
@@ -17,11 +16,13 @@ import { initializeUiAccessibility } from "../core/ui-primitives.js";
 import { getVendorRuntime } from "../platform/userscript/vendor-runtime.js";
 import { JavBusHostAdapter } from "../platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../platform/hosts/javdb-host-adapter.js";
+import { getBlacklistSubjectInfo, parseBlacklistFilterPage } from "../integrations/host-list/blacklist-parser.js";
 import { featureManifests } from "../features/catalog.js";
-import { registerSitePlugins } from "../plugins/registry.js";
+import { registerSiteCompatibility } from "../features/compatibility/contribution-catalog.js";
 import { attachCompatibilityFacade } from "./compatibility-facade.js";
 import { createAppContext } from "./create-app-context.js";
 import { integrationManifests } from "./integration-catalog.js";
+import { SERVICE } from "../contracts/tokens.js";
 
 function patchLayerRuntime(layerRuntime, utilsRuntime) {
     const originalClose = layerRuntime.close;
@@ -118,7 +119,7 @@ export async function bootstrapJhs() {
         const siteContext = initializeRuntimeConstants(window.location);
         const vendors = getVendorRuntime();
         const jhsEventBus = initializeEventBus();
-        const { utils, gmHttp, storageManager, stateService } = createLegacyRuntime(jhsEventBus);
+        const { utils, gmHttp, storageManager, stateService, storageMutationCoordinator } = createLegacyRuntime(jhsEventBus);
         markPhase("legacy-runtime");
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
         // 黑名单/关键词规则可被其他标签页修改：内存派生缓存不随事件自动失效，必须在此主动清空
@@ -132,16 +133,24 @@ export async function bootstrapJhs() {
         const disabledMigration = await readDisabledPluginSettings(storageManager);
         const disabled = disabledMigration.migrated;
         const localOriginSettings = await resolveLocalOrigins(storageManager);
-        const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
+        const blacklistParser = Object.freeze({
+            getSubjectInfo: (options) => getBlacklistSubjectInfo({ ...options, jquery: vendors.$ }),
+            parseFilterPage: (options) => parseBlacklistFilterPage({ ...options, jquery: vendors.$ }),
+        });
+        const javdbHostAdapter = new JavDbHostAdapter(document, window.location, blacklistParser), javbusHostAdapter = new JavBusHostAdapter(document, window.location, blacklistParser);
         const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
             gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue, gmDeleteValue: globalThis.GM_deleteValue,
-            legacyHttp: gmHttp, legacyStorage: storageManager, eventBus: jhsEventBus, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
+            legacyHttp: gmHttp, legacyStorage: storageManager, legacyUtils: utils, copyToClipboard: (label, value) => utils.copyToClipboard(label, value), eventBus: jhsEventBus, storageMutationCoordinator, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
         markPhase("context");
-        injectCoreCss(context.services.styles, buildDetailPanelCss());
+        injectCoreCss(context.services.styles);
+        if (route === "detail" || route === "owned-detail") {
+            const { buildDetailPanelCss } = await import("../ui/detail/panel-styles.js");
+            context.rootScope.addCleanup(context.services.styles.register("jhs-detail-panels", buildDetailPanelCss()));
+        }
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings, credentialService: context.services.credential });
@@ -159,6 +168,7 @@ export async function bootstrapJhs() {
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
         });
+        context.container.register(SERVICE.clog, logger.clog);
         markPhase("logger");
         initializeThemeRuntime(context.rootScope);
         initializeUiAccessibility(context.rootScope);
@@ -171,34 +181,36 @@ export async function bootstrapJhs() {
         Object.assign(globalThis, logger);
         if (credentialMigration.issues?.length) logger.show.info("部分旧凭证未能安全迁移，已保留原数据，请重新保存对应凭证");
         if (localOriginSettings.notice) logger.show.info(localOriginSettings.notice);
-        const pluginManager = new PluginManager({ diagnostics: context.services.diagnostics });
+        const compatibilityBeans = new CompatibilityBeanRegistry({
+            diagnostics: context.services.diagnostics,
+        });
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
-        registerSitePlugins(pluginManager, context.registries.features, siteContext.site);
+        registerSiteCompatibility(compatibilityBeans, context.registries.features, siteContext.site);
         markPhase("registry");
         // Compatibility infrastructure must be ready before any feature mounts.
         // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.
         attachCompatibilityFacade({
-            pluginManager, utils, gmHttp, storageManager, stateService, jhsEventBus,
+            pluginManager: compatibilityBeans, utils, gmHttp, storageManager, stateService, jhsEventBus,
             clog: logger.clog, show: logger.show, loading: logger.loading,
         }, globalThis.unsafeWindow);
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";
-        // Legacy plugins inspect these route flags during their handle() phase.
-        // Publish them before feature activation so list/detail contributions
-        // (including delayed FC2 navigation protection) can attach on startup.
+        // Compatibility consumers inspect these route flags during feature activation.
+        await storageMutationCoordinator.runExclusive(async () => {
+            await runDataMigrations(storageManager, storageMutationCoordinator, true);
+            await storageManager._getReviewFilterKeywordListWithoutLock();
+            await stateService.recoverPendingTransactionWithoutLock();
+        });
+        markPhase("data-prepare");
         await context.registries.features.start();
         markPhase("feature-runtime");
-        await runDataMigrations(storageManager);
-        await storageManager.getReviewFilterKeywordList();
-        await stateService.recoverPendingTransaction();
-        markPhase("data-prepare");
-        await Promise.all([pluginManager.processCss(), Promise.resolve(applyThemeMode(context.services.settings.snapshot().themeMode))]);
-        markPhase("plugin-css");
+        applyThemeMode(context.services.settings.snapshot().themeMode);
         if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
-        await pluginManager.processPlugins();
-        markPhase("plugin-runtime");
+        await jhsEventBus.emit("jhs-features-ready", {}, { broadcast: false });
+        markPhase("feature-ready-signal");
         markPhase("first-ready");
+        context.registries.features.scheduleIdle();
         markPhase("total");
         return context;
     } catch (cause) {

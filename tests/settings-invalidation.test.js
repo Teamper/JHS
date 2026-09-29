@@ -11,6 +11,8 @@ const settingsService = readTestFile(join(process.cwd(), "src/services/settings-
 const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
 const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
 const settingTemplates = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
+const settingsEffects = readTestFile(join(process.cwd(), "src/features/system/settings-effects-controller.js"), "utf8");
+const systemCatalog = readTestFile(join(process.cwd(), "src/features/system/catalog.js"), "utf8");
 
 function methodBody(source, start, end) {
     return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
@@ -59,7 +61,7 @@ describe("settings invalidation ownership", () => {
     it("opens and closes Settings without requiring CoverButtonPlugin", () => {
         const openDialog = methodBody(settingPlugin, "async openSettingDialog", "renderTaskStatuses()");
         expect(openDialog).not.toContain('getDependency("CoverButtonPlugin")');
-        expect(settingPlugin).toContain('getBean("CoverButtonPlugin")?.enableSvgBtn?.()');
+        expect(settingPlugin).toContain("this.featureCoverButtonAdapter?.enableSvgBtn?.()");
         expect(settingTemplates).not.toContain("coverButtonPlugin");
     });
 
@@ -67,18 +69,31 @@ describe("settings invalidation ownership", () => {
         const dom = new JSDOM("<div></div>"), $ = jqueryFactory(dom.window), bus = { emit: async () => { throw new Error("bus unavailable"); } };
         const newVideo = { resetBtnTip: () => { throw new Error("new-video unavailable"); } };
         const blacklist = { resetBtnTip: vi.fn(), reloadTable: vi.fn() };
-        const context = vm.createContext({
-            window: dom.window, document: dom.window.document, $, C: "no", _: "yes", r: true, jhsEventBus: undefined,
-            storageManager: { getReviewFilterKeywordList: async () => [], getTitleFilterKeyword: async () => [] },
-            utils: {}, clog: { error: vi.fn() },
-        });
+        const logger = { error: vi.fn() };
+        const context = vm.createContext({ window: dom.window, document: dom.window.document, $, C: "no", _: "yes", r: true });
         vm.runInContext(`${settingForms}; globalThis.saveSettingFormForTest = saveSettingForm;`, context);
         context.jhsEventBus = bus;
         const settings = { snapshot: () => ({ trustedLocalOrigins: [] }), update: async updater => updater({ trustedLocalOrigins: [] }) };
-        await expect(context.saveSettingFormForTest({ settings, newVideo, blacklist, movie: {} }, $(dom.window.document.querySelector("div")))).resolves.toEqual({ ok: true });
+        const dependencies = {
+            settings, newVideo, blacklist, movie: {}, jquery: $, document: dom.window.document,
+            legacyStorage: { getReviewFilterKeywordList: async () => [], getTitleFilterKeyword: async () => [] },
+            utilities: {}, events: bus, logger,
+        };
+        await expect(context.saveSettingFormForTest(dependencies, $(dom.window.document.querySelector("div")))).resolves.toEqual({ ok: true });
         expect(blacklist.resetBtnTip).toHaveBeenCalledOnce();
         expect(blacklist.reloadTable).toHaveBeenCalledOnce();
-        expect(context.clog.error).toHaveBeenCalledTimes(2);
+        expect(logger.error).toHaveBeenCalledTimes(2);
+    });
+
+    it("owns initial logger and live layout effects in the eager Settings system Feature", () => {
+        const surface = methodBody(settingPlugin, "activateFeatureSurface(scope, profile)", "/** 桌面设置入口 Surface");
+        expect(settingsEffects).toContain('snapshot.enableClog ?? "yes"');
+        expect(settingsEffects).toContain('this.scope.listen(this.settings, "settings.changed"');
+        expect(systemCatalog).toContain('id: "settings-effects"');
+        expect(systemCatalog).toContain('startup: "eager"');
+        expect(surface).not.toContain("settings.changed");
+        expect(surface).not.toContain("applyLayoutFromSettings");
+        expect(surface).not.toContain('storageManager.getSetting("enableClog"');
     });
 });
 

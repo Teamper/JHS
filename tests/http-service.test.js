@@ -7,6 +7,16 @@ import { canonicalizeUrl, createRequestKey, HttpService, isCloudflareChallenge }
 import { SettingsService } from "../src/services/settings-service.js";
 
 describe("HTTP, URL and settings contracts", () => {
+    it("passes the configured request deadline to native fetch without changing GM requests", async () => {
+        const port = { request: vi.fn(async options => ({ status: 200, data: "ok", finalUrl: options.url })) };
+        const service = new HttpService(port, new ExternalUrlPolicy());
+        const options = { providerId: "host-page", url: "https://javdb.com/tags", cacheScope: "none", timeout: 9000,
+            urlPolicy: { trustClass: "builtin-public", hosts: ["javdb.com"] } };
+        await service.request({ ...options, transport: "native-fetch" });
+        expect(port.request).toHaveBeenLastCalledWith(expect.objectContaining({ nativeTimeout: 9000 }));
+        await service.request(options);
+        expect(port.request).toHaveBeenLastCalledWith(expect.not.objectContaining({ nativeTimeout: expect.anything() }));
+    });
     it("does not derive RequestKeys for mutation or no-cache requests", async () => {
         const digest = vi.spyOn(crypto.subtle, "digest"), port = { request: vi.fn(async options => ({ status: 200, data: {}, finalUrl: options.url })) };
         const service = new HttpService(port, new ExternalUrlPolicy());

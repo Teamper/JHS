@@ -24,6 +24,22 @@ it("owns JavDB list roots and creates host-compatible JHS list surfaces", () => 
     expect(owned.classList.contains("jhs-owned-list")).toBe(true);
 });
 
+it("restores the original JavDB list, pagination and sibling order when the 123AV catalog unmounts", () => {
+    const dom = new JSDOM('<section><div class="container"><h2 class="section-title">FC2</h2><div class="box">host tools</div><div class="tool-box">host filters</div><div class="movie-list"><article class="item">host result</article></div><nav class="pagination">host pages</nav><div id="after-list">host footer</div></div></section>', { url: "https://javdb.com/tags/fc2?c10=1&jhs_source=123av" });
+    const host = new JavDbHostAdapter(dom.window.document, dom.window.location), root = host.createOwnedListRoot(["jhs-123av-list"]);
+    const container = dom.window.document.querySelector(".container"), originalChildren = [...container.children];
+    host.mountExternalFc2Catalog(root);
+    expect(dom.window.document.querySelectorAll(".movie-list")).toHaveLength(1);
+    expect(dom.window.document.querySelector(".box")).toBeNull();
+    expect(host.unmountExternalFc2Catalog(root)).toBe(true);
+    expect(dom.window.document.querySelector(".movie-list .item").textContent).toBe("host result");
+    expect(dom.window.document.querySelector(".box").textContent).toBe("host tools");
+    expect(dom.window.document.querySelector(".tool-box").textContent).toBe("host filters");
+    expect(dom.window.document.querySelector("nav.pagination").textContent).toBe("host pages");
+    expect([...container.children]).toEqual(originalChildren);
+    expect([...container.childNodes].filter((node) => node.nodeType === 8)).toHaveLength(0);
+});
+
 it.each([
     "/advanced_search?type=3", "/advanced_search?type=100", "/want_watch_videos", "/watched_videos",
 ])("detects DOM-backed JavDB list route %s", (path) => {

@@ -3,8 +3,8 @@ const REVIEW_KEY = "filter_keyword_review", LEGACY_KEY = "review_filter_keyword"
 let writeChain = Promise.resolve();
 
 /** Merge mistaken 6.5 writes with the canonical portable list under its write lock. */
-/** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<unknown>, remove?: (key: string) => Promise<unknown>}} storage @param {string} [keyword] */
-export function readReviewKeywords(storage, keyword) {
+/** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<unknown>, remove?: (key: string) => Promise<unknown>}} storage @param {string} [keyword] @param {{coordinator?: {runExclusive: (operation: () => any) => Promise<any>}, alreadyLocked?: boolean}} [options] */
+export function readReviewKeywords(storage, keyword, options = {}) {
     const write = async () => {
         const current = await storage.get(REVIEW_KEY), legacy = await storage.get(LEGACY_KEY);
         const values = [...new Set([...(Array.isArray(current) ? current.map(String) : []), ...(Array.isArray(legacy) ? legacy.map(String) : []), ...(keyword == null ? [] : [keyword])])];
@@ -15,7 +15,9 @@ export function readReviewKeywords(storage, keyword) {
         if (Array.isArray(legacy) && JSON.stringify(await storage.get(LEGACY_KEY)) === JSON.stringify(legacy)) await storage.remove?.(LEGACY_KEY);
         return values;
     };
+    if (options.alreadyLocked) return write();
     const operation = writeChain.then(async () => {
+        if (options.coordinator?.runExclusive) return options.coordinator.runExclusive(write);
         const locks = globalThis.navigator?.locks;
         return locks?.request ? await locks.request("jhs_keyword_lock", write) : await write();
     });

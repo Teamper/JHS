@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeLibraryStats } from "../src/features/stats/stats-repository.js";
+import { computeLibraryStats } from "../src/features/system/stats-model.js";
 
 describe("computeLibraryStats frozen semantics", () => {
     it("separates raw and effective numerators for blocked records", () => {

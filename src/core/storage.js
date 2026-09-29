@@ -4,9 +4,14 @@ import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 import { readReviewKeywords } from "./review-keywords.js";
 
+/** Report a post-commit failure without reclassifying the persisted mutation. */
+function warnAfterCommittedStorageMutation(message, error) {
+    try { globalThis.clog?.warn?.(message, error); }
+    catch { /* Diagnostics must not turn a durable write into a retryable failure. */ }
+}
+
 let e = new WeakSet, t = async function(e, t, n) {
     let a;
-    const locks = globalThis.navigator?.locks;
     const write = async () => {
         if (Array.isArray(e)) a = [ ...e ]; else {
             const list = await this.forage.getItem(t) || [];
@@ -19,7 +24,7 @@ let e = new WeakSet, t = async function(e, t, n) {
         return await this._setItemAndInvalidate(t, a), a;
     };
     // 读取-检查-写入需要跨标签页互斥，避免并发添加关键词时互相覆盖
-    return locks?.request ? locks.request("jhs_keyword_lock", write) : write();
+    return this._withCrossTabLock("jhs_keyword_lock", write);
 };
 
 export class StorageManager {
@@ -83,6 +88,10 @@ export class StorageManager {
     }
     /** 跨标签页互斥；Web Locks 不可用时退化为直接执行（仍保留页内互斥） */
     async _withCrossTabLock(e, t) {
+        if (this.mutationCoordinator?.runExclusive) return this.mutationCoordinator.runExclusive(async () => {
+            this._invalidateCache();
+            return t();
+        });
         const n = globalThis.navigator?.locks;
         return n?.request ? n.request(e, t) : t();
     }
@@ -100,11 +109,12 @@ export class StorageManager {
         const t = await this.getFavoriteActressList();
         const {starId: n, name: a, allName: i, avatar: s, lastCheckTime: o, newVideoList: r, lastPublishTime: l, actressType: c, remark: d} = e;
         if (!n) throw new Error("缺失starId");
-        let h = t.find((e => e.starId === n));
-        if (!h) return clog.error("未找到演员信息", n, a), !1;
+        const existing = t.find((e => e.starId === n));
+        if (!existing) return clog.error("未找到演员信息", n, a), !1;
+        const h = { ...existing };
         a && (h.name = a), i && (h.allName = i), s && (h.avatar = s), null != c && (h.actressType = c),
         o && (h.lastCheckTime = o), r && (h.newVideoList = r), l && (h.lastPublishTime = l),
-        d && (h.remark = d), h.updateDate = utils.getNowStr(), await this._setItemAndInvalidate(this.favorite_actresses_key, t);
+        d && (h.remark = d), h.updateDate = utils.getNowStr(), await this._setItemAndInvalidate(this.favorite_actresses_key, t.map((item => item === existing ? h : item)));
         return true;
     }
     async getCarList() {
@@ -221,7 +231,9 @@ export class StorageManager {
         for (const [flag, records] of groups) await this.stateService.patch(records.map((item => item.carNum)), { [flag]: !0 }, { type: "legacy-batch-save", records });
     }
     async removeNewVideoList(e) {
-        return this.withActressLock(async () => {
+        return this.withActressLock(() => this._removeNewVideoListWithoutLock(e));
+    }
+    async _removeNewVideoListWithoutLock(e) {
             const targets = new Set((Array.isArray(e) ? e : [ e ]).map(normalizeCarNum).filter(Boolean));
             const t = await this.getFavoriteActressList(), changed = new Set;
             const a = t.map((t => {
@@ -234,7 +246,6 @@ export class StorageManager {
             }));
             changed.size && await this._setItemAndInvalidate(this.favorite_actresses_key, a);
             return { changed: [ ...changed ] };
-        });
     }
     async removeCar(e) {
         const result = await this.stateService.remove(e);
@@ -288,38 +299,113 @@ export class StorageManager {
         await this._setItemAndInvalidate(this.blacklist_key, t);
     }
     async deleteBlacklistItem(e) {
-        return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+        return this._withCrossTabLock("jhs_blacklist_lock", () => this._deleteBlacklistItemWithoutLock(e));
+    }
+    async _deleteBlacklistItemWithoutLock(e) {
         const t = await this.getBlacklist(), n = t.filter((t => t.starId !== e));
-        t.length !== n.length && await this._setItemAndInvalidate(this.blacklist_key, n);
-        });
+        if (t.length === n.length) return false;
+        await this._setItemAndInvalidate(this.blacklist_key, n);
+        return true;
     }
     async getBlacklistCarList() {
         return this._readCached("cache_filter_actor_actress_car_list", this.blacklist_car_list_key, []);
     }
     async batchSaveBlacklistCarList(e) {
         return this._withCrossTabLock("jhs_blacklist_lock", async () => {
-        const t = await this.getBlacklistCarList(), n = JSON.parse(JSON.stringify(t));
-        let a = !1, i = [];
-        for (const s of e) {
-            n.find((e => e.carNum === s.carNum)) || (this._saveSingleCar(s, n), clog.html(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s.names)} ${escapeHtml(s.carNum)}</span>`),
-            a = !0, i.push(s.carNum));
-        }
-        if (a) {
-            await this._setItemAndInvalidate(this.blacklist_car_list_key, n);
-            const result = await this.removeNewVideoList(i);
-            result.changed.length && await window.jhsEventBus?.emit?.("new-video-changed", {
-                reason: "blacklist-car-removed",
-                carNums: result.changed
-            });
-            await window.cleanCache_filter_actor_actress_car_list();
-        }
-        return { changed: i.map(normalizeCarNum).filter(Boolean) };
+            const beforeBlacklistCars = await this.getBlacklistCarList(), nextBlacklistCars = JSON.parse(JSON.stringify(beforeBlacklistCars)), addedItems = [], changed = [];
+            for (const item of e) {
+                if (nextBlacklistCars.find((entry => entry.carNum === item.carNum))) continue;
+                this._saveSingleCar(item, nextBlacklistCars), addedItems.push(item), changed.push(item.carNum);
+            }
+            if (!changed.length) return { changed: [] };
+            const beforeActresses = await this.getFavoriteActressList(), targets = new Set(changed.map(normalizeCarNum).filter(Boolean));
+            const hasLinkedNewVideos = beforeActresses.some((actress => Array.isArray(actress.newVideoList) && actress.newVideoList.some((item => targets.has(normalizeCarNum("string" == typeof item ? item : item.carNum))))));
+            const attempted = [];
+            let result = { changed: [] };
+            try {
+                attempted.push([ this.blacklist_car_list_key, beforeBlacklistCars ]);
+                await this._setItemAndInvalidate(this.blacklist_car_list_key, nextBlacklistCars);
+                if (hasLinkedNewVideos) attempted.push([ this.favorite_actresses_key, beforeActresses ]);
+                result = await this._removeNewVideoListWithoutLock(changed);
+            } catch (error) {
+                const rollbackErrors = [];
+                for (const [key, value] of attempted.reverse()) {
+                    try { await this._setItemAndInvalidate(key, value); }
+                    catch (rollbackError) { rollbackErrors.push(rollbackError); }
+                }
+                if (rollbackErrors.length) {
+                    const failure = new Error("批量屏蔽失败且自动回滚不完整");
+                    failure.cause = error;
+                    failure.rollbackErrors = rollbackErrors;
+                    throw failure;
+                }
+                throw error;
+            }
+            for (const item of addedItems) {
+                try { clog.html(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(item.names)} ${escapeHtml(item.carNum)}</span>`); }
+                catch (error) { warnAfterCommittedStorageMutation("屏蔽记录已保存，但操作提示显示失败", error); }
+            }
+            if (result.changed.length) {
+                try {
+                    await window.jhsEventBus?.emit?.("new-video-changed", { reason: "blacklist-car-removed", carNums: result.changed });
+                } catch (error) { warnAfterCommittedStorageMutation("新作品记录已清理，但跨标签通知失败", error); }
+            }
+            try { await window.cleanCache_filter_actor_actress_car_list(); }
+            catch (error) { warnAfterCommittedStorageMutation("屏蔽记录已保存，但列表缓存清理失败", error); }
+            return { changed: changed.map(normalizeCarNum).filter(Boolean) };
         });
     }
     async removeBlacklistCarList(e) {
-        const t = await this.getBlacklistCarList(), n = t.filter((t => t.starId !== e));
-        n.length !== t.length && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n),
-        window.cleanCache_filter_actor_actress_car_list());
+        return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+            const changed = await this._removeBlacklistCarListWithoutLock(e);
+            if (changed) {
+                try { await window.cleanCache_filter_actor_actress_car_list(); }
+                catch (error) { warnAfterCommittedStorageMutation("黑名单影片记录已移除，但列表缓存清理失败", error); }
+            }
+        });
+    }
+    async _removeBlacklistCarListWithoutLock(e) {
+        const current = await this.getBlacklistCarList(), next = current.filter((item => item.starId !== e));
+        if (next.length === current.length) return false;
+        await this._setItemAndInvalidate(this.blacklist_car_list_key, next);
+        return true;
+    }
+    /** Remove an actor and its blocked-card records in one shared mutation window. */
+    async removeBlacklistActor(starId) {
+        return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+            const blacklist = await this.getBlacklist(), blacklistCars = await this.getBlacklistCarList();
+            const nextBlacklist = blacklist.filter((item => item.starId !== starId));
+            const nextBlacklistCars = blacklistCars.filter((item => item.starId !== starId));
+            const attempted = [];
+            try {
+                if (nextBlacklistCars.length !== blacklistCars.length) {
+                    attempted.push([ this.blacklist_car_list_key, blacklistCars ]);
+                    await this._setItemAndInvalidate(this.blacklist_car_list_key, nextBlacklistCars);
+                }
+                if (nextBlacklist.length !== blacklist.length) {
+                    attempted.push([ this.blacklist_key, blacklist ]);
+                    await this._setItemAndInvalidate(this.blacklist_key, nextBlacklist);
+                }
+            } catch (error) {
+                const rollbackErrors = [];
+                for (const [key, value] of attempted.reverse()) {
+                    try { await this._setItemAndInvalidate(key, value); }
+                    catch (rollbackError) { rollbackErrors.push(rollbackError); }
+                }
+                if (rollbackErrors.length) {
+                    const failure = new Error("移除黑名单失败且自动回滚不完整");
+                    failure.cause = error;
+                    failure.rollbackErrors = rollbackErrors;
+                    throw failure;
+                }
+                throw error;
+            }
+            if (nextBlacklistCars.length !== blacklistCars.length) {
+                try { await window.cleanCache_filter_actor_actress_car_list(); }
+                catch (error) { warnAfterCommittedStorageMutation("黑名单影片记录已移除，但列表缓存清理失败", error); }
+            }
+            return { removedActor: nextBlacklist.length !== blacklist.length, removedCarRecords: blacklistCars.length - nextBlacklistCars.length };
+        });
     }
     async getFavoriteActressList() {
         return this._readCached("cacheFavoriteActresses", this.favorite_actresses_key, []);
@@ -375,9 +461,7 @@ export class StorageManager {
     async getHighlightedTags() {
         return await this.forage.getItem(this.highlighted_tags_key) || [];
     }
-    async setHighlightedTags(e) {
-        return await this.forage.setItem(this.highlighted_tags_key, e);
-    }
+    async setHighlightedTags(e) { return this._withCrossTabLock("jhs_highlighted_tags", () => this.forage.setItem(this.highlighted_tags_key, e)); }
     async saveTitleFilterKeyword(n) {
         if (await s(this, e, t).call(this, n, this.filter_keyword_title_key, "标题关键词"), Array.isArray(n)) return null;
         return this.withActressLock(async () => {
@@ -401,7 +485,10 @@ export class StorageManager {
         return this._readCached("cacheTitleFilterKeyword", this.filter_keyword_title_key, []);
     }
     async getReviewFilterKeywordList() {
-        return readReviewKeywords({ get: key => this.forage.getItem(key), set: (key, value) => this._setItemAndInvalidate(key, value), remove: key => this.forage.removeItem(key) });
+        return readReviewKeywords({ get: key => this.forage.getItem(key), set: (key, value) => this._setItemAndInvalidate(key, value), remove: key => this.forage.removeItem(key) }, undefined, { coordinator: this.mutationCoordinator });
+    }
+    async _getReviewFilterKeywordListWithoutLock() {
+        return readReviewKeywords({ get: key => this.forage.getItem(key), set: (key, value) => this._setItemAndInvalidate(key, value), remove: key => this.forage.removeItem(key) }, undefined, { alreadyLocked: true });
     }
     async saveReviewFilterKeyword(n) {
         return s(this, e, t).call(this, n, this.filter_keyword_review_key, "评论关键词");
@@ -421,50 +508,105 @@ export class StorageManager {
     }
     async saveSetting(e) {
         if (globalThis.settingsService?.replace) return globalThis.settingsService.replace(e);
-        e ? (await this._setItemAndInvalidate(this.setting_key, e), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
+        if (!e) return void show.error("设置对象为空");
+        return this._withCrossTabLock("jhs_setting_lock", () => this._saveSettingWithoutLock(e));
+    }
+    async _saveSettingWithoutLock(e) {
+        await this._setItemAndInvalidate(this.setting_key, e);
+        try { await window.clean_cacheSettingObj(); }
+        catch (error) { warnAfterCommittedStorageMutation("[settings] cache notification failed (ignored)", error); }
     }
     invalidateSettingCache() { this._invalidateCache(this.setting_key); }
     async saveSettingItem(e, t) {
         if (!e) return void show.error("key 不能为空");
         // 6.5: route through the single SettingsService write entry when it is available.
         if (globalThis.settingsService?.set) return globalThis.settingsService.set(e, t);
-        const locks = globalThis.navigator?.locks;
         const write = async () => {
-            let n = await this.getSetting();
-            n[e] = t, await this.saveSetting(n);
+            let n = await this.forage.getItem(this.setting_key) || {};
+            n[e] = t, await this._saveSettingWithoutLock(n);
         };
-        return locks?.request ? locks.request("jhs_setting_lock", write) : write();
+        return this._withCrossTabLock("jhs_setting_lock", write);
     }
     /** Atomic read-modify-write for settings. Delegates to SettingsService when available. */
     async updateSetting(mutator) {
         if (globalThis.settingsService?.update) return globalThis.settingsService.update(mutator);
-        const locks = globalThis.navigator?.locks;
         const write = async () => {
-            const settings = await this.getSetting();
+            const settings = await this.forage.getItem(this.setting_key) || {};
             mutator(settings);
-            await this.saveSetting(settings);
+            await this._saveSettingWithoutLock(settings);
         };
-        return locks?.request ? locks.request("jhs_setting_lock", write) : write();
+        return this._withCrossTabLock("jhs_setting_lock", write);
+    }
+    /** Used only while the shared storage mutation lock is already held. */
+    async updateSettingWithoutLock(mutator) {
+        if (globalThis.settingsService?.updateWithoutLock) return globalThis.settingsService.updateWithoutLock(mutator);
+        const settings = await this.forage.getItem(this.setting_key) || {};
+        mutator(settings);
+        await this._saveSettingWithoutLock(settings);
     }
     async importData(e) {
         validatePortableData(e);
-        await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
         const imported = { ...e };
-        if (imported.setting && "object" === typeof imported.setting && !Array.isArray(imported.setting)) {
-            imported.setting = mergePortableSettings(await this.getSetting(), imported.setting);
-        }
         const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]);
-        // 与 state.patch 共用同一把跨标签页锁，避免覆盖后台进行中的状态事务后被恢复流程整体回滚
+        // Snapshot, import, and migration must share one write window. A gap between
+        // snapshot creation and import could omit a concurrent tab's last mutation.
         await this._withCrossTabLock("jhs_state_mutation", async () => {
-            const writes = [];
-            for (const key in imported) {
-                if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
-                if ("third_party_ttl_cache" === key) continue;
-                writes.push("data_version" === key ? this.setDataVersion(imported[key]) : this._setItemAndInvalidate(key, imported[key]));
+            await this.stateService?.recoverPendingTransactionWithoutLock?.();
+            if (imported.setting && "object" === typeof imported.setting && !Array.isArray(imported.setting)) {
+                imported.setting = mergePortableSettings(await this.forage.getItem(this.setting_key) || {}, imported.setting);
             }
-            await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this);
+            if (await hasPortableUserData(this)) {
+                const createSnapshot = () => this._createSnapshotWithoutMutation("导入前自动备份", "auto-import");
+                if (this.mutationCoordinator?.runExclusive) await createSnapshot();
+                else await this._withSnapshotLock(createSnapshot);
+            }
+            const canEnumerateKeys = typeof this.forage.keys === "function";
+            const knownKeys = [ ...new Set([ ...PORTABLE_DATA_KEYS, "data_version", "mutation_journal", "snapshots", "data_health_warnings", "filter_actor_actress_info_list", "favorite_actresses_info_list", "car_list_filter_actor_actress", "title_filter_keyword", "review_filter_keyword", "highlightedTags", ...Object.keys(imported) ]) ];
+            const keysBefore = canEnumerateKeys ? await this.forage.keys() : knownKeys;
+            const keysAfter = () => canEnumerateKeys ? this.forage.keys() : knownKeys;
+            const before = new Map;
+            for (const key of keysBefore) {
+                const value = await this.forage.getItem(key);
+                if (canEnumerateKeys || null != value) before.set(key, value && "object" == typeof value ? (globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value))) : value);
+            }
+            try {
+                for (const key in imported) {
+                    if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
+                    if ("third_party_ttl_cache" === key) continue;
+                    if ("data_version" === key) await this.setDataVersion(imported[key]);
+                    else await this._setItemAndInvalidate(key, imported[key]);
+                }
+                this._invalidateCache();
+                await runDataMigrations(this, this.mutationCoordinator, true);
+            } catch (error) {
+                const rollbackErrors = [];
+                let currentKeys;
+                try {
+                    currentKeys = await keysAfter();
+                } catch (rollbackError) {
+                    rollbackErrors.push(rollbackError);
+                    currentKeys = knownKeys;
+                }
+                for (const key of currentKeys) {
+                    if (!before.has(key)) {
+                        try { await this.forage.removeItem(key); }
+                        catch (rollbackError) { rollbackErrors.push(rollbackError); }
+                    }
+                }
+                for (const [key, value] of before) {
+                    try { await this.forage.setItem(key, value); }
+                    catch (rollbackError) { rollbackErrors.push(rollbackError); }
+                }
+                this._invalidateCache();
+                if (rollbackErrors.length) {
+                    const failure = new Error("导入失败且自动回滚不完整；导入前自动备份仍保留");
+                    failure.cause = error;
+                    failure.rollbackErrors = rollbackErrors;
+                    throw failure;
+                }
+                throw error;
+            }
         });
-        await window.stateService?.recoverPendingTransaction();
     }
     async exportPortableData() {
         const data = { data_version: await this.getDataVersion() };
@@ -484,14 +626,20 @@ export class StorageManager {
         return await this.forage.getItem(this.third_party_cache_key) || {};
     }
     async setThirdPartyCache(e) {
-        await this.forage.setItem(this.third_party_cache_key, e || {});
+        await this._withCrossTabLock("jhs_third_party_cache", () => this._setThirdPartyCacheWithoutLock(e));
     }
+    async _setThirdPartyCacheWithoutLock(e) { await this.forage.setItem(this.third_party_cache_key, e || {}); }
     async clearThirdPartyCache() {
-        await this.forage.removeItem(this.third_party_cache_key);
+        await this._withCrossTabLock("jhs_third_party_cache", () => this.forage.removeItem(this.third_party_cache_key));
     }
     async deleteCachedRequest(key) {
-        const cache = await this.getThirdPartyCache();
-        Object.prototype.hasOwnProperty.call(cache, key) && (delete cache[key], await this.setThirdPartyCache(cache));
+        await this._withCrossTabLock("jhs_third_party_cache", async () => {
+            const cache = await this.getThirdPartyCache();
+            if (Object.prototype.hasOwnProperty.call(cache, key)) {
+                delete cache[key];
+            await this._setThirdPartyCacheWithoutLock(cache);
+            }
+        });
     }
     async cachedRequest(e, t, n) {
         const a = Date.now(), i = await this.getThirdPartyCache(), s = i[e];
@@ -505,7 +653,7 @@ export class StorageManager {
         return await this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
             const latest = await this.getThirdPartyCache();
             latest[e] = i[e], this._pruneThirdPartyCache(latest, a);
-            await this.setThirdPartyCache(latest);
+            await this._setThirdPartyCacheWithoutLock(latest);
         }), o;
     }
     /** 以 TTL 写入一条缓存（与 cachedRequest 共用 third_party_ttl_cache 存储与跨标签页锁）。 */
@@ -514,7 +662,7 @@ export class StorageManager {
         return this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
             const latest = await this.getThirdPartyCache();
             latest[e] = { time: a, ttl: n, data: t }, this._pruneThirdPartyCache(latest, a);
-            await this.setThirdPartyCache(latest);
+            await this._setThirdPartyCacheWithoutLock(latest);
         });
     }
     /** 清理长期未命中的过期条目并限制总量，防止 third_party_ttl_cache 无界膨胀 */
@@ -585,6 +733,7 @@ export class StorageManager {
         return y && r("orphan-blacklist-car", "黑名单作品找不到关联演员", y), s;
     }
     async repairDataHealth() {
+        return this._withCrossTabLock("jhs_data_health_repair", async () => {
         let e = 0, t = await this.getCarList(), n = await this.getFavoriteActressList(), a = await this.getBlacklist(), i = await this.getBlacklistCarList();
         const s = this._dedupeByKey(t, "carNum");
         s.changed && (t = s.list, e++);
@@ -628,6 +777,7 @@ export class StorageManager {
             fixedGroups: e,
             report: await this.inspectDataHealth()
         };
+        });
     }
     /** 数据迁移: 将旧版扁平键名重命名为新格式 */
     async merge_table_name() {
@@ -639,7 +789,7 @@ export class StorageManager {
         t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.blacklist_car_list_key, t)),
         await this.forage.removeItem(e), e = "title_filter_keyword", t = await this.forage.getItem(e) || [],
         t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.filter_keyword_title_key, t)),
-        await this.forage.removeItem(e), await this.getReviewFilterKeywordList(), e = "highlightedTags", t = await this.forage.getItem(e) || [],
+        await this.forage.removeItem(e), await this._getReviewFilterKeywordListWithoutLock(), e = "highlightedTags", t = await this.forage.getItem(e) || [],
         t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.highlighted_tags_key, t)),
         await this.forage.removeItem(e);
     }
@@ -666,7 +816,7 @@ export class StorageManager {
             checkIntervalTime_newVideo: "checkNewVideo_intervalTime",
             checkIntervalTime_favoriteActress: "checkFavoriteActress_IntervalTime"
         };
-        await this.updateSetting((e) => {
+        await this.updateSettingWithoutLock((e) => {
             for (const a in n) {
                 const i = n[a];
                 Object.prototype.hasOwnProperty.call(e, a) && (e[i] = e[a], delete e[a], t = !0);
@@ -743,10 +893,12 @@ export class StorageManager {
     async _getSnapshots() { return await this.forage.getItem(this._snapshotKey()) || []; }
     async _saveSnapshots(e) { await this._setItemAndInvalidate(this._snapshotKey(), e); }
     async _withSnapshotLock(e) {
-        return await navigator.locks.request("jhs_snapshot_lock", async () => await e());
+        if (this.mutationCoordinator?.runExclusive) return this.mutationCoordinator.runExclusive(e);
+        const locks = globalThis.navigator?.locks;
+        return locks?.request ? locks.request("jhs_snapshot_lock", e) : e();
     }
-    async createSnapshot(e = "", t = "manual") {
-        return this._withSnapshotLock(async () => {
+    /** Caller must already hold StorageMutationCoordinator when available. */
+    async _createSnapshotWithoutMutation(e = "", t = "manual") {
             const n = await this._getSnapshots(), a = await this.exportData();
             for (const i of this._snapshotMetaKeys()) delete a[i];
             let i = 0;
@@ -762,7 +914,9 @@ export class StorageManager {
             };
             n.push(s), n.length > 10 && n.splice(0, n.length - 10);
             return await this._saveSnapshots(n), clog.log(`创建快照: ${s.name} (${t})`), s;
-        });
+    }
+    async createSnapshot(e = "", t = "manual") {
+        return this._withSnapshotLock(async () => this._createSnapshotWithoutMutation(e, t));
     }
     async getSnapshotList() {
         return (await this._getSnapshots()).map((e => ({ id: e.id, name: e.name, source: e.source, time: e.time, itemCount: e.itemCount, kind: e.kind || "snapshot", targetDataVersion: e.targetDataVersion, appVersion: e.appVersion })));

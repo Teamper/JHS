@@ -2,6 +2,7 @@
 
 import { normalizeCarNum } from "./constants.js";
 import { STATE_FLAG_NAMES, createEmptyStateFlags, normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
+import { createStateDomainRegistry } from "./state-domains.js";
 
 /** @typedef {Record<string, any>} StateRecord */
 /** @typedef {keyof import("./state-model.js").StateFlags} StateFlag */
@@ -98,30 +99,42 @@ function pruneActivityLog(log, now = Date.now()) {
 }
 
 export class StateService {
-    /** @param {StateRecord} storage @param {StateRecord} eventBus */
-    constructor(storage, eventBus) {
-        this.storage = storage, this.eventBus = eventBus, this._queue = Promise.resolve(), this._recovering = !1;
+    /** @param {StateRecord} storage @param {StateRecord} eventBus @param {{runExclusive: (operation: () => any) => Promise<any>} | null} [mutationCoordinator] */
+    constructor(storage, eventBus, mutationCoordinator = null) {
+        this.storage = storage, this.eventBus = eventBus, this.mutationCoordinator = mutationCoordinator, this.domains = createStateDomainRegistry(storage), this._queue = Promise.resolve(), this._recovering = !1;
     }
     /** @param {() => any} callback */
     _withLock(callback) {
+        if (this.mutationCoordinator) return this.mutationCoordinator.runExclusive(() => {
+            this.storage._invalidateCache?.();
+            return callback();
+        });
         const lockManager = globalThis.navigator?.locks;
         if (lockManager) return lockManager.request("jhs_state_mutation", callback);
         const run = this._queue.then(callback, callback);
         return this._queue = run.catch((() => {})), run;
     }
+    /** Notifications run after durable writes and must not make callers repeat a committed mutation. */
+    /** @param {string} type @param {StateRecord} payload */
+    async _notifyCommitted(type, payload) {
+        try { await this.eventBus?.emit?.(type, payload); }
+        catch (error) {
+            try { globalThis.console?.warn?.(`[JHS] 持久化已完成，但 ${type} 通知失败`, error); }
+            catch { /* Durable state must not be reclassified as failed by diagnostics. */ }
+        }
+    }
     async getActivityLog() {
-        return pruneActivityLog(await this.storage.forage.getItem("activity_log"));
+        return pruneActivityLog(await this.domains.activity.read());
     }
     async getOfflineHistory() {
-        return await this.storage.forage.getItem("offline_history") || [];
+        return await this.domains.offlineHistory.read();
     }
     /** @param {StateRecord} record */
     async appendOfflineHistory(record) {
         return this._withLock(async () => {
             const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || new Date().toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
-            history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history);
-            try { await this.eventBus.emit("offline-history-changed", { ids: [ item.id ] }); }
-            catch (error) { globalThis.console?.warn("[JHS] 离线历史已保存，通知失败"); }
+            history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.domains.offlineHistory.write(history);
+            await this._notifyCommitted("offline-history-changed", { ids: [ item.id ] });
             return item;
         });
     }
@@ -130,11 +143,58 @@ export class StateService {
         return this._withLock(async () => {
             const keys = new Set(Array.isArray(ids) ? ids : [ ids ]), history = await this.getOfflineHistory(), next = history.filter((/** @param {StateRecord} item */ item => !keys.has(item.id)));
             if (next.length === history.length) return !1;
-            return await this.storage.forage.setItem("offline_history", next), await this.eventBus.emit("offline-history-changed", { ids: [ ...keys ], removed: !0 }), !0;
+            await this.domains.offlineHistory.write(next);
+            await this._notifyCommitted("offline-history-changed", { ids: [ ...keys ], removed: !0 });
+            return !0;
         });
     }
     async getNewVideoDecisions() {
-        return await this.storage.forage.getItem("new_video_decisions") || {};
+        return await this.domains.decisions.read();
+    }
+    /** Preserve the 6.5.1 actress record API while routing feature callers through the state service. */
+    async getFavoriteActressList() {
+        return this.storage.getFavoriteActressList();
+    }
+    /** Read the established movie map through the StateService domain boundary. */
+    async getCarMap() {
+        return this.storage.getCarMap();
+    }
+    /** Read the established blacklist records for native Feature surfaces. */
+    async getBlacklist() {
+        return this.storage.getBlacklist();
+    }
+    /** Read the established blocked-car records for Discovery workflows. */
+    async getBlacklistCarList() {
+        return this.storage.getBlacklistCarList();
+    }
+    /** Add or refresh one blacklist actor using the established StorageManager schema and shared mutation lock. @param {StateRecord} item */
+    async addBlacklistItem(item) {
+        return this.storage.addBlacklistItem(item);
+    }
+    /** Persist parsed blacklist-car records through the shared storage coordinator. @param {StateRecord[]} records */
+    async batchSaveBlacklistCarList(records) {
+        return this.storage.batchSaveBlacklistCarList(records);
+    }
+    /** Update the existing blacklist actor metadata without changing its stored schema. @param {StateRecord} update */
+    async updateBlacklistItem(update) {
+        return this.storage.updateBlacklistItem(update);
+    }
+    /** Keep blacklist record deletion and related blocked-card cleanup under one shared mutation lock. @param {string} starId */
+    async removeBlacklistActor(starId) {
+        return this.storage.removeBlacklistActor(starId);
+    }
+    /** Keep the established actress merge rules; StorageManager enters the shared mutation coordinator. @param {StateRecord[]} actresses */
+    async addFavoriteActressList(actresses) {
+        return this.storage.addFavoriteActressList(actresses);
+    }
+    /** Keep the existing strict starId deletion semantics under the shared mutation coordinator. @param {unknown} starId */
+    /** Preserve the actress update API; StorageManager enters the shared mutation coordinator. @param {StateRecord} update */
+    async updateFavoriteActress(update) {
+        return this.storage.updateFavoriteActress(update);
+    }
+    /** @param {unknown} starId */
+    async removeFavoriteActress(starId) {
+        return this.storage.removeFavoriteActress(starId);
     }
     /** Read one normalized state record for post-mutation verification. */
     /** @param {unknown} carNum */
@@ -146,9 +206,9 @@ export class StateService {
     }
     /** @param {string[] | null} [requestedDomains] @returns {Promise<StateRecord>} */
     async _readDomains(requestedDomains = null) {
-        const requested = new Set(requestedDomains ?? ["carList", "actresses", "decisions", "activity"]), read = (/** @type {string} */ domain, /** @type {string} */ key, /** @type {unknown} */ fallback) => requested.has(domain) ? this.storage.forage.getItem(key) : Promise.resolve(fallback);
-        const [carList, actresses, decisions, activity] = await Promise.all([ read("carList", this.storage.car_list_key, []), read("actresses", this.storage.favorite_actresses_key, []), read("decisions", "new_video_decisions", {}), read("activity", "activity_log", null) ]);
-        return { carList: carList || [], actresses: actresses || [], decisions: decisions || {}, activity: pruneActivityLog(activity) };
+        const requested = new Set(requestedDomains ?? [ "carList", "actresses", "decisions", "activity" ]), read = (/** @type {string} */ domain) => requested.has(domain) ? this.domains[domain].read() : Promise.resolve(domain === "activity" ? { entries: [] } : domain === "decisions" ? {} : []);
+        const [carList, actresses, decisions, activity] = await Promise.all([ read("carList"), read("actresses"), read("decisions"), read("activity") ]);
+        return { carList, actresses, decisions, activity: pruneActivityLog(activity) };
     }
     /** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {string[]} carNums */
     _removeHandledNewVideos(actresses, decisions, carNums) {
@@ -164,7 +224,7 @@ export class StateService {
     }
     /** @param {StateRecord} log */
     async _writeActivity(log) {
-        await this.storage.forage.setItem("activity_log", pruneActivityLog(log));
+        await this.domains.activity.write(pruneActivityLog(log));
     }
     /** @param {StateRecord} domains @param {StateRecord} next @param {StateRecord} activity @param {string[]} [touchedDomains] */
     async _commit(domains, next, activity, touchedDomains = ["carList", "activity"]) {
@@ -174,8 +234,8 @@ export class StateService {
         const journal = { schema: 2, id: activity.id, state: "prepared", createdAt: activity.createdAt, touchedDomains: touched, before: select(domains), after: select(next, true) };
         await this.storage.forage.setItem("mutation_journal", journal);
         try {
-            touched.includes("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, next.carList), touched.includes("activity") && await this._writeActivity(pendingLog),
-            touched.includes("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, next.actresses), touched.includes("decisions") && await this.storage.forage.setItem("new_video_decisions", next.decisions);
+            touched.includes("carList") && await this.domains.carList.write(next.carList), touched.includes("activity") && await this._writeActivity(pendingLog),
+            touched.includes("actresses") && await this.domains.actresses.write(next.actresses), touched.includes("decisions") && await this.domains.decisions.write(next.decisions);
             activity.commitState = "committed", pendingLog.entries = pendingLog.entries.map((/** @param {StateRecord} entry */ entry => entry.id === activity.id ? activity : entry)), await this._writeActivity(pendingLog);
             await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
         } catch (error) {
@@ -188,7 +248,7 @@ export class StateService {
         const log = await this.getActivityLog(), activity = log.entries.find((/** @param {StateRecord} entry */ entry => entry.id === journal.id));
         const touched = Array.isArray(journal.touchedDomains) ? journal.touchedDomains : ["carList", "actresses", "decisions", "activity"];
         if ("committed" === activity?.commitState) {
-            touched.includes("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.after.carList), touched.includes("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.after.actresses), touched.includes("decisions") && await this.storage.forage.setItem("new_video_decisions", journal.after.decisions);
+            touched.includes("carList") && await this.domains.carList.write(journal.after.carList), touched.includes("actresses") && await this.domains.actresses.write(journal.after.actresses), touched.includes("decisions") && await this.domains.decisions.write(journal.after.decisions);
         } else {
             const current = await this._readDomains(touched), keys = touched.filter((key) => key !== "activity");
             const conflict = keys.some((key => {
@@ -207,13 +267,17 @@ export class StateService {
                     archives.push(archive), archives.length > 20 && archives.splice(0, archives.length - 20);
                     await this.storage.forage.setItem("mutation_journal_conflicts", archives), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
                 } catch (archiveError) {
-                    clog.error("[状态] 冲突事务归档失败，保留原事务日志", archiveError);
+                    try { clog.error("[状态] 冲突事务归档失败，保留原事务日志", archiveError); }
+                    catch { /* Preserve the archive failure and the active journal. */ }
                     throw archiveError;
                 }
-                clog.warn("[状态] 检测到未完成状态事务且数据已变化，已归档证据并保留当前数据"), show.info("检测到未完成的状态事务，已保留当前数据并归档冲突证据");
+                try { clog.warn("[状态] 检测到未完成状态事务且数据已变化，已归档证据并保留当前数据"); }
+                catch { /* Recovery is already durable. */ }
+                try { show.info("检测到未完成的状态事务，已保留当前数据并归档冲突证据"); }
+                catch { /* Recovery is already durable. */ }
                 return;
             }
-            touched.includes("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), touched.includes("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), touched.includes("decisions") && await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
+            touched.includes("carList") && await this.domains.carList.write(journal.before.carList), touched.includes("actresses") && await this.domains.actresses.write(journal.before.actresses), touched.includes("decisions") && await this.domains.decisions.write(journal.before.decisions);
             journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter((/** @param {StateRecord} entry */ entry => entry.id !== journal.id)), await this._writeActivity(log));
         }
         await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
@@ -224,6 +288,10 @@ export class StateService {
     }
     async recoverPendingTransaction() {
         return this._withLock((() => this._recoverWithoutLock()));
+    }
+    /** Call only while the shared storage mutation lock is already held. */
+    async recoverPendingTransactionWithoutLock() {
+        return this._recoverWithoutLock();
     }
     /** @param {string | string[]} carNums @param {Partial<import("./state-model.js").StateFlags>} patch @param {StateRecord} [options] */
     async patch(carNums, patch, options = {}) {
@@ -259,7 +327,10 @@ export class StateService {
         if (!changes.length) return { changed: [], transactionId: null };
         changes.forEach((change => handled.includes(change.carNum) && (change.newVideoEffect = captureNewVideoEffect(domains.actresses, domains.decisions, change.carNum))));
         const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, handled), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: options.type || "state-patch", commitState: "pending", changes, createdAt: new Date().toISOString(), undoAttemptedAt: null };
-        await this._commit(domains, { carList: [ ...map.values() ], ...effects }, activity, handled.length ? ["carList", "actresses", "decisions", "activity"] : ["carList", "activity"]), await this.eventBus.emit("car-state-changed", { carNums: changes.map((change => change.carNum)), transactionId: activity.id }), handled.length && await this.eventBus.emit("new-video-changed", { carNums: [ ...new Set(handled) ], reason: "state-handled" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        await this._commit(domains, { carList: [ ...map.values() ], ...effects }, activity, handled.length ? ["carList", "actresses", "decisions", "activity"] : ["carList", "activity"]);
+        await this._notifyCommitted("car-state-changed", { carNums: changes.map((change => change.carNum)), transactionId: activity.id });
+        handled.length && await this._notifyCommitted("new-video-changed", { carNums: [ ...new Set(handled) ], reason: "state-handled" });
+        await this._notifyCommitted("activity-log-changed", { transactionId: activity.id });
         return { changed: changes.map((change => change.carNum)), transactionId: activity.id };
     }
     /** @param {string} carNum @param {StateFlag} flag @param {StateRecord} [options] */
@@ -281,7 +352,9 @@ export class StateService {
             const domains = await this._readDomains(), changes = domains.carList.filter((/** @type {StateRecord} */ record) => keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))).map((/** @type {StateRecord} */ record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: [ "record" ], before: cloneStateValue(record), after: null, undoState: "pending" }));
             if (!changes.length) return { changed: [], transactionId: null };
             const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "record-delete", commitState: "pending", changes, createdAt: new Date().toISOString(), undoAttemptedAt: null };
-            await this._commit(domains, { carList: domains.carList.filter((/** @type {StateRecord} */ record) => !keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity, ["carList", "activity"]), await this.eventBus.emit("car-records-removed", { carNums: changes.map((/** @type {StateRecord} */ change) => change.carNum), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            await this._commit(domains, { carList: domains.carList.filter((/** @type {StateRecord} */ record) => !keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity, ["carList", "activity"]);
+            await this._notifyCommitted("car-records-removed", { carNums: changes.map((/** @type {StateRecord} */ change) => change.carNum), transactionId: activity.id });
+            await this._notifyCommitted("activity-log-changed", { transactionId: activity.id });
             return { changed: changes.map((/** @type {StateRecord} */ change) => change.carNum), transactionId: activity.id };
         });
     }
@@ -301,7 +374,9 @@ export class StateService {
             if (!changes.length) return { changed: [], transactionId: null };
             const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-decision", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
             const changed = changes.map((change => change.carNum));
-            await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity, ["decisions", "activity"]), await this.eventBus.emit("new-video-changed", { carNums: changed, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity, ["decisions", "activity"]);
+            await this._notifyCommitted("new-video-changed", { carNums: changed, reason: action || "decision-restored" });
+            await this._notifyCommitted("activity-log-changed", { transactionId: activity.id });
             return { changed, transactionId: activity.id };
         });
     }
@@ -321,7 +396,9 @@ export class StateService {
                 return { carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect, afterDecision, undoState: "pending" };
             }));
             const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
-            await this._commit(domains, { carList: domains.carList, actresses: effects.actresses, decisions }, activity, ["actresses", "decisions", "activity"]), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            await this._commit(domains, { carList: domains.carList, actresses: effects.actresses, decisions }, activity, ["actresses", "decisions", "activity"]);
+            await this._notifyCommitted("new-video-changed", { carNums: changed, reason });
+            await this._notifyCommitted("activity-log-changed", { transactionId: activity.id });
             return { changed, transactionId: activity.id };
         });
     }
@@ -367,12 +444,13 @@ export class StateService {
             const select = (/** @type {StateRecord} */ source) => Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(source[key])]));
             const journal = { schema: 2, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: select(before), after: select({ carList: nextCars, actresses, decisions, activity: log }) };
             try {
-                await this.storage.forage.setItem("mutation_journal", journal), touched.has("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), touched.has("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), touched.has("decisions") && await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+                await this.storage.forage.setItem("mutation_journal", journal), touched.has("carList") && await this.domains.carList.write(nextCars), touched.has("actresses") && await this.domains.actresses.write(actresses), touched.has("decisions") && await this.domains.decisions.write(decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
             } catch (error) {
                 await this._recoverWithoutLock();
                 throw error;
             }
-            reverted.length && await this.eventBus.emit("car-state-changed", { carNums: reverted, undoOf: transactionId }), await this.eventBus.emit("activity-log-changed", { transactionId, undo: !0 });
+            reverted.length && await this._notifyCommitted("car-state-changed", { carNums: reverted, undoOf: transactionId });
+            await this._notifyCommitted("activity-log-changed", { transactionId, undo: !0 });
             return { reverted, conflicts };
         });
     }

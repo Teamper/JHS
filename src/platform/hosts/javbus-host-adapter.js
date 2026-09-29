@@ -1,11 +1,22 @@
 // @ts-check
 
+import { normalizeMovieCarNum } from "../../core/movie-identity.js";
+
 /** JavBus 带分页的列表路径前缀（除 /page/N 外的 /<prefix>/<id>/N 形式）。 */
 const JAVBUS_LIST_PREFIXES = new Set([ "star", "genre", "maker", "actress", "series", "tag", "search", "director", "studio", "label" ]);
 
 export class JavBusHostAdapter {
-    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
-    constructor(documentRuntime = document, locationRuntime = window.location) { this.site = "javbus"; this.document = documentRuntime; this.location = locationRuntime; }
+    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
+    constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) { this.site = "javbus"; this.document = documentRuntime; this.location = locationRuntime; this.blacklistParser = blacklistParser; }
+    getBlacklistSubjectInfo() {
+        if (!this.blacklistParser) throw new Error("黑名单页面解析器尚未配置");
+        return this.blacklistParser.getSubjectInfo({ site: this.site, href: this.location.href, document: this.document });
+    }
+    /** @param {any} page @param {string} name @param {string} starId @param {string} [site] */
+    parseBlacklistFilterPage(page, name, starId, site = this.site) {
+        if (!this.blacklistParser) throw new Error("黑名单页面解析器尚未配置");
+        return this.blacklistParser.parseFilterPage({ page, name, starId, site });
+    }
     /** 解析当前搜索条件第一页：去掉 /page/N 与 /<list-prefix>/<id>/N 的页码段；非法 URL 原样返回。 */
     /** @param {string} currentUrl */
     resolveFirstPageUrl(currentUrl) {
@@ -29,12 +40,28 @@ export class JavBusHostAdapter {
     }
     detectRoute() { return this.locateNativeMagnets() ? "detail" : this.locateListRoot() ? "list" : "other"; }
     readMovieRef() {
-        const carNum = this.document.querySelector(".info p span, [data-car-number]")?.textContent?.trim() ?? null;
+        const pathCarNum = this.location.pathname.split("/").filter(Boolean).pop()?.replace(/_\d{4}-\d{2}-\d{2}$/u, "") ?? null;
+        const domCarNum = this.document.querySelector(".info p span, [data-car-number]")?.textContent?.trim() ?? null;
+        const carNum = [pathCarNum, domCarNum].map(normalizeMovieCarNum).find(Boolean) ?? null;
         return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javbus" }) : null;
+    }
+    readMovieInfo() {
+        const ref = this.readMovieRef();
+        if (!ref) return null;
+        const actress = [...this.document.querySelectorAll('span[onmouseover*="star_"] a')].map((element) => element.textContent?.trim()).filter(Boolean).join(" ");
+        const release = [...this.document.querySelectorAll("span.header")].find((element) => element.textContent?.includes("發行日期:"));
+        const publishTime = release?.parentElement?.textContent?.replace("發行日期:", "").trim() ?? "";
+        return Object.freeze({ ...ref, actress, actors: "", publishTime });
     }
     locateListRoot() { return this.document.querySelector(".masonry"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item, :scope > .movie-box") ?? [])]; }
     getListContainer() { return this.locateListRoot()?.parentElement ?? null; }
+    getListSelectors() {
+        return Object.freeze({
+            boxSelector: ".masonry", itemSelector: ".masonry .item", coverImgSelector: ".masonry .movie-box .photo-frame img",
+            requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next",
+        });
+    }
     getListLayoutContainer() { return this.document.querySelector(".container-fluid .row"); }
     /** @param {string[]} [classes] */
     createOwnedListRoot(classes = []) {
@@ -51,6 +78,13 @@ export class JavBusHostAdapter {
             reviews: root?.querySelector('[data-jhs-slot="reviews"]') ?? this.document.querySelector("#reviews"),
             related: root?.querySelector('[data-jhs-slot="related"]'),
         });
+    }
+    /** Mount JHS detail actions before the native offline-submit control. @param {Element} element */
+    mountDetailActions(element) {
+        const target = this.document.querySelector("#mag-submit-show");
+        if (!target) return false;
+        target.before(element);
+        return true;
     }
     locateNativeGallery() { return this.document.querySelector("#sample-waterfall, .sample-box"); }
     locateNativeMagnets() { return this.document.querySelector("#magnet-table"); }

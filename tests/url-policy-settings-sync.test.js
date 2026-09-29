@@ -20,6 +20,23 @@ function createRuntime(initial = {}) {
 }
 
 describe("trusted local origin runtime synchronization", () => {
+    it("routes resource settings through the coordinated SettingsService writer", async () => {
+        const { runtime } = createRuntime();
+        const context = createAppContext(runtime);
+        await context.services.settings.load();
+        const source = {
+            id: "fixture-source", name: "Fixture", enabled: true,
+            searchUrlTemplate: "https://search.example/?q={keyword}",
+            targetUrlTemplate: "https://search.example/?q={keyword}", parserType: "magnet-links",
+        };
+
+        await context.services.resourceSettings.saveMagnetSources([source]);
+
+        expect(await context.services.resourceSettings.getMagnetSources()).toEqual([source]);
+        expect(context.services.settings.snapshot().customMagnetSources).toBe(JSON.stringify([source]));
+        context.rootScope.dispose();
+    });
+
     it("applies additions and revocations without reloading the application", async () => {
         const { runtime } = createRuntime({ trustedLocalOrigins: [] });
         const context = createAppContext(runtime);

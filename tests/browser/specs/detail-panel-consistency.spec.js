@@ -9,7 +9,7 @@ test("list iframe panels share inset, surface and typography without losing cont
   const fixture = await readFile(new URL("../fixtures/javdb-detail-panels.html", import.meta.url), "utf8");
   await context.route("https://javdb.com/v/**", route => route.fulfill({contentType:"text/html",body:fixture}));
   await page.goto("https://javdb.com/");
-  const options = {settingOverrides:{enableLoadReview:"no",enableLoadRelated:"no",enableMagnetsFilter:"no",enableLoadPreviewVideo:"no"}};
+  const options = {settingOverrides:{enableLoadReview:"no",enableLoadRelated:"no",enableLoadOtherSite:"no",enableMagnetsFilter:"no",enableLoadPreviewVideo:"no"}};
   await injectUserscriptRuntime(page, options);
   await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
   const navigation = page.waitForEvent("framenavigated", {predicate:frame=>frame !== page.mainFrame() && frame.url().includes("/v/")});
@@ -27,6 +27,21 @@ test("list iframe panels share inset, surface and typography without losing cont
   await frame.locator(".jhs-related-toggle").click();
   await expect(frame.locator(".jhs-review-item")).toHaveCount(1);
   await expect(frame.locator(".jhs-related-item")).toHaveCount(1);
+  const featureOwnership = await frame.evaluate(() => {
+    const manager = window.unsafeWindow.pluginManager;
+    const descriptors = manager.getPluginDescriptors();
+    return {
+      reviewDescriptors: ["ReviewPlugin", "RelatedPlugin"].every(name => descriptors.some(item => item.name === name)),
+      externalFeatureBeans: ["OtherSitePlugin", "UnifiedOfflinePlugin"].every(name => manager.getBean(name)?.managedByFeature === true),
+      externalSitesController: typeof manager.getBean("OtherSitePlugin")?.loadOtherSite === "function" && typeof manager.getBean("OtherSitePlugin")?.handle === "undefined",
+      externalFeatureTimings: !manager.getTimings().some(item => item.name === "UnifiedOfflinePlugin" || item.name === "OtherSitePlugin"),
+      magnetBeanMissing: manager.getBean("HighlightMagnetPlugin") === undefined,
+      magnetDescriptorPresent: descriptors.some(item => item.name === "HighlightMagnetPlugin"),
+      pluginNames: manager.getPluginNames().filter(name => ["ReviewPlugin", "RelatedPlugin", "HighlightMagnetPlugin", "OtherSitePlugin"].includes(name)),
+    };
+  });
+  expect(featureOwnership).toMatchObject({ reviewDescriptors: true, externalFeatureBeans: true, externalSitesController: true, externalFeatureTimings: true, magnetBeanMissing: true, magnetDescriptorPresent: true });
+  expect(featureOwnership.pluginNames).toEqual([]);
   for(const width of [360,390,768,992,1248,1408]) for(const theme of ["light","dark"]) {
     await page.setViewportSize({width,height:900});
     await frame.evaluate(theme=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("themeMode",theme),theme);
@@ -60,4 +75,17 @@ test("list iframe panels share inset, surface and typography without losing cont
   await expect(frame.locator(".jhs-related-title")).toHaveAttribute("href","/lists/fixture");
   expect(await frame.evaluate(()=>window.originalMagnetNodes.every(n=>n.isConnected && n.querySelector(".copy-to-clipboard")))).toBe(true);
   await frame.locator(".jhs-detail-post-resource").screenshot({path:fileURLToPath(new URL("../../../output/playwright/detail-panels-after.png", import.meta.url))});
+  const setSetting = value => frame.evaluate(v => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadOtherSite", v), value);
+  await setSetting("yes");
+  await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(1);
+  expect(await frame.evaluate(() => {
+    const actions = document.querySelector(".jhs-detail-btn-row"), sites = document.querySelector("[data-jhs-other-site-box]");
+    return Boolean(actions && sites && (actions.compareDocumentPosition(sites) & Node.DOCUMENT_POSITION_FOLLOWING));
+  })).toBe(true);
+  await setSetting("no");
+  await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(0);
+  await setSetting("yes");
+  await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(1);
+  await frame.evaluate(() => window.unsafeWindow.pluginManager.getBean("OtherSitePlugin").stop());
+  await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(0);
 });

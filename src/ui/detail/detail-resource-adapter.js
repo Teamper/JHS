@@ -3,9 +3,11 @@
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
 
 /** 返回当前详情页的宿主资源边界；调用者不得重挂载这些节点。 */
-/** @param {any} hostAdapter */
-export function getDetailResourceAdapter(hostAdapter) {
-    if (!window.isDetailPage || typeof hostAdapter?.getDetailResourceBoundary !== "function") return null;
+/** @param {any} hostAdapter @param {{jquery?: (value: any) => any, isDetailPage?: boolean}} [runtime] */
+export function getDetailResourceAdapter(hostAdapter, runtime = {}) {
+    const active = runtime.isDetailPage ?? window.isDetailPage;
+    if (!active || typeof hostAdapter?.getDetailResourceBoundary !== "function") return null;
+    const $ = runtime.jquery ?? /** @type {any} */ (globalThis).$;
     const boundary = hostAdapter.getDetailResourceBoundary();
     if (!boundary) return null;
     return {

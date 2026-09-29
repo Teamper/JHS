@@ -9,7 +9,7 @@ async function boot(page, context) {
     await page.goto("https://javdb.com/");
     const add=page.addScriptTag.bind(page);
     page.addScriptTag=async options=>{
-        if(options.path?.endsWith("JHS.user.js")) {
+        if(options.path?.endsWith(".user.js")) {
             await add({path:fileURLToPath(new URL("../fixtures/layer-runtime/layer-1.0.9.min.js",import.meta.url))});
             await add({path:fileURLToPath(new URL("../fixtures/viewer-runtime/viewer-1.11.1.min.js",import.meta.url))});
         }

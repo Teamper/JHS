@@ -1,6 +1,7 @@
 // @ts-check
 
 import { BUILT_IN_SCREENSHOT_SOURCES } from "./screenshot-sources.js";
+import { normalizeHttpUrl } from "../core/feature-helpers.js";
 
 /** 未显式指定 provider 时，长缩略图只允许使用的默认来源。 */
 const DEFAULT_SCREENSHOT_PROVIDER = "javstore";
@@ -10,6 +11,15 @@ const SCREENSHOT_PROVIDER_IDS = new Set([DEFAULT_SCREENSHOT_PROVIDER]);
 export class ScreenshotService {
     /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
     constructor(providers, integrations = null) { this.providers = providers; this.integrations = integrations; }
+
+    /** 规范截图资源 URL，并升级 JavStore 自有域名的 HTTP 链接。 @param {unknown} value @param {string} [baseUrl] */
+    normalizeAssetUrl(value, baseUrl = "https://javstore.net") {
+        const normalized = normalizeHttpUrl(value, baseUrl);
+        if (!normalized) return null;
+        const url = new URL(normalized);
+        if (url.protocol === "http:" && (url.hostname === "javstore.net" || url.hostname.endsWith(".javstore.net"))) url.protocol = "https:";
+        return url.href;
+    }
 
     /** 详情/FC2 自动加载开关；列表手动按钮可显式绕过此门禁。 @param {Record<string, any>} settings */
     isEnabled(settings) { return settings?.enableLoadScreenShot !== "no"; }

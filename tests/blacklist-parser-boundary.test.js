@@ -1,81 +1,75 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
+import { getBlacklistSubjectInfo, parseBlacklistFilterPage } from "../src/integrations/host-list/blacklist-parser.js";
 
-const repoRoot = join(import.meta.dirname, "..");
+afterEach(() => vi.unstubAllGlobals());
 
-function loadBlacklist(html, save = vi.fn(async () => {}), pageUrl = "https://javdb.com/actors/a") {
-    const dom = new JSDOM(html, { url: pageUrl }), $ = jqueryFactory(dom.window);
-    const gmHttp = { get: vi.fn(async () => '<div class="masonry"></div><div id="waterfall"></div>') };
-    class BasePlugin {
-        getSelector(site) { return "javbus" === site
-            ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }
-            : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
-        getBean() { return null; }
-        getRuntimeService(name) { return "scope" === name ? () => ({}) : {}; }
-    }
-    const context = vm.createContext({
-        console, URL, Date, window: dom.window, document: dom.window.document, $, BasePlugin, storageManager: { batchSaveBlacklistCarList: save },
-        T: "javdb", I: "javbus", d: "filter", r: true, l: false, o: "", _: "yes", requestHostPage: (_http, url) => gmHttp.get(String(url)), clog: { error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), ok: vi.fn() }, utils: { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) }, i: (target, key, value) => target[key] = value,
-        readListItem: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), publishTime: element.attr("data-date") })
-    });
-    const source = [ "src/core/feature-helpers.js", "src/integrations/host-list/parser.js", "src/plugins/blacklist/blacklist.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
-    vm.runInContext(`${source};globalThis.Plugin=BlacklistPlugin`, context);
-    return { plugin: new context.Plugin, $page: $(dom.window.document), save, gmHttp };
+function createPage(html, href = "https://javdb.com/actors/a") {
+    const dom = new JSDOM(html, { url: href }), $ = jqueryFactory(dom.window);
+    vi.stubGlobal("$", $);
+    vi.stubGlobal("document", dom.window.document);
+    return { dom, $ };
 }
 
-describe("blacklist parser boundaries", () => {
-    it("uses the full-batch label for initial and refreshed tooltips", () => {
-        const source = readTestFile(join(repoRoot, "src/plugins/blacklist/blacklist.js"), "utf8");
-        expect(source).not.toContain("上次检测时间");
-        expect(source.match(/上次整批检测/g)).toHaveLength(2);
-        expect(source).not.toMatch(/\b(?:gmHttp|localStorage)\s*\./);
+const actorCard = (carNum, href = "/v/1", publishTime = "2026-08-01") => `<div class="item"><a href="${href}"><img src="/thumb.jpg"><div class="video-title"><strong>${carNum}</strong>Title</div><div class="meta">${publishTime}</div></a></div>`;
+
+describe("blacklist parser boundary", () => {
+    it("rejects challenge pages, missing containers and empty pages with pagination", () => {
+        let page = createPage('<title>Just a moment...</title><div class="cf-chl-test"></div>');
+        expect(() => parseBlacklistFilterPage({ page: page.$(page.dom.window.document), name: "Actor", starId: "a", site: "javdb", jquery: page.$ })).toThrow("challenge");
+        page = createPage("<main>login</main>");
+        expect(() => parseBlacklistFilterPage({ page: page.$(page.dom.window.document), name: "Actor", starId: "a", site: "javdb", jquery: page.$ })).toThrow("invalid");
+        page = createPage('<div class="movie-list"></div><a class="pagination-next" href="?page=2"></a>');
+        expect(() => parseBlacklistFilterPage({ page: page.$(page.dom.window.document), name: "Actor", starId: "a", site: "javdb", jquery: page.$ })).toThrow("空页面包含下一页");
+        page.dom.window.close();
     });
 
-    it("rejects challenge, missing containers and empty pages with pagination", async () => {
-        let loaded = loadBlacklist('<title>Just a moment...</title><div class="cf-chl-test"></div>');
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "javdb")).rejects.toThrow("challenge");
-        loaded = loadBlacklist("<main>login</main>");
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "javdb")).rejects.toThrow("invalid");
-        loaded = loadBlacklist('<div class="movie-list"></div><a class="pagination-next" href="?page=2"></a>');
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "javdb")).rejects.toThrow("空页面包含下一页");
+    it("parses established record fields and selects the latest publication date without writing", () => {
+        const { dom, $ } = createPage(`<div class="movie-list">${actorCard("A-1", "/v/1", "2026-08-01")}${actorCard("A-2", "/v/2", "2026-09-03")}${actorCard("A-3", "/v/3", "invalid")}</div><a class="pagination-next" href="?page=2">Next</a>`);
+        const parsed = parseBlacklistFilterPage({ page: $(dom.window.document), name: "Actor A", starId: "actor-a", site: "javdb", jquery: $ });
+        expect(parsed).toMatchObject({ nextPageLink: "?page=2", lastPublishTime: "2026-09-03", recordCount: 3 });
+        expect(parsed.records[1]).toMatchObject({ carNum: "A-2", url: "/v/2", names: "Actor A", actionType: "filter", starId: "actor-a", publishTime: "2026-09-03" });
+        dom.window.close();
     });
 
-    it("propagates storage failures and records the maximum publication date", async () => {
-        const html = '<div class="movie-list"><div class="item" data-car="A-1" data-url="/v/1" data-date="2026-08-01"></div><div class="item" data-car="A-2" data-url="/v/2" data-date="2026-09-03"></div><div class="item" data-car="A-3" data-url="/v/3" data-date="invalid"></div></div>';
-        let loaded = loadBlacklist(html, vi.fn(async () => { throw new Error("write failed"); }));
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "javdb")).rejects.toThrow("write failed");
-        loaded = loadBlacklist(html);
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "javdb")).resolves.toMatchObject({ lastPublishTime: "2026-09-03" });
-        expect(loaded.save).toHaveBeenCalledWith(expect.arrayContaining([ expect.objectContaining({ carNum: "A-2" }) ]));
+    it("keeps explicit site selection and JavBus waterfall parsing", () => {
+        const { dom, $ } = createPage(`<div class="masonry"></div><div id="waterfall">${actorCard("BUS-1", "/ABC-1", "2026-09-02")}</div>`, "https://www.javbus.com/star/a");
+        expect(parseBlacklistFilterPage({ page: $(dom.window.document), name: "Actor", starId: "a", site: "javbus", jquery: $ })).toMatchObject({ recordCount: 1, lastPublishTime: "2026-09-02" });
+        expect(() => parseBlacklistFilterPage({ page: $(dom.window.document), name: "Actor", starId: "a", site: "unknown", jquery: $ })).toThrow("未知黑名单来源站点");
+        dom.window.close();
     });
 
-    it("uses the explicit site even when page text suggests the other site", async () => {
-        let loaded = loadBlacklist('<p>javbus</p><div class="movie-list"><div class="item" data-car="DB-1" data-url="/v/1" data-date="2026-09-01"></div></div>');
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "javdb")).resolves.toMatchObject({ lastPublishTime: "2026-09-01" });
-
-        loaded = loadBlacklist('<div class="masonry"></div><div id="waterfall"><div class="item" data-car="BUS-1" data-url="/v/2" data-date="2026-09-02"></div></div>', vi.fn(async () => {}), "https://www.javbus.com/star/a");
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "javbus")).resolves.toMatchObject({ lastPublishTime: "2026-09-02" });
-        expect(loaded.save).toHaveBeenCalledWith(expect.arrayContaining([ expect.objectContaining({ carNum: "BUS-1" }) ]));
+    it("ignores the native JavBus actor profile card before reading movie numbers", () => {
+        const html = '<div id="waterfall"><div class="item"><div class="avatar-box">Actor</div></div><div class="item"><a href="/BUS-1"><img title="Movie"><date>BUS-1</date><date>2026-09-02</date></a></div></div>';
+        const { dom, $ } = createPage(html, "https://www.javbus.com/star/a");
+        const parsed = parseBlacklistFilterPage({ page: $(dom.window.document), name: "Actor", starId: "a", site: "javbus", jquery: $ });
+        expect(parsed).toMatchObject({ recordCount: 1, lastPublishTime: "2026-09-02" });
+        expect(parsed.records).toEqual([{ carNum: "BUS-1", url: "/BUS-1", names: "Actor", actionType: "filter", starId: "a", publishTime: "2026-09-02" }]);
+        expect(dom.window.document.querySelector(".avatar-box")).not.toBeNull();
+        dom.window.close();
     });
 
-    it("rejects an unknown explicit source site", async () => {
-        const loaded = loadBlacklist('<div class="movie-list"></div>');
-        await expect(loaded.plugin.parseAndSaveFilterInfo(loaded.$page, "A", "a", "unknown")).rejects.toThrow("未知黑名单来源站点");
+    it("treats a JavBus profile-only page as empty after excluding the profile item", () => {
+        const html = '<div id="waterfall"><div class="item"><div class="avatar-box">Actor</div></div></div>';
+        const { dom, $ } = createPage(html, "https://www.javbus.com/star/a");
+        expect(parseBlacklistFilterPage({ page: $(dom.window.document), name: "Actor", starId: "a", site: "javbus", jquery: $ })).toMatchObject({ recordCount: 0, records: [] });
+        const next = dom.window.document.createElement("a");
+        next.id = "next";
+        next.href = "/star/a/2";
+        dom.window.document.body.append(next);
+        expect(() => parseBlacklistFilterPage({ page: $(dom.window.document), name: "Actor", starId: "a", site: "javbus", jquery: $ })).toThrow("空页面包含下一页");
+        dom.window.close();
     });
 
-    it("keeps the explicit site through manual pagination", async () => {
-        const loaded = loadBlacklist('<div class="masonry"></div><div id="waterfall"></div>', vi.fn(async () => {}), "https://www.javbus.com/star/a");
-        loaded.plugin.parseAndSaveFilterInfo = vi.fn()
-            .mockResolvedValueOnce({ nextPageLink: "https://www.javbus.com/star/a/2" })
-            .mockResolvedValueOnce({ nextPageLink: null });
-        await loaded.plugin.filterActorVideo("A", "a", loaded.$page, "javbus");
-        expect(loaded.gmHttp.get).toHaveBeenCalledWith("https://www.javbus.com/star/a/2");
-        expect(loaded.plugin.parseAndSaveFilterInfo).toHaveBeenNthCalledWith(1, loaded.$page, "A", "a", "javbus");
-        expect(loaded.plugin.parseAndSaveFilterInfo).toHaveBeenNthCalledWith(2, expect.anything(), "A", "a", "javbus");
+    it("extracts stable actor and tag identity without losing query filters", () => {
+        let { dom, $ } = createPage('<h2 class="actor-section-name">演员甲, 别名甲</h2><div class="section-meta">男優</div><div class="section-meta">無碼</div>', "https://javdb.com/actors/actor-a?sort_type=1&page=3&t=d");
+        expect(getBlacklistSubjectInfo({ site: "javdb", href: dom.window.location.href, document: dom.window.document, jquery: $ })).toMatchObject({
+            starId: "actor-a", name: "演员甲", allName: ["演员甲", "别名甲", "男優", "無碼"], role: "actor", movieType: "uncensored", blacklistUrl: "https://javdb.com/actors/actor-a?t=d",
+        });
+        dom.window.close();
+        ({ dom, $ } = createPage('<span id="jhs-check-tag">分類 &amp; 名稱</span>', "https://javdb.com/tags?tag=14&page=2"));
+        expect(getBlacklistSubjectInfo({ site: "javdb", href: dom.window.location.href, document: dom.window.document, jquery: $ })).toMatchObject({ starId: "no-分類 & 名稱", role: "虚拟演员", movieType: "分類 & 名稱", blacklistUrl: "https://javdb.com/tags?tag=14" });
+        dom.window.close();
     });
 });

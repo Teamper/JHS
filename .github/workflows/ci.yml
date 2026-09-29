@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, refactor/6.5]
+    branches: [main, refactor/6.5, refactor/7.0-rebuild-from-6.5.1]
   pull_request:
-    branches: [main, refactor/6.5]
+    branches: [main, refactor/6.5, refactor/7.0-rebuild-from-6.5.1]
   workflow_dispatch:
 
 permissions:
@@ -61,6 +61,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

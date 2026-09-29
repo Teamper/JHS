@@ -7,13 +7,14 @@ test("history detail and its shade stay above history across close and reopen", 
     await page.goto("https://javdb.com/");
     const addScript = page.addScriptTag.bind(page);
     page.addScriptTag = async options => {
-        if (options.path?.endsWith("JHS.user.js")) {
+        if (options.path?.endsWith(".user.js")) {
             await addScript({ path: fileURLToPath(new URL("../fixtures/layer-runtime/layer-1.0.9.min.js", import.meta.url)) });
         }
         return addScript(options);
     };
     await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no" } });
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
+    await expect.poll(() => page.locator("#jhs-library-history-feature").evaluate(style => style.textContent.includes(".jhs-history-layout"))).toBe(true);
     await page.evaluate(() => {
         const history = window.unsafeWindow.pluginManager.getBean("HistoryPlugin");
         history.historyRepository.list = async () => [{
@@ -26,6 +27,8 @@ test("history detail and its shade stay above history across close and reopen", 
         await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("HistoryPlugin").openHistory());
         const history = page.locator(".layui-layer-page").filter({ has: page.locator(".jhs-history-dialog") });
         await expect(history.locator(".history-detailBtn")).toBeVisible();
+        await expect.poll(() => history.locator(".jhs-history-layout").evaluate(node => getComputedStyle(node).display)).toBe("flex");
+        await expect.poll(() => history.locator("#table-container").evaluate(node => getComputedStyle(node).overflowX)).toBe("hidden");
         const historyStack = await page.evaluate(() => [...window.utils.layerIndexStack]);
         for (const closeMethod of ["button", "escape"]) {
             await history.locator(".history-detailBtn").click();

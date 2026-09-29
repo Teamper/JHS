@@ -27,6 +27,65 @@ test("review keyword confirmation treats external text as text with the real Lay
     await body.click({button:"right"});await page.locator(".layui-layer-dialog .layui-layer-btn0").click();
     await expect.poll(()=>page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("ReviewPlugin").getRuntimeService("storage").get("filter_keyword_review"))).toContain(text);
 });
+test("resource source and rule deletion confirmations render external names as text", async ({page,context}) => {
+    await fulfillHostFixtures(context);
+    const addScript=page.addScriptTag.bind(page);
+    page.addScriptTag=async options=>{
+        if(options.path?.endsWith(".user.js")) await addScript({path:fileURLToPath(new URL("../fixtures/layer-runtime/layer-1.0.9.min.js", import.meta.url))});
+        return addScript(options);
+    };
+    await boot(page);
+    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    const settings=page.locator(".layui-layer").filter({has:page.locator("#resource-sources-panel")});
+    await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
+    await settings.locator('.side-menu-item[data-panel="resource-sources-panel"]').click();
+    const name='<img src="data:," onerror="document.documentElement.dataset.auditExecuted=String(1)"> & <b>fixture</b>';
+    await page.evaluate(name=>{
+        const plugin=window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+        plugin.resourceState.custom=[{id:"fixture-source",name,enabled:true,priority:1,type:"magnet",searchUrlTemplate:"https://example.test/search?q={keyword}"}];
+        plugin.resourceState.tags=[{id:"fixture-rule",name,type:"contains",pattern:"fixture",weight:1}];
+        plugin.renderResourceSettings(window.jQuery(document.querySelector(".layui-layer:has(#resource-sources-panel)")));
+    },name);
+    for(const [list,button] of [["#custom-magnet-source-list",".jhs-source-delete"],["#magnet-tag-rule-list",".jhs-rule-delete"]]) {
+        await settings.locator(`${list} ${button}`).click();
+        const dialog=page.locator(".layui-layer-dialog").last();
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toContainText(name);
+        await expect(dialog.locator("img,b")).toHaveCount(0);
+        expect(await page.evaluate(()=>document.documentElement.dataset.auditExecuted)).toBeUndefined();
+        const dialogId=await dialog.getAttribute("id");
+        await dialog.locator(".layui-layer-btn1").click();
+        await expect(page.locator(`#${dialogId}`)).toHaveCount(0);
+        await expect(settings.locator(`${list} ${button}`)).toHaveCount(1);
+    }
+});
+test("setting keyword removal confirmation renders the saved text literally", async ({page,context}) => {
+    await fulfillHostFixtures(context);
+    const addScript=page.addScriptTag.bind(page);
+    page.addScriptTag=async options=>{
+        if(options.path?.endsWith(".user.js")) await addScript({path:fileURLToPath(new URL("../fixtures/layer-runtime/layer-1.0.9.min.js", import.meta.url))});
+        return addScript(options);
+    };
+    await boot(page);
+    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    const settings=page.locator(".layui-layer").filter({has:page.locator("#filter-panel")});
+    await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
+    await settings.locator('.side-menu-item[data-panel="filter-panel"]').click();
+    const keyword="<b>fixture</b>";
+    await settings.locator("#reviewKeywordContainer .keyword-input").fill(keyword);
+    await settings.locator("#reviewKeywordContainer .add-tag-btn").click();
+    const label=settings.locator("#reviewKeywordContainer .keyword-label").filter({hasText:keyword});
+    await expect(label).toHaveCount(1);
+    await label.locator(".keyword-remove").click();
+    const dialog=page.locator(".layui-layer-dialog").last();
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(keyword);
+    await expect(dialog.locator("b")).toHaveCount(0);
+    const dialogId=await dialog.getAttribute("id");
+    await dialog.locator(".layui-layer-btn1").click();
+    await expect(page.locator(`#${dialogId}`)).toHaveCount(0);
+    await expect(label).toHaveCount(1);
+});
 test("cloud OFF controls persist booleans and exclude both providers", async ({page,context}) => {
     await fulfillHostFixtures(context);await boot(page,{enable123Offline:true,enable115Offline:true});
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
@@ -69,6 +128,7 @@ test("related expansion synchronizes across tabs like reviews", async ({page,con
 
 test("115 matching cancels late detail results and restarts once", async ({page,context}) => {
     await fulfillHostFixtures(context);await boot(page,{enable115Match:false});
+    await page.waitForFunction(()=>Boolean(window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin")));
     await page.evaluate(()=>{
         window.matchRequests=[];
         const plugin=window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin");
@@ -89,6 +149,7 @@ test("115 matching cancels late detail results and restarts once", async ({page,
 
 for(const count of [0,1,2]) test(`115 ${count} matches isolate their card action`, async ({page,context})=>{
     await fulfillHostFixtures(context);await boot(page,{enable115Match:false},"https://javdb.com/");
+    await page.waitForFunction(()=>Boolean(window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin")));
     await page.evaluate(async count=>{
         const plugin=window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin"),offline=plugin.getRuntimeService("offline");
         window.matchCalls=0;window.playLinks=[];
@@ -145,7 +206,7 @@ test("123 disabled during token decryption never dispatches a cloud request", as
     await fulfillHostFixtures(context);await boot(page,{enable123Offline:true});
     await page.evaluate(()=>{
         const plugin=window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
-        const bridge=window.unsafeWindow.pluginManager.getBean("OneTwoThreeOfflinePlugin");
+        const bridge=plugin.getRuntimeService("pan123Credential");
         window.tokenBoundaryCalls=0;
         bridge.getStoredToken=()=>new Promise(resolve=>window.releaseBoundaryToken=resolve);
         plugin.getRuntimeService("offline").submitWithIntegration=async()=>{window.tokenBoundaryCalls++;};

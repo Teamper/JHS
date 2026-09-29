@@ -1,29 +1,50 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
-import { describe, expect, it } from "vitest";
-const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/compat-enhancements.js"), "utf8");
-const nav = readTestFile(join(import.meta.dirname, "../src/plugins/status/nav-bar.js"), "utf8");
-describe("status and media UX contracts", () => {
-    it("injects the single confirmed ad-container rule only on JavDB", async () => {
-        const loadCss = async siteContext => {
-            const context = vm.createContext({ BasePlugin: class {}, siteContext });
-            vm.runInContext(`${source};globalThis.Plugin=CompatibilityEnhancementsPlugin`, context);
-            return new context.Plugin().initCss();
-        };
-        const javdbCss = await loadCss({ isJavDB: true });
-        expect(javdbCss).toContain(".sda-content");
-        expect(javdbCss).toMatch(/display\s*:\s*none\s*!important/);
-        expect(await loadCss({ isJavDB: false, isJavBus: true })).toBe("");
-        expect(await loadCss({ isJavDB: false, is123Pan: true })).toBe("");
-        const cleanup = source.slice(source.indexOf("async initCss()"), source.indexOf("async handle()"));
-        expect(cleanup.match(/\.sda-content/g)).toHaveLength(1);
-        expect(cleanup).not.toMatch(/MutationObserver|setInterval|href|https?:\/\//);
+import { describe, expect, it, vi } from "vitest";
+import { JSDOM } from "jsdom";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { migrateDisabledPlugins } from "../src/core/legacy-plugin-contributions.js";
+import { CompatibilityController } from "../src/features/compatibility/compatibility-controller.js";
+
+function createController(site) {
+    const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", { url: "https://javdb.com/" });
+    dom.window.requestIdleCallback = vi.fn(() => 7);
+    dom.window.cancelIdleCallback = vi.fn();
+    const style = { register: vi.fn(() => vi.fn()) };
+    const controller = new CompatibilityController({
+        document: dom.window.document, window: dom.window, location: dom.window.location,
+        site, route: "list", host: {}, style,
+        state: { getFavoriteActressList: async () => [], getBlacklist: async () => [] },
+        notifications: {}, ui: {}, scope: new LifecycleScope(`compat-${site}`), diagnostics: {},
     });
-    it("removes records through the declared transactional StateService", () => expect(source).toContain('getRuntimeService("state").remove(carNum)'));
-    it("loads actress state once into sets", () => { expect(source).toContain("new Set((await storageManager.getFavoriteActressList())"); expect(source).toContain("new Set((await storageManager.getBlacklist())"); });
-    it("links bounded comment images without rebuilding review DOM", () => { expect(source).toContain("createTreeWalker"); expect(source).toContain("SHOW_TEXT"); expect(source).toContain("showImageViewer"); expect(source).not.toContain("node.html("); });
-    it("intercepts image paste only on the navigation search input", () => { expect(nav).toContain('$("#search-keyword").on("paste"'); expect(nav).toContain('type.indexOf("image")'); });
-    it("uses configured 115 concurrency and cache lifetime", () => { const one15 = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8"); expect(one15).toContain("mapLimit(cards, this.concurrency"); expect(one15).toContain('snapshot().oneOneFiveConcurrency'); expect(one15).toContain('snapshot().oneOneFiveCacheMinutes'); expect(one15).toContain('rootMargin: "200px"'); });
+    return { dom, controller, style, scope: controller.scope };
+}
+
+describe("compatibility enhancement Feature", () => {
+    it("registers the confirmed ad-container rule only on JavDB and cleans idle work up", () => {
+        const javdb = createController("javdb");
+        javdb.controller.start();
+        expect(javdb.style.register).toHaveBeenCalledWith("feature-compatibility-ad-container", ".sda-content { display:none!important; }");
+        expect(javdb.dom.window.requestIdleCallback).toHaveBeenCalledOnce();
+        javdb.scope.dispose();
+        expect(javdb.dom.window.cancelIdleCallback).toHaveBeenCalledWith(7);
+        expect(javdb.style.register.mock.results[0].value).toHaveBeenCalledOnce();
+
+        const javbus = createController("javbus");
+        javbus.controller.start();
+        expect(javbus.style.register).not.toHaveBeenCalled();
+        javbus.scope.dispose();
+    });
+
+    it("retains the 6.5.1 disable ID mapping after removing its legacy executor", () => {
+        expect(migrateDisabledPlugins(["CompatibilityEnhancementsPlugin", "unknown-setting"])).toEqual(["compatibility.enhancements", "unknown-setting"]);
+    });
+
+    it("keeps 115 concurrency and cache lifetime settings unchanged", async () => {
+        const { readTestFile } = await import("./helpers/read-test-file.js");
+        const { join } = await import("node:path");
+        const source = readTestFile(join(import.meta.dirname, "../src/features/external-bridge/one-one-five-match-controller.js"), "utf8");
+        expect(source).toContain("mapLimit(cards, this.concurrency");
+        expect(source).toContain("snapshot().oneOneFiveConcurrency");
+        expect(source).toContain("snapshot().oneOneFiveCacheMinutes");
+        expect(source).toContain('rootMargin: "200px"');
+    });
 });

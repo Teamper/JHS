@@ -19,17 +19,17 @@
       "reason": "Legacy plugin utility surface remains available through the 6.6 Compatibility Facade boundary.",
       "removalVersion": "6.6"
     },
-    {
-      "file": "src/plugins/backup/setting.js",
-      "category": "compatibility-glue",
-      "reason": "Transitional SettingPlugin entry composes typed settings panels, forms and runtime services for legacy registration.",
-      "removalVersion": "6.6"
-    },
+      {
+        "file": "src/plugins/backup/setting.js",
+        "category": "compatibility-glue",
+        "reason": "Settings Feature owns activation and injects service ports; the legacy-shaped settings form controller remains behind the 6.5.1 SettingPlugin compatibility bean until its views are migrated.",
+        "removalVersion": "7.0"
+      },
     {
       "file": "src/plugins/new-video/new-video.js",
       "category": "compatibility-glue",
-      "reason": "Transitional NewVideoPlugin UI entry bridges the typed scheduler, state and service boundaries for legacy registration.",
-      "removalVersion": "6.6"
+      "reason": "Discovery owns activation and injects the workspace capabilities; legacy rendering remains isolated here until the dialogs and views are migrated to typed controllers.",
+      "removalVersion": "7.0"
     }
   ]
 }

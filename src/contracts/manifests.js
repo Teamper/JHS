@@ -38,6 +38,14 @@ export function defineFeature(manifest) {
     if (!STARTUP_MODES.has(String(manifest.startup))) throw new TypeError("Feature startup mode is invalid");
     for (const field of ["sites", "routes", "contributes", "providesCommands"]) requireUniqueStrings(manifest[field], field);
     requireUniqueTokens(manifest.requires, "requires");
+    requireUniqueTokens(manifest.optionalRequires ?? [], "optionalRequires");
+    if ((/** @type {symbol[]} */ (manifest.requires)).some((token) => (/** @type {symbol[]} */ (manifest.optionalRequires ?? [])).includes(token))) throw new TypeError("Feature requires and optionalRequires cannot overlap");
+    if (manifest.requiresFeaturesByRoute !== undefined) {
+        if (!manifest.requiresFeaturesByRoute || typeof manifest.requiresFeaturesByRoute !== "object" || Array.isArray(manifest.requiresFeaturesByRoute)) throw new TypeError("requiresFeaturesByRoute must be a route-to-feature map");
+        for (const [route, featureIds] of Object.entries(/** @type {Record<string, unknown>} */ (manifest.requiresFeaturesByRoute))) {
+            requireUniqueStrings(featureIds, `requiresFeaturesByRoute.${route}`);
+        }
+    }
     if (typeof manifest.activate !== "function") throw new TypeError("Feature activate must be a function");
     if (typeof manifest.disableable !== "boolean") throw new TypeError("Feature disableable must be explicit");
     if (manifest.kind === "system" && manifest.disableable !== false) throw new TypeError("System features cannot be disableable");
@@ -49,13 +57,17 @@ export function defineContribution(manifest) {
     requireNonEmptyString(manifest.id, "Contribution id");
     requireNonEmptyString(manifest.featureId, "Contribution featureId");
     requireNonEmptyString(manifest.legacyPluginId, "Contribution legacyPluginId");
+    const executionOwner = manifest.executionOwner ?? "feature";
+    if (executionOwner !== "feature") throw new TypeError("All runtime contributions must be Feature-owned");
+    if (manifest.plugin != null) throw new TypeError("Contributions cannot declare legacy plugin executors");
+    const lifecycleOwner = manifest.lifecycleOwner ?? "feature";
+    if (lifecycleOwner !== "feature") throw new TypeError("All contribution lifecycles must be Feature-owned");
     requireUniqueStrings(manifest.sites, "sites");
     requireUniqueStrings(manifest.routes, "routes");
     requireUniqueStrings(manifest.surfaces, "surfaces");
     requireUniqueTokens(manifest.requires, "requires");
-    if (typeof manifest.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
     if (!manifest.order || typeof manifest.order !== "object") throw new TypeError("Contribution order must be explicit");
-    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), routes: Object.freeze([...(/** @type {unknown[]} */ (manifest.routes))]), surfaces: Object.freeze([...(/** @type {unknown[]} */ (manifest.surfaces))]), order: Object.freeze({ ...manifest.order }) });
+    return Object.freeze({ ...manifest, executionOwner, lifecycleOwner, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), routes: Object.freeze([...(/** @type {unknown[]} */ (manifest.routes))]), surfaces: Object.freeze([...(/** @type {unknown[]} */ (manifest.surfaces))]), order: Object.freeze({ ...manifest.order }) });
 }
 
 /** @param {Record<string, unknown>} manifest */

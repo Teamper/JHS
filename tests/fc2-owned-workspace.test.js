@@ -12,21 +12,28 @@ import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
 import { CacheService } from "../src/services/cache-service.js";
 import { assessMagnetQuality } from "../src/core/magnet-quality.js";
 import { Fc2Plugin } from "../src/plugins/external-search/fc2.js";
+import { Fc2WorkspaceService } from "../src/features/detail/fc2-workspace-service.js";
 
 const repoRoot = join(import.meta.dirname, "..");
-const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
+const fc2Source = readTestFile(join(repoRoot, "src/features/detail/fc2-workspace-service.js"), "utf8");
+const fc2WorkspaceManifestSource = readTestFile(join(repoRoot, "src/features/detail/fc2-workspace-manifest.js"), "utf8");
+const fc2PageControllerSource = readTestFile(join(repoRoot, "src/features/detail/fc2-owned-page-controller.js"), "utf8");
+const fc2StylesSource = readTestFile(join(repoRoot, "src/ui/detail/fc2-workspace-styles.js"), "utf8");
+const detailManifestSource = readTestFile(join(repoRoot, "src/features/detail/manifest.js"), "utf8");
+const listManifestSource = readTestFile(join(repoRoot, "src/features/list/manifest.js"), "utf8");
 const fc2ViewSource = readTestFile(join(repoRoot, "src/ui/detail/fc2-workspace-view.js"), "utf8");
-const fc2NavigationSource = readTestFile(join(repoRoot, "src/plugins/status/fc2-navigation.js"), "utf8");
-const fc2By123AvSource = readTestFile(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
-const screenshotSource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
-const historySource = readTestFile(join(repoRoot, "src/plugins/status/history.js"), "utf8");
+const fc2NavigationSource = readTestFile(join(repoRoot, "src/features/list/fc2-navigation-controller.js"), "utf8");
+const fc2By123AvSource = readTestFile(join(repoRoot, "src/features/external-bridge/fc2-catalog-controller.js"), "utf8");
+const screenshotControllerSource = readTestFile(join(repoRoot, "src/features/detail/screenshot-controller.js"), "utf8");
+const screenshotPanelSource = readTestFile(join(repoRoot, "src/ui/detail/screenshot-panel.js"), "utf8");
+const listPageSource = readTestFile(join(repoRoot, "src/features/list/list-compatibility-service.js"), "utf8");
+const historySource = readTestFile(join(repoRoot, "src/features/library/history-dialog-controller.js"), "utf8");
 const stateServiceSource = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8");
-const titleFilterSource = readTestFile(join(repoRoot, "src/plugins/blacklist/filter-title-keyword.js"), "utf8");
-const highlightMagnetSource = readTestFile(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
+const titleFilterControllerSource = readTestFile(join(repoRoot, "src/features/library/title-keyword-controller.js"), "utf8");
+const highlightMagnetSource = readTestFile(join(repoRoot, "src/features/detail/magnet-filter-controller.js"), "utf8");
 const primitivesSource = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
 const loggerSource = readTestFile(join(repoRoot, "src/core/logger.js"), "utf8");
-const top250Source = readTestFile(join(repoRoot, "src/plugins/external-search/top250.js"), "utf8");
+const top250Source = readTestFile(join(repoRoot, "src/features/discovery/top250-controller.js"), "utf8");
 
 function loadWorkspace() {
     const dom = new JSDOM('<main id="host"></main>', { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window);
@@ -71,6 +78,28 @@ function loadImageViewer() {
 }
 
 describe("FC2 owned detail workspace", () => {
+    it("ensures the lazy 123AV adapter before loading a 123AV detail workspace", async () => {
+        const adapter = {
+            resolveMovieId: vi.fn(async () => "movie-1"),
+            loadDetail: vi.fn(async () => {}),
+        };
+        const ensureFc2Catalog = vi.fn(async () => adapter);
+        const service = new Fc2WorkspaceService({ runtimeServices: { ensureFc2Catalog } });
+        vi.spyOn(service, "configureJavDbWantButton").mockResolvedValue(undefined);
+        vi.spyOn(service, "mountPanels").mockResolvedValue(undefined);
+        vi.spyOn(service, "fetchAndRenderNativeMagnets").mockResolvedValue(undefined);
+        vi.spyOn(service, "applyFc2Translation").mockResolvedValue(undefined);
+        const context = { isAlive: () => true, carNum: "FC2-123", url: "https://www.123av.com/videos/123" };
+
+        await service.load123AvDetail(context);
+        await Promise.resolve();
+
+        expect(ensureFc2Catalog).toHaveBeenCalledOnce();
+        expect(adapter.resolveMovieId).toHaveBeenCalledWith("FC2-123");
+        expect(adapter.loadDetail).toHaveBeenCalledWith(context, context.url);
+        expect(service.fetchAndRenderNativeMagnets).toHaveBeenCalledWith(context, "movie-1");
+    });
+
     it("never builds a private FC2 URL without a resolved movie id", async () => {
         const openPage = vi.fn();
         vi.stubGlobal("utils", { openPage });
@@ -89,14 +118,57 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("keeps the dialog height chain bounded so the workspace owns scrolling", () => {
-        expect(fc2Source).toMatch(/\.movie-detail-layer \.layui-layer-content \{[^}]*min-height:0;[^}]*overflow:hidden;/);
-        expect(fc2Source).toMatch(/\.movie-detail-layer \.jhs-fc2-dialog-host \{[^}]*height:100%;[^}]*min-height:0;/);
-        expect(fc2Source).toMatch(/\.jhs-fc2-workspace\[data-jhs-fc2-mode="dialog"\] \{[^}]*height:100%;[^}]*min-height:0;[^}]*overflow-y:auto;/);
+        expect(fc2StylesSource).toMatch(/\.movie-detail-layer \.layui-layer-content \{[^}]*min-height:0;[^}]*overflow:hidden;/);
+        expect(fc2StylesSource).toMatch(/\.movie-detail-layer \.jhs-fc2-dialog-host \{[^}]*height:100%;[^}]*min-height:0;/);
+        expect(fc2StylesSource).toMatch(/\.jhs-fc2-workspace\[data-jhs-fc2-mode="dialog"\] \{[^}]*height:100%;[^}]*min-height:0;[^}]*overflow-y:auto;/);
+    });
+
+    it("registers FC2 workspace styles from the owning Features, not the compatibility plugin", () => {
+        expect(fc2Source).not.toContain("async initCss()");
+        expect(fc2WorkspaceManifestSource).toContain("FC2_WORKSPACE_STYLES");
+        expect(detailManifestSource).not.toContain("FC2_WORKSPACE_STYLES");
+        expect(listManifestSource).not.toContain("FC2_WORKSPACE_STYLES");
+        expect(fc2StylesSource).toContain("const FC2_WORKSPACE_STYLES");
+    });
+
+    it("moves the collection-codes page lifecycle into the FC2 workspace Feature", () => {
+        expect(fc2Source).not.toContain("async handle()");
+        expect(fc2PageControllerSource).toContain('scope.listen(this.window, "pagehide"');
+        expect(fc2PageControllerSource).toContain("this.canCommit(generation)");
+        expect(fc2PageControllerSource).toContain('mode: "page"');
+        expect(fc2WorkspaceManifestSource).toContain("new Fc2OwnedPageController");
+    });
+
+    it("restores the FC2 third-party slot when its Feature adapter attaches after page startup", () => {
+        const dom = new JSDOM('<main id="host"><div class="jhs-fc2-workspace"><div data-jhs-slot="resources"><section class="jhs-fc2-resource-group"><div data-jhs-role="native-magnets"></div></section><section class="jhs-fc2-resource-group"><div data-jhs-role="magnet-hub"></div></section></div></div></main>', { url: "https://javdb.com/users/collection_codes" });
+        const $ = jqueryFactory(dom.window), workspace = $(dom.window.document.querySelector(".jhs-fc2-workspace")), resources = workspace.find('[data-jhs-slot="resources"]');
+        const context = { isAlive: () => true, getSlot: () => resources, otherSiteGeneration: 0 };
+        workspace.data("jhsFc2Context", context);
+        const plugin = new Fc2Plugin(), adapter = {};
+        const mount = vi.spyOn(plugin, "mountFc2OtherSites").mockImplementation(() => {});
+        vi.stubGlobal("$", $);
+        try {
+            plugin.attachFeatureExternalSitesAdapter(adapter);
+            const sitesGroup = resources.find('[data-jhs-role="other-sites"]').closest(".jhs-fc2-resource-group");
+            expect(sitesGroup).toHaveLength(1);
+            expect(sitesGroup.next().find('[data-jhs-role="magnet-hub"]')).toHaveLength(1);
+            expect(mount).toHaveBeenCalledOnce();
+            expect(mount.mock.calls[0][0]).toBe(context);
+            expect(mount.mock.calls[0][1][0]).toBe(sitesGroup[0]);
+            expect(mount.mock.calls[0][2]).toBe(adapter);
+
+            plugin.detachFeatureExternalSitesAdapter(adapter);
+            expect(resources.find('[data-jhs-role="other-sites"]')).toHaveLength(0);
+            expect(context.otherSiteGeneration).toBe(1);
+        } finally {
+            vi.unstubAllGlobals();
+            dom.window.close();
+        }
     });
 
     it("lets sections keep their content height and opens gallery thumbnails in the viewer", () => {
-        expect(fc2Source).toMatch(/\.jhs-fc2-workspace \{[^}]*grid-auto-rows:max-content;[^}]*align-content:start;/);
-        expect(fc2Source).toMatch(/\.jhs-fc2-gallery-grid \{[^}]*minmax\(112px,144px\)/);
+        expect(fc2StylesSource).toMatch(/\.jhs-fc2-workspace \{[^}]*grid-auto-rows:max-content;[^}]*align-content:start;/);
+        expect(fc2StylesSource).toMatch(/\.jhs-fc2-gallery-grid \{[^}]*minmax\(112px,144px\)/);
         expect(fc2ViewSource).toContain('class="jhs-btn jhs-fc2-gallery-item"');
         expect(fc2Source).toContain('showImageViewer(image, "", { galleryRoot: gallery[0] })');
         expect(fc2Source).not.toContain('"data-fancybox"');
@@ -172,9 +244,9 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("renders screenshot-provider results as the smallest thumbnail until opened", () => {
-        expect(fc2Source).toMatch(/\.jhs-fc2-screenshot-thumbnail \{[^}]*width:112px;/);
-        expect(screenshotSource).toContain('class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"');
-        expect(screenshotSource).toContain("showImageViewer(image[0])");
+        expect(fc2StylesSource).toMatch(/\.jhs-fc2-screenshot-thumbnail \{[^}]*width:112px;/);
+        expect(screenshotPanelSource).toContain('class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"');
+        expect(screenshotPanelSource).toContain("showImageViewer(image[0])");
     });
 
     it("keeps state action buttons mounted while either summary renderer refreshes", () => {
@@ -187,22 +259,52 @@ describe("FC2 owned detail workspace", () => {
 
     it("propagates an explicit FC2 source without guessing from URL text", () => {
         expect(fc2Source).not.toContain('url.includes("123av")');
-        expect(fc2By123AvSource).toContain('data-jhs-fc2-source="123av"');
-        expect(fc2NavigationSource).toContain("fc2Source || (await fc2.resolveFc2Source");
+        expect(fc2By123AvSource).toContain('setAttribute("data-jhs-fc2-source", "123av")');
+        expect(fc2NavigationSource).toContain("fc2Source || (await this.fc2.resolveFc2Source");
         expect(fc2NavigationSource).toContain("resolveMovieIdForRecord(carNum, aHref)");
-        expect(historySource).toContain("resolveFc2Source(t)");
+        expect(historySource).toContain('this.resolveLegacy("Fc2Plugin")');
+        expect(historySource).toContain("this.getFc2Workspace()");
         expect(stateServiceSource).toContain('"fc2Source"');
         expect(fc2Source).toContain('target.searchParams.set("source", source)');
     });
 
     it("keeps the native FC2 entry free of a hard list.core dependency so disabling ListPagePlugin stays safe", () => {
         expect(fc2Source).not.toContain('getBean("ListPagePlugin")');
-        expect(fc2Source).toContain('o.includes("collection_codes?movieId")');
+        expect(fc2PageControllerSource).toContain('pageUrl.pathname !== "/users/collection_codes"');
+        expect(fc2PageControllerSource).toContain('pageUrl.searchParams.has("movieId")');
         expect(fc2Source).toContain("openFc2Dialog(");
-        expect(fc2NavigationSource).toContain("protectFc2Navigation(root, fc2)");
-        expect(fc2NavigationSource).toContain('this.getBean("Fc2Plugin")');
+        expect(fc2NavigationSource).toContain("protectFc2Navigation(root)");
+        expect(fc2NavigationSource).toContain("this.fc2.openNativeFallback");
+        expect(fc2Source).toContain("getListNavigationCapability()");
+        expect(fc2Source).toContain("openNativeFallback: (url, carNum, { event, newTab })");
+        expect(fc2NavigationSource).not.toContain('this.getBean("Fc2Plugin")');
         expect(listPageSource).not.toContain("protectFc2Navigation(root)");
         expect(listPageSource).not.toContain('getBean("Fc2Plugin")');
+    });
+
+    it("exposes a frozen list-navigation capability without exposing the plugin instance", async () => {
+        const plugin = {
+            resolveMovieIdForRecord: vi.fn(async () => "movie-id"),
+            resolveFc2Source: vi.fn(async () => "123av"),
+            openFc2Page: vi.fn(async () => true),
+            openFc2Dialog: vi.fn(),
+        };
+        const capability = Fc2Plugin.prototype.getListNavigationCapability.call(plugin);
+        expect(Object.isFrozen(capability)).toBe(true);
+        await expect(capability.resolveMovieIdForRecord("FC2-123", "/v/fc2")).resolves.toBe("movie-id");
+        await expect(capability.resolveFc2Source({ url: "/v/fc2" })).resolves.toBe("123av");
+        await capability.openFc2Page("movie-id", "FC2-123", "/v/fc2", { newTab: true }, { source: "123av" });
+        capability.openFc2Dialog("movie-id", "FC2-123", "/v/fc2", { source: "123av" });
+        expect(plugin.resolveMovieIdForRecord).toHaveBeenCalledWith("FC2-123", "/v/fc2");
+        expect(plugin.openFc2Page).toHaveBeenCalledWith("movie-id", "FC2-123", "/v/fc2", { newTab: true }, { source: "123av" });
+        expect(plugin.openFc2Dialog).toHaveBeenCalledWith("movie-id", "FC2-123", "/v/fc2", { source: "123av" });
+
+        const openPage = vi.fn();
+        vi.stubGlobal("utils", { openPage });
+        const event = { button: 1 };
+        capability.openNativeFallback("/v/fc2", "FC2-123", { event, newTab: true });
+        expect(openPage).toHaveBeenCalledWith("/v/fc2", "FC2-123", true, { event, newTab: true });
+        vi.unstubAllGlobals();
     });
 
     it("restores source links, magnet metadata and scoped quality filtering", () => {
@@ -244,12 +346,13 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("supports exact layer closing, reusable MagnetHub and hardened mobile layout", () => {
-        expect(titleFilterSource).toContain("utils.closePage({ root: host, layerIndex })");
+        expect(titleFilterControllerSource).toContain("this.ui.closePage({ root: this.ui.jquery(title) })");
+        expect(titleFilterControllerSource).toContain('this.window.getSelection()?.toString()');
         expect(fc2Source).toContain('hubButton.attr("aria-expanded", "false")');
         expect(fc2Source).toContain("magnetHubPromise ||=");
         expect(primitivesSource).toMatch(/\.magnet-tabs > div \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*overflow-x: auto;/);
-        expect(fc2Source).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
-        expect(fc2Source).toContain("@media (max-width:339px)");
+        expect(fc2StylesSource).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
+        expect(fc2StylesSource).toContain("@media (max-width:339px)");
     });
 
     it("keeps asynchronous error variables inside their catch callbacks", () => {
@@ -261,10 +364,10 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("initializes screenshot through the single ScreenshotService-owned view and keeps stable slots", () => {
-        expect(screenshotSource).toContain("renderScreenshotPanel");
-        expect(screenshotSource).toContain('service.isEnabled(this.getSettingsSnapshot())');
+        expect(screenshotPanelSource).toContain("renderScreenshotPanel");
+        expect(screenshotControllerSource).toContain("this.screenshot.isEnabled(this.settings.snapshot())");
         expect(fc2Source).toContain('screenshotService.isEnabled(settings.snapshot())');
-        expect(fc2Source).toContain(".jhs-fc2-screenshot:empty");
+        expect(fc2StylesSource).toContain(".jhs-fc2-screenshot:empty");
         expect(fc2Source).toContain("box ? sitesGroup.show() : sitesGroup.hide()");
         expect(fc2Source).toContain("sitesGroup.hide();");
         expect(fc2Source).not.toContain("if (!result && !screenshot.children().length) screenshot.remove()");

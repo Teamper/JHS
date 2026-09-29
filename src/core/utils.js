@@ -32,7 +32,7 @@ export class Utils {
             mp4: "video/mp4",
             webm: "video/webm",
             ogg: "audio/ogg"
-        }), i(this, "timers", new Map), i(this, "insertStyle", (e => {
+        }), i(this, "timers", new Map), i(this, "iframeEscBindings", new Map), i(this, "insertStyle", (e => {
             const t = (Array.isArray(e) ? e : [ e ]).filter(Boolean);
             if (0 === t.length) return;
             const n = t.map((e => e.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""))).filter(Boolean).join("\n"), a = document.createElement("style");
@@ -78,7 +78,11 @@ export class Utils {
         if (e.defaultPrevented || e.isDefaultPrevented?.()) return;
         if (0 === this.layerIndexStack.length) return;
         /* 先剔除已被 X 按钮/shadeClick 等途径关闭的陈旧索引，避免 Esc 被空操作吞掉 */
-        for (;this.layerIndexStack.length && !document.getElementById(`layui-layer${this.layerIndexStack[this.layerIndexStack.length - 1]}`); ) this.layerIndexStack.pop();
+        while (this.layerIndexStack.length) {
+            const staleLayerIndex = this.layerIndexStack[this.layerIndexStack.length - 1];
+            if (document.getElementById(`layui-layer${staleLayerIndex}`)) break;
+            this.releaseEscClose(staleLayerIndex);
+        }
         const t = this.layerIndexStack[this.layerIndexStack.length - 1];
         if (null == t) return;
         const n = $(`#layui-layer${t}`);
@@ -98,25 +102,57 @@ export class Utils {
         a || (this.layerIndexStack.pop(), layer.close(t));
     }
     setupEscClose(e) {
-        var t;
         this._boundHandler || (this._boundHandler = this._handleGlobalEscKey.bind(this),
         $(document).off("keydown.globalLayerEsc"), $(document).on("keydown.globalLayerEsc", this._boundHandler)),
         -1 === this.layerIndexStack.indexOf(e) && this.layerIndexStack.push(e);
-        const n = $(`#layui-layer-iframe${e}`), a = `keydown.layerEsc${e}`;
+        const n = $(`#layui-layer-iframe${e}`), a = `layerEsc${e}`, frame = n[0];
+        if (!frame) return;
         try {
-            const e = null == (t = n[0]) ? void 0 : t.contentDocument;
-            if (e) {
-                if ("yes" === n.attr("data-esc-bound")) return;
-                $(e).off(a), $(e).on(a, this._boundHandler), n.attr("data-esc-bound", "yes");
+            let binding = this.iframeEscBindings.get(e);
+            if (binding && binding.iframe !== frame) {
+                this.releaseIframeEscBinding(e, binding);
+                binding = null;
             }
+            if (!binding) {
+                binding = { iframe: frame, document: null, loadHandler: null };
+                binding.loadHandler = () => this.bindIframeEscDocument(e);
+                this.iframeEscBindings.set(e, binding);
+                $(frame).on(`load.${a}`, binding.loadHandler);
+            }
+            const frameDocument = frame.contentDocument;
+            if (frameDocument) this.bindIframeEscDocument(e, frameDocument);
         } catch (i) {
             clog.error("iframe监听失败 (跨域或未加载完毕):", i);
         }
     }
+    bindIframeEscDocument(e, currentDocument = null) {
+        const binding = this.iframeEscBindings.get(e);
+        if (!binding) return;
+        try {
+            const frameDocument = currentDocument || binding.iframe.contentDocument;
+            if (!frameDocument || binding.document === frameDocument) return;
+            const namespace = `keydown.layerEsc${e}`;
+            binding.document && $(binding.document).off(namespace);
+            $(frameDocument).off(namespace).on(namespace, this._boundHandler);
+            binding.document = frameDocument;
+            $(binding.iframe).attr("data-esc-bound", "yes");
+        } catch (error) {
+            clog.error("iframe监听失败 (跨域或未加载完毕):", error);
+        }
+    }
+    releaseIframeEscBinding(e, binding) {
+        const namespace = `layerEsc${e}`;
+        $(binding.iframe).off(`load.${namespace}`, binding.loadHandler).removeAttr("data-esc-bound");
+        binding.document && $(binding.document).off(`keydown.${namespace}`);
+        this.iframeEscBindings.delete(e);
+    }
     /** 弹层经非 Esc 途径（X 按钮/shadeClick/layer.close）关闭时清理 Esc 栈，缺省清理栈顶 */
     releaseEscClose(e) {
         const t = null == e ? this.layerIndexStack[this.layerIndexStack.length - 1] : e;
-        null != t && (this.layerIndexStack = this.layerIndexStack.filter((n => n !== t)));
+        if (null == t) return;
+        this.layerIndexStack = this.layerIndexStack.filter((n => n !== t));
+        const binding = this.iframeEscBindings.get(t);
+        binding && this.releaseIframeEscBinding(t, binding);
     }
     /** 将 Tab 焦点限制在弹窗内，并在释放时恢复原焦点。 @param {Element} container */
     trapFocus(container) {

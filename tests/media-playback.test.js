@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import jquery from "jquery";
-import { PreviewVideoPlugin } from "../src/plugins/image-viewer/preview-video.js";
+import { JavDbPreviewController as PreviewVideoPlugin } from "../src/features/detail/javdb-preview-controller.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
-const preview = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/preview-video.js"), "utf8");
-const bus = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/bus-preview-video.js"), "utf8");
-const cover = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/cover-button.js"), "utf8");
+const preview = readTestFile(join(import.meta.dirname, "../src/features/detail/javdb-preview-controller.js"), "utf8");
+const bus = readTestFile(join(import.meta.dirname, "../src/features/detail/javbus-preview-controller.js"), "utf8");
+const cover = readTestFile(join(import.meta.dirname, "../src/features/list/cover-button-controller.js"), "utf8");
 let dom, plugin;
 function setup({ open = true, playing = true, dmm = true, muted = false } = {}) {
     dom = new JSDOM(`<div class="${open ? "fancybox-content" : "hidden-source"}"><video id="preview-video" src="https://example.test/native.m3u8"></video></div>`, { url: "https://javdb.com/v/test" });
@@ -84,25 +84,36 @@ describe("preview playback contracts", () => {
         expect(attempts).toEqual([{muted:false,visible:true,nativePaused:false},{muted:true,visible:true,nativePaused:false}]);
         expect(native.paused).toBe(true); expect(document.querySelector("#jhs-preview-video").muted).toBe(true);
     });
+    it("applies the saved mute preference and persists volume changes",async()=>{
+        const {settings}=setup({muted:true});
+        await plugin.handleVideo();
+        const dmm=document.querySelector("#jhs-preview-video");
+        expect(dmm.muted).toBe(true);
+        dmm.muted=false;
+        dmm.dispatchEvent(new dom.window.Event("volumechange"));
+        await Promise.resolve();
+        expect(settings.videoMuted).toBe(false);
+    });
     it("shares quality controls and exposes pressed state on both sites", () => {
         for (const source of [ preview, bus ]) {
             expect(source).toContain("jhs-video-quality-btn"); expect(source).toContain("aria-pressed"); expect(source).not.toContain("video-control-btn");
         }
     });
-    it("injects the movie service and lifecycle scope for every remote DMM preview", () => {
-        for (const source of [bus, cover]) {
-            expect(source).toContain('getRuntimeService("movie")');
-            expect(source).toContain('getRuntimeService("scope")()');
-            expect(source).toMatch(/fetchDmmPreviewIfEnabled\([^\n]+getRuntimeService\("storage"\)[^\n]+getRuntimeService\("movie"\)[^\n]+scope[^\n]+(?:settings|snapshot\(\))\)/);
-        }
+    it("injects movie, storage, and abortable request scope into the JavBus DMM preview", () => {
+        expect(bus).toContain("fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, requestScope, this.settings.snapshot())");
+        expect(bus).toContain("this.requestScope = requestScope");
+        expect(bus).toContain("requestScope.dispose()");
+        expect(cover).toContain("fetchDmmPreviewIfEnabled(n, this.storage, this.movie, scope, settings)");
+        expect(cover).toContain("const settings = this.settings.snapshot()");
     });
     it("keeps native play calls inside safePlay only", () => {
-        const allRuntime = [ preview, bus, cover, readTestFile(join(import.meta.dirname, "../src/features/list/list-filters.js"), "utf8"), readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page.js"), "utf8") ].join("\n");
+        const allRuntime = [ preview, bus, cover, readTestFile(join(import.meta.dirname, "../src/features/list/list-filters.js"), "utf8"), readTestFile(join(import.meta.dirname, "../src/features/list/list-compatibility-service.js"), "utf8") ].join("\n");
         expect(allRuntime).not.toMatch(/\.play\s*\(/);
     });
     it("does not interpolate remote media URLs into HTML templates", () => {
-        expect(bus).not.toContain('<source src="${a}"');
-        expect(bus).not.toContain('data-video-src="${a}"');
+        expect(bus).toContain("source.src = sources[quality]");
+        expect(bus).not.toContain('<source src="${');
+        expect(bus).not.toContain('data-video-src="${');
         expect(cover).not.toContain('<video src="${c}" poster="${s}"');
     });
 });

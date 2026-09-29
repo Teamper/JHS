@@ -3,6 +3,9 @@ import { extname, join, relative } from "node:path";
 
 const repoRoot = join(import.meta.dirname, "..");
 const srcRoot = join(repoRoot, "src");
+const detailManifest = await readFile(join(srcRoot, "features", "detail", "manifest.js"), "utf8");
+const fc2WorkspaceManifest = await readFile(join(srcRoot, "features", "detail", "fc2-workspace-manifest.js"), "utf8");
+const systemFeatureCatalog = await readFile(join(srcRoot, "features", "system", "catalog.js"), "utf8");
 const failures = [];
 
 function requireMatch(source, pattern, message) {
@@ -23,48 +26,49 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2Workspace, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, panelStyles, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, previewService, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2Workspace, commandbar, newVideo, compatibilityBeans, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, panelStyles, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, previewService, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
   readFile(join(srcRoot, "core", "css-injection.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "external-search", "magnet-hub.js"), "utf8"),
+  readFile(join(srcRoot, "features", "external-bridge", "magnet-hub-controller.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-templates.js"), "utf8"),
   readFile(join(srcRoot, "core", "utils.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "status", "detail-workspace.js"), "utf8"),
+  readFile(join(srcRoot, "features", "detail", "detail-workspace-controller.js"), "utf8"),
   readFile(join(srcRoot, "ui", "detail", "fc2-detail-workspace.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "status", "mobile-bottom-bar.js"), "utf8"),
+  readFile(join(srcRoot, "features", "system", "responsive-shell-controller.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "new-video", "new-video.js"), "utf8"),
-  readFile(join(srcRoot, "core", "plugin-manager.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "external-search", "hit-show.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "translate", "translate.js"), "utf8"),
+  readFile(join(srcRoot, "core", "compatibility-bean-registry.js"), "utf8"),
+  readFile(join(srcRoot, "features", "discovery", "hit-show-controller.js"), "utf8"),
+  readFile(join(srcRoot, "features", "translation", "translation-controller.js"), "utf8"),
   readFile(join(srcRoot, "ui", "translation", "title-translation.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-styles.js"), "utf8"),
   readFile(join(srcRoot, "main.js"), "utf8"),
   readFile(join(repoRoot, "package.json"), "utf8"),
   readFile(join(srcRoot, "core", "logger.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "external-search", "review.js"), "utf8"),
+  readFile(join(srcRoot, "compat", "detail-panel-beans.js"), "utf8"),
   readFile(join(srcRoot, "ui", "detail", "review-panel.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "external-search", "related.js"), "utf8"),
+  readFile(join(srcRoot, "ui", "detail", "related-panel.js"), "utf8"),
   readFile(join(srcRoot, "ui", "detail", "panel-styles.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-panels.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-forms.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "status", "list-page-button.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "image-viewer", "cover-button.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "status", "highlight-magnet.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "new-video", "task.js"), "utf8"),
+  readFile(join(srcRoot, "features", "list", "list-actions-controller.js"), "utf8"),
+  readFile(join(srcRoot, "features", "list", "cover-button-controller.js"), "utf8"),
+  readFile(join(srcRoot, "features", "detail", "magnet-filter-controller.js"), "utf8"),
+  readFile(join(srcRoot, "features", "discovery", "task-execution-service.js"), "utf8"),
   readFile(join(srcRoot, "core", "storage-queue.js"), "utf8"),
   readFile(join(srcRoot, "core", "constants.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "image-viewer", "preview-video.js"), "utf8"),
+  readFile(join(srcRoot, "features", "detail", "javdb-preview-controller.js"), "utf8"),
   readFile(join(srcRoot, "services", "preview-service.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "image-viewer", "screenshot.js"), "utf8"),
+  readFile(join(srcRoot, "features", "detail", "screenshot-controller.js"), "utf8"),
   readFile(join(srcRoot, "integrations", "javstore", "parser.js"), "utf8"),
   readFile(join(srcRoot, "integrations", "javstore", "manifest.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
+  readFile(join(srcRoot, "features", "external-sites", "other-sites-controller.js"), "utf8"),
   readFile(join(srcRoot, "platform", "hosts", "javdb-host-adapter.js"), "utf8"),
   readFile(join(srcRoot, "ui", "settings", "setting-control-renderer.js"), "utf8"),
-  readFile(join(repoRoot, "JHS.user.js"), "utf8")
+  readFile(join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js"), "utf8")
 ]);
+const listSortController = await readFile(join(srcRoot, "features", "list", "list-sort-controller.js"), "utf8");
 
 const packageVersion = JSON.parse(packageSource).version;
 const userscriptVersion = main.match(/^\/\/ @version\s+(\S+)$/m)?.[1];
@@ -99,7 +103,8 @@ requireMatch(injection, /register\("jhs-ui-primitives", buildUiPrimitivesCss\(\)
 requireMatch(injection, /export function injectCoreCss\(styles,\s*detailPanelCss\s*=\s*""\)/, "core CSS injection must accept the Bootstrap style registry");
 const bootstrap = await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8");
 requireMatch(bootstrap, /import \{ injectCoreCss \} from "\.\.\/core\/css-injection\.js"/, "Bootstrap must own core CSS injection");
-requireMatch(bootstrap, /injectCoreCss\(context\.services\.styles,\s*buildDetailPanelCss\(\)\)/, "Bootstrap must execute core CSS injection through StyleRegistry");
+requireMatch(bootstrap, /injectCoreCss\(context\.services\.styles\)/, "Bootstrap must execute core CSS injection through StyleRegistry");
+requireMatch(bootstrap, /if \(route === "detail" \|\| route === "owned-detail"\)[\s\S]*await import\("\.\.\/ui\/detail\/panel-styles\.js"\)[\s\S]*context\.rootScope\.addCleanup\(context\.services\.styles\.register\("jhs-detail-panels", buildDetailPanelCss\(\)\)\)/, "detail panel CSS must load only on detail routes and clean up with the root scope");
 requireMatch(bootstrap, /initializeUiAccessibility\(context\.rootScope\)/, "dynamic UI accessibility enhancer must use the App Root Lifecycle");
 requireMatch(injection, /register\("jhs-core-layout", F\)/, "clean global support CSS must be registered");
 forbidMatch(injection, /cleanGlobalCss/, "legacy regex CSS cleanup layer must be deleted");
@@ -122,12 +127,16 @@ requireMatch(utils, /getResponsiveArea\(e\)/, "legacy responsive dialog API must
 
 for (const section of ["summary", "gallery", "resources", "related", "reviews"])
   requireMatch(fc2Workspace, new RegExp(`data-jhs-section=\\"\\$\\{name\\}\\"|section\\(\\"${section}\\"`), `FC2 detail workspace missing ${section}`);
-requireMatch(detail, /if \(!window\.isDetailPage\) return/, "detail workspace must be limited to detail pages");
+requireMatch(detailManifest, /routes:\s*\["detail", "owned-detail"\]/, "detail Feature must declare its supported routes");
+requireMatch(fc2WorkspaceManifest, /if \(runtime\.route === "owned-detail"\) \{[\s\S]*?new Fc2OwnedPageController/, "FC2 workspace Feature must own its page lifecycle on the owned-detail route");
+requireMatch(fc2WorkspaceManifest, /controller\.start\(\)[\s\S]*controller\.dispose\(\)/, "FC2 owned page must start and dispose through its Feature lifecycle");
 requireMatch(commandbar, /id="jhs-page-commandbar"/, "page command bar is missing");
 if ((commandbar.match(/id="jhs-page-commandbar"/g) || []).length !== 1) failures.push("page command bar must have one source template");
 requireMatch(commandbar, /ArrowDown.*ArrowUp.*Home.*End/s, "batch menu missing keyboard navigation");
-requireMatch(manager, /afterPluginsReady/, "plugin manager missing afterPluginsReady lifecycle");
-requireMatch(commandbar, /afterPluginsReady\(\)[\s\S]*buildCommandBar/, "command bar must assemble after plugins are ready");
+forbidMatch(compatibilityBeans, /\b(?:register|processPlugins|processCss|prepareCss|handle)\s*\(/, "compatibility registry must not execute legacy plugins or their CSS");
+requireMatch(compatibilityBeans, /getPluginNames\(\)\s*\{\s*return \[\];\s*\}/, "legacy executor metrics must remain empty");
+requireMatch(systemFeatureCatalog, /id:\s*"responsive-shell"[\s\S]*startup:\s*"idle"[\s\S]*controller\.start\(runtime\.scope\)/, "responsive shell must activate lazily through the Feature lifecycle");
+requireMatch(commandbar, /start\(scope\)[\s\S]*this\.syncSurfaces\(\)/, "command bar surfaces must assemble from its Feature lifecycle");
 requireMatch(commandbar, /quickFilter\.length[\s\S]{0,180}jhs-commandbar__filters/, "command bar must move the complete quick-filter control when present");
 requireMatch(commandbar, /jhs-mobile-filter-menu[\s\S]*jhs-mobile-filter-option/, "mobile list filtering must remain available outside the hidden command bar");
 forbidMatch(commandbar, /\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/, "command bar filters must not clip popovers");
@@ -139,9 +148,10 @@ requireMatch(commandbar, /\[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" \]/,
 requireMatch(commandbar, /\[ "#statsBtn", "#blacklistBtn" \][\s\S]*jhs-commandbar__menu/, "statistics and blacklist must be grouped in more menu");
 requireMatch(commandbar, /#addBlacklistBtn[\s\S]*jhs-commandbar__context/, "actor context action must remain directly visible");
 requireMatch(commandbar, /#filterAllVideo[\s\S]*#favoriteAllVideo[\s\S]*#hasDownAllVideo/, "batch menu must contain exactly the three bulk actions");
-requireMatch(hitShow, /classifyJavDbPage\(window\.location\)/, "playback enhancement must use the native page context");
+requireMatch(hitShow, /getPageContext\?\.\(\)/, "playback enhancement must use the host page context");
 forbidMatch(hitShow, /preventDefault|handlePlayback|advanced_search/, "playback enhancement must not replace native navigation or list data");
-requireMatch(translate, /getRuntimeService\("translation"\)/, "translation feature must use the declared service");
+requireMatch(translate, /this\.translation\.translate\(sourceText/, "translation feature must use its injected translation service");
+requireMatch(translate, /generation === this\.generation/, "translation feature must reject stale responses");
 forbidMatch(translate, /localStorage|fetch\(/, "translation feature must not own network or cache persistence");
 requireMatch(translationUi, /nextAll\("\.translated-title"\)/, "translation output must update an existing node");
 forbidMatch(translationUi, /translated-title[\s\S]{0,400}\.html\(/, "translated external text must not use html()");
@@ -182,7 +192,7 @@ requireMatch(detail, /normalizeHostActions\(root\.find\("\.video-meta-panel"\)\.
 requireMatch(detail, /jhs-detail-host-action/, "detail workspace host action appearance class is missing");
 
 requireMatch(listButtons, /role="menuitemradio"/, "sort control must use menuitemradio options");
-requireMatch(listButtons, /getRuntimeService\("settings"\)\.set\("sortMethod"/, "sort control must persist through SettingsService");
+requireMatch(listSortController, /this\.settings\.set\("sortMethod"/, "sort control must persist through SettingsService");
 const bootstrapSource = await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8");
 for (const pattern of [/localStorage\.getItem\("jhs_sortMethod"\)/, /draft\.sortMethod == null/, /draft\.sortMethod = legacySortMethod/])
   requireMatch(bootstrapSource, pattern, "sort control must migrate its legacy storage key");
@@ -199,13 +209,14 @@ forbidMatch(injection, /scale\(1\.04\)|\.masonry \.item:hover/, "JavBus cover ho
 
 requireMatch(magnet, /class="magnet-copy"[\s\S]*copy-btn[\s\S]*jhs-offline-btn/, "resource row must directly contain copy and unified offline buttons");
 forbidMatch(magnet, /magnet-(?:more|overflow)|more-menu/, "resource row must not hide actions in a more menu");
-requireMatch(newVideo, /repeat\(auto-fit,minmax\(min\(100%,260px\),1fr\)\)/, "new video cards must use the adaptive 260px grid");
-requireMatch(newVideo, /\.newVideoToolBox\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video workspace must contain its own width");
-requireMatch(newVideo, /#actress-card-container\s*\{[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/, "actress card container must prevent horizontal overflow without disabling vertical scrolling");
-requireMatch(newVideo, /#new-video-list-container\s*\{[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/, "new video list container must prevent horizontal overflow without disabling vertical scrolling");
-requireMatch(newVideo, /\.jhs-new-video-grid\s*\{[^}]*repeat\(auto-fill,minmax\(min\(100%,260px\),1fr\)\)[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video list grid must fit narrow containers");
-forbidMatch(newVideo, /\.layui-layer[^}]*overflow-x\s*:\s*hidden/, "new video overflow fixes must not mask the issue at the layui layer");
-requireMatch(newVideo, /actress-card-avatar[\s\S]{0,180}border-radius:\s*50%/, "new video avatars must use a defined round radius");
+const newVideoStylesSource = await readFile(join(srcRoot, "features", "discovery", "new-video-styles.js"), "utf8");
+requireMatch(newVideoStylesSource, /repeat\(auto-fit,minmax\(min\(100%,260px\),1fr\)\)/, "new video cards must use the adaptive 260px grid");
+requireMatch(newVideoStylesSource, /\.newVideoToolBox\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video workspace must contain its own width");
+requireMatch(newVideoStylesSource, /#actress-card-container\s*\{[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/, "actress card container must prevent horizontal overflow without disabling vertical scrolling");
+requireMatch(newVideoStylesSource, /#new-video-list-container\s*\{[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/, "new video list container must prevent horizontal overflow without disabling vertical scrolling");
+requireMatch(newVideoStylesSource, /\.jhs-new-video-grid\s*\{[^}]*repeat\(auto-fill,minmax\(min\(100%,260px\),1fr\)\)[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video list grid must fit narrow containers");
+forbidMatch(newVideoStylesSource, /\.layui-layer[^}]*overflow-x\s*:\s*hidden/, "new video overflow fixes must not mask the issue at the layui layer");
+requireMatch(newVideoStylesSource, /actress-card-avatar[\s\S]{0,180}border-radius:\s*50%/, "new video avatars must use a defined round radius");
 requireMatch(newVideo, />重新检测</, "new video card must keep the text primary action");
 requireMatch(newVideo, /type:\s*"error"[\s\S]{0,240}actionLabel:\s*"重试"/, "new video load failure must expose a retry action");
 requireMatch(newVideo, /const profileUrl = normalizeHttpUrl\(`\/actors\/\$\{encodeURIComponent\(starId\)\}\?t=d`, javDbUrl\)/, "actress profile URL must normalize the initialized JavDB URL and encode the actor ID");
@@ -217,10 +228,9 @@ requireMatch(builtCardSource, /`\/actors\/\$\{encodeURIComponent\(\w+\)\}\?t=d`/
 forbidMatch(builtCardSource, /\w+=`\$\{(\w+)\}\/actors\/\$\{\w+\.starId\}\?t=d`[\s\S]{0,1000}\b(?:const|let)\b[^;]*\b\1=/,
   "built actress cards read a shadowed variable before initialization");
 requireMatch(constants, /function normalizeCarNum[\s\S]*\[ "undefined", "null" \]/, "shared car number normalization is missing");
-requireMatch(manager, /params\.get\("jhsCarNum"\)[\s\S]*copyCarNum[\s\S]*panelCarNum[\s\S]*fallbackCarNum/, "detail car number priority is incomplete");
+requireMatch(javDbHostAdapter, /location\.searchParams\.get\("jhsCarNum"\)[\s\S]*copiedCarNum[\s\S]*panelCarNum[\s\S]*fallbackCarNum/, "detail car number priority is incomplete");
 requireMatch(constants, /function assertPageInfoContract[\s\S]*expected object/, "getPageInfo development contract assertion is missing");
-requireMatch(manager, /return assertPageInfoContract\(\{\s*carNum,\s*url: t,\s*actress: n,\s*actors: a,\s*publishTime: i\s*\}\)/,
-  "getPageInfo must return its complete public object contract");
+requireMatch(javDbHostAdapter, /readMovieInfo\(\)[\s\S]*actress[\s\S]*actors[\s\S]*publishTime/, "JavDB host adapter must return complete detail identity and metadata");
 requireMatch(utils, /new URL\(e, window\.location\.origin\)[\s\S]*searchParams\.set\("jhsCarNum", carNum\)/, "detail URLs must carry the known car number");
 requireMatch(previewService, /async fetchVideo\(\)\s*\{\s*const carNum = normalizeCarNum\(this\.carNum\)/, "DMM must validate carNum before cache and parsing");
 requireMatch(previewService, /跳过 DMM 解析：番号不可用/, "DMM invalid-number warning is missing");
@@ -231,7 +241,7 @@ requireMatch(previewVideo, /settings\.set\("videoMuted", dmmVideo\.muted\)/, "Ja
 requireMatch(previewVideo, /addClass\("is-active"\)[\s\S]*dmmPlayed = ready && \(!shouldPlay \|\| await safePlay[\s\S]*if \(!alive\(\)\)[\s\S]*if \(ready && !dmmPlayed && !dmmVideo\.muted\)[\s\S]*高画质预览静音重试[\s\S]*if \(!alive\(\)\)[\s\S]*restoreNativePlayer/, "JavDB DMM playback must preserve pause, reject stale callbacks and retry muted before native fallback");
 forbidMatch(previewVideo, /nativePreviewSrc|rememberNativeSource|restoreNativeSource|video\.currentSrc/, "JavDB HLS blob sources must never be cached or restored");
 forbidMatch(previewVideo, /\$nativeVideo\.attr\("src"|nativeVideo\.load\(\)/, "JHS must not replace or reload the JavDB HLS media source");
-requireMatch(screenshot, /async getScreenshot\(e\)\s*\{\s*e = normalizeCarNum\(e\)/, "screenshots must validate carNum first");
+requireMatch(screenshot, /async getScreenshot\(rawCarNum/, "screenshots must validate carNum first");
 requireMatch(screenshot, /无法获取番号，缩略图未加载/, "screenshot invalid-number fallback is missing");
 requireMatch(javstoreIntegration, /javstore\.net\/search\?q=\$\{encodeURIComponent\(movieRef\.carNum \|\| ""\)\}/, "JavStore must use its query search endpoint");
 requireMatch(parsers, /a\[href\$=["']-pn\.html["']\][\s\S]{0,240}includes\(normalizedCarNum\.toUpperCase\(\)\)[\s\S]{0,180}\.map\([\s\S]{0,120}\.get\(\)/,
@@ -240,8 +250,8 @@ requireMatch(javstoreIntegration, /for \(const candidate of candidates\)[\s\S]*a
 requireMatch(parsers, /normalizeJavStoreAssetUrl\(previewHref, detailUrl\)/, "JavStore preview URLs must be resolved and normalized against the detail page");
 requireMatch(parsers, /"javstore\.net" === hostname \|\| hostname\.endsWith\("\.javstore\.net"\)[\s\S]{0,100}url\.protocol = "https:"/, "JavStore HTTP preview URLs must be upgraded selectively");
 requireMatch(parsers, /previewUrl\.replace\("\.th", ""\)/, "JavStore preview URLs must retain .th compatibility");
-requireMatch(screenshot, /service\.resolve\(s*\{ carNum|getScreenshotService\(\)\.resolve/, "screenshots must resolve through ScreenshotService");
-requireMatch(screenshot, /addImg\(e, t\)[\s\S]{0,100}normalizeJavStoreAssetUrl\(t\)/, "screenshot rendering must normalize JavStore asset URLs at the final boundary");
+requireMatch(screenshot, /this\.screenshot\.resolve\(\{ carNum \}/, "screenshots must resolve through ScreenshotService");
+requireMatch(screenshot, /this\.screenshot\.normalizeAssetUrl\(rawUrl/, "screenshot rendering must normalize assets through ScreenshotService");
 requireMatch(parsers, /"CLICK HERE!" === wrap\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
 requireMatch(javstoreIntegration, /if \(imageUrl\) return[\s\S]*return \[\]/, "JavStore must continue after a candidate without CLICK HERE!");
 forbidMatch(screenshot, /javstore\.net\/search\/|img\[src\*=['"]_s\.jpg/, "legacy JavStore search or detail fallback must not return");
@@ -255,9 +265,10 @@ forbidMatch(task, /includes\(["']javdb["']\)/, "new video parsing must not infer
 requireMatch(task, /"valid" !== pageState\.state[\s\S]{0,120}throw/, "missing movie containers must fail parsing");
 requireMatch(task, /0 === s\.length[\s\S]{0,220}newVideoList:\s*\[\]/, "valid empty movie containers must persist an empty result");
 requireMatch(storageQueue, /return this\.queue = task\.catch[\s\S]{0,160}, task/, "storage queue must reject callers and recover its internal chain");
-forbidMatch(highlightMagnet, /#enable-magnets-filter[^\n]{0,100}(?:hide\(|addClass\(["']do-hide)/, "magnet filtering must never hide its toolbar entry");
-requireMatch(highlightMagnet, /removeClass\("do-hide"\)[\s\S]{0,160}未识别到可过滤项/, "magnet filtering must retain a no-match hint");
-requireMatch(highlightMagnet, /showAll\(\)[\s\S]{0,260}removeClass\("do-hide"\)[\s\S]{0,260}\.show\(\)/, "disabling magnet filtering must restore every row");
+forbidMatch(highlightMagnet, /#enable-magnets-filter[^\n]{0,100}(?:hide\(|classList\.add\(["']do-hide)/, "magnet filtering must never hide its toolbar entry");
+requireMatch(highlightMagnet, /updateFilterHint\(hasMatch\)[\s\S]{0,280}未识别到可过滤项/, "magnet filtering must retain a no-match hint");
+requireMatch(highlightMagnet, /row\.classList\.remove\("high-quality", "jhs-magnet-filter-hidden"\)/, "disabling magnet filtering must restore every row");
+requireMatch(highlightMagnet, /button\?\.removeAttribute\("data-tip"\)/, "disabling magnet filtering must clear its hint");
 requireMatch(fc2Workspace, /createFc2DetailContext/, "FC2 detail workspace must own a scoped lifecycle context");
 requireMatch(fc2Workspace, /\[ "summary", "影片概览" \], \[ "gallery", "预览与剧照" \], \[ "resources", "资源" \], \[ "reviews", "评论" \], \[ "related", "相关清单" \]/, "FC2 workspace must place reviews before related lists");
 requireMatch(commandbar, /<button type="button" id="jhs-fab" class="jhs-btn"/, "mobile FAB must be a native JHS button");
@@ -305,9 +316,9 @@ for (const file of sourceFiles) {
   }
   forbidMatch(source, /class\s*=\s*["'][^"']*\bjhs-btn\b[^"']*\s(?:button|is-(?:info|small|primary|success|danger|warning))(?:\s|["'])/i,
     `${path} mixes JHS and Bulma button classes`);
-  if (["src/plugins/external-search/top250.js", "src/plugins/external-search/hit-show.js", "src/plugins/external-search/fc2.js", "src/plugins/status/list-page.js"].includes(path))
+  if (["src/plugins/external-search/top250.js", "src/features/discovery/hit-show-controller.js", "src/plugins/external-search/fc2.js", "src/features/list/list-compatibility-service.js"].includes(path))
     forbidMatch(source, /class=["'][^"']*(?:\bbutton\b|\bbuttons\b|\btag\s+is-(?:primary|warning|success|info))/, `${path} contains legacy Bulma controls`);
-  if (["src/plugins/external-search/top250.js", "src/plugins/external-search/hit-show.js"].includes(path))
+  if (["src/plugins/external-search/top250.js", "src/features/discovery/hit-show-controller.js"].includes(path))
     forbidMatch(source, /上一頁|下一頁|人評價/, `${path} contains traditional JHS UI copy`);
   forbidMatch(source, /id=["']conditionBox["']/, `${path} contains the duplicate Top250 condition id`);
   forbidMatch(source, /menu-btn|main-tab-btn|(?:class|removeClass|addClass|querySelector)[^\n]{0,80}a-(?:normal|primary|success|danger|warning|info)/,

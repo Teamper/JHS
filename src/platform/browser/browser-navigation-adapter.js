@@ -9,8 +9,12 @@ export class BrowserNavigationAdapter {
         this.openWindow = runtime.open ?? window.open.bind(window);
         assertPort(this, "NavigationPort", PORT_METHODS.navigation);
     }
-    /** @param {string} url @param {{newTab?: boolean}} [options] */
-    open(url, options = {}) { return options.newTab ? this.openWindow(url, "_blank", "noopener") : this.assign(url); }
+    /** @param {string} url @param {{newTab?: boolean, background?: boolean}} [options] */
+    open(url, options = {}) {
+        const openInTab = /** @type {any} */ (globalThis).GM_openInTab;
+        if (options.background && typeof openInTab === "function") return openInTab(url, { insert: 0 });
+        return options.newTab ? this.openWindow(url, "_blank", "noopener") : this.assign(url);
+    }
     /** @param {string} url */
     assign(url) { this.location.assign(url); }
     /** @param {string} url */

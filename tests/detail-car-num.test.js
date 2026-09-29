@@ -4,7 +4,12 @@ import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
+import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { ScreenshotController } from "../src/features/detail/screenshot-controller.js";
+import { normalizeJavStoreAssetUrl } from "../src/integrations/javstore/parser.js";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
+import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -16,49 +21,44 @@ function loadCarNumHelpers() {
 }
 
 function getPageInfo({ url, javdb = false, javbus = false, copyCarNum = null, fallbackCarNum = null } = {}) {
-    const helpers = loadCarNumHelpers();
-    const collection = ({ text = "", attr = null, values = [] } = {}) => {
-        const api = {
-            first: () => api,
-            attr: () => attr,
-            text: () => text,
-            each: () => api,
-            prev: () => api,
-            parent: () => api,
-            find: () => api,
-            map: () => ({ get: () => values })
-        };
-        return api;
+    const dom = new JSDOM("<!doctype html><html><body></body></html>", { url });
+    const { document } = dom.window;
+    const add = (parent, tag, className, text) => {
+        const element = document.createElement(tag);
+        if (className) element.className = className;
+        element.textContent = text;
+        parent.append(element);
+        return element;
     };
-    const $ = (selector) => {
-        if ("string" != typeof selector) return collection();
-        if (selector.includes("data-clipboard-text")) return collection({ attr: copyCarNum });
-        if (selector.includes(".panel-block")) return collection();
-        if (selector.includes("#video_id")) return collection({ text: fallbackCarNum || "" });
-        if (selector === ".female") return collection({ values: [ "女优甲" ] });
-        if (selector === ".male") return collection({ values: [ "男优乙" ] });
-        if (selector.includes('strong:contains("日期:")')) return collection({ text: "2026-08-11" });
-        if (selector.includes('span[onmouseover*="star_"]')) return collection({ values: [ "女优丙" ] });
-        if (selector.includes("發行日期")) return collection({ text: "發行日期: 2026-08-10" });
-        return collection();
-    };
-    const context = vm.createContext({
-        console,
-        URL,
-        performance: { now: () => 0 },
-        window: { location: new URL(url) },
-        $,
-        r: javdb,
-        l: javbus,
-        o: url,
-        normalizeCarNum: helpers.normalize,
-        firstValidCarNum: helpers.first,
-        assertPageInfoContract: helpers.assertContract,
-        i: (target, key, value) => (target[key] = value)
-    });
-    const source = readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8");
-    vm.runInContext(`${source}; globalThis.TestBasePlugin = BasePlugin;`, context);
-    return context.TestBasePlugin.prototype.getPageInfo.call({});
+    if (javdb) {
+        const detail = add(document.body, "div", "video-detail", "");
+        const info = add(detail, "div", "column-video-info", "");
+        if (copyCarNum) {
+            const anchor = add(info, "a", "", "");
+            anchor.title = "複製番号";
+            anchor.setAttribute("data-clipboard-text", copyCarNum);
+        }
+        if (fallbackCarNum) add(detail, "div", "video-id", fallbackCarNum);
+        add(detail, "span", "", "女优甲");
+        add(detail, "span", "female", "");
+        add(detail, "span", "", "男优乙");
+        add(detail, "span", "male", "");
+        const datePanel = add(detail, "div", "panel-block", "");
+        add(datePanel, "strong", "", "日期:");
+        add(datePanel, "span", "value", "2026-08-11");
+    } else if (javbus) {
+        add(document.body, "span", "", "女优丙");
+        const actress = add(document.body, "span", "", "");
+        actress.setAttribute("onmouseover", "star_1");
+        add(actress, "a", "", "女优丙");
+        const release = add(document.body, "p", "", "");
+        add(release, "span", "header", "發行日期:");
+        release.append(" 2026-08-10");
+    }
+    const host = javdb ? new JavDbHostAdapter(document, dom.window.location) : new JavBusHostAdapter(document, dom.window.location);
+    const info = host.readMovieInfo() ?? { carNum: null, url, actress: "", actors: "", publishTime: "" };
+    dom.window.close();
+    return { carNum: info.carNum, url: info.url, actress: info.actress ?? "", actors: info.actors ?? "", publishTime: info.publishTime ?? "" };
 }
 
 function loadUtils(url = "https://javdb.example/search?q=ABF-142") {
@@ -96,26 +96,17 @@ function loadDmmParser() {
     return { Parser: context.TestDmmParser, warn, error, request };
 }
 
-function loadScreenshotPlugin(overrides = {}) {
-    const warn = vi.fn(), debug = vi.fn(), error = vi.fn(), cachedRequest = vi.fn(), context = vm.createContext({
-        console,
-        URL,
-        BasePlugin: class { getRuntimeService(name) { return "scope" === name ? async () => overrides.scope : overrides[name]; } },
-        normalizeCarNum: loadCarNumHelpers().normalize,
-        clog: { warn, debug, error, log: vi.fn() },
-        storageManager: { cachedRequest },
-        localStorage: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() },
-        gmHttp: overrides.gmHttp || { get: vi.fn() },
-        utils: overrides.utils || { htmlTo$dom: vi.fn() },
-        $: overrides.$ || vi.fn(),
-        r: true,
-        l: false
+function createScreenshotController(overrides = {}) {
+    const dom = new JSDOM("", { url: "https://javdb.com/v/test-id" });
+    const settings = overrides.settings ?? { snapshot: () => ({ enableLoadScreenShot: "yes" }) };
+    const screenshot = overrides.screenshot ?? { isEnabled: () => true, resolve: vi.fn(async () => null), getSearchUrl: () => null, normalizeAssetUrl: normalizeJavStoreAssetUrl };
+    const controller = new ScreenshotController({
+        document: dom.window.document, window: dom.window,
+        hostAdapter: overrides.hostAdapter ?? { site: "javdb", readMovieRef: () => ({ carNum: "ABC-123" }), locateNativeGallery: () => null },
+        route: "detail", settings, screenshot, styles: { register: vi.fn(() => vi.fn()) }, ui: { openImageViewer: vi.fn() },
+        diagnostics: { recordError: vi.fn() }, scope: overrides.scope ?? { id: "detail", disposed: false },
     });
-    context.CACHE_TTL = { screenshot: 6048e5 };
-    const parserSource = readTestFile(join(repoRoot, "src/integrations/javstore/parser.js"), "utf8");
-    const source = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-    vm.runInContext(`${parserSource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
-    return { Plugin: context.TestScreenshotPlugin, warn, debug, error, cachedRequest };
+    return { controller, dom, screenshot, settings };
 }
 
 describe("detail car number propagation", () => {
@@ -189,50 +180,48 @@ describe("detail car number propagation", () => {
         expect(request).not.toHaveBeenCalled();
     });
 
-    it("rejects an unavailable screenshot number before cache or JavStore access", async () => {
-        const { Plugin, warn, cachedRequest } = loadScreenshotPlugin();
-        await expect(new Plugin().getScreenshot("undefined")).rejects.toThrow("缩略图番号不可用");
-        expect(warn).toHaveBeenCalledWith("跳过缩略图解析：番号不可用");
-        expect(cachedRequest).not.toHaveBeenCalled();
+    it("rejects an unavailable screenshot number before calling ScreenshotService", async () => {
+        const { controller, screenshot } = createScreenshotController();
+        await expect(controller.getScreenshot("undefined")).rejects.toThrow("缩略图番号不可用");
+        expect(screenshot.resolve).not.toHaveBeenCalled();
     });
 
     it("resolves screenshots through the declared ScreenshotService", async () => {
         const resolve = vi.fn(async () => [{ url: "https://img.javstore.net/preview.jpg", providerId: "javstore" }]);
         const settings = { snapshot: () => ({ enableLoadScreenShot: "yes" }) };
-        const { Plugin } = loadScreenshotPlugin({ screenshot: { resolve, isEnabled: () => true }, settings, scope: { id: "detail" } });
-        await expect(new Plugin().getScreenshot("IPZZ-479")).resolves.toBe("https://img.javstore.net/preview.jpg");
+        const scope = { id: "detail" }, { controller } = createScreenshotController({ screenshot: { resolve, isEnabled: () => true }, settings, scope });
+        await expect(controller.getScreenshot("IPZZ-479")).resolves.toBe("https://img.javstore.net/preview.jpg");
         expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" }, settings: { enableLoadScreenShot: "yes" }, allowWhenDisabled: false });
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {
-        const append = vi.fn(), container = { empty: vi.fn().mockReturnThis(), append, on: vi.fn().mockReturnThis() };
-        const image = { attributes: {}, attr(values) { Object.assign(this.attributes, values); return this; }, addClass: vi.fn().mockReturnThis() };
-        const { Plugin } = loadScreenshotPlugin({ $: vi.fn(value => value === ".screen-container" ? container : image) });
-        new Plugin().addImg("缩略图", "http://img.javstore.net/legacy.jpg");
-        expect(image.attributes.src).toBe("https://img.javstore.net/legacy.jpg");
-        expect(append).toHaveBeenCalledWith(image);
+        const { controller, dom } = createScreenshotController(), container = dom.window.document.createElement("a");
+        expect(controller.renderImage(container, "缩略图", "http://img.javstore.net/legacy.jpg")).toBe(true);
+        expect(container.querySelector("img")?.src).toBe("https://img.javstore.net/legacy.jpg");
     });
 });
 
 describe("source regression contracts", () => {
     it("keeps detail consumers on the strict getPageInfo object contract", () => {
         for (const file of [
-            "src/plugins/status/detail-page-button.js",
-            "src/plugins/image-viewer/preview-video.js",
-            "src/plugins/image-viewer/screenshot.js"
+            "src/features/detail/detail-page-actions-controller.js",
+            "src/features/detail/javdb-preview-controller.js"
         ]) {
             const source = readTestFile(join(repoRoot, file), "utf8");
             expect(source).toContain("getPageInfo()");
             expect(source).not.toContain("getPageInfo()?.carNum");
         }
-        const translate = readTestFile(join(repoRoot, "src/plugins/translate/translate.js"), "utf8");
-        expect(translate).toContain('getRuntimeService("translation")');
+        const screenshot = readTestFile(join(repoRoot, "src/features/detail/screenshot-controller.js"), "utf8");
+        expect(screenshot).toContain("this.hostAdapter.readMovieRef?.()?.carNum");
+        const translate = readTestFile(join(repoRoot, "src/features/translation/translation-controller.js"), "utf8");
+        expect(translate).toContain("this.translation.translate(sourceText, { cacheAlias: carNum");
+        expect(translate).toContain("this.hostAdapter?.readMovieRef?.()?.carNum");
         expect(translate).not.toContain("getPageInfo()?.carNum");
     });
 
     it("routes detail state-action dialogs through the declared DialogService", () => {
-        const source = readTestFile(join(repoRoot, "src/plugins/status/detail-page-button.js"), "utf8");
-        expect(source).toContain('getRuntimeService("dialog")');
+        const source = readTestFile(join(repoRoot, "src/features/detail/detail-page-actions-controller.js"), "utf8");
+        expect(source).toContain("this.dialog.open(");
         expect(source).not.toContain("layer.open");
     });
 

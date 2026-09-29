@@ -1,11 +1,12 @@
 // @ts-check
 
 export class SettingsService extends EventTarget {
-    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, normalizers?: Record<string, (value: unknown) => unknown>, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void}} [options] */
+    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, normalizers?: Record<string, (value: unknown) => unknown>, mutationCoordinator?: {runExclusive: (operation: () => any) => Promise<any>} | null, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void}} [options] */
     constructor(storage, options = {}) {
         super();
         this.storage = storage;
         this.validators = options.validators ?? {};
+        this.mutationCoordinator = options.mutationCoordinator ?? null;
         this.normalizers = options.normalizers ?? {};
         this.afterPersist = options.afterPersist ?? null;
         /** @type {Readonly<Record<string, unknown>>} */ this.snapshotValue = Object.freeze({});
@@ -73,7 +74,21 @@ export class SettingsService extends EventTarget {
      */
     async update(mutator, storageKey = "setting") {
         if (typeof mutator !== "function") throw new TypeError("Settings update mutator must be a function");
-        return this._enqueue(() => this._withSettingLock(async () => {
+        return this._enqueue(() => this._withSettingLock(() => this._updateWithoutLock(mutator, storageKey)));
+    }
+
+    /** Only for a caller already holding StorageMutationCoordinator's lock. */
+    /** @param {(draft: Record<string, unknown>) => unknown} mutator @param {string} [storageKey] */
+    async updateWithoutLock(mutator, storageKey = "setting") {
+        if (typeof mutator !== "function") throw new TypeError("Settings update mutator must be a function");
+        // The caller already owns the shared mutation lock. Queueing behind a
+        // regular update here can deadlock: that update may be ahead in
+        // writeChain while waiting to acquire the same lock.
+        return this._updateWithoutLock(mutator, storageKey);
+    }
+
+    /** @param {(draft: Record<string, unknown>) => unknown} mutator @param {string} storageKey */
+    async _updateWithoutLock(mutator, storageKey) {
             const stored = await this.storage.get(storageKey);
             const base = /** @type {Record<string, unknown>} */ (stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {});
             const draft = { ...base };
@@ -105,10 +120,13 @@ export class SettingsService extends EventTarget {
                 // Storage and local snapshot are already committed. Post-commit
                 // side effects (legacy cache invalidation / BroadcastChannel) must
                 // never turn a successful persistence into a reported failure.
-                if (typeof /** @type {any} */ (globalThis).clog?.error === "function") /** @type {any} */ (globalThis).clog.error("[settings] afterPersist failed (ignored)", error);
+                try {
+                    if (typeof /** @type {any} */ (globalThis).clog?.error === "function") /** @type {any} */ (globalThis).clog.error("[settings] afterPersist failed (ignored)", error);
+                } catch {
+                    // Diagnostics are best-effort after the setting is already durable.
+                }
             }
             return next;
-        }));
     }
 
     /** @param {string} storageKey */
@@ -127,6 +145,7 @@ export class SettingsService extends EventTarget {
 
     /** Runs a settings operation inside the shared lock so it serializes with legacy writers and other tabs. @template T @param {() => Promise<T>} fn */
     async _withSettingLock(fn) {
+        if (this.mutationCoordinator) return this.mutationCoordinator.runExclusive(fn);
         const locks = globalThis.navigator?.locks;
         if (!locks?.request) return fn();
         return locks.request("jhs_setting_lock", () => fn());

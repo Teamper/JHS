@@ -5,6 +5,8 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { AutoPageController } from "../src/features/list/auto-page-controller.js";
+import { OtherSitesController } from "../src/features/external-sites/other-sites-controller.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 const $ = jquery;
@@ -51,133 +53,121 @@ function loadPlugin(relativePath, overrides = {}) {
     return { Plugin: context.TestPlugin, settings, settingsEvents };
 }
 
+function makeAutoPage(autoPage, request = vi.fn(async () => ({ data: "" }))) {
+    const settings = { snapshot: () => ({ autoPage }) };
+    const scope = new LifecycleScope("test-auto-page-feature-lifecycle");
+    const selectors = { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" };
+    const hostAdapter = { site: "javdb", document: doc, location: win.location, getListSelectors: () => selectors };
+    const controller = new AutoPageController({
+        hostAdapter, http: { request }, settings, list: { replaceCoverImages: vi.fn() },
+        ui: { jquery: (value) => $(value) }, scope, document: doc, window: win, logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+    controller.shouldDisablePaging = vi.fn(async () => false);
+    return { controller, settings, scope, request };
+}
+
 describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
     it("AutoPage: OFF 停止（loader 移除、请求清空），ON 重新启动不刷新", async () => {
-        const { Plugin, settings } = loadPlugin("src/plugins/status/auto-page.js", {
-            className: "AutoPagePlugin",
-            settingsSnapshot: { autoPage: "no" },
-            globals: { LifecycleScope },
-        });
-        const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : { scope: async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false }), http: {} }[name];
-        await plugin.reconfigure();
-        expect(plugin.started).toBe(false);
-        expect(plugin.loader).toBeUndefined();
-        settings.snapshot = () => ({ autoPage: "yes" });
-        plugin.getSelector = () => ({ boxSelector: ".movie-list", nextPageSelector: ".pagination-next" });
-        plugin.shouldDisablePaging = async () => false;
-        await plugin.reconfigure();
-        expect(plugin.started).toBe(true);
-        expect(plugin.loader).toBeInstanceOf(win.HTMLElement);
-        plugin.stop();
-        expect(plugin.loader).toBeUndefined();
-        expect(plugin.nextUrl).toBeNull();
-        expect(plugin.pageItems).toEqual([]);
-    });
-
-    it("ActressInfo: OFF→mount 不渲染，unmount 删除 JHS DOM", async () => {
-        const { Plugin } = loadPlugin("src/plugins/avatar/actress-info.js", {
-            className: "ActressInfoPlugin",
-            settingsSnapshot: { enableLoadActressInfo: "no" },
-        });
-        $("body").append('<div class="actress-info">旧节点</div>');
-        const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? { snapshot: () => ({ enableLoadActressInfo: "no" }) } : async () => ({});
-        await plugin.mount();
-        expect($(".actress-info").length).toBe(1);
-        plugin.unmount();
-        expect($(".actress-info").length).toBe(0);
+        const fixture = makeAutoPage("no");
+        await fixture.controller.reconfigure();
+        expect(fixture.controller.started).toBe(false);
+        expect(fixture.controller.loader).toBeUndefined();
+        fixture.settings.snapshot = () => ({ autoPage: "yes" });
+        doc.querySelector(".movie-list").insertAdjacentHTML("afterend", '<a class="pagination-next" href="/page/2">下一页</a>');
+        await fixture.controller.reconfigure();
+        expect(fixture.controller.started).toBe(true);
+        expect(fixture.controller.loader).toBeInstanceOf(win.HTMLElement);
+        fixture.controller.stop();
+        expect(fixture.controller.loader).toBeUndefined();
+        expect(fixture.controller.nextUrl).toBeNull();
+        expect(fixture.controller.pageItems).toEqual([]);
+        fixture.scope.dispose();
     });
 
     it("OtherSite: 使用 SettingsService 快照（无私有缓存），OFF 只删 JHS 自有面板", async () => {
-        const { Plugin, settings } = loadPlugin("src/plugins/external-search/other-site.js", {
-            className: "OtherSitePlugin",
-            settingsSnapshot: { enableLoadOtherSite: "no" },
-        });
+        const snapshot = { enableLoadOtherSite: "no" };
+        const settings = { snapshot: () => snapshot, addEventListener: vi.fn(), removeEventListener: vi.fn() };
         $("body").append('<div data-jhs-other-site-box></div><div data-jhs-other-site-settings></div><div id="otherSiteBox"></div>');
-        const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => ({ addCleanup: () => {} }) : {};
-        const cache = await plugin.getSettingCache();
+        const scope = new LifecycleScope("other-sites-feature-off");
+        const controller = new OtherSitesController({
+            window: win, document: doc, jquery: $, hostAdapter: { readMovieRef: () => null }, movie: {}, storage: {},
+            settings, events: {}, scope, ui: { isHidden: () => false, openPage: vi.fn() }, notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
+        });
+        const cache = await controller.getSettingCache();
         expect(cache).toBe(settings.snapshot());
-        await plugin.mount();
-        plugin.unmount();
+        await controller.mount();
+        controller.unmount();
         expect($("[data-jhs-other-site-box]").length).toBe(0);
         expect($("[data-jhs-other-site-settings]").length).toBe(0);
         expect($("#otherSiteBox").length).toBe(1);
+        scope.dispose();
     });
 
-    it("ON→OFF→ON ×3 通过 settings.changed 切换，监听器只注册一次", async () => {
-        const { Plugin, settings, settingsEvents } = loadPlugin("src/plugins/external-search/other-site.js", {
-            className: "OtherSitePlugin",
-            settingsSnapshot: { enableLoadOtherSite: "yes" },
+    it("External sites: waits for legacy detail controls before mounting and follows later live setting changes", async () => {
+        let snapshot = { enableLoadOtherSite: "yes" };
+        const settingsEvents = [];
+        const settings = {
+            snapshot: () => snapshot,
+            addEventListener: (name, handler) => settingsEvents.push({ name, handler }),
+            removeEventListener: vi.fn(),
+        };
+        const handlers = new Set();
+        const events = { on: vi.fn((name, handler) => { expect(name).toBe("jhs-features-ready"); handlers.add(handler); return () => handlers.delete(handler); }) };
+        const scope = new LifecycleScope("other-sites-feature-live-toggle");
+        const controller = new OtherSitesController({
+            window: win, document: doc, jquery: $, hostAdapter: { readMovieRef: () => null }, movie: {}, storage: {},
+            settings, events, scope, ui: { isHidden: () => false, openPage: vi.fn() },
+            notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
         });
-        const plugin = new Plugin();
         const mounted = vi.fn(async () => {}), unmounted = vi.fn();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => ({ addCleanup: () => {} }) : {};
-        plugin.loadOtherSite = mounted;
-        plugin.unmount = unmounted;
-        await plugin.handle();
+        controller.mount = mounted;
+        controller.unmount = unmounted;
+        controller.start();
         expect(settingsEvents.filter((item) => item.name === "settings.changed")).toHaveLength(1);
         const handler = settingsEvents[0].handler;
+        snapshot = { enableLoadOtherSite: "no" };
+        handler({ detail: { names: [ "enableLoadOtherSite" ] } });
+        snapshot = { enableLoadOtherSite: "yes" };
+        handler({ detail: { names: [ "enableLoadOtherSite" ] } });
+        expect(mounted).not.toHaveBeenCalled();
+        await Promise.all([...handlers].map(ready => ready()));
+        expect(mounted).toHaveBeenCalledOnce();
         for (let i = 0; i < 3; i++) {
-            settings.snapshot = () => ({ enableLoadOtherSite: "no" });
+            snapshot = { enableLoadOtherSite: "no" };
             handler({ detail: { names: [ "enableLoadOtherSite" ] } });
-            settings.snapshot = () => ({ enableLoadOtherSite: "yes" });
+            snapshot = { enableLoadOtherSite: "yes" };
             handler({ detail: { names: [ "enableLoadOtherSite" ] } });
         }
         expect(settingsEvents.filter((item) => item.name === "settings.changed")).toHaveLength(1);
-        expect(unmounted).toHaveBeenCalledTimes(3);
-        expect(mounted).toHaveBeenCalledTimes(4); // 初始 handle 一次 + 3 次重新挂载
+        expect(events.on).toHaveBeenCalledOnce();
+        expect(unmounted).toHaveBeenCalledTimes(4);
+        expect(mounted).toHaveBeenCalledTimes(4); // 首次 ready 挂载 + 3 次重新启用
+        scope.dispose();
+        expect(handlers.size).toBe(0);
+        expect(settings.removeEventListener).toHaveBeenCalledWith("settings.changed", handler);
     });
 
     it("AutoPage: stop 释放 liveScope，请求中切 OFF 不再 append", async () => {
         let resolveRequest;
         const pending = new Promise((resolve) => { resolveRequest = resolve; });
-        const { Plugin, settings } = loadPlugin("src/plugins/status/auto-page.js", {
-            className: "AutoPagePlugin",
-            settingsSnapshot: { autoPage: "yes" },
-            globals: { LifecycleScope, requestHostPage: () => pending },
-        });
-        const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "http" ? {} : async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false });
-        plugin.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", coverImgSelector: ".cover img", nextPageSelector: ".pagination-next" });
-        plugin.shouldDisablePaging = async () => false;
-        plugin.getBoxCarInfoList = () => [];
-        plugin.getBean = () => ({ replaceHdImg: () => {} });
-        await plugin.reconfigure();
-        expect(plugin.started).toBe(true);
-        const firstScope = plugin.liveScope;
+        const request = vi.fn(() => pending);
+        const fixture = makeAutoPage("yes", request);
+        doc.querySelector(".movie-list").insertAdjacentHTML("afterend", '<a class="pagination-next" href="/page/2">下一页</a>');
+        await fixture.controller.reconfigure();
+        expect(fixture.controller.started).toBe(true);
+        const firstScope = fixture.controller.liveScope;
         expect(firstScope).not.toBeNull();
-        plugin.nextUrl = "/page/2";
-        const loadPromise = plugin.loadNextPage();
-        plugin.stop();
-        expect(plugin.started).toBe(false);
-        expect(plugin.liveScope).toBeNull();
+        const loadPromise = fixture.controller.loadNextPage();
+        await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+        fixture.controller.stop();
+        expect(fixture.controller.started).toBe(false);
+        expect(fixture.controller.liveScope).toBeNull();
         expect(firstScope.disposed).toBe(true);
-        resolveRequest('<div class="movie-list"><div class="item"></div></div>');
+        resolveRequest({ data: '<div class="movie-list"><div class="item"></div></div>' });
         await loadPromise;
-        expect(plugin.pageItems).toEqual([]);
+        expect(fixture.controller.pageItems).toEqual([]);
         expect($(".movie-list").children().length).toBe(0);
+        fixture.scope.dispose();
     });
 
-    it("ActressInfo: 查询中切 OFF 后异步返回不再 append", async () => {
-        let resolveInfo;
-        const pending = new Promise((resolve) => { resolveInfo = resolve; });
-        const { Plugin, settings } = loadPlugin("src/plugins/avatar/actress-info.js", {
-            className: "ActressInfoPlugin",
-            settingsSnapshot: { enableLoadActressInfo: "yes" },
-        });
-        win.history.replaceState({}, "", "/v/test-id");
-        const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "actressInfo" ? { lookup: () => pending, profileUrl: () => "" } : name === "scope" ? async () => ({}) : null;
-        $("body").append('<div>女優A</div><a class="female"></a><div><strong>演員</strong></div>');
-        const mountPromise = plugin.mount();
-        await Promise.resolve();
-        plugin.unmount();
-        expect($(".actress-info").length).toBe(0);
-        resolveInfo({ url: "https://example.test", birthday: "1990-01-01", age: "30", height: "160", weight: "45", threeSizeText: "B", braSize: "B70" });
-        await mountPromise;
-        expect($(".actress-info").length).toBe(0);
-        expect($(".female").next(".actress-info").length).toBe(0);
-    });
 });

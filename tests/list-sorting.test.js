@@ -1,25 +1,31 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 import { classifyJavDbPage } from "../src/core/site-context.js";
+import { ListActionsController } from "../src/features/list/list-actions-controller.js";
+import { ListSortController } from "../src/features/list/list-sort-controller.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 function loadPlugin(url, html, { isHitShowPage = false } = {}) {
     const dom = new JSDOM(html, { url }), $ = jqueryFactory(dom.window);
     let sortMethod = "default";
     const settings = { snapshot: () => ({ sortMethod }), set: vi.fn(async (name, value) => { sortMethod = value; }) };
-    const context = vm.createContext({
-        window: dom.window, document: dom.window.document, URLSearchParams, $, o: dom.window.location.href, r: true, l: false, c: false, _: "yes",
-        localStorage: dom.window.localStorage, storageManager: { getSetting: vi.fn(async () => "yes") }, classifyJavDbPage,
-        BasePlugin: class { getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }; } getRuntimeService() { return settings; } },
-        clog: { error: vi.fn() }
+    const location = dom.window.location;
+    const hostAdapter = {
+        site: "javdb", location, detectRoute: () => "list",
+        getPageContext: () => classifyJavDbPage(location),
+        getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }),
+    };
+    const sortController = new ListSortController({
+        hostAdapter,
+        settings, document: dom.window.document, location: dom.window.location,
     });
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page-button.js"), "utf8");
-    vm.runInContext(`${source};globalThis.Plugin=ListPageButtonPlugin`, context);
-    return { $, plugin: new context.Plugin(), settings, setSortMethod: value => { sortMethod = value; } };
+    const plugin = new ListActionsController({
+        hostAdapter, list: {}, settings, storage: { get: vi.fn(async () => []) },
+        ui: { jquery: $, loading: () => ({ close() {} }) }, notifications: { info: vi.fn(), error: vi.fn() },
+        scope: new LifecycleScope("test:list-actions"), sortController, document: dom.window.document, window: dom.window,
+    });
+    return { $, plugin, settings, sortController, setSortMethod: value => { sortMethod = value; } };
 }
 
 describe("FC2 list sorting", () => {

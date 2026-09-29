@@ -8,6 +8,7 @@ import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 /** @typedef {(diff: any, current: any, imported: any) => void} ShowDiffPreview */
 /** @typedef {any} WebDavHandle */
 /** @typedef {any} DialogHandle */
+/** @typedef {{jquery: (value: any) => any, document: Document, legacyStorage: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window & typeof globalThis}} BackupUiDependencies */
 /** @param {unknown} error */
 const errorMessage = error => error instanceof Error ? error.message : String(error);
 /** @param {unknown} error */
@@ -17,8 +18,8 @@ function backupErrorDetails(error) {
     const status = Number(candidate?.details?.status);
     return { code, ...(Number.isInteger(status) && status >= 100 && status <= 599 ? { status } : {}) };
 }
-/** @param {{stage: string, result: string, durationMs: number, bytes?: number, code?: string, status?: number, timeoutMs?: number}} event */
-function logBackupStage(event) {
+/** @param {{stage: string, result: string, durationMs: number, bytes?: number, code?: string, status?: number, timeoutMs?: number}} event @param {any} logger */
+function logBackupStage(event, logger) {
     const code = typeof event.code === "string" && /^[A-Z_]{2,32}$/.test(event.code) ? event.code : undefined;
     const record = {
         stage: event.stage, result: event.result, durationMs: Math.max(0, Math.round(event.durationMs)),
@@ -28,42 +29,46 @@ function logBackupStage(event) {
         ...(event.status == null ? {} : { status: event.status }),
     };
     try {
-        if (event.result === "error") clog.warn?.("[WebDAV备份]", record);
-        else clog.log?.("[WebDAV备份]", record);
+        if (event.result === "error") logger.warn?.("[WebDAV备份]", record);
+        else logger.log?.("[WebDAV备份]", record);
     }
     catch { /* Logging must not change the backup result. */ }
 }
-/** @template T @param {string} stage @param {() => Promise<T>} action */
-async function measureBackupStage(stage, action) {
-    const startedAt = performance.now();
+/** @template T @param {string} stage @param {() => Promise<T>} action @param {BackupUiDependencies} dependencies */
+async function measureBackupStage(stage, action, dependencies) {
+    const { logger, window } = dependencies;
+    const startedAt = window.performance.now();
     try {
         const result = await action();
-        logBackupStage({ stage, result: "success", durationMs: performance.now() - startedAt });
+        logBackupStage({ stage, result: "success", durationMs: window.performance.now() - startedAt }, logger);
         return result;
     } catch (error) {
-        logBackupStage({ stage, result: "error", durationMs: performance.now() - startedAt, ...backupErrorDetails(error) });
+        logBackupStage({ stage, result: "error", durationMs: window.performance.now() - startedAt, ...backupErrorDetails(error) }, logger);
         throw error;
     }
 }
-/** @param {any} webdavService */
-async function resolveWebDavProfile(webdavService) {
+/** @param {any} webdavService @param {BackupUiDependencies} dependencies */
+async function resolveWebDavProfile(webdavService, dependencies) {
     if (typeof webdavService?.getProfile === "function") return webdavService.getProfile();
+    const { legacyStorage: storageManager } = dependencies;
     const settings = await storageManager.getSetting();
     return { url: settings.webDavUrl, username: settings.webDavUsername, password: await decryptCredential(settings.webDavPassword || "") };
 }
 
 /** Handle JSON file import via file input, run diff analysis, show preview. */
-/** @param {ShowDiffPreview} showDiffPreviewFn */
-export async function importSettingData(showDiffPreviewFn) {
+/** @param {ShowDiffPreview} showDiffPreviewFn @param {BackupUiDependencies} dependencies */
+export async function importSettingData(showDiffPreviewFn, dependencies) {
+    const { document, legacyStorage: storageManager, notifications: show, logger: clog, domUi, window } = dependencies;
+    const loading = () => domUi.loading();
     try {
         const input = document.createElement("input");
         input.type = "file", input.accept = ".json";
         const cleanup = () => input.remove();
-        input.onchange = async e => {
+        input.onchange = async (/** @type {Event} */ e) => {
             const t = /** @type {HTMLInputElement} */ (e.currentTarget).files?.[0];
             if (!t) return void cleanup();
-            const n = new FileReader;
-            n.onload = async e => {
+            const n = new window.FileReader;
+            n.onload = async (/** @type {ProgressEvent<FileReader>} */ e) => {
                 cleanup();
                 try {
                     const t = String((/** @type {FileReader} */ (e.currentTarget)).result || ""), n = JSON.parse(t);
@@ -82,43 +87,56 @@ export async function importSettingData(showDiffPreviewFn) {
                 cleanup(), show.error("读取文件时出错");
             }, n.readAsText(t);
         }, document.body.appendChild(input), input.click();
-        setTimeout(cleanup, 3e5);
+        window.setTimeout(cleanup, 3e5);
     } catch (e) {
         clog.error(e), show.error("导入数据时出错: " + errorMessage(e));
     }
 }
 
 /** Create encrypted backup and upload via WebDAV. */
-/** @param {string} folderName @param {WebDavHandle} webdavService */
-export async function backupDataByWebDav(folderName, webdavService) {
+/** @param {string} folderName @param {WebDavHandle} webdavService @param {BackupUiDependencies} dependencies */
+export async function backupDataByWebDav(folderName, webdavService, dependencies) {
+    const { legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
+    const loading = () => domUi.loading();
+    const logStage = (/** @type {{stage: string, result: string, durationMs: number, bytes?: number, code?: string, status?: number, timeoutMs?: number}} */ event) => logBackupStage(event, clog);
     const r = loading();
-    const startedAt = performance.now();
+    const startedAt = window.performance.now();
     let result = "error", bytes;
     try {
-        const t = await measureBackupStage("读取凭据", () => resolveWebDavProfile(webdavService)), n = t.url;
+        const t = await measureBackupStage("读取凭据", () => resolveWebDavProfile(webdavService, dependencies), dependencies), n = t.url;
         if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
         const a = t.username;
         if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
         if (!t.password) return void show.error("请填写webDav密码并保存后, 再试此功能");
         const s = utils.getNowStr("_", "_") + ".json";
-        const plain = await measureBackupStage("导出数据", async () => JSON.stringify(await storageManager.exportData()));
-        const encrypted = await measureBackupStage("加密", () => encryptPortableBackup(plain));
+        const plain = await measureBackupStage("导出数据", async () => JSON.stringify(await storageManager.exportData()), dependencies);
+        const encrypted = await measureBackupStage("加密", () => encryptPortableBackup(plain), dependencies);
         bytes = encrypted.length;
         const client = webdavService.createClient({ url: n, username: a, password: t.password });
-        await client.backup(folderName, s, encrypted, logBackupStage);
-        result = "success", show.ok("备份完成");
+        await client.backup(folderName, s, encrypted, logStage);
+        result = "success";
     } catch (l) {
         clog.error("[WebDAV备份失败]", backupErrorDetails(l)), show.error(errorMessage(l));
     } finally {
-        logBackupStage({ stage: "合计", result, durationMs: performance.now() - startedAt, ...(bytes == null ? {} : { bytes }) });
-        r.close();
+        logStage({ stage: "合计", result, durationMs: window.performance.now() - startedAt, ...(bytes == null ? {} : { bytes }) });
+        try { r.close(); }
+        catch (error) {
+            try { clog.warn("[WebDAV备份] 关闭加载提示失败", backupErrorDetails(error)); }
+            catch { /* A completed upload must remain successful if diagnostics fail. */ }
+        }
+    }
+    if (result === "success") {
+        try { show.ok("备份完成"); }
+        catch (error) { clog.warn("[WebDAV备份] 上传成功，但完成提示失败", backupErrorDetails(error)); }
     }
 }
 
 /** List WebDAV backups and open the file list dialog. */
-/** @param {string} folderName @param {Function} openFileListDialogFn @param {WebDavHandle} webdavService */
-export async function backupListBtnByWebDav(folderName, openFileListDialogFn, webdavService) {
-    const t = await resolveWebDavProfile(webdavService), n = t.url;
+/** @param {string} folderName @param {Function} openFileListDialogFn @param {WebDavHandle} webdavService @param {BackupUiDependencies} dependencies */
+export async function backupListBtnByWebDav(folderName, openFileListDialogFn, webdavService, dependencies) {
+    const { notifications: show, logger: clog, domUi } = dependencies;
+    const loading = () => domUi.loading();
+    const t = await resolveWebDavProfile(webdavService, dependencies), n = t.url;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a = t.username;
     if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
@@ -136,8 +154,10 @@ export async function backupListBtnByWebDav(folderName, openFileListDialogFn, we
 }
 
 /** Mobile-specific backup file list dialog using card-based UI. */
-/** @param {BackupFile[]} e @param {WebDavHandle} t @param {string} n @param {string} folderName @param {ShowDiffPreview} showDiffPreviewFn @param {DialogHandle} dialog */
-function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog) {
+/** @param {BackupFile[]} e @param {WebDavHandle} t @param {string} n @param {string} folderName @param {ShowDiffPreview} showDiffPreviewFn @param {DialogHandle} dialog @param {BackupUiDependencies} dependencies */
+function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog, dependencies) {
+    const { jquery: $, legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi } = dependencies;
+    const loading = () => domUi.loading();
     const formatSize = (/** @type {number} */ size) => {
         const units = ["B", "KB", "MB", "GB", "TB", "PB"];
         let i = 0, s = size;
@@ -176,7 +196,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
                 const file = e[idx];
                 if (!file) return;
                 if (action === "delete") {
-                    dialog.confirm(`是否删除 ${file.name} ?`, {
+                    dialog.confirm(`是否删除 ${escapeHtml(file.name)} ?`, {
                         icon: 3, title: "提示", btn: ["确定", "取消"]
                     }, async (/** @type {number} */ confirmIdx) => {
                         dialog.close(confirmIdx);
@@ -218,10 +238,12 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
 }
 
 /** Desktop backup file list dialog using Tabulator table. */
-/** @param {BackupFile[]} e @param {WebDavHandle} t @param {string} n @param {string} folderName @param {ShowDiffPreview} showDiffPreviewFn @param {DialogHandle} dialog */
-export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialog) {
+/** @param {BackupFile[]} e @param {WebDavHandle} t @param {string} n @param {string} folderName @param {ShowDiffPreview} showDiffPreviewFn @param {DialogHandle} dialog @param {BackupUiDependencies} dependencies */
+export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialog, dependencies) {
+    const { jquery: $, legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi } = dependencies;
+    const loading = () => domUi.loading();
     if (utils.isMobileMode()) {
-        openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog);
+        openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog, dependencies);
         return;
     }
     dialog.open({
@@ -232,7 +254,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
         anim: -1,
         success: (/** @type {HTMLElement} */ a) => {
             const tableRoot = $(a).find(".jhs-table-dialog__content").get(0) || $(a).find("#table-container").get(0);
-            const i = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, tableRoot, {
+            const i = createJhsTable(domUi.tableConstructor, tableRoot, {
                 pagination: !1,
                 layout: "fitColumns",
                 placeholder: "暂无数据",
@@ -280,7 +302,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                         return s((() => {
                             const a = e.getElement().querySelector(".backup-delete"), s = e.getElement().querySelector(".backup-download"), r = e.getElement().querySelector(".backup-import");
                             a && a.addEventListener("click", ((/** @type {MouseEvent} */ e) => {
-                                dialog.confirm(`是否删除 ${o.name} ?`, {
+                                dialog.confirm(`是否删除 ${escapeHtml(o.name)} ?`, {
                                     icon: 3,
                                     title: "提示",
                                     btn: [ "确定", "取消" ]
@@ -327,7 +349,9 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
 }
 
 /** Export all data as a downloadable JSON file. */
-export async function exportSettingData() {
+/** @param {BackupUiDependencies} dependencies */
+export async function exportSettingData(dependencies) {
+    const { legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog } = dependencies;
     try {
         const e = JSON.stringify(await storageManager.exportData()), t = `${utils.getNowStr("_", "_")}.json`;
         utils.download(e, t), show.ok("数据导出成功");

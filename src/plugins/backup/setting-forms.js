@@ -1,7 +1,6 @@
 // @ts-check
 
 import { C, _, r, escapeHtml } from "../../core/constants.js";
-import { jhsEventBus } from "../../core/event-bus.js";
 import { parseNumberSetting } from "../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
 import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
@@ -108,14 +107,16 @@ function bindManualDirtyTracking(root) {
 }
 
 /** @param {any} layerRoot */
-function formRoot(layerRoot) {
-    return layerRoot ? /** @type {any} */ (globalThis).$(layerRoot) : /** @type {any} */ (globalThis).$(document);
+/** @param {SettingDependencies} dependencies @param {any} layerRoot */
+function formRoot(dependencies, layerRoot) {
+    if (typeof dependencies.jquery !== "function") throw new Error("Settings form UI dependency is unavailable");
+    return layerRoot ? dependencies.jquery(layerRoot) : dependencies.jquery(dependencies.document);
 }
 
 /** Load all settings from storage into the main settings dialog form fields. */
 /** @param {SettingDependencies} dependencies @param {any} [layerRoot] */
 export async function loadSettingForm(dependencies, layerRoot = null) {
-    const root = formRoot(layerRoot);
+    const root = formRoot(dependencies, layerRoot);
     const e = dependencies.settings.snapshot();
     root.find("#videoQuality").val(e.videoQuality);
     root.find("#reviewCount").val(e.reviewCount || 20);
@@ -160,27 +161,27 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#javDbUrl").val(movie.externalSiteOrigin("javDbBtn", e));
     root.find("#javBusUrl").val(movie.externalSiteOrigin("javBusBtn", e));
     root.find("#supJavUrl").val(movie.externalSiteOrigin("supJavBtn", e));
-    let g = await storageManager.getReviewFilterKeywordList(), p = await storageManager.getTitleFilterKeyword();
+    let g = await dependencies.legacyStorage.getReviewFilterKeywordList(), p = await dependencies.legacyStorage.getTitleFilterKeyword();
     // “重试加载”会重跑本函数：先清空标签容器并解绑旧事件，否则关键词显示两份、添加事件翻倍
     [ "#reviewKeywordContainer", "#filterKeywordContainer" ].forEach((/** @type {string} */ container) => {
         root.find(`${container} .tag-box`).empty();
         root.find(`${container} .add-tag-btn`).off(".jhsKeywordBind"), root.find(`${container} .keyword-input`).off(".jhsKeywordBind");
     });
     g && g.forEach((/** @type {string} */ item) => {
-        addLabelTag("#reviewKeywordContainer", item, root);
+        addLabelTag(dependencies, "#reviewKeywordContainer", item, root);
     });
     p && p.forEach((/** @type {string} */ item) => {
-        addLabelTag("#filterKeywordContainer", item, root);
+        addLabelTag(dependencies, "#filterKeywordContainer", item, root);
     });
     [ "#reviewKeywordContainer", "#filterKeywordContainer" ].forEach((/** @type {string} */ container) => {
-        root.find(`${container} .add-tag-btn`).on("click.jhsKeywordBind", ((/** @type {any} */ event) => addKeyword(event, container, root)));
+        root.find(`${container} .add-tag-btn`).on("click.jhsKeywordBind", ((/** @type {any} */ event) => addKeyword(dependencies, event, container, root)));
         root.find(`${container} .keyword-input`).on("keypress.jhsKeywordBind", ((/** @type {any} */ event) => {
-            "Enter" === event.key && addKeyword(event, container, root);
+            "Enter" === event.key && addKeyword(dependencies, event, container, root);
         }));
     });
     bindManualDirtyTracking(root);
     bindKeywordDirtyTracking(root);
-    bindLayoutRangeEvents(root, dependencies.busImg, dependencies.host, dependencies.settings);
+    bindLayoutRangeEvents(root, dependencies.host, dependencies.utilities);
 }
 
 /** Bind the shared layout range controls without accumulating handlers. */
@@ -189,25 +190,25 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
  * SettingBindingHub through the static control binding created in
  * SettingPlugin.hydrateLiveSettings(), so persistence and rollback stay unified.
  *
- * @param {any} root @param {any} busImgPlugin @param {any} hostAdapter @param {any} settings
+ * @param {any} root @param {any} hostAdapter @param {{ isMobileMode?: () => boolean }} utilities
  */
-function bindLayoutRangeEvents(root, busImgPlugin, hostAdapter, settings) {
+function bindLayoutRangeEvents(root, hostAdapter, utilities) {
     root.find("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
-        applyLayoutRangeValue(root, hostAdapter, "containerColumns", root.find("#containerColumns").val());
+        applyLayoutRangeValue(root, hostAdapter, "containerColumns", root.find("#containerColumns").val(), utilities?.isMobileMode?.() ?? false);
     }));
     root.find("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((/** @type {any} */ event) => {
-        applyLayoutRangeValue(root, hostAdapter, "containerWidth", parseInt($(event.target).val()) + 70);
+        applyLayoutRangeValue(root, hostAdapter, "containerWidth", parseInt(root.find("#containerWidth").val()) + 70, utilities?.isMobileMode?.() ?? false);
     }));
 }
 
-/** Applies one persisted layout value to both the control and the live host DOM. @param {any} root @param {any} hostAdapter @param {"containerColumns" | "containerWidth"} key @param {unknown} value */
-export function applyLayoutRangeValue(root, hostAdapter, key, value) {
+/** Applies a persisted layout value to the control while preserving the mobile host layout. @param {any} root @param {any} hostAdapter @param {"containerColumns" | "containerWidth"} key @param {unknown} value @param {boolean} [mobile] */
+export function applyLayoutRangeValue(root, hostAdapter, key, value, mobile = false) {
     if (key === "containerColumns") {
         const columns = Math.min(10, Math.max(2, Math.round(Number(value) || 5)));
         root.find("#containerColumns").val(String(columns));
         root.find("#showContainerColumns").text(String(columns));
         const listRoot = hostAdapter?.locateListRoot?.();
-        if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+        if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${mobile ? 1 : columns}, minmax(0, 1fr))`;
         return;
     }
     const width = Math.min(100, Math.max(70, Math.round(Number(value) || 100)));
@@ -215,13 +216,15 @@ export function applyLayoutRangeValue(root, hostAdapter, key, value) {
     root.find("#containerWidth").val(String(width - 70));
     root.find("#showContainerWidth").text(widthText);
     const layoutContainer = hostAdapter?.getListLayoutContainer?.();
-    if (layoutContainer) layoutContainer.style.minWidth = widthText;
+    if (layoutContainer) layoutContainer.style.minWidth = mobile ? "100%" : widthText;
 }
 
 /** Dispose one quick-setting host's binding and clear its DOM. */
 /** @param {any} host */
-export function disposeQuickSettingHost(host) {
-    const root = $(host);
+/** @param {any} host @param {(value: any) => any} jquery */
+export function disposeQuickSettingHost(host, jquery) {
+    if (typeof jquery !== "function") throw new Error("Settings form UI dependency is unavailable");
+    const root = jquery(host);
     root.data("jhsQuickSettingBinding")?.dispose?.();
     root.removeData("jhsQuickSettingBinding");
     root.empty().hide();
@@ -230,7 +233,7 @@ export function disposeQuickSettingHost(host) {
 /** Initialize quick settings in either the desktop popover or mobile layer. */
 /** @param {SettingDependencies} dependencies @param {() => any} getSelector @param {(panel: string) => void} openSettingDialogFn @param {any} root */
 export async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root) {
-    const host = $(root);
+    const host = dependencies.jquery(root);
     if (!host.length) {
         throw new Error("Quick setting root is required");
     }
@@ -246,7 +249,7 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
             event.stopPropagation();
             const currentBinding = host.data("jhsQuickSettingBinding");
             await currentBinding?.flush?.();
-            disposeQuickSettingHost(host);
+            disposeQuickSettingHost(host, dependencies.jquery);
             await openSettingDialogFn("base-panel");
         }));
 }
@@ -254,8 +257,19 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
 /** Read all form values and save to storage. */
 /** @param {SettingDependencies} dependencies @param {any} [layerRoot] */
 export async function saveSettingForm(dependencies, layerRoot = null) {
-    const root = formRoot(layerRoot);
+    const root = formRoot(dependencies, layerRoot);
     const dirtyKeys = root.data("jhsDirtyManualKeys") || null;
+    if (dirtyKeys instanceof Set && dependencies.webdav?.getProfile) {
+        const savedProfile = await dependencies.webdav.getProfile();
+        const currentProfile = {
+            webDavUrl: String(root.find("#webDavUrl").val() || "").trim(),
+            webDavUsername: String(root.find("#webDavUsername").val() || ""),
+            webDavPassword: String(root.find("#webDavPassword").val() || ""),
+        };
+        if (currentProfile.webDavUrl !== String(savedProfile.url || "")) dirtyKeys.add("webDavUrl");
+        if (currentProfile.webDavUsername !== String(savedProfile.username || "")) dirtyKeys.add("webDavUsername");
+        if (currentProfile.webDavPassword !== String(savedProfile.password || "")) dirtyKeys.add("webDavPassword");
+    }
     /** @type {string | null} */
     let nextWebDavUrl = null;
     /** @type {string | null} */
@@ -275,7 +289,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         }
         const currentTrusted = new Set(Array.isArray(dependencies.settings.snapshot().trustedLocalOrigins) ? dependencies.settings.snapshot().trustedLocalOrigins : []);
         if (nextWebDavOrigin && !currentTrusted.has(nextWebDavOrigin)) {
-            const authorized = await new Promise((resolve) => utils.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
+            const authorized = await new Promise((resolve) => dependencies.utilities.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
             if (!authorized) return { canceled: true };
         }
     }
@@ -306,10 +320,10 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         try {
             // replaceAll 清掉删除按钮的 ×；去重避免重复标签落库
             const reviewKeywords = [ ...new Set(root.find("#reviewKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
-                const text = $(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+                const text = dependencies.jquery(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
                 return text;
             }).filter(Boolean)) ];
-            await storageManager.saveReviewFilterKeyword(reviewKeywords);
+            await dependencies.legacyStorage.saveReviewFilterKeyword(reviewKeywords);
         } catch (error) {
             keywordErrors.push(error);
         }
@@ -317,10 +331,10 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     if (dirtyTitleKeywords) {
         try {
             const titleKeywords = [ ...new Set(root.find("#filterKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
-                const text = $(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+                const text = dependencies.jquery(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
                 return text;
             }).filter(Boolean)) ];
-            await storageManager.saveTitleFilterKeyword(titleKeywords);
+            await dependencies.legacyStorage.saveTitleFilterKeyword(titleKeywords);
         } catch (error) {
             keywordErrors.push(error);
         }
@@ -338,8 +352,8 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     /** @type {Array<[string, () => unknown | Promise<unknown>]>} */
     const postSaveEffects = [
         ["filter rules", async () => {
-            if (!jhsEventBus) throw new Error("EventBus 尚未初始化");
-            await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
+            if (!dependencies.events) throw new Error("EventBus 尚未初始化");
+            await dependencies.events.emit("filter-rules-changed", { scope: "title-keyword" });
         }],
         ["new-video status", () => dependencies.newVideo?.resetBtnTip?.()],
         ["blacklist status", () => dependencies.blacklist?.resetBtnTip?.()],
@@ -348,7 +362,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     for (const [name, effect] of postSaveEffects) {
         try { await effect(); }
         catch (error) {
-            if (typeof /** @type {any} */ (globalThis).clog?.error === "function") /** @type {any} */ (globalThis).clog.error(`设置保存后 ${name} 刷新失败（已忽略）`, error);
+            dependencies.logger?.error?.(`设置保存后 ${name} 刷新失败（已忽略）`, error);
         }
     }
     return { ok: true };
@@ -425,29 +439,30 @@ async function collectManualSettingPatch(root, dirtyKeys = null) {
 
 /** Create a removable keyword label tag in the filter panel. */
 /** @param {string} container @param {string} text @param {any} root */
-function addLabelTag(container, text, root) {
+/** @param {SettingDependencies} dependencies @param {string} container @param {string} text @param {any} root */
+function addLabelTag(dependencies, container, text, root) {
     const target = root.find(`${container} .tag-box`);
     const value = String(text);
     let node;
     if (/^[a-z]{2,}-/i.test(value) && r) {
-        node = $("<a>")
+        node = dependencies.jquery("<a>")
             .addClass("keyword-label keyword-label--link")
             .attr("data-keyword", value)
             .attr("href", `/video_codes/${value.replace("-", "")}`)
             .attr("target", "_blank");
     } else {
-        node = $("<div>")
+        node = dependencies.jquery("<div>")
             .addClass("keyword-label")
             .attr("data-keyword", value);
     }
-    node.append(document.createTextNode(value));
-    node.append($("<span>").addClass("keyword-remove").text("×"));
+    node.append(dependencies.document.createTextNode(value));
+    node.append(dependencies.jquery("<span>").addClass("keyword-remove").text("×"));
     const dirtyKey = container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords";
     node.find(".keyword-remove").click(((/** @type {any} */ event) => {
         event.stopPropagation(), event.preventDefault();
-        const current = $(event.currentTarget);
+        const current = dependencies.jquery(event.currentTarget);
         const keyword = current.closest(".keyword-label").attr("data-keyword").split(" ")[0];
-        utils.q(event, `是否移除屏蔽词  ${escapeHtml(keyword)}?`, (async () => {
+        dependencies.utilities.q(event, `是否移除屏蔽词  ${escapeHtml(keyword)}?`, (async () => {
             current.parent().remove();
             root.data(dirtyKey, true);
         }));
@@ -457,13 +472,14 @@ function addLabelTag(container, text, root) {
 
 /** Add a keyword from the input field to the tag box. */
 /** @param {any} event @param {string} container @param {any} root */
-function addKeyword(event, container, root) {
+/** @param {SettingDependencies} dependencies @param {any} event @param {string} container @param {any} root */
+function addKeyword(dependencies, event, container, root) {
     const input = root.find(`${container} .keyword-input`);
     const value = input.val().trim();
     if (!value) return;
     // 与存储层去重语义一致：重复关键词直接忽略，不再各走各的
-    const exists = root.find(`${container} .keyword-label`).toArray().some(((/** @type {Element} */ element) => $(element).text().replaceAll("×", "").trim() === value));
-    if (!exists) addLabelTag(container, value, root);
+    const exists = root.find(`${container} .keyword-label`).toArray().some(((/** @type {Element} */ element) => dependencies.jquery(element).text().replaceAll("×", "").trim() === value));
+    if (!exists) addLabelTag(dependencies, container, value, root);
     input.val("");
     root.data(container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords", true);
 }

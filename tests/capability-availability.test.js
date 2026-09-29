@@ -7,9 +7,9 @@ import { FeatureRuntime } from "../src/app/feature-runtime.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { defineFeature } from "../src/contracts/manifests.js";
 
-const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
+const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-actions-controller.js"), "utf8");
 const newVideo = readTestFile(join(process.cwd(), "src/plugins/new-video/new-video.js"), "utf8");
-const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
+const coverButtons = readTestFile(join(process.cwd(), "src/features/list/cover-button-controller.js"), "utf8");
 const registrySource = readTestFile(join(process.cwd(), "src/app/command-registry.js"), "utf8");
 const runtimeSource = readTestFile(join(process.cwd(), "src/app/feature-runtime.js"), "utf8");
 
@@ -27,21 +27,23 @@ describe("capability availability (无死按钮)", () => {
     });
 
     it("legacy list toolbar renders buttons only when the capability exists", () => {
-        expect(listButtons).toContain('${hasNewVideo ? `<button type="button" id="newVideoBtn"');
-        expect(listButtons).toContain('${hasBlacklist ? `<button type="button" id="blacklistBtn"');
-        expect(listButtons).toContain('const hasNewVideo = Boolean(this.getBean("NewVideoPlugin"))');
+        expect(listButtons).toContain('const newVideoAction = hasNewVideo ?');
+        expect(listButtons).toContain('const blacklistAction = hasBlacklist ?');
+        expect(listButtons).toContain('this.newVideo = options.newVideo ?? null');
         expect(listButtons).not.toContain("黑名单功能已禁用");
     });
 
-    it("card screenshot button is gated on both the setting and the plugin", () => {
-        expect(coverButtons).toContain('Boolean(this.getBean("ScreenShotPlugin"))');
+    it("card screenshot action uses the injected ScreenshotService capability", () => {
+        expect(coverButtons).toContain("this.screenshot.resolve(");
+        expect(coverButtons).toContain("this.screenshotAvailable === true");
+        expect(coverButtons).not.toContain("ScreenShotPlugin");
     });
 
     it("new-video edit dialog is scoped to its layer root", () => {
-        expect(newVideo).toContain("editRoot = $(e);");
+        expect(newVideo).toContain("editRoot = this.jquery(e);");
         expect(newVideo).toContain("editRoot.find(\"#edit-actress-avatar\")");
-        expect(newVideo).not.toContain('$("#edit-actress-avatar")');
-        expect(newVideo).not.toContain('$("#edit-actress-name")');
+        expect(newVideo).not.toContain('this.jquery("#edit-actress-avatar")');
+        expect(newVideo).not.toContain('this.jquery("#edit-actress-name")');
     });
 
     it("feature runtime declares owner availability for provided commands", () => {

@@ -27,3 +27,21 @@ it("restores layout controls and host DOM when persistence rejects", async () =>
     expect(root.find("#showContainerWidth").text()).toBe("100%");
     expect(host.getListLayoutContainer().style.minWidth).toBe("100%");
 });
+
+it("keeps the mobile list at one column while displaying saved desktop layout values", () => {
+    const dom = new JSDOM('<div id="root"><input id="containerColumns" type="range"><span id="showContainerColumns"></span><input id="containerWidth" type="range"><span id="showContainerWidth"></span></div><div id="list"></div><div id="layout"></div>');
+    const jq = jqueryFactory(dom.window), root = jq("#root");
+    const host = { locateListRoot: () => dom.window.document.querySelector("#list"), getListLayoutContainer: () => dom.window.document.querySelector("#layout") };
+
+    applyLayoutRangeValue(root, host, "containerColumns", 5, true);
+    applyLayoutRangeValue(root, host, "containerWidth", 85, true);
+    expect(root.find("#showContainerColumns").text()).toBe("5");
+    expect(root.find("#showContainerWidth").text()).toBe("85%");
+    expect(host.locateListRoot().style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))");
+    expect(host.getListLayoutContainer().style.minWidth).toBe("100%");
+
+    applyLayoutRangeValue(root, host, "containerColumns", 5, false);
+    applyLayoutRangeValue(root, host, "containerWidth", 85, false);
+    expect(host.locateListRoot().style.gridTemplateColumns).toBe("repeat(5, minmax(0, 1fr))");
+    expect(host.getListLayoutContainer().style.minWidth).toBe("85%");
+});

@@ -88,6 +88,7 @@ async function checkImportGraph() {
         services: new Set(["contracts", "core"]),
         integrations: new Set(["contracts", "core"]),
         ui: new Set(["contracts", "core"]),
+        compat: new Set(["core", "plugins"]),
         platform: new Set(["contracts", "core"]),
         contracts: new Set(["core"]),
     };
@@ -108,8 +109,9 @@ async function checkImportGraph() {
             const sameSharedLayer = sourceLayer === targetLayer && [ "services", "ui" ].includes(sourceLayer);
             const samePluginDir = sourceLayer === "plugins" && targetLayer === "plugins" && sourceRelative[1] === targetRelative[1];
             const featureCatalog = sourceRelative.join("/") === "features/catalog.js" && targetLayer === "features";
-            const pluginCatalog = sourceRelative.join("/") === "plugins/registry.js" && targetLayer === "plugins";
-            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !samePluginDir && !featureCatalog && !pluginCatalog) {
+            const pluginCatalog = sourceRelative.join("/") === "features/compatibility/contribution-catalog.js" && targetLayer === "plugins";
+            const pluginCompatibilityAdapter = sourceRelative.join("/") === "features/compatibility/contribution-catalog.js" && [ "compat/list-page-adapter.js", "compat/detail-workspace-adapter.js", "compat/detail-panel-beans.js", "compat/responsive-shell-bridge.js", "compat/blacklist-compatibility-bean.js", "compat/history-compatibility-bean.js", "compat/task-compatibility-bean.js", "compat/new-video-compatibility-bean.js", "compat/settings-compatibility-bean.js" ].includes(targetRelative.join("/"));
+            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !samePluginDir && !featureCatalog && !pluginCatalog && !pluginCompatibilityAdapter) {
                 boundaryErrors.push(`${sourceLayer} -> ${targetLayer}: ${path.relative(rootDir, file)} imports ${path.relative(rootDir, dependency)}`);
             }
         }

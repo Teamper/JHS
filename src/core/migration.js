@@ -64,9 +64,12 @@ async function ensureV2MigrationSnapshot(/** @type {any} */ storage) {
         itemCount: Object.values(data).reduce(((sum, value) => sum + (Array.isArray(value) ? value.length : value && "object" == typeof value ? 1 : 0)), 0),
         data
     };
-    // 与 createSnapshot 共用同一把快照锁，避免并发迁移/快照互相覆盖
-    const save = async () => (snapshots.push(snapshot), snapshots.length > 10 && snapshots.splice(0, snapshots.length - 10), await storage._saveSnapshots(snapshots), snapshot);
-    return storage._withCrossTabLock ? await storage._withCrossTabLock("jhs_snapshot_lock", save) : await save();
+    // runDataMigrations already owns the global write lock, so do not acquire
+    // the snapshot lock again from inside it.
+    snapshots.push(snapshot);
+    snapshots.length > 10 && snapshots.splice(0, snapshots.length - 10);
+    await storage._saveSnapshots(snapshots);
+    return snapshot;
 }
 
 async function migrateLegacyStorage(/** @type {any} */ storage) {
@@ -139,7 +142,7 @@ async function migrateV3(/** @type {any} */ storage) {
 /** @type {Readonly<Record<number, (storage: any) => Promise<void>>>} */
 const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags, 3: migrateV3 });
 
-export async function runDataMigrations(/** @type {any} */ storage) {
+export async function runDataMigrations(/** @type {any} */ storage, coordinator = storage.mutationCoordinator, alreadyLocked = false) {
     // 迁移是“读版本→整表覆写→写版本”的多步过程，必须跨标签页互斥，防止双标签页同时执行互相丢数据
     const locks = globalThis.navigator?.locks;
     const run = async () => {
@@ -152,5 +155,10 @@ export async function runDataMigrations(/** @type {any} */ storage) {
         }
         return version;
     };
+    if (alreadyLocked) return run();
+    if (coordinator?.runExclusive) return coordinator.runExclusive(async () => {
+        storage._invalidateCache?.();
+        return run();
+    });
     return locks?.request ? locks.request("jhs_data_migration", run) : run();
 }

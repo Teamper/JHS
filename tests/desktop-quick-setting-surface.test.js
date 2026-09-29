@@ -7,17 +7,6 @@ import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 
-const DESKTOP_DEPENDENCIES = [
-    "OtherSitePlugin",
-    "ListPagePlugin",
-    "TranslatePlugin",
-    "ActressInfoPlugin",
-    "ScreenShotPlugin",
-    "NewVideoPlugin",
-    "BlacklistPlugin",
-    "BusImgPlugin",
-];
-
 function flush() {
     return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -62,19 +51,26 @@ function createHarness({ searchHidden = false } = {}) {
 
     initializeRuntimeConstants(dom.window.location);
 
-    const plugin = new SettingPlugin();
-    plugin.runtimeServices = {
-        settingsRegistry: registry,
-        settings,
-        profile: { current: () => "regular" },
-        scope: async () => ({ listen() { return () => {}; }, addCleanup() {} }),
-        host: {},
-        movie: {},
-        dialog: { open() {} },
-    };
-    plugin.declaredDependencies = new Set(DESKTOP_DEPENDENCIES);
-    plugin.pluginManager = { resolveDeclaredPlugin: () => null };
-    plugin.getFormDependencies = () => ({ settingsRegistry: registry, settings });
+    const plugin = new SettingPlugin({
+        runtimeServices: {
+            settingsRegistry: registry,
+            settings,
+            profile: { current: () => "regular" },
+            scope: async () => ({ listen() { return () => {}; }, addCleanup() {} }),
+            host: { getListSelectors: () => ({ itemSelector: ".movie-list .item" }) },
+            movie: {},
+            dialog: { open() {} },
+        },
+        capabilities: {},
+        jquery: jq,
+        utilities: globalThis.utils,
+        notifications: globalThis.show,
+        logger: globalThis.clog,
+        legacyStorage: globalThis.storageManager,
+        events: {},
+        document: dom.window.document,
+        window: dom.window,
+    });
     plugin.openSettingDialog = openSettingDialog;
     plugin._settingScope = { listen() { return () => {}; }, addCleanup() {} };
     plugin._desktopSettingNavMounted = false;
@@ -103,7 +99,8 @@ describe("desktop quick setting surface root selection", () => {
     });
 
     it("binds the visible mini surface when navbar search is visible", async () => {
-        const { jq, settings } = await createHarness();
+        const { jq, settings, plugin } = await createHarness();
+        expect(plugin.getSelector()).toEqual({ itemSelector: ".movie-list .item" });
         expect(jq(".mini-setting-box").css("display")).not.toBe("none");
         expect(jq(".setting-box").css("display")).toBe("none");
 
@@ -112,6 +109,7 @@ describe("desktop quick setting surface root selection", () => {
 
         const mini = jq(".mini-setting-box .mini-simple-setting");
         const normal = jq(".setting-box .simple-setting");
+        await vi.waitFor(() => expect(mini.data("jhsQuickSettingBinding")).toBeTruthy());
         expect(mini.data("jhsQuickSettingBinding")).toBeTruthy();
         expect(normal.data("jhsQuickSettingBinding")).toBeFalsy();
 
@@ -129,10 +127,22 @@ describe("desktop quick setting surface root selection", () => {
 
         const normal = jq(".setting-box .simple-setting");
         const mini = jq(".mini-setting-box .mini-simple-setting");
+        await vi.waitFor(() => expect(normal.data("jhsQuickSettingBinding")).toBeTruthy());
         expect(normal.data("jhsQuickSettingBinding")).toBeTruthy();
         expect(mini.data("jhsQuickSettingBinding")).toBeFalsy();
 
         await settings.set("enableLoadScreenShot", "yes");
         expect(normal.find('[data-jhs-setting="enableLoadScreenShot"] input').is(":checked")).toBe(true);
+    });
+
+    it("drops a pending settings template load when its hover surface closes", async () => {
+        const { jq } = await createHarness();
+        const host = jq(".mini-setting-box .mini-simple-setting");
+        jq(".mini-setting-box").trigger("mouseover");
+        jq(".mini-setting-box").trigger("mouseleave");
+        await flush();
+
+        expect(host.data("jhsQuickSettingBinding")).toBeFalsy();
+        expect(host.children()).toHaveLength(0);
     });
 });

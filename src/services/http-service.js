@@ -94,6 +94,9 @@ export class HttpService {
                 circuitCooldownMs: options.circuitCooldownMs ?? Number(settings.circuitBreakerCooldown ?? 60000),
             };
         }
+        if (options.transport === "native-fetch" && options.nativeTimeout == null) {
+            options = { ...options, nativeTimeout: options.timeout };
+        }
         const cacheScope = options.cacheScope ?? "none";
         if (method !== "GET" && cacheScope !== "none") throw new TypeError("Mutation requests cannot use generic cache/dedupe");
         const urlPolicy = /** @type {{trustClass: string, hosts?: string[], expectedOrigin?: string}} */ (options.urlPolicy);

@@ -42,16 +42,24 @@ function loadRealListPage({ carList = [] } = {}) {
         readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-evaluator.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-refresh-coordinator.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/list-item-reader.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/storage-index.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-compatibility-service.js"), "utf8"),
         "normalizeMovieCarNum = normalizeCarNum;",
         `globalThis.__testCarMap = createIndexedMap(${JSON.stringify(carList)}, "carNum");`,
-        "globalThis.TestListPagePlugin=ListPagePlugin;",
+        "globalThis.TestListPagePlugin=ListPageCompatibilityService;",
     ].join("\n");
     vm.runInContext(source, context);
     contextRef = context;
-    return { dom, plugin: new context.TestListPagePlugin(), $, storageManager };
+    const plugin = new context.TestListPagePlugin({ runtimeServices: {
+        host: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }) },
+        legacyStorage: storageManager,
+        settings: { snapshot: () => ({ translateTitle: "no", hoverBigImg: "no" }) },
+        state: { getActivityLog: async () => ({ entries: [] }) },
+        translation: { translate: vi.fn(async () => "译文") },
+    } });
+    return { dom, plugin, $, storageManager };
 }
 
 /** markDataListHtml 的同构卡片（热播页真实 DOM 结构）。 */

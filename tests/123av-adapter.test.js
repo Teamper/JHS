@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const readSource = (path) => readTestFile(join(import.meta.dirname, "..", path), "utf8");
-const fc2Source = readSource("src/plugins/external-search/fc2-by-123av.js");
+const fc2Source = readSource("src/features/external-bridge/fc2-catalog-controller.js");
 const integrationSource = readSource("src/integrations/av123/manifest.js");
-const otherSiteSource = readSource("src/plugins/external-search/other-site.js");
+const otherSiteSource = readSource("src/features/external-sites/other-sites-controller.js");
 const httpSource = readSource("src/core/http.js");
 
 describe("123AV Chinese adapter contract", () => {
@@ -15,9 +15,9 @@ describe("123AV Chinese adapter contract", () => {
         expect(integrationSource).toContain("/cn/search?keyword=${encodeURIComponent(keyword)}&page=${sourcePage}");
         expect(integrationSource).toContain("keyword ? [page]");
         expect(fc2Source).not.toContain('this.keyword && $(".page-box").hide()');
-        expect(fc2Source).toContain("normalizeHttpUrl(e.url)");
+        expect(fc2Source).toContain("const href = normalizeHttpUrl(item.url)");
         expect(otherSiteSource).toContain('providerId: "av123"');
-        expect(otherSiteSource).toContain('getRuntimeService("movie").searchUrl');
+        expect(otherSiteSource).toContain("this.movie.searchUrl");
     });
 
     it("removes obsolete 123AV selectors, routes and sorting controls", () => {

@@ -5,6 +5,8 @@ import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NewVideoWorkspaceController } from "../src/features/discovery/new-video-workspace-controller.js";
+import { FEATURE_ICONS } from "../src/core/feature-icons.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -21,7 +23,11 @@ function createHarness() {
         getCarMap: vi.fn(async () => new Map),
         getSetting: vi.fn(async () => 8760)
     };
-    const stateService = { getNewVideoDecisions: vi.fn(async () => ({})) };
+    const stateService = {
+        getNewVideoDecisions: vi.fn(async () => ({})),
+        getFavoriteActressList: vi.fn(() => storageManager.getFavoriteActressList()),
+        getCarMap: vi.fn(() => storageManager.getCarMap()),
+    };
     const beans = {
         OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") },
         TaskPlugin: { getTaskStatusSnapshot: vi.fn(() => ({ state: "idle", completedAt: null, nextAt: null })) }
@@ -37,7 +43,7 @@ function createHarness() {
     dom.window.ImageHoverPreview = ImageHoverPreview;
     const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
     const context = vm.createContext({
-        console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math,
+        console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math, FEATURE_ICONS,
         window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
         $, BasePlugin, ImageHoverPreview, storageManager, stateService, renderStateView,
         JHS_Z_INDEX: { dialogHoverPreview: 999999992 },
@@ -57,10 +63,15 @@ function createHarness() {
         T: "javdb", I: "javbus", D: "filter", A: "uncensored", _: "yes", l: false
     });
     context.globalThis = context;
-    const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("function aggregateNewVideoRecords");
-    vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoPlugin`, context);
-    const plugin = new context.TestPlugin;
+    const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("class NewVideoWorkspaceService");
+    vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoWorkspaceService`, context);
+    const plugin = new context.TestPlugin({ runtimeServices: { ...runtimeServices, state: stateService, scope: () => Promise.resolve({ assertActive() {}, disposed: false }) }, resolveDependency: name => beans[name], jquery: $, legacyStorage: storageManager, utilities: context.utils, notifications: context.show, logger: context.clog, events: context.jhsEventBus, createImageHoverPreview: config => new dom.window.ImageHoverPreview(config), document: dom.window.document, window: dom.window });
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";
+    plugin.featureNewVideoWorkspaceController = new NewVideoWorkspaceController({
+        state: stateService,
+        settings: { snapshot: () => ({ checkNewVideo_ruleTime: 8760 }) },
+        movie: runtimeServices.movie,
+    });
     return { plugin, $, actresses, storageManager, stateService, beans, runtimeServices };
 }
 
@@ -150,5 +161,99 @@ describe("new video workspace snapshot", () => {
         expect($(".actress-card-name").text()).toBe('<img id="injected">');
         expect($(".actress-card__profile").attr("href")).toContain("a%22%20onmouseover%3D%22alert(1)");
         expect($(".actress-card-avatar").attr("src")).toBe("https://c0.jdbstatic.com/images/actor_unknow.jpg");
+    });
+
+    it("keeps a saved actress edit successful when its invalidation event fails", async () => {
+        const { plugin, $, actresses, storageManager } = createHarness();
+        const dialog = { open: vi.fn(options => { $(plugin.document.body).append(options.content); }), close: vi.fn() };
+        plugin.runtimeServices.dialog = dialog;
+        plugin.utils.getDialogArea = () => ["400px", "auto"];
+        storageManager.updateFavoriteActress = vi.fn(async () => true);
+        plugin.events.emit = vi.fn(async () => { throw new Error("event channel closed"); });
+        plugin.logger.warn.mockImplementation(() => { throw new Error("logger unavailable"); });
+
+        await plugin.editActress(actresses[0]);
+        $("#edit-actress-name").val("Alice Updated");
+        await dialog.open.mock.calls[0][0].yes(1);
+
+        expect(storageManager.updateFavoriteActress).toHaveBeenCalledOnce();
+        expect(plugin.events.emit).toHaveBeenCalledOnce();
+        expect(plugin.notifications.error).not.toHaveBeenCalled();
+        expect(plugin.notifications.ok).toHaveBeenCalledWith("女优 Alice Updated 信息已更新");
+        expect(dialog.close).toHaveBeenCalledWith(1);
+    });
+
+    it("keeps the editor open and the original actress unchanged when persistence fails", async () => {
+        const { plugin, $, actresses, storageManager } = createHarness();
+        const dialog = { open: vi.fn(options => { $(plugin.document.body).append(options.content); }), close: vi.fn() };
+        plugin.runtimeServices.dialog = dialog;
+        plugin.utils.getDialogArea = () => ["400px", "auto"];
+        storageManager.updateFavoriteActress = vi.fn(async () => { throw new Error("IndexedDB unavailable"); });
+        plugin.events.emit = vi.fn();
+
+        await plugin.editActress(actresses[0]);
+        $("#edit-actress-name").val("Alice Updated");
+        await dialog.open.mock.calls[0][0].yes(1);
+
+        expect(actresses[0].name).toBe("Alice");
+        expect(plugin.notifications.error).toHaveBeenCalledWith("修改失败: IndexedDB unavailable");
+        expect(plugin.events.emit).not.toHaveBeenCalled();
+        expect(dialog.close).not.toHaveBeenCalled();
+    });
+
+    it("does not claim an edit succeeded after another tab removed the actress", async () => {
+        const { plugin, $, actresses, storageManager } = createHarness();
+        const dialog = { open: vi.fn(options => { $(plugin.document.body).append(options.content); }), close: vi.fn() };
+        plugin.runtimeServices.dialog = dialog;
+        plugin.utils.getDialogArea = () => ["400px", "auto"];
+        storageManager.updateFavoriteActress = vi.fn(async () => false);
+        plugin.events.emit = vi.fn();
+
+        await plugin.editActress(actresses[0]);
+        $("#edit-actress-name").val("Alice Updated");
+        await dialog.open.mock.calls[0][0].yes(1);
+
+        expect(actresses[0].name).toBe("Alice");
+        expect(plugin.notifications.error).toHaveBeenCalledWith("修改失败: 演员记录已不存在");
+        expect(plugin.events.emit).not.toHaveBeenCalled();
+        expect(dialog.close).not.toHaveBeenCalled();
+    });
+
+    it("closes the editor after a durable edit even when the success toast fails", async () => {
+        const { plugin, $, actresses, storageManager } = createHarness();
+        const dialog = { open: vi.fn(options => { $(plugin.document.body).append(options.content); }), close: vi.fn() };
+        plugin.runtimeServices.dialog = dialog;
+        plugin.utils.getDialogArea = () => ["400px", "auto"];
+        storageManager.updateFavoriteActress = vi.fn(async () => true);
+        plugin.events.emit = vi.fn(async () => {});
+        plugin.notifications.ok.mockImplementation(() => { throw new Error("toast unavailable"); });
+
+        await plugin.editActress(actresses[0]);
+        $("#edit-actress-name").val("Alice Updated");
+        await dialog.open.mock.calls[0][0].yes(1);
+
+        expect(storageManager.updateFavoriteActress).toHaveBeenCalledOnce();
+        expect(plugin.notifications.error).not.toHaveBeenCalled();
+        expect(plugin.logger.warn).toHaveBeenCalledOnce();
+        expect(dialog.close).toHaveBeenCalledWith(1);
+    });
+
+    it("does not retry a completed actress uncollect when workspace invalidation fails", async () => {
+        const { plugin, $, actresses, storageManager, runtimeServices } = createHarness();
+        plugin._viewMode = "actress", plugin.nvJavDbUrl = "https://javdb.com", plugin.nvActressesCache = actresses;
+        plugin.getPendingNewVideoCount = () => 0, plugin.renderPagination = vi.fn();
+        plugin.document.head.append($("<meta name='csrf-token' content='synthetic-token'>")[0]);
+        runtimeServices.actressInfo.uncollect = vi.fn(async () => ({ success: true }));
+        storageManager.removeFavoriteActress = vi.fn(async () => true);
+        plugin.events.emit = vi.fn(async () => { throw new Error("event channel closed"); });
+        let confirmation;
+        plugin.utils.q = vi.fn((_event, _message, callback) => { confirmation = callback(); });
+
+        await plugin.renderActressCards();
+        $(".btn-delete-actress").first().trigger("click");
+        await expect(confirmation).resolves.toBeUndefined();
+        expect(runtimeServices.actressInfo.uncollect).toHaveBeenCalledOnce();
+        expect(storageManager.removeFavoriteActress).toHaveBeenCalledOnce();
+        expect(plugin.events.emit).toHaveBeenCalledOnce();
     });
 });

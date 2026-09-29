@@ -6,7 +6,7 @@ async function boot(page, context, url) {
     await page.goto(url);
     if (process.env.JHS_UI_BASELINE) {
         const original = page.addScriptTag.bind(page);
-        page.addScriptTag = options => original(options.path?.endsWith("JHS.user.js") ? { path: process.env.JHS_UI_BASELINE } : options);
+        page.addScriptTag = options => original(options.path?.endsWith(".user.js") ? { path: process.env.JHS_UI_BASELINE } : options);
     }
     await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview:"no", enableLoadPreviewVideo:"no", needClosePage:"no" } });
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);

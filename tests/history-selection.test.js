@@ -1,12 +1,8 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
-import { HistorySelectionModel } from "../src/features/history/history-selection-model.js";
-import { HistoryRepository } from "../src/features/history/history-repository.js";
+import { HistoryRepository } from "../src/features/library/history-repository.js";
+import { HistoryDialogController } from "../src/features/library/history-dialog-controller.js";
 
 function createRecords(count = 120) {
     return Array.from({ length: count }, ((_, index) => ({
@@ -45,38 +41,14 @@ function loadHistory(records = createRecords()) {
             info: vi.fn(),
             error: vi.fn()
         };
-    const stateService = { patch, remove, toggle: vi.fn() };
-    const context = vm.createContext({
-        document: dom.window.document,
-        window: dom.window,
-        $,
-        BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } },
-        HistorySelectionModel, HistoryRepository,
-        Tabulator: class {},
-        layer,
-        storageManager: { getCarList },
-        normalizeCarNum: value => String(value || "").trim().toUpperCase(),
-        normalizeStateFlags: flags => ({ favorite: !1, downloaded: !1, watched: !1, blocked: !1, ...flags }),
-        hasAnyState: flags => Object.values(flags || {}).some(Boolean),
-        legacyActionToFlag: action => ({ filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" })[action],
-        utils: { q: confirmation },
-        show,
-        clog: { error: vi.fn() },
-        loading: () => ({ close }),
-        i: (target, key, value) => (target[key] = value),
-        r: !0,
-        l: !1,
-        d: "filter",
-        h: "favorite",
-        g: "hasDown",
-        p: "hasWatch",
-        u: "屏蔽",
-        b: "收藏",
-        y: "下载",
-        k: "观看"
-    });
-    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
-    const plugin = new context.History, root = $("#history");
+    const stateService = { patch, remove, toggle: vi.fn() }, storageService = { getCarList };
+    const plugin = new HistoryDialogController({
+        document: dom.window.document, window: dom.window, jquery: $,
+        domUi: { confirm: confirmation, getDialogArea: () => [], enhanceSelect: vi.fn(), loading: () => ({ close }) },
+        dialog: { open: layer.open, close: layer.close }, notifications: show, logger: { error: vi.fn() },
+        clipboard: { copyText: vi.fn() }, movie: {}, settings: { snapshot: () => ({}) },
+        storage: storageService, state: stateService, repository: new HistoryRepository({ storage: storageService, state: stateService }), site: "javdb",
+    }), root = $("#history");
     const table = {
         currentData: records.slice(0, 50),
         selectedData: [],

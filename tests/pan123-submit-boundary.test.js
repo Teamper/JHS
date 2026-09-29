@@ -1,18 +1,22 @@
 // @vitest-environment jsdom
 import {it,expect,vi,afterEach} from "vitest";
 import jquery from "jquery";
-import {UnifiedOfflinePlugin} from "../src/plugins/offline/unified-offline.js";
+import {UnifiedOfflineController} from "../src/features/external-bridge/unified-offline-controller.js";
 import {LifecycleScope} from "../src/core/lifecycle-scope.js";
 afterEach(()=>{document.body.replaceChildren();vi.unstubAllGlobals();});
 it.each(["disabled","disposed","removed","success"])("checks the actual 123 submission boundary after token read: %s",async mode=>{
     vi.stubGlobal("$",jquery);vi.stubGlobal("show",{ok:vi.fn(),error:vi.fn()});vi.stubGlobal("clog",{error:vi.fn()});
     vi.stubGlobal("utils",{getOwningLayerIndex:()=>null,q:vi.fn()});
     document.body.innerHTML='<button>离线</button>';
-    const plugin=new UnifiedOfflinePlugin(),scope=new LifecycleScope("submit-boundary"),settings={enable123Offline:true};
+    const scope=new LifecycleScope("submit-boundary"),settings={enable123Offline:true};
     let release,started;
     const token=new Promise(resolve=>release=resolve),ready=new Promise(resolve=>started=resolve),submit=vi.fn(async()=>{}),history=vi.fn(async()=>{});
-    plugin.getOptionalDependency=()=>({getStoredToken:()=>{started();return token;}});
-    plugin.getRuntimeService=name=>name==="settings"?{snapshot:()=>settings}:name==="offline"?{submitWithIntegration:submit}:name==="state"?{appendOfflineHistory:history}:null;
+    const plugin=new UnifiedOfflineController({
+        document,window,route:"detail",site:"javdb",hostAdapter:{site:"javdb",locateListItems:()=>[],readMovieRef:()=>({carNum:"ABC-123"})},
+        offline:{submitWithIntegration:submit,getIntegrationHomeUrl:()=>"https://pan.example/"},dialog:{},state:{appendOfflineHistory:history},settings:{snapshot:()=>settings},
+        styles:{register:vi.fn(()=>()=>{})},events:{on:()=>()=>{}},pan123Credential:{getStoredToken:()=>{started();return token;}},
+        ui:{jquery,confirm:vi.fn(),closePage:vi.fn()},notifications:{ok:vi.fn(),error:vi.fn()},diagnostics:{recordError:vi.fn()},scope,
+    });
     plugin.lifecycleScope=scope;plugin.registerProviders(scope);plugin.BUTTON_COOLDOWN_MS=0;
     const provider=plugin.registry.providers.get("123");
     plugin.registry.getCandidates=async()=>[{provider,availability:{authState:"ready"}}];

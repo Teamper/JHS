@@ -1,70 +1,98 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
-import jqueryFactory from "jquery";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
-import { StatsRepository, computeLibraryStats } from "../src/features/stats/stats-repository.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { StatsController } from "../src/features/system/stats-controller.js";
 
-function loadStatsPlugin() {
-    const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
-    const listPage = { getCurrentPageSummary: vi.fn(() => ({ blockedItems: 7 })), setQuickFilter: vi.fn() };
-    const newVideo = { getPendingNewVideoTotal: vi.fn(async () => 3), openDialog: vi.fn() };
-    const beans = { ListPagePlugin: listPage, NewVideoPlugin: newVideo, OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") } };
-    const stateService = { getActivityLog: vi.fn(async () => ({ entries: [], coverageStart: null })) };
-    class BasePlugin {
-        getBean(name) { return beans[name]; }
-        getOptionalDependency(name) { return beans[name]; }
-        getRuntimeService(name) {
-            if (name === "diagnostics") return { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) };
-            if (name === "dialog") return { open: layer.open, close: layer.close };
-            if (name === "state") return stateService;
-            if (name === "movie") return { externalSiteOrigin: () => "https://javdb.com" };
-            return null;
-        }
-    }
-    const layer = {
+function createHarness({ anchor = true } = {}) {
+    const dom = new JSDOM(`<body>${anchor ? "<button id='newVideoBtn'>新作品</button>" : ""}</body>`, { url: "https://javdb.com/" });
+    const document = dom.window.document;
+    const listPage = { getCurrentPageSummary: vi.fn(async () => ({ blockedItems: 7 })), setQuickFilter: vi.fn(async () => {}) };
+    const handlers = new Set();
+    const styleRelease = vi.fn();
+    let layerElement;
+    const dialog = {
         close: vi.fn(),
         open: vi.fn(options => {
-            const element = $("<div></div>").html(options.content).appendTo("body");
-            options.success(element, 12);
+            layerElement = document.createElement("div");
+            layerElement.innerHTML = options.content;
+            document.body.append(layerElement);
+            options.success(layerElement, 12);
             return 12;
-        })
+        }),
     };
-    const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, BasePlugin, StatsRepository, computeLibraryStats, layer, URL,
-        storageManager: {
-            getCarList: vi.fn(async () => [ { stateFlags: { blocked: true } }, { stateFlags: { favorite: true, downloaded: true, watched: true } }, { stateFlags: {} } ]),
-            getFavoriteActressList: vi.fn(async () => [ {} ]), getBlacklist: vi.fn(async () => [ {}, {} ]), getSetting: vi.fn(async () => ({}))
-        },
-        utils: { getDialogArea: vi.fn(() => [ "1040px", "760px" ]), setupEscClose: vi.fn() },
-        normalizeStateFlags: flags => ({ blocked: !!flags?.blocked, favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched }),
-        hasAnyState: flags => Object.values(flags).some(Boolean), escapeHtml: value => String(value), r: true, l: false
+    const scope = new LifecycleScope("test:stats");
+    const controller = new StatsController({
+        document,
+        libraryStats: { loadSnapshot: vi.fn(async () => ({
+            cars: [
+                { stateFlags: { blocked: true } },
+                { stateFlags: { favorite: true, downloaded: true, watched: true } },
+                { stateFlags: {} },
+            ],
+            actresses: [{}], blacklist: [{}, {}], activity: { entries: [], coverageStart: null },
+        })), getPendingNewVideoTotal: vi.fn(async () => 3) },
+        diagnostics: { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }), recordError: vi.fn() },
+        notifications: { error: vi.fn() },
+        movie: { externalSiteOrigin: () => "https://javdb.com" },
+        settings: { snapshot: () => ({}) }, dialog,
+        events: { on: vi.fn((_type, handler) => { handlers.add(handler); return () => handlers.delete(handler); }) },
+        ui: { getDialogArea: () => ["1040px", "760px"] },
+        styles: { register: vi.fn(() => styleRelease) }, scope,
+        openNewVideo: vi.fn(async () => {}),
+        getPendingNewVideoTotal: () => controller.libraryStats.getPendingNewVideoTotal(),
+        getCurrentPageSummary: listPage.getCurrentPageSummary,
+        setQuickFilter: (filter) => listPage.setQuickFilter(filter),
     });
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/stats/stats.js"), "utf8");
-    vm.runInContext(`${source};globalThis.TestStatsPlugin=StatsPlugin`, context);
-    return { $, layer, listPage, newVideo, plugin: new context.TestStatsPlugin() };
+    controller.start();
+    return { dom, document, controller, dialog, get layerElement() { return layerElement; }, listPage, handlers, scope, styleRelease };
 }
 
-describe("Stats scope semantics", () => {
+let currentHarness;
+afterEach(() => {
+    currentHarness?.controller.dispose();
+    currentHarness?.dom.window.close();
+    currentHarness = null;
+});
+
+describe("Stats Feature scope semantics", () => {
     it("keeps full-library metrics static and only exposes scope-matched actions", async () => {
-        const { $, layer, listPage, newVideo, plugin } = loadStatsPlugin();
-        await plugin.openDialog();
+        currentHarness = createHarness();
+        const { document, controller, dialog, listPage } = currentHarness;
+        expect(document.querySelector("#newVideoBtn + #statsBtn span")?.textContent).toBe("统计");
+        await controller.openDialog();
 
-        expect(layer.open.mock.calls[0][0].title).toBe("统计");
-        const groups = $(".jhs-stats__group"), overview = groups.eq(0), currentPage = groups.eq(1);
-        expect(overview.find(".jhs-stats__metric")).toHaveLength(11);
-        expect(overview.find("button.jhs-stats__metric")).toHaveLength(1);
-        expect(overview.find("button[data-action='new-video'] span").text()).toBe("新作品待处理");
-        expect(overview.find("[data-filter]")).toHaveLength(0);
-        expect(overview.find(".jhs-stats__metric").filter(((_, element) => $(element).find("span").text() === "手动屏蔽")).find("strong").text()).toBe("1");
+        expect(dialog.open.mock.calls[0][0].title).toBe("统计");
+        const groups = document.querySelectorAll(".jhs-stats__group");
+        const overview = groups[0], currentPage = groups[1];
+        expect(overview.querySelectorAll(".jhs-stats__metric")).toHaveLength(11);
+        expect(overview.querySelectorAll("button.jhs-stats__metric")).toHaveLength(1);
+        expect(overview.querySelector("button[data-action='new-video'] span")?.textContent).toBe("新作品待处理");
+        expect(overview.querySelector("[data-filter]")).toBeNull();
+        expect([...overview.querySelectorAll(".jhs-stats__metric")].find((element) => element.querySelector("span")?.textContent === "手动屏蔽")?.querySelector("strong")?.textContent).toBe("1");
 
-        expect(currentPage.find("button[data-action='filter'][data-filter='blockedItems'] strong").text()).toBe("7");
-        overview.find("button[data-action='new-video']").trigger("click");
-        expect(newVideo.openDialog).toHaveBeenCalledOnce();
-        currentPage.find("button[data-action='filter']").trigger("click");
+        expect(currentPage.querySelector("button[data-action='filter'] strong")?.textContent).toBe("7");
+        overview.querySelector("button[data-action='new-video']")?.dispatchEvent(new document.defaultView.MouseEvent("click", { bubbles: true }));
+        expect(controller.openNewVideo).toHaveBeenCalledOnce();
+        currentPage.querySelector("button[data-action='filter']")?.dispatchEvent(new document.defaultView.MouseEvent("click", { bubbles: true }));
         expect(listPage.setQuickFilter).toHaveBeenCalledWith("blockedItems");
-        expect(layer.close).toHaveBeenCalledTimes(2);
+        expect(controller.libraryStats.getPendingNewVideoTotal).toHaveBeenCalledOnce();
+        expect(listPage.getCurrentPageSummary).toHaveBeenCalledOnce();
+        expect(dialog.close).toHaveBeenCalledTimes(2);
+    });
+
+    it("waits for the list contribution and cleans up its button, style, and pending dialog on stop", async () => {
+        currentHarness = createHarness({ anchor: false });
+        const { document, handlers, controller, scope, dialog, styleRelease } = currentHarness;
+        expect(document.querySelector("#statsBtn")).toBeNull();
+        document.body.insertAdjacentHTML("afterbegin", "<button id='newVideoBtn'>新作品</button>");
+        [...handlers][0]?.();
+        expect(document.querySelector("#newVideoBtn + #statsBtn")).not.toBeNull();
+        await controller.openDialog();
+        expect(controller.dialogId).toBe(12);
+        controller.dispose();
+        expect(scope.disposed).toBe(true);
+        expect(dialog.close).toHaveBeenCalledWith(12);
+        expect(document.querySelector("#statsBtn")).toBeNull();
+        expect(styleRelease).toHaveBeenCalledOnce();
     });
 });

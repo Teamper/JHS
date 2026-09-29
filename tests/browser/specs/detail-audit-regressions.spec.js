@@ -2,21 +2,22 @@ import { test, expect } from "@playwright/test";
 test.beforeEach(({}, testInfo) => { test.skip(!["desktop-wide", "mobile"].includes(testInfo.project.name), "interaction owners"); });
 
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
 const injectRuntime = async (page, options) => {
   if (!process.env.JHS_AUDIT_BASELINE) return injectUserscriptRuntime(page, options);
   const original = page.addScriptTag.bind(page);
-  page.addScriptTag = options => original(options.path?.endsWith("JHS.user.js") ? { path: process.env.JHS_AUDIT_BASELINE } : options);
+  page.addScriptTag = options => original(options.path?.endsWith(".user.js") ? { path: process.env.JHS_AUDIT_BASELINE } : options);
   try { return await injectUserscriptRuntime(page, options); } finally { page.addScriptTag = original; }
 };
 
-async function boot(page, context, { hiddenVideo = false, iframe = false } = {}) {
+async function boot(page, context, { hiddenVideo = false, iframe = false, disabledPlugins = [] } = {}) {
   await fulfillHostFixtures(context);
   const base = await readFile(new URL("../fixtures/javdb-detail-interactions.html", import.meta.url), "utf8");
   await context.route("https://javdb.com/v/**", route => route.fulfill({ contentType: "text/html", body: base }));
   await page.goto(iframe ? "https://javdb.com/" : "https://javdb.com/v/test-id");
-  await injectRuntime(page, { settingOverrides: { enableLoadPreviewVideo: "no", enableLoadReview: "no", enableMagnetsFilter: "no", needClosePage: "no" } });
+  await injectRuntime(page, { disabledPlugins, settingOverrides: { enableLoadPreviewVideo: "no", enableLoadReview: "no", enableMagnetsFilter: "no", needClosePage: "no" } });
   await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
   if (!iframe) return page;
   const navigation = page.waitForEvent("framenavigated", { predicate: frame => frame !== page.mainFrame() && frame.url().includes("/v/") });
@@ -53,6 +54,32 @@ async function nativePlayer(frame) {
   await frame.locator(".preview-video-container").first().click();
   await expect(frame.locator("#video-bottom-toolbar")).toBeVisible();
 }
+
+test("JavDB native preview is Feature-managed and retains its live master switch", async ({ page, context }) => {
+  const frame = await boot(page, context);
+  const pluginState = await frame.evaluate(() => ({
+    managedByFeature: window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")?.managedByFeature,
+    runtimeStatus: window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")?.runtimeStatus,
+    registeredLegacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("PreviewVideoPlugin"),
+  }));
+  expect(pluginState).toEqual({ managedByFeature: true, runtimeStatus: "managed-feature", registeredLegacyExecutor: false });
+  const trigger = frame.locator(".preview-video-container").first();
+  await expect(trigger).not.toHaveClass(/jhs-native-preview-hidden/);
+  await frame.evaluate(() => window.settingsService.set("enablePreviewVideo", "no"));
+  await expect(trigger).toHaveClass(/jhs-native-preview-hidden/);
+  await frame.evaluate(() => window.settingsService.set("enablePreviewVideo", "yes"));
+  await expect(trigger).not.toHaveClass(/jhs-native-preview-hidden/);
+});
+
+test("legacy PreviewVideoPlugin disable ID suppresses the native controller and compatibility bean", async ({ page, context }) => {
+  const frame = await boot(page, context, { disabledPlugins: ["PreviewVideoPlugin"] });
+  const state = await frame.evaluate(() => ({
+    legacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("PreviewVideoPlugin"),
+    compatibilityBean: Boolean(window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")),
+    dmmTriggers: document.querySelectorAll("[data-jhs-dmm-trigger]").length,
+  }));
+  expect(state).toEqual({ legacyExecutor: false, compatibilityBean: false, dmmTriggers: 0 });
+});
 
 test("open detail iframe shrinks with its viewport and stays usable", async ({ page, context }) => {
   await page.setViewportSize({width:1600,height:1000});
@@ -92,6 +119,33 @@ test("DMM fallback entry must have an existing playback target when no native vi
   await page.locator("[data-jhs-dmm-trigger]").first().click();
   await expect(page.locator("[data-jhs-preview-host] #jhs-preview-video")).toBeVisible();
   await expect(page.locator("[data-jhs-preview-host] #speed-btn")).toBeVisible();
+});
+
+test("failed DMM-only preview leaves no blocking layer shade", async ({ page, context }) => {
+  const addScript = page.addScriptTag.bind(page);
+  page.addScriptTag = async options => {
+    if (options.path?.endsWith(".user.js")) {
+      await addScript({ path: fileURLToPath(new URL("../fixtures/layer-runtime/layer-1.0.9.min.js", import.meta.url)) });
+    }
+    return addScript(options);
+  };
+  try { await boot(page, context); } finally { page.addScriptTag = addScript; }
+  await page.evaluate(async () => {
+    const plugin = window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin");
+    plugin.getDmmPreview = async () => ({ sources: { "720": "https://example.invalid/unavailable.mp4" }, error: null });
+    HTMLMediaElement.prototype.load = function () {
+      if (this.id === "jhs-preview-video") setTimeout(() => this.dispatchEvent(new Event("error")), 0);
+    };
+    Object.defineProperty(HTMLMediaElement.prototype, "readyState", { configurable: true, get() { return 0; } });
+    document.querySelector("#preview-video")?.remove();
+    document.querySelectorAll(".preview-video-container").forEach(node => node.remove());
+    await window.settingsService.set("enableLoadPreviewVideo", "yes");
+    await plugin.initDmm(plugin.lifecycleScope);
+  });
+  await expect(page.locator("[data-jhs-dmm-trigger]")).toBeVisible();
+  await page.locator("[data-jhs-dmm-trigger]").click();
+  await expect(page.locator(".layui-layer")).toHaveCount(0);
+  await expect(page.locator(".layui-layer-shade")).toHaveCount(0);
 });
 
 test("disabling preview while media.play is pending must not resurrect toolbar or hide native video", async ({ page, context }) => {
@@ -168,15 +222,40 @@ test("offline remote success followed by history failure must not be recorded as
   await boot(page, context);
   const result = await page.evaluate(async () => {
     const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), button = window.jQuery('<button>离线</button>').appendTo(document.body);
-    let calls = 0; const history = [];
+    let calls = 0; const history = [], errors = [], successes = [];
+    window.show.error = message => errors.push(String(message));
+    window.show.ok = message => successes.push(String(message));
     offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { calls++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
     offline.getRuntimeService("state").appendOfflineHistory = async row => { history.push(row.status); if (history.length === 1) throw new Error("local history write failed"); };
     await offline.submitResource({ currentTarget: button[0] }, "magnet:?xt=urn:btih:audit", button, { carNum: "ABC-123" });
-    return { calls, history, buttonText: button.text() };
+    const retryButton = window.jQuery('<button>离线</button>').appendTo(document.body);
+    await offline.submitResource({ currentTarget: retryButton[0] }, "magnet:?xt=urn:btih:audit", retryButton, { carNum: "ABC-123" });
+    return { calls, history, errors, successes, buttonText: button.text() };
   });
   console.log("offline-history-failure", result);
   expect(result.calls).toBe(1);
   expect(result.history).not.toContain("failed");
+  expect(result.buttonText).toBe("已提交");
+  expect(result.errors).toContain("任务已创建，但本地记录保存失败，请勿重复提交");
+  expect(result.successes).toEqual([]);
+});
+
+test("offline remote success survives a throwing local-history warning", async ({ page, context }) => {
+  await boot(page, context);
+  const result = await page.evaluate(async () => {
+    const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), button = window.jQuery('<button>离线</button>').appendTo(document.body);
+    let submissions = 0;
+    const history = [];
+    window.show.error = () => { throw new Error("toast unavailable"); };
+    window.show.ok = () => { throw new Error("unexpected success notice"); };
+    offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { submissions++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
+    offline.getRuntimeService("state").appendOfflineHistory = async row => { history.push(row.status); throw new Error("local history write failed"); };
+    await offline.submitResource({ currentTarget: button[0] }, "magnet:?xt=urn:btih:warning-fault", button, { carNum: "ABC-123" });
+    const retryButton = window.jQuery('<button>离线</button>').appendTo(document.body);
+    await offline.submitResource({ currentTarget: retryButton[0] }, "magnet:?xt=urn:btih:warning-fault", retryButton, { carNum: "ABC-123" });
+    return { submissions, history, buttonText: button.text() };
+  });
+  expect(result).toEqual({ submissions: 1, history: ["submitted"], buttonText: "已提交" });
 });
 
 test("mark downloaded with automatic close disabled must not report a close failure", async ({ page, context }) => {

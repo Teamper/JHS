@@ -29,7 +29,8 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         addFavoriteActressList: vi.fn(async () => {}), updateFavoriteActress: vi.fn(async () => true), updateBlacklistItem: vi.fn(async update => Object.assign(blacklistItems.find(item => item.starId === update.starId), update)), getCarMap: vi.fn(async () => new Map)
     };
     const localStorage = { getItem: vi.fn(key => values.has(key) ? values.get(key) : null), setItem: vi.fn((key, value) => values.set(key, String(value))), removeItem: vi.fn(key => values.delete(key)) };
-    const storage = { getLocal: localStorage.getItem, setLocal: localStorage.setItem, removeLocal: localStorage.removeItem }, scope = new LifecycleScope("feature:discovery");
+    const storage = { getLocal: localStorage.getItem, setLocal: localStorage.setItem, removeLocal: localStorage.removeItem }, scope = new LifecycleScope("feature:scheduler");
+    let activeScope = scope;
     const eventHandlers = new Map, jhsEventBus = {
         on: vi.fn((type, handler) => {
             const handlers = eventHandlers.get(type) || [];
@@ -41,6 +42,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         })
     };
     const locks = { request: vi.fn(async (key, options, callback) => callback({ name: key })) };
+    Object.defineProperty(dom.window.navigator, "locks", { configurable: true, value: locks });
     const gmHttp = { get: vi.fn() }, http = {
         request: vi.fn(async request => ({ data: await gmHttp.get(request.url), finalUrl: request.url }))
     }, actressInfo = {
@@ -60,23 +62,6 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         NewVideoPlugin: { loadData: vi.fn(async () => {}), resetBtnTip: vi.fn(async () => {}) },
         BlacklistPlugin: { resetBtnTip: vi.fn(async () => {}) }
     };
-    class BasePlugin {
-        getBean(name) { return beans[name]; }
-        getOptionalDependency(name) { return beans[name]; }
-        getRuntimeService(name) {
-            if ("storage" === name) return storage;
-            if ("scope" === name) return () => scope;
-            if ("http" === name) return http;
-            if ("actressInfo" === name) return actressInfo;
-            if ("movie" === name) return {
-                externalSiteOrigin: siteId => "javBusBtn" === siteId
-                    ? beans.OtherSitePlugin.getJavBusUrl()
-                    : beans.OtherSitePlugin.getJavDbUrl(),
-            };
-            return null;
-        }
-        getSelector(site = "javdb") { return site === "javbus" ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" } : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
-    }
     class StorageQueue { async addTask(task) { return task(); } async waitAllFinished() {} }
     const format = timestamp => {
         const date = new ClockDate(timestamp), pad = value => String(value).padStart(2, "0");
@@ -84,7 +69,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     };
     const context = vm.createContext({
         console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
-        window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, BasePlugin, StorageQueue,
+        window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, StorageQueue,
         T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
         escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, (/** @type {string} */ c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c)),
         utils: { sleep: vi.fn(async () => {}), getNowStr: (a = "-", b = ":", timestamp = null) => format(null == timestamp ? clock.now : timestamp), getHourDifference: (left, right) => Math.floor(Math.abs(right.getTime() - left.getTime()) / 36e5), genericSort: items => [ ...items ], htmlTo$dom: html => $(new JSDOM(html, { url: "https://javdb.com/" }).window.document) },
@@ -94,10 +79,27 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         setTimeout, clearTimeout
     });
     context.globalThis = context;
-    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js", "src/plugins/new-video/task.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
-    vm.runInContext(`${source};globalThis.Task=TaskPlugin`, context);
-    const plugin = new context.Task;
-    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, $, htmlToPage: context.utils.htmlTo$dom };
+    const taskExecutionSource = readFileSync(join(repoRoot, "src/features/discovery/task-execution-service.js"), "utf8")
+        .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
+        .replace(/^export\s+(?=class\s)/gm, "");
+    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n") + `\n${taskExecutionSource}`;
+    vm.runInContext(`${source};globalThis.Task=TaskExecutionService`, context);
+    const plugin = new context.Task({
+        runtimeServices: {
+            storage, scope: () => activeScope, http, actressInfo, events: jhsEventBus,
+            movie: { externalSiteOrigin: siteId => siteId === "javBusBtn" ? beans.OtherSitePlugin.getJavBusUrl() : beans.OtherSitePlugin.getJavDbUrl() },
+            state: { getNewVideoDecisions: async () => ({}) },
+            hostAdapters: {
+                javdb: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
+                javbus: { getListSelectors: () => ({ boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }) },
+            },
+            hostListParser: { parseDetailPage: context.parseDetailPage },
+        },
+        resolveDependency: name => beans[name] ?? null,
+        legacyStorage: storageManager, utilities: context.utils, logger: context.clog, jquery: $,
+        window: context.window, notifications: { error: context.show.error },
+    });
+    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, setScope: value => { activeScope = value; }, document: dom.window.document, $, htmlToPage: context.utils.htmlTo$dom };
 }
 
 describe("task scheduler state machine", () => {
@@ -189,18 +191,6 @@ describe("task scheduler state machine", () => {
         expect(harness.storageManager.getSetting).toHaveBeenCalledTimes(2);
     });
 
-    it("recalculates schedules once for one settings-changed notification", async () => {
-        const harness = createHarness();
-        harness.plugin.runAndSchedule = vi.fn(async () => {}), harness.plugin.scheduleTask = vi.fn();
-        const recalculate = vi.spyOn(harness.plugin, "recalculateSchedules");
-        await harness.plugin.handle();
-        await harness.jhsEventBus.emit("settings-changed", {});
-        expect(recalculate).toHaveBeenCalledOnce();
-        expect(harness.scope.snapshot().listeners).toBe(2);
-        harness.scope.dispose();
-        expect(harness.scope.snapshot()).toMatchObject({ listeners: 0, disposed: true });
-    });
-
     it("reports only current-tab execution as running and cleans active state on failure", async () => {
         const harness = createHarness("2026-08-23T14:03:00");
         harness.values.set("jhs_time_checkNewVideo", "2026-08-23 13:00:00");
@@ -244,6 +234,97 @@ describe("task scheduler state machine", () => {
         expect(second).toMatchObject({ success: 1, parseFailed: 0, skippedInterval: 1 });
         expect(calls).toHaveLength(1);
         expect(calls[0]).toContain("/actors/b");
+    });
+
+    it("does not mark a completed new-video batch as failed when its closing notice throws", async () => {
+        const harness = createHarness();
+        harness.plugin.taskConfig = { checkConcurrencyCount: 1, checkRequestSleep: 0, checkNewVideo_intervalTime: 12, checkNewVideo_ruleTime: 0 };
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.plugin.logger.html = vi.fn(message => {
+            if (String(message).includes("检测最新作品---结束")) throw new Error("notice unavailable");
+        });
+        harness.plugin.logger.warn = vi.fn(() => { throw new Error("warning unavailable"); });
+
+        const result = await harness.plugin.checkNewVideo(true);
+
+        expect(result).toMatchObject({ completed: true, success: 0, parseFailed: 0, networkFailed: 0 });
+        expect(harness.values.get("jhs_time_checkNewVideo")).toMatch(/^2026-/);
+    });
+
+    it("still broadcasts saved new work when the closing notice fails", async () => {
+        const harness = createHarness();
+        harness.plugin.taskConfig = { checkConcurrencyCount: 1, checkRequestSleep: 0, checkNewVideo_intervalTime: 12, checkNewVideo_ruleTime: 0 };
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.plugin.featureNewVideoScanController = {
+            scanActresses: async () => ({ actressCount: 1, success: 1, parseFailed: 0, networkFailed: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, fatal: false, blockedError: null }),
+        };
+        harness.plugin.logger.html = vi.fn(message => {
+            if (String(message).includes("检测最新作品---结束")) throw new Error("notice unavailable");
+        });
+
+        const result = await harness.plugin.checkNewVideo(true);
+
+        expect(result).toMatchObject({ completed: true, success: 1, parseFailed: 0 });
+        expect(harness.jhsEventBus.emit).toHaveBeenCalledWith("new-video-changed", { reason: "task-completed", carNums: [] });
+    });
+
+    it("keeps a saved manual actress scan when its closing notice fails", async () => {
+        const harness = createHarness();
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.plugin.featureNewVideoScanController = { scanActress: vi.fn(async () => 1) };
+        harness.plugin.logger.html = vi.fn(message => {
+            if (String(message).includes("检测最新作品---结束")) throw new Error("notice unavailable");
+        });
+        harness.plugin.logger.warn = vi.fn(() => { throw new Error("warning unavailable"); });
+
+        await harness.plugin.checkOneNewVideo({ starId: "actor-1", name: "Actor One" });
+
+        expect(harness.plugin.featureNewVideoScanController.scanActress).toHaveBeenCalledOnce();
+        expect(harness.$("#checkNewVideoMsg").text()).toBe("检测完毕");
+        expect(harness.jhsEventBus.emit).toHaveBeenCalledWith("new-video-changed", { reason: "single-actress-check", carNums: [] });
+        expect(harness.plugin.notifications.error).not.toHaveBeenCalled();
+    });
+
+    it("still reports a failed manual actress scan without broadcasting success", async () => {
+        const harness = createHarness();
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.plugin.featureNewVideoScanController = { scanActress: vi.fn(async () => { throw new Error("write failed"); }) };
+
+        await harness.plugin.checkOneNewVideo({ starId: "actor-1", name: "Actor One" });
+
+        expect(harness.$("#checkNewVideoMsg").text()).toContain("发生错误");
+        expect(harness.plugin.notifications.error).toHaveBeenCalledOnce();
+        expect(harness.jhsEventBus.emit).not.toHaveBeenCalledWith("new-video-changed", expect.anything());
+    });
+
+    it("keeps a committed favorite-actress sync when its closing notice and warning fail", async () => {
+        const harness = createHarness();
+        harness.plugin.taskConfig = { checkFavoriteActress_IntervalTime: 24 };
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.plugin.featureNewVideoScanController = { syncFavoriteActresses: async () => ({ actors: [], pages: 1 }) };
+        harness.plugin.logger.log = vi.fn(message => {
+            if (String(message).includes("所有演员信息已收集")) throw new Error("notice unavailable");
+        });
+        harness.plugin.logger.warn = vi.fn(() => { throw new Error("warning unavailable"); });
+
+        const result = await harness.plugin.checkFavoriteActress(true);
+
+        expect(result).toMatchObject({ completed: true, success: 0, parseFailed: 0 });
+        expect(harness.values.get("jhs_time_checkFavoriteActress")).toMatch(/^2026-/);
+    });
+
+    it("keeps a completed blacklist batch when its closing notice fails", async () => {
+        const harness = createHarness();
+        harness.plugin.taskConfig = { checkConcurrencyCount: 1, checkRequestSleep: 0, checkBlacklist_intervalTime: 12, checkBlacklist_ruleTime: 0 };
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.plugin.logger.log = vi.fn(message => {
+            if (String(message).includes("黑名单整批检测：")) throw new Error("notice unavailable");
+        });
+
+        const result = await harness.plugin.checkBlacklist(true);
+
+        expect(result).toMatchObject({ completed: true, success: 0, parseFailed: 0 });
+        expect(harness.values.get("jhs_time_checkBlacklist")).toMatch(/^2026-/);
     });
 
     it("records the maximum real publication date before inbox filters", async () => {

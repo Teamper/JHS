@@ -14,6 +14,7 @@ describe("host page request", () => {
                 url: "https://javdb.com/page/2",
                 responseType: "text",
                 cacheScope: "none",
+                transport: "native-fetch",
                 urlPolicy: { trustClass: "builtin-public", hosts: ["javdb.com"], expectedOrigin: "https://javdb.com" },
             }, scope);
         } finally {

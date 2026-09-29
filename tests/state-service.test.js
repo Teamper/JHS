@@ -7,15 +7,15 @@ import { describe, expect, it, vi } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..");
 
-function loadStateService() {
+function loadStateService(diagnosticConsole = console, uiDiagnostics = {}) {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
-    const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
-    const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
-    vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
+    const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), domains = readTestFile(join(repoRoot, "src/core/state-domains.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
+    const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, console: diagnosticConsole, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: uiDiagnostics.clog ?? { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: uiDiagnostics.show ?? { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
+    vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${domains}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
     return context.StateServiceClass;
 }
 
-function createHarness(initial = {}) {
+function createHarness(initial = {}, mutationCoordinator = null, diagnosticConsole = console, uiDiagnostics = {}) {
     const data = new Map(Object.entries(initial)), storage = {
         car_list_key: "car_list", favorite_actresses_key: "favorite_actresses",
         forage: {
@@ -25,17 +25,75 @@ function createHarness(initial = {}) {
         },
         _setItemAndInvalidate: vi.fn(async (key, value) => data.set(key, value)),
         _invalidateCache: vi.fn(),
+        getBlacklist: vi.fn(async () => data.get("blacklist") || []),
+        batchSaveBlacklistCarList: vi.fn(async records => ({ records: records.length })),
+        updateBlacklistItem: vi.fn(async update => update),
+        removeBlacklistActor: vi.fn(async starId => ({ removedActor: starId === "actor-1", removedCarRecords: 2 })),
         getCar: vi.fn(async carNum => (data.get("car_list") || []).find(item => item.carNum === carNum))
-    }, eventBus = { emit: vi.fn(async () => {}) }, StateService = loadStateService();
-    return { service: new StateService(storage, eventBus), storage, eventBus, data };
+    }, eventBus = { emit: vi.fn(async () => {}) }, StateService = loadStateService(diagnosticConsole, uiDiagnostics);
+    return { service: new StateService(storage, eventBus, mutationCoordinator), storage, eventBus, data };
 }
 
 describe("StateService durable transactions", () => {
+    it("exposes established actress and movie-map reads through its domain boundary", async () => {
+        const { service, storage } = createHarness();
+        storage.getFavoriteActressList = vi.fn(async () => [{ starId: "actor-1" }]);
+        storage.getCarMap = vi.fn(async () => new Map([["ABC-123", { carNum: "ABC-123" }]]));
+
+        await expect(service.getFavoriteActressList()).resolves.toEqual([{ starId: "actor-1" }]);
+        await expect(service.getCarMap()).resolves.toEqual(new Map([["ABC-123", { carNum: "ABC-123" }]]));
+        expect(storage.getFavoriteActressList).toHaveBeenCalledOnce();
+        expect(storage.getCarMap).toHaveBeenCalledOnce();
+    });
+    it("routes new-video actress-record updates through StorageManager's mutation boundary", async () => {
+        const { service, storage } = createHarness();
+        storage.updateFavoriteActress = vi.fn(async (update) => ({ saved: update.starId }));
+
+        await expect(service.updateFavoriteActress({ starId: "actor-1", newVideoList: [] })).resolves.toEqual({ saved: "actor-1" });
+        expect(storage.updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", newVideoList: [] });
+    });
+    it("exposes the established blacklist read through the StateService boundary", async () => {
+        const { service, storage } = createHarness({ blacklist: [{ starId: "actor-1" }] });
+        await expect(service.getBlacklist()).resolves.toEqual([{ starId: "actor-1" }]);
+        expect(storage.getBlacklist).toHaveBeenCalledOnce();
+    });
+    it("routes blacklist actor deletion through the coordinated storage operation", async () => {
+        const { service, storage } = createHarness();
+        await expect(service.removeBlacklistActor("actor-1")).resolves.toEqual({ removedActor: true, removedCarRecords: 2 });
+        expect(storage.removeBlacklistActor).toHaveBeenCalledWith("actor-1");
+    });
+    it("routes blacklist page commits through the StateService boundary", async () => {
+        const { service, storage } = createHarness(), records = [{ carNum: "A-1" }], update = { starId: "actor-1", checkTime: "2026-09-27" };
+        await expect(service.batchSaveBlacklistCarList(records)).resolves.toEqual({ records: 1 });
+        await expect(service.updateBlacklistItem(update)).resolves.toEqual(update);
+        expect(storage.batchSaveBlacklistCarList).toHaveBeenCalledWith(records);
+        expect(storage.updateBlacklistItem).toHaveBeenCalledWith(update);
+    });
     it("keeps a persisted offline success when broadcasting the history update fails", async () => {
         const {service,eventBus,data}=createHarness();
         eventBus.emit.mockRejectedValueOnce(new Error("channel closed"));
         await expect(service.appendOfflineHistory({id:"submitted-1",carNum:"ABC-1",status:"submitted"})).resolves.toMatchObject({id:"submitted-1",status:"submitted"});
         expect(data.get("offline_history")).toHaveLength(1);
+    });
+    it("does not turn a committed history write into failure when the fallback warning throws", async () => {
+        const warning = { warn: vi.fn(() => { throw new Error("console unavailable"); }) };
+        const { service, eventBus, data } = createHarness({}, null, warning);
+        eventBus.emit.mockRejectedValue(new Error("channel closed"));
+
+        await expect(service.appendOfflineHistory({ id: "submitted-1", carNum: "ABC-1", status: "submitted" })).resolves.toMatchObject({ id: "submitted-1" });
+        expect(data.get("offline_history")).toHaveLength(1);
+        expect(warning.warn).toHaveBeenCalledOnce();
+    });
+    it("keeps a committed state patch successful when the shared mutation lock is injected", async () => {
+        const coordinator = { runExclusive: vi.fn(async (operation) => operation()) };
+        const { service, storage, data, eventBus } = createHarness({ car_list: [] }, coordinator);
+        eventBus.emit.mockRejectedValue(new Error("channel closed"));
+        await expect(service.patch("ABC-1", { favorite: true })).resolves.toMatchObject({ changed: [ "ABC-1" ] });
+        expect(coordinator.runExclusive).toHaveBeenCalledOnce();
+        expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
+        const journal = storage.forage.setItem.mock.calls.find(([ key ]) => key === "mutation_journal")?.[1];
+        expect(journal).toMatchObject({ schema: 2, state: "prepared", touchedDomains: [ "carList", "actresses", "decisions", "activity" ] });
+        expect(Object.keys(journal.before)).toEqual([ "carList", "actresses", "decisions", "activity" ]);
     });
     it.each(["mutation_journal", "car_list", "favorite_actresses", "new_video_decisions", "activity_log", "journal-clear"])("recovers an undo failure at %s without losing retry eligibility", async stage => {
         const { service, storage, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }], new_video_decisions: { "ABC-1": { action: "snoozed" } } });
@@ -52,9 +110,11 @@ describe("StateService durable transactions", () => {
     it("restores undo eligibility when the activity write fails", async () => {
         const { service, data, storage } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }] });
         const result = await service.patch("ABC-1", { favorite: true });
-        const write = storage.forage.setItem.getMockImplementation();
-        storage.forage.setItem.mockImplementationOnce(async (...args) => write(...args));
-        storage.forage.setItem.mockImplementationOnce(async () => { throw new Error("activity write failed"); });
+        let failed = false;
+        storage._setItemAndInvalidate.mockImplementation(async (key, value) => {
+            if (!failed && key === "activity_log") { failed = true; throw new Error("activity write failed"); }
+            data.set(key, value);
+        });
         await expect(service.undoTransaction(result.transactionId)).rejects.toThrow("activity write failed");
         await service.recoverPendingTransaction();
         expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
@@ -171,6 +231,36 @@ describe("StateService durable transactions", () => {
         });
         await expect(conflict.service.recoverPendingTransaction()).rejects.toThrow("archive unavailable");
         expect(conflict.data.has("mutation_journal")).toBe(true);
+    });
+
+    it.each(["log", "toast"])("keeps successful conflict archival complete when the %s diagnostic fails", async (failure) => {
+        const before = { carList: [], actresses: [], decisions: {}, activity: { entries: [] } };
+        const after = { carList: [{ carNum: "ABC-1" }], actresses: [], decisions: {}, activity: { entries: [] } };
+        const diagnostics = {
+            clog: { warn: vi.fn(() => { if (failure === "log") throw new Error("log failed"); }), error: vi.fn(), log: vi.fn() },
+            show: { info: vi.fn(() => { if (failure === "toast") throw new Error("toast failed"); }), error: vi.fn(), ok: vi.fn() },
+        };
+        const conflict = createHarness({ car_list: [{ carNum: "OTHER" }], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] }, mutation_journal: { id: "tx", before, after } }, null, console, diagnostics);
+
+        await expect(conflict.service.recoverPendingTransaction()).resolves.toBe(true);
+        expect(conflict.data.get("car_list")).toEqual([{ carNum: "OTHER" }]);
+        expect(conflict.data.get("mutation_journal_conflicts")).toHaveLength(1);
+        expect(conflict.data.has("mutation_journal")).toBe(false);
+    });
+
+    it("preserves the original archive error and active journal when its error logger fails", async () => {
+        const before = { carList: [], actresses: [], decisions: {}, activity: { entries: [] } };
+        const after = { carList: [{ carNum: "ABC-1" }], actresses: [], decisions: {}, activity: { entries: [] } };
+        const diagnostics = { clog: { warn: vi.fn(), error: vi.fn(() => { throw new Error("logger failed"); }), log: vi.fn() } };
+        const conflict = createHarness({ car_list: [{ carNum: "OTHER" }], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] }, mutation_journal: { id: "tx", before, after } }, null, console, diagnostics);
+        conflict.storage.forage.setItem.mockImplementation(async (key, value) => {
+            if (key === "mutation_journal_conflicts") throw new Error("archive unavailable");
+            conflict.data.set(key, value);
+        });
+
+        await expect(conflict.service.recoverPendingTransaction()).rejects.toThrow("archive unavailable");
+        expect(conflict.data.has("mutation_journal")).toBe(true);
+        expect(conflict.data.get("car_list")).toEqual([{ carNum: "OTHER" }]);
     });
 
     it("caps conflict archives at twenty entries", async () => {

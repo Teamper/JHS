@@ -528,11 +528,12 @@ export function buildSettingDialogHtml(activePanel, cacheItems) {
 }
 
 /** Inject the Data Health sidebar item and panel HTML into the dialog. */
-export function injectHealthPanel() {
-    const e = $(".side-menu-item").parent();
+/** @param {(value: any) => any} jquery */
+export function injectHealthPanel(jquery) {
+    const e = jquery(".side-menu-item").parent();
     e.length && !e.find('[data-panel="health-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="health-panel" aria-controls="health-panel">数据体检</button>');
-    const t = $(".content-panel").parent();
-    t.length && !$("#health-panel").length && t.append(`
+    const t = jquery(".content-panel").parent();
+    t.length && !jquery("#health-panel").length && t.append(`
             <div id="health-panel" class="content-panel">
                 <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>数据体检</h3><p>检查本地数据并在备份后修复异常。</p></header>
                 <div class="jhs-toolbar jhs-health-actions">
@@ -546,11 +547,12 @@ export function injectHealthPanel() {
 }
 
 /** Inject the Plugin Management sidebar item and panel HTML into the dialog. */
-export function injectPluginMgmtPanel() {
-    const e = $(".side-menu-item").parent();
+/** @param {(value: any) => any} jquery */
+export function injectPluginMgmtPanel(jquery) {
+    const e = jquery(".side-menu-item").parent();
     e.length && !e.find('[data-panel="plugin-mgmt-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="plugin-mgmt-panel" aria-controls="plugin-mgmt-panel">插件管理</button>');
-    const t = $(".content-panel").parent();
-    if (!t.length || $("#plugin-mgmt-panel").length) return;
+    const t = jquery(".content-panel").parent();
+    if (!t.length || jquery("#plugin-mgmt-panel").length) return;
     const i = `<div id="plugin-mgmt-panel" class="content-panel">
         <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>插件管理</h3><p>按功能查看插件状态、耗时和错误记录。</p></header>
         <div class="jhs-setting-metrics">
@@ -561,7 +563,7 @@ export function injectPluginMgmtPanel() {
         <p class="jhs-setting-help">禁用插件后需刷新页面生效。核心插件不可禁用。</p>
         <div id="plugin-mgmt-list"></div>
         <details class="jhs-diagnostics"><summary>诊断信息</summary><div class="jhs-diagnostics__content">
-        <h3 class="jhs-setting-subheading">插件执行耗时</h3><p class="jhs-setting-help">页面加载时各插件 handle() 的执行时间。</p><div id="plugin-timing-table"></div>
+        <h3 class="jhs-setting-subheading">功能激活耗时</h3><p class="jhs-setting-help">页面加载时各功能的激活时间。</p><div id="plugin-timing-table"></div>
         <h3 class="jhs-setting-subheading">错误日志</h3><div class="jhs-toolbar"><button type="button" id="pm-clear-log" class="jhs-btn jhs-btn--danger"><span>清空日志</span></button></div><div id="plugin-error-log" class="jhs-setting-output jhs-setting-output--compact">无错误记录</div>
         <h3 class="jhs-setting-subheading">缓存命中率</h3><div id="cache-hit-stats" class="jhs-setting-output"></div>
         </div></details></section>
@@ -570,21 +572,23 @@ export function injectPluginMgmtPanel() {
 }
 
 /** Inject the Snapshot sidebar item and panel HTML into the dialog. */
-export function injectSnapshotPanel() {
-    const e = $(".side-menu-item").parent();
+/** @param {(value: any) => any} jquery */
+export function injectSnapshotPanel(jquery) {
+    const e = jquery(".side-menu-item").parent();
     e.length && !e.find('[data-panel="snapshot-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="snapshot-panel" aria-controls="snapshot-panel">恢复点</button>');
-    const t = $(".content-panel").parent();
-    if (!t.length || $("#snapshot-panel").length) return;
+    const t = jquery(".content-panel").parent();
+    if (!t.length || jquery("#snapshot-panel").length) return;
     const n = '<div id="snapshot-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>恢复点</h3><p>创建、下载或恢复本地数据快照。</p></header><div class="jhs-toolbar"><button type="button" id="createSnapshotBtn" class="jhs-btn jhs-btn--primary"><span>创建快照</span></button></div><p class="jhs-setting-help">快照保存当前全部数据状态，可用于恢复。最多保留 10 个，超出自动清理最旧的。</p><div id="snapshot-list"></div></section></div>';
     t.append(n);
 }
 
 /** Inject the Network/External Requests sidebar item and panel HTML into the dialog. */
-export function injectNetworkPanel() {
-    const e = $(".side-menu-item").parent();
+/** @param {(value: any) => any} jquery */
+export function injectNetworkPanel(jquery) {
+    const e = jquery(".side-menu-item").parent();
     e.length && !e.find('[data-panel="network-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="network-panel" aria-controls="network-panel">外部请求</button>');
-    const t = $(".content-panel").parent();
-    if (!t.length || $("#network-panel").length) return;
+    const t = jquery(".content-panel").parent();
+    if (!t.length || jquery("#network-panel").length) return;
     const n = `<div id="network-panel" class="content-panel">
         <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>外部请求</h3><p>配置熔断规则并查看站点健康状态。</p></header>
         <h3 class="jhs-setting-subheading">熔断器配置</h3><p class="jhs-setting-help">连续请求失败达到阈值后，自动停止对该站点的请求，避免拖慢整体体验。</p>
@@ -597,9 +601,10 @@ export function injectNetworkPanel() {
     t.append(n);
 }
 
-export function injectResourceSourcesPanel() {
-    if ($("#resource-sources-panel").length) return;
-    $(".content-panel").last().after(`<div id="resource-sources-panel" class="content-panel">
+/** @param {(value: any) => any} jquery */
+export function injectResourceSourcesPanel(jquery) {
+    if (jquery("#resource-sources-panel").length) return;
+    jquery(".content-panel").last().after(`<div id="resource-sources-panel" class="content-panel">
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>磁力来源</h3><p>聚合多个来源搜索磁力结果，优先级数字越小越靠前。</p></header><div id="builtin-magnet-source-list" class="jhs-resource-card-list"></div><div class="jhs-toolbar"><h4>自定义来源</h4><button type="button" id="add-custom-magnet-source" class="jhs-btn jhs-btn--primary">+ 添加来源</button></div><div id="custom-magnet-source-list" class="jhs-resource-card-list"></div></section>
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>磁力规则</h3><p>使用可视化规则为结果添加标签或过滤低质量内容。</p></header><div class="jhs-toolbar"><h4>标签规则</h4><button type="button" id="add-magnet-tag-rule" class="jhs-btn">+ 新建</button></div><div id="magnet-tag-rule-list" class="jhs-resource-card-list"></div><div class="jhs-toolbar"><h4>过滤规则</h4><button type="button" id="add-magnet-filter-rule" class="jhs-btn">+ 新建</button></div><div id="magnet-filter-rule-list" class="jhs-resource-card-list"></div></section>
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>截图来源</h3><p>自动选择会按优先级依次尝试可用来源。</p></header><div class="jhs-setting-group"><label class="jhs-setting-row"><span>自动选择</span><input type="radio" name="screenshotMode" value="auto"></label><label class="jhs-setting-row"><span>手动选择</span><input type="radio" name="screenshotMode" value="manual"></label></div><div id="screenshot-source-list" class="jhs-resource-card-list"></div></section>
@@ -607,7 +612,7 @@ export function injectResourceSourcesPanel() {
     </div>
     <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>统一离线服务</h3><p>115 状态：<span id="one-one-five-state" class="jhs-badge">未知</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>服务不可用时会在提交前显示原因。</small></header><div id="cloud-settings-catalog" class="jhs-setting-group" aria-label="云盘服务设置"></div></section></div>
     <div id="data-tools-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>番号列表导入</h3><p>支持换行、空格、逗号分隔番号。必须先解析预览，再确认导入。</p></header><label class="jhs-setting-group"><span>番号</span><textarea id="car-number-import" class="jhs-textarea" rows="8" placeholder="ABC-001&#10;ABC-002&#10;FC2-1234567"></textarea></label><label class="jhs-setting-row"><span>导入为</span><select id="car-number-import-status" class="jhs-select-source"><option value="">请选择</option><option value="favorite">收藏</option><option value="hasDown">已下载</option><option value="hasWatch">已观看</option><option value="filter">屏蔽</option></select></label><div class="jhs-toolbar"><button type="button" id="preview-car-number-import" class="jhs-btn">解析预览</button><button type="button" id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled>确认导入</button></div><div id="car-number-import-preview" class="jhs-card" aria-live="polite"></div></section></div>`);
-    const sidebar = $(".jhs-mobile-sidebar,.setting-sidebar").first();
+    const sidebar = jquery(".jhs-mobile-sidebar,.setting-sidebar").first();
     sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="resource-sources-panel" aria-controls="resource-sources-panel">资源来源</button><button type="button" class="jhs-btn side-menu-item" data-panel="cloud-services-panel" aria-controls="cloud-services-panel">云盘服务</button><button type="button" class="jhs-btn side-menu-item" data-panel="data-tools-panel" aria-controls="data-tools-panel">数据工具</button>');
 }
 

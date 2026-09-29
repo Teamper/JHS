@@ -4,8 +4,8 @@
 <style>.movie-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.item{min-width:0}.item .cover img{width:100%;max-width:100%}.tabs a{margin-right:14px}</style></head>
 <body>
   <nav id="navbar-menu-hero"><a href="/tags/fc2?c10=1">FC2分类</a></nav>
-  <nav class="main-tabs"><a href="/rankings/movies?p=daily&amp;t=censored">排行榜</a><a href="/rankings/playback?p=daily&amp;t=high_score">热播</a><a href="/rankings/top">TOP250</a></nav>
   <section class="section"><div class="container">
+    <div class="tabs"><ul><li><a href="/rankings/playback"><span>热播</span></a></li><li><a href="/rankings/top"><span>TOP250</span></a></li><li><a href="/rankings/movies?t=censored"><span>有碼</span></a></li><li><a href="/rankings/movies?t=fc2"><span>FC2</span></a></li></ul></div>
     <h2 class="section-title">原生榜单</h2>
     <div class="tabs"><a id="movie-fc2" href="/rankings/movies?p=weekly&amp;t=fc2">FC2周榜</a><a id="playback-all" href="/rankings/playback?p=monthly&amp;t=all">热播全部月榜</a><a id="top-fc2" href="/rankings/top?t=3">TOP FC2</a><select id="top-year" data-url="/rankings/top?t=%25s"><option>2026</option></select></div>
     <div class="movie-list h cols-4 vcols-8">

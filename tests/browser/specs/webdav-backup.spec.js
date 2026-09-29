@@ -51,3 +51,30 @@ test("Chrome settings backup keeps WebDAV's 10-second deadline and records safe 
   expect(JSON.stringify(result)).not.toMatch(/fixture-password|fixture-user|dav\.example\.test/);
   expect(result.loading).toBe(false);
 });
+
+test("WebDAV delete confirmation renders an external filename as text on desktop and mobile", async ({ context, page }, testInfo) => {
+  test.skip(!["desktop-wide", "mobile"].includes(testInfo.project.name), "desktop table and mobile cards own this HTML-rendering check");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  const fileName = '<img src="data:," onerror="document.documentElement.dataset.webdavExecuted=String(1)"> <b>backup</b> &.json';
+  await page.evaluate((name) => {
+    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+    const webdav = plugin.getRuntimeService("webdav");
+    webdav.getProfile = async () => ({ url: "https://dav.example.test/dav", username: "fixture-user", password: "fixture-password" });
+    webdav.createClient = () => ({ getBackupList: async () => [{ name, size: 12, createTime: "2026-09-28", fileId: "synthetic-file" }] });
+    plugin.openSettingDialog();
+  }, fileName);
+  const settings = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
+  await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  await settings.locator('.side-menu-item[data-panel="backup-panel"]').click();
+  await settings.locator("#webdavBackupListBtn").click();
+  const deleteButton = testInfo.project.name === "mobile" ? page.locator(".jhs-backup-btn-danger") : page.locator(".backup-delete");
+  await expect(deleteButton).toBeVisible();
+  await deleteButton.click();
+  const confirmation = page.locator(".layui-layer-dialog-content");
+  await expect(confirmation).toContainText(fileName);
+  await expect(confirmation.locator("img,b")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.dataset.webdavExecuted)).toBeUndefined();
+  await page.locator(".layui-layer-btn1").last().click();
+});

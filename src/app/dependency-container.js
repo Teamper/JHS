@@ -22,17 +22,20 @@ export class DependencyContainer {
         return this;
     }
 
-    /** @param {readonly symbol[]} requiredTokens */
-    resolveDeclared(requiredTokens) {
+    /** @param {readonly symbol[]} requiredTokens @param {readonly symbol[]} [optionalTokens] */
+    resolveDeclared(requiredTokens, optionalTokens = []) {
         const dependencies = Object.create(null);
+        const declared = [...requiredTokens, ...optionalTokens];
         const seen = new Set();
-        for (const token of requiredTokens) {
+        for (const token of declared) {
             if (seen.has(token)) {
                 const error = new JhsError("DUPLICATE_TOKEN", `Duplicate declared dependency: ${String(token)}`, { source: "DependencyContainer" });
                 this.diagnostics?.recordError?.(error);
                 throw error;
             }
             seen.add(token);
+        }
+        for (const token of requiredTokens) {
             if (!this.values.has(token)) {
                 const error = new JhsError("MISSING_DEPENDENCY", `Missing declared dependency: ${String(token)}`, { source: "DependencyContainer" });
                 this.diagnostics?.recordError?.(error);
@@ -42,6 +45,9 @@ export class DependencyContainer {
                 value: this.values.get(token),
                 enumerable: true,
             });
+        }
+        for (const token of optionalTokens) {
+            if (this.values.has(token)) Object.defineProperty(dependencies, token, { value: this.values.get(token), enumerable: true });
         }
         Object.freeze(dependencies);
         return new Proxy(dependencies, {

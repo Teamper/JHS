@@ -4,8 +4,14 @@ import { normalizeMovieCarNum } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
 
 export class JavDbHostAdapter {
-    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
-    constructor(documentRuntime = document, locationRuntime = window.location) { this.site = "javdb"; this.document = documentRuntime; this.location = locationRuntime; }
+    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
+    constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) {
+        this.site = "javdb";
+        this.document = documentRuntime;
+        this.location = locationRuntime;
+        this.blacklistParser = blacklistParser;
+        /** @type {WeakMap<Element, {container: Element, replacedNodes: Array<{node: Element, anchor: Comment}>}>} */ this.externalFc2CatalogMounts = new WeakMap();
+    }
     /** 解析当前搜索条件第一页：删除 page 查询参数，保留其余搜索条件；非法 URL 原样返回。 */
     /** @param {string} currentUrl */
     resolveFirstPageUrl(currentUrl) {
@@ -24,6 +30,15 @@ export class JavDbHostAdapter {
         return this.locateListRoot() ? "list" : "other";
     }
     getPageContext() { return classifyJavDbPage(this.location); }
+    getBlacklistSubjectInfo() {
+        if (!this.blacklistParser) throw new Error("黑名单页面解析器尚未配置");
+        return this.blacklistParser.getSubjectInfo({ site: this.site, href: this.location.href, document: this.document });
+    }
+    /** @param {any} page @param {string} name @param {string} starId @param {string} [site] */
+    parseBlacklistFilterPage(page, name, starId, site = this.site) {
+        if (!this.blacklistParser) throw new Error("黑名单页面解析器尚未配置");
+        return this.blacklistParser.parseFilterPage({ page, name, starId, site });
+    }
     getTop250FilterContainer() { return this.document.querySelector("section .container") ?? this.getListContainer(); }
     locateTop250SubtitleCards() { return this.locateListItems(); }
     /** @param {Element} controls */
@@ -35,9 +50,27 @@ export class JavDbHostAdapter {
     mountExternalFc2Catalog(root) {
         const container = this.getListContainer();
         if (!container) throw new Error("JavDB 列表容器不可用");
-        container.querySelector(":scope > .box")?.remove();
-        container.querySelector(":scope > .tool-box")?.remove();
-        this.mountOwnedListRoot(container, root);
+        const replacedNodes = [...container.children].filter((child) => child.matches(".movie-list, nav.pagination, .box, .tool-box")).map((node) => {
+            const anchor = this.document.createComment("jhs-fc2-catalog-slot");
+            node.before(anchor);
+            node.remove();
+            return { node, anchor };
+        });
+        container.append(root);
+        this.externalFc2CatalogMounts.set(root, { container, replacedNodes });
+    }
+    /** Restore host list controls after the 123AV Feature releases its owned catalog root. @param {Element} root */
+    unmountExternalFc2Catalog(root) {
+        root.remove();
+        const mount = this.externalFc2CatalogMounts.get(root);
+        if (!mount) return false;
+        for (const { node, anchor } of mount.replacedNodes) {
+            if (anchor.parentNode !== mount.container) continue;
+            if (node.isConnected) anchor.remove();
+            else anchor.replaceWith(node);
+        }
+        this.externalFc2CatalogMounts.delete(root);
+        return true;
     }
     /** Carry only the JHS local filter while native TOP250 controls change category, year or page. */
     /** @param {string} value */
@@ -54,12 +87,38 @@ export class JavDbHostAdapter {
         }
     }
     readMovieRef() {
-        const carNum = this.document.querySelector(".panel-block.first-block .value, [data-car-number]")?.textContent?.trim() ?? null;
+        const location = new URL(this.location.href);
+        const copiedCarNum = this.document.querySelector('.column-video-info a[data-clipboard-text][title*="番"], .video-detail a[data-clipboard-text][title*="番"]')?.getAttribute("data-clipboard-text");
+        const copiedTitleCarNum = this.document.querySelector('a[title="複製番號"]')?.getAttribute("data-clipboard-text");
+        let panelCarNum = null;
+        for (const panel of this.document.querySelectorAll(".column-video-info .panel-block, .video-detail .panel-block")) {
+            const label = panel.querySelector("strong, .label")?.textContent?.trim() ?? "";
+            if (!/(?:番号|番號|^ID)\s*[:：]?/i.test(label)) continue;
+            panelCarNum = panel.querySelector("[data-clipboard-text]")?.getAttribute("data-clipboard-text") || panel.querySelector(".value")?.textContent;
+            if (normalizeMovieCarNum(panelCarNum)) break;
+        }
+        const fallbackCarNum = this.document.querySelector("#video_id, .video-id, .video-title strong")?.textContent;
+        const carNum = [location.searchParams.get("jhsCarNum"), copiedCarNum, copiedTitleCarNum, panelCarNum, fallbackCarNum]
+            .map(normalizeMovieCarNum).find(Boolean) ?? null;
         return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javdb" }) : null;
+    }
+    readMovieInfo() {
+        const ref = this.readMovieRef();
+        if (!ref) return null;
+        const namesBefore = (/** @type {string} */ selector) => [...this.document.querySelectorAll(selector)].map((element) => element.previousElementSibling?.textContent?.trim()).filter(Boolean).join(" ");
+        const dateLabel = [...this.document.querySelectorAll("strong")].find((element) => element.textContent?.includes("日期:"));
+        const publishTime = dateLabel?.parentElement?.querySelector(".value")?.textContent?.trim() ?? "";
+        return Object.freeze({ ...ref, actress: namesBefore(".female"), actors: namesBefore(".male"), publishTime });
     }
     locateListRoot() { return this.document.querySelector(".movie-list"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item") ?? [])]; }
     getListContainer() { return this.locateListRoot()?.parentElement ?? null; }
+    getListSelectors() {
+        return Object.freeze({
+            boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img",
+            requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next",
+        });
+    }
     getListLayoutContainer() { return this.document.querySelector("section .container"); }
     /** @param {string[]} [classes] */
     createOwnedListRoot(classes = []) {
@@ -76,6 +135,8 @@ export class JavDbHostAdapter {
         container.append(root);
     }
     locateDetailRoot() { return this.document.querySelector(".video-detail") ?? this.document.querySelector(".movie-panel-info")?.closest(".container") ?? this.document.querySelector("main"); }
+    /** Detail Feature compatibility behavior: only HTTP(S) metadata links are opened in a new tab. */
+    locateDetailExternalLinks() { return [...(this.document.querySelectorAll(".video-meta-panel a") ?? [])]; }
     locateDetailSlots() {
         const root = this.locateDetailRoot();
         return Object.freeze({
@@ -84,6 +145,13 @@ export class JavDbHostAdapter {
             reviews: root?.querySelector('[data-jhs-slot="reviews"]') ?? this.document.querySelector("#reviews"),
             related: root?.querySelector('[data-jhs-slot="related"]'),
         });
+    }
+    /** Mount JHS detail actions at the host's native action boundary. @param {Element} element */
+    mountDetailActions(element) {
+        const tabs = this.document.querySelector(".tabs");
+        if (!tabs) return false;
+        tabs.after(element);
+        return true;
     }
     locateNativeGallery() { return this.document.querySelector(".tile-images, .preview-images"); }
     locateNativeMagnets() { return this.document.querySelector("#magnets-content"); }

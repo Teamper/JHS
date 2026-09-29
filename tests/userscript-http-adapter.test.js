@@ -26,7 +26,9 @@ describe("UserscriptHttpAdapter", () => {
             method: "GET", url: "https://translate-pa.googleapis.com/v1/translate", responseType: "json", transport: "native-fetch",
         });
         expect(response.data).toEqual({ translation: "译文" });
+        expect(response).toMatchObject({ transportUsed: "native-fetch" });
         expect(nativeFetch).toHaveBeenCalledOnce();
+        expect(nativeFetch).toHaveBeenCalledWith("https://translate-pa.googleapis.com/v1/translate", expect.objectContaining({ credentials: "same-origin" }));
         expect(request).not.toHaveBeenCalled();
     });
 
@@ -39,6 +41,7 @@ describe("UserscriptHttpAdapter", () => {
             method: "GET", url: "https://translate-pa.googleapis.com/v1/translate", responseType: "json", transport: "native-fetch",
         });
         expect(response.data).toEqual({ translation: "回退译文" });
+        expect(response).toMatchObject({ transportUsed: "gm", nativeFallbackCode: "NETWORK_ERROR" });
         expect(request).toHaveBeenCalledOnce();
     });
 

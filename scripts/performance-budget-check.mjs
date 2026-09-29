@@ -14,7 +14,7 @@ for (const label of Object.keys(budget.browserFixture.maximumInitialRequests || 
     const ciBaseline = budget.browserFixture.ciStartupMedianMilliseconds?.[label];
     if (!Number.isFinite(ciBaseline) || ciBaseline <= 0) throw new Error(`Missing positive CI fixture startup baseline for ${label}`);
 }
-const size = (await stat(path.join(rootDir, "JHS.user.js"))).size;
+const size = (await stat(path.join(rootDir, "dist", "dev", "JHS-7.0.dev.user.js"))).size;
 const maximum = Math.floor(budget.bundle.baselineBytes * (1 + budget.bundle.maximumGrowthRatio));
 if (size > maximum) throw new Error(`Bundle ${size} bytes exceeds the reviewed budget ${maximum} bytes`);
-console.log(`Performance budget passed: bundle ${size}/${maximum} bytes; fixture request budgets ${JSON.stringify(budget.browserFixture.maximumInitialRequests)}; Windows Edge startup medians ${JSON.stringify(budget.browserFixture.startupMedianMilliseconds)}ms; GitHub Ubuntu Chromium startup medians ${JSON.stringify(budget.browserFixture.ciStartupMedianMilliseconds)}ms`);
+console.log(`Performance budget passed: migration bundle ${size}/${maximum} bytes; fixture request budgets ${JSON.stringify(budget.browserFixture.maximumInitialRequests)}; Windows Edge startup medians ${JSON.stringify(budget.browserFixture.startupMedianMilliseconds)}ms; GitHub Ubuntu Chromium startup medians ${JSON.stringify(budget.browserFixture.ciStartupMedianMilliseconds)}ms`);

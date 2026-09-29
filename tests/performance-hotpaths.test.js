@@ -8,38 +8,6 @@ import { describe, expect, it, vi } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..");
 
-function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
-    const listeners = new Map(), documentListeners = new Map(), setTimeoutSpy = vi.fn(() => 1), clearTimeoutSpy = vi.fn(), cleanups = [];
-    const location = new URL("https://javdb.com/v/test"), window = {
-        location, isListPage, addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type)
-    }, document = {
-        hidden, addEventListener: (type, listener) => documentListeners.set(type, listener), removeEventListener: type => documentListeners.delete(type)
-    }, locks = { request: vi.fn(async (key, options, callback) => callback({ key })) };
-    const storage = { getLocal: vi.fn(), setLocal: vi.fn() }, scope = {
-        listen(target, type, listener) { target.addEventListener(type, listener); cleanups.push(() => target.removeEventListener(type, listener)); },
-        addCleanup(cleanup) { cleanups.push(cleanup); },
-        dispose() { [...cleanups].reverse().forEach(cleanup => cleanup()); }
-    };
-    const context = vm.createContext({
-        console, URL, window, document, navigator: { locks }, setTimeout: setTimeoutSpy, clearTimeout: clearTimeoutSpy,
-        localStorage: { getItem: vi.fn(), setItem: vi.fn() }, $: () => ({ length: 0 }), l: true, _: "yes",
-        T: "javdb", I: "javbus", D: "censored", A: "uncensored", BasePlugin: class { getRuntimeService(name) { return "storage" === name ? storage : "scope" === name ? () => scope : "movie" === name ? { externalSiteOrigin: () => "https://javdb.com" } : null; } },
-        StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
-        storageManager: { getSetting: vi.fn(async () => ({})) }, utils: { sleep: vi.fn(), getNowStr: vi.fn(), getHourDifference: vi.fn() },
-        clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() },
-        i: (target, key, value) => (target[key] = value)
-    });
-    const source = [
-        readTestFile(join(repoRoot, "src/core/site-context.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/integrations/javdb/parser.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/integrations/host-list/parser.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8"),
-        "globalThis.TestTaskPlugin=TaskPlugin;"
-    ].join("\n");
-    vm.runInContext(source, context);
-    return { plugin: new context.TestTaskPlugin(), window, document, listeners, documentListeners, locks, setTimeoutSpy, scope };
-}
-
 function loadListObserver() {
     const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     dom.window.isListPage = true;
@@ -64,11 +32,19 @@ function loadListObserver() {
     });
     const source = [
         readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8"),
-        "globalThis.TestListPagePlugin=ListPagePlugin;"
+        readTestFile(join(repoRoot, "src/features/list/list-refresh-coordinator.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-compatibility-service.js"), "utf8"),
+        "globalThis.TestListPagePlugin=ListPageCompatibilityService;"
     ].join("\n");
     vm.runInContext(source, context);
-    return { dom, plugin: new context.TestListPagePlugin(), $, translate, mapLimit, storageManager, clog: context.clog };
+    const plugin = new context.TestListPagePlugin({ runtimeServices: {
+        host: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }) },
+        legacyStorage: storageManager,
+        settings: { snapshot: () => ({ translateTitle: "yes", hoverBigImg: "no" }) },
+        translation: { translate },
+        scope: async () => ({ disposed: false }),
+    } });
+    return { dom, plugin, $, translate, mapLimit, storageManager, clog: context.clog };
 }
 
 function initializeAccessibilityDom(html) {
@@ -79,42 +55,6 @@ function initializeAccessibilityDom(html) {
     vm.runInContext(`${source.slice(start, end)};initializeUiAccessibility(lifecycleScope);`, context);
     return dom;
 }
-
-describe("background task lifecycle", () => {
-    it("does not initialize or schedule on a detail page despite the lexical isListPage helper", async () => {
-        const { plugin, documentListeners, setTimeoutSpy } = loadTaskLifecycle({ isListPage: false });
-        plugin.doTask = vi.fn();
-        await plugin.handle();
-        expect(plugin.doTask).not.toHaveBeenCalled();
-        expect(documentListeners.size).toBe(0);
-        expect(setTimeoutSpy).not.toHaveBeenCalled();
-    });
-
-    it("runs once on a visible list page and schedules the next visible check", async () => {
-        const { plugin, setTimeoutSpy, scope, listeners, documentListeners } = loadTaskLifecycle({ isListPage: true });
-        plugin.doTask = vi.fn(async () => {});
-        await plugin.handle();
-        expect(plugin.doTask).toHaveBeenCalledTimes(1);
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3e5);
-        expect(listeners.has("pagehide")).toBe(true);
-        expect(documentListeners.has("visibilitychange")).toBe(true);
-        scope.dispose();
-        expect(listeners.size).toBe(0);
-        expect(documentListeners.size).toBe(0);
-    });
-
-    it("keeps hidden list pages dormant and retains the cross-tab lock", async () => {
-        const hidden = loadTaskLifecycle({ isListPage: true, hidden: true });
-        hidden.plugin.doTask = vi.fn(), await hidden.plugin.handle();
-        expect(hidden.plugin.doTask).not.toHaveBeenCalled();
-        expect(hidden.setTimeoutSpy).not.toHaveBeenCalled();
-
-        const visible = loadTaskLifecycle({ isListPage: true });
-        visible.plugin.loadConfig = vi.fn(async () => visible.plugin.taskConfig = { enableCheckBlacklist: "no" });
-        await visible.plugin.doTask();
-        expect(visible.locks.request).toHaveBeenCalledTimes(1);
-    });
-});
 
 describe("list mutation hot path", () => {
     it("reruns the latest refresh after an in-flight refresh becomes stale", async () => {

@@ -5,6 +5,8 @@ import { performance } from "node:perf_hooks";
 
 const browserRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(browserRoot, "..", "..");
+const defaultUserscriptPath = process.env.JHS_TEST_BUNDLE_PATH || join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js");
+const getUserscriptPath = (options) => process.env.JHS_TEST_BUNDLE_PATH || options.userscriptPath || defaultUserscriptPath;
 
 export async function fulfillHostFixtures(context) {
   const javdb = await readFile(join(browserRoot, "fixtures", "javdb-detail.html"), "utf8");
@@ -50,22 +52,27 @@ export async function injectUserscriptRuntime(page, options = {}) {
   markPhase("tabulator");
   await page.addStyleTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "css", "tabulator.min.css") });
   markPhase("vendor-style");
-  await page.evaluate(async ({ disabledPlugins, settingOverrides }) => {
+  await page.evaluate(async ({ disabledPlugins, settingOverrides, preserveStorage }) => {
     const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
-    await forage.setItem("setting", {
-      translateTitle: "no",
-      httpRetryCount: 1,
-      circuitBreakerThreshold: 1,
-      ...(disabledPlugins?.length ? { disabledPlugins: JSON.stringify(disabledPlugins) } : {}),
-      ...settingOverrides,
-    });
-  }, { disabledPlugins: options.disabledPlugins || [], settingOverrides: options.settingOverrides || {} });
+    if (!preserveStorage) await forage.setItem("setting", {
+        translateTitle: "no",
+        httpRetryCount: 1,
+        circuitBreakerThreshold: 1,
+        ...(disabledPlugins?.length ? { disabledPlugins: JSON.stringify(disabledPlugins) } : {}),
+        ...settingOverrides,
+      });
+  }, { disabledPlugins: options.disabledPlugins || [], settingOverrides: options.settingOverrides || {}, preserveStorage: options.preserveStorage === true });
   await page.evaluate(({ version, nativeTranslation, rankingMovies, topMovies }) => {
     window.__jhsBrowserTestMetadata = { fixture: true, version };
     window.__jhsBrowserDiagnostics = { requests: [], nativeTranslationRequests: 0, startedAt: performance.now() };
     window.unsafeWindow = window;
-    window.GM_getValue = (_key, fallback) => fallback;
-    window.GM_setValue = () => undefined;
+    window.GM_getValue = (key, fallback) => {
+      const stored = window.localStorage.getItem(`__jhs_fixture_gm_${key}`);
+      if (stored === null) return fallback;
+      try { return JSON.parse(stored); } catch { return stored; }
+    };
+    window.GM_setValue = (key, value) => window.localStorage.setItem(`__jhs_fixture_gm_${key}`, JSON.stringify(value));
+    window.GM_deleteValue = (key) => window.localStorage.removeItem(`__jhs_fixture_gm_${key}`);
     window.GM_openInTab = () => ({ close() {} });
     window.GM_xmlhttpRequest = (options) => {
       window.__jhsBrowserDiagnostics.requests.push({ method: options.method || "GET", url: String(options.url || "") });
@@ -157,7 +164,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
       confirm(message, options = {}, yes, cancel) {
         const content = document.createElement("div");
         content.className = "layui-layer-dialog-content";
-        content.textContent = String(message);
+        content.innerHTML = String(message);
         const id = this.open({ ...options, type: 1, content });
         const mounted = mountedLayers.get(id);
         const buttons = document.createElement("div");
@@ -179,15 +186,18 @@ export async function injectUserscriptRuntime(page, options = {}) {
     };
   }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "", rankingMovies: options.rankingMovies || null, topMovies: options.topMovies || null });
   markPhase("fixture-setup");
+  if (typeof options.beforeUserscriptInjection === "function") await options.beforeUserscriptInjection(hostPage);
   if (options.expectRedirect) {
-    try { await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") }); }
+    const script = options.userscriptSource ? { content: options.userscriptSource } : { path: getUserscriptPath(options) };
+    try { await page.addScriptTag(script); }
     catch (error) { if (!/Execution context was destroyed|Target closed|navigation/i.test(String(error))) throw error; }
     return;
   }
-  await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
+  const script = options.userscriptSource ? { content: options.userscriptSource } : { path: getUserscriptPath(options) };
+  await page.addScriptTag(script);
   markPhase("userscript-eval");
   try {
-    await page.waitForFunction(() => Boolean(window.unsafeWindow?.pluginManager?.getStartupReport), null, { timeout: 15_000 });
+    await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]), null, { timeout: 15_000 });
     markPhase("startup-ready");
     await page.evaluate((phases) => { window.__jhsBrowserDiagnostics.bootstrapPhases = { ...(window.__jhsBrowserDiagnostics.bootstrapPhases || {}), harness: phases }; }, bootstrapPhases);
   } catch (error) {

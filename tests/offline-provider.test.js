@@ -1,16 +1,11 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { OfflineProviderRegistry } from "../src/features/external-bridge/offline-provider-registry.js";
+import { UnifiedOfflineController } from "../src/features/external-bridge/unified-offline-controller.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
-function loadRegistry() {
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8"), end = source.indexOf("class UnifiedOfflinePlugin"), context = vm.createContext({ Map, Array, Date, TypeError });
-    vm.runInContext(`${source.slice(0, end)}; globalThis.Registry = OfflineProviderRegistry;`, context);
-    return context.Registry;
-}
+function loadRegistry() { return OfflineProviderRegistry; }
 
 function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
     const dom = new JSDOM('<button class="jhs-offline-btn">离线</button>', { url: "https://javdb.example/v/abc-1" }), $ = jqueryFactory(dom.window);
@@ -18,19 +13,23 @@ function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
         close: vi.fn(),
         open: vi.fn(options => { options.content.appendTo("body"); return 7; }),
     };
-    const stateService = { appendOfflineHistory: history, patch: vi.fn() }, closePage = vi.fn().mockResolvedValue(true), getOwningLayerIndex = vi.fn(() => 9);
-    class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : name === "settings" ? { snapshot: () => ({ needClosePage: "yes" }) } : null; } }
-    const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, BasePlugin, Map, Array, Date, TypeError,
-        r: true, l: false, setTimeout, clearTimeout,
-        show: { ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn() }, utils: { q: vi.fn(), closePage, getOwningLayerIndex, getDialogArea: vi.fn(() => []) }, storageManager: { getSetting: vi.fn(async () => "ask") }, layer,
-        getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }, readListItem: vi.fn()
+    const stateService = { appendOfflineHistory: history, patch: vi.fn(), getState: vi.fn(async () => ({ stateFlags: { downloaded: true } })) }, closePage = vi.fn().mockResolvedValue(true);
+    const notifications = { ok: vi.fn(), error: vi.fn(), info: vi.fn() }, confirm = vi.fn();
+    const settings = { snapshot: () => ({ needClosePage: "yes", offlineProviderMode: "ask" }) };
+    const context = { show: notifications, utils: { q: confirm } };
+    const scope = new LifecycleScope("test:offline");
+    const plugin = new UnifiedOfflineController({
+        window: dom.window, document: dom.window.document, route: "detail", site: "javdb",
+        hostAdapter: { site: "javdb", locateListItems: () => [], readMovieRef: () => ({ carNum: "ABC-1" }) },
+        offline: { submitWithIntegration: vi.fn(), getIntegrationHomeUrl: () => "https://pan.example/" },
+        dialog: { open: layer.open, close: layer.close }, state: stateService, settings,
+        styles: { register: vi.fn(() => () => {}) }, events: { on: vi.fn(() => () => {}) },
+        pan123Credential: { getStoredToken: async () => "token" }, ui: { jquery: $, confirm, closePage, getDialogArea: vi.fn(() => []), getOwningLayerIndex: vi.fn(() => 9) },
+        notifications, diagnostics: { recordError: vi.fn() }, scope,
     });
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
-    vm.runInContext(`${source};globalThis.TestOfflinePlugin=UnifiedOfflinePlugin;`, context);
-    const plugin = new context.TestOfflinePlugin(), provider = { id: "115", name: "115", isEnabled: async () => true, submit };
+    const provider = { id: "115", name: "115", isEnabled: async () => true, submit };
     plugin.registry = { getCandidates: vi.fn(async () => [ { provider, availability: { authState: "ready" } } ]), updateAvailability: vi.fn() };
-    return { $, button: $("button"), closePage, context, history, layer, plugin, stateService };
+    return { $, button: $("button"), closePage, context, history, layer, plugin, scope, stateService };
 }
 
 describe("offline provider registry", () => {
@@ -83,9 +82,31 @@ describe("offline provider registry", () => {
         expect(registry.positiveTtl).toBe(300000);
         expect(registry.negativeTtl).toBe(20000);
     });
+
+    it("treats a persisted string false as disabled instead of enabling the provider", async () => {
+        const { plugin } = loadOfflinePlugin(vi.fn());
+        plugin.registry = new OfflineProviderRegistry();
+        plugin.settings = { snapshot: () => ({ enable115Offline: "false", enable123Offline: "false" }) };
+        plugin.registerProviders();
+        expect(await plugin.registry.providers.get("115").isEnabled()).toBe(false);
+        expect(await plugin.registry.providers.get("123").isEnabled()).toBe(false);
+    });
 });
 
 describe("unified offline button state", () => {
+    it("uses the saved provider mode when multiple providers support the resource", async () => {
+        const { plugin, layer } = loadOfflinePlugin(vi.fn());
+        const candidates = [
+            { provider: { id: "123", name: "123 云盘" }, availability: { authState: "ready" } },
+            { provider: { id: "115", name: "115" }, availability: { authState: "ready" } },
+        ];
+        const preferred = candidates[1];
+        plugin.settings = { snapshot: () => ({ offlineProviderMode: "115" }) };
+
+        await expect(plugin.chooseCandidate({}, candidates)).resolves.toBe(preferred);
+        expect(layer.open).not.toHaveBeenCalled();
+    });
+
     it("releases the button when busy-state initialization throws", async () => {
         const submit=vi.fn(), {plugin,button}=loadOfflinePlugin(submit);
         vi.spyOn(button,"attr").mockImplementationOnce(()=>{throw new Error("button failed");});
@@ -99,6 +120,18 @@ describe("unified offline button state", () => {
         await vi.waitFor(()=>expect(layer.open).toHaveBeenCalledOnce());
         layer.open.mock.calls[0][0].end(); await expect(pending).resolves.toBeNull();
     });
+    it("closes an open provider chooser and resolves it when its owning Feature stops", async () => {
+        const { plugin, layer, scope } = loadOfflinePlugin(vi.fn());
+        const candidates = [
+            { provider: { id: "123", name: "123" }, availability: { authState: "ready" } },
+            { provider: { id: "115", name: "115" }, availability: { authState: "unknown" } },
+        ];
+        const pending = plugin.chooseCandidate({}, candidates);
+        await vi.waitFor(() => expect(layer.open).toHaveBeenCalledOnce());
+        scope.dispose();
+        await expect(pending).resolves.toBeNull();
+        expect(layer.close).toHaveBeenCalledWith(7);
+    });
     it("releases ownership when availability fails and allows an immediate retry", async () => {
         const submit = vi.fn(async () => {}), { plugin,button } = loadOfflinePlugin(submit);
         plugin.registry.getCandidates.mockRejectedValueOnce(new Error("availability failed"));
@@ -106,6 +139,31 @@ describe("unified offline button state", () => {
         expect(button.hasClass("loading")).toBe(false);
         await plugin.submitResource({}, "magnet:?xt=retry", button, {carNum:"ABC-1"});
         expect(submit).toHaveBeenCalledOnce();
+    });
+    it("locks the initiating button before availability awaits and rejects a provider disabled during selection", async () => {
+        const submit = vi.fn(async () => {}), { plugin, button } = loadOfflinePlugin(submit);
+        const candidates = await plugin.registry.getCandidates();
+        plugin.registry.getCandidates.mockClear();
+        let releaseCandidates;
+        plugin.registry.getCandidates.mockImplementation(() => new Promise((resolve) => { releaseCandidates = resolve; }));
+
+        const first = plugin.submitResource({}, "magnet:?xt=single-flight", button, { carNum: "ABC-1" });
+        expect(button.hasClass("loading")).toBe(true);
+        await plugin.submitResource({}, "magnet:?xt=single-flight", button.clone(), { carNum: "ABC-1" });
+        await plugin.submitResource({}, "magnet:?xt=single-flight", button, { carNum: "ABC-1" });
+        releaseCandidates(candidates);
+        await first;
+        expect(plugin.registry.getCandidates).toHaveBeenCalledOnce();
+        expect(submit).toHaveBeenCalledOnce();
+
+        const disabledSubmit = vi.fn(async () => {}), disabled = loadOfflinePlugin(disabledSubmit);
+        const [candidate] = await disabled.plugin.registry.getCandidates();
+        candidate.provider.isEnabled = vi.fn(async () => false);
+        disabled.plugin.chooseCandidate = vi.fn(async () => candidate);
+        await disabled.plugin.submitResource({}, "magnet:?xt=disabled", disabled.button, { carNum: "ABC-1" });
+        expect(candidate.provider.isEnabled).toHaveBeenCalledOnce();
+        expect(disabledSubmit).not.toHaveBeenCalled();
+        expect(disabled.context.show.error).toHaveBeenCalledWith("所选离线服务已关闭，未提交任务");
     });
     it("does not submit after the owning scope or button disappears during availability", async () => {
         for (const mode of ["scope", "button"]) {
@@ -132,11 +190,86 @@ describe("unified offline button state", () => {
         expect(submit).toHaveBeenCalledOnce(); expect(history).toHaveBeenCalledOnce();
         expect(history.mock.calls[0][0].status).toBe("submitted"); expect(button.text()).toBe("已提交");
         expect(context.show.error).toHaveBeenCalledWith(expect.stringContaining("任务已创建"));
+        expect(context.show.ok).not.toHaveBeenCalled();
+        await plugin.submitResource({}, "magnet:?xt=success", button.clone(), { carNum: "ABC-1" });
+        expect(submit).toHaveBeenCalledOnce();
+    });
+    it("keeps the submitted UI state when reporting a local history failure also throws", async () => {
+        const submit = vi.fn(async () => {}), history = vi.fn(async () => { throw new Error("disk"); });
+        const { plugin, button, context } = loadOfflinePlugin(submit, history);
+        context.show.error.mockImplementation(() => { throw new Error("toast unavailable"); });
+
+        await plugin.submitResource({}, "magnet:?xt=notice-failed", button, { carNum: "ABC-1" });
+
+        expect(submit).toHaveBeenCalledOnce();
+        expect(history).toHaveBeenCalledOnce();
+        expect(button.text()).toBe("已提交");
+        expect(context.show.ok).not.toHaveBeenCalled();
+        await plugin.submitResource({}, "magnet:?xt=notice-failed", button.clone().removeClass("loading"), { carNum: "ABC-1" });
+        expect(submit).toHaveBeenCalledOnce();
     });
     it("reports the provider failure even when recording that failure also fails", async () => {
         const {plugin,button,context}=loadOfflinePlugin(vi.fn(async()=>{throw new Error("cloud failure");}),vi.fn(async()=>{throw new Error("disk failure");}));
         await expect(plugin.submitResource({}, "magnet:?xt=failed", button, {carNum:"ABC-1"})).resolves.toBeUndefined();
         expect(context.show.error).toHaveBeenCalledWith(expect.stringContaining("cloud failure")); expect(button.hasClass("loading")).toBe(false);
+    });
+    it("shows the configured 115 login entry only for authentication failures", async () => {
+        const authFailure = Object.assign(new Error("115 未登录"), { code: "AUTH_REQUIRED" });
+        const enabled = loadOfflinePlugin(vi.fn(async () => { throw authFailure; }));
+        enabled.plugin.settings = { snapshot: () => ({ enable115LoginRedirect: true }) };
+        enabled.plugin.offline.getIntegrationHomeUrl = () => "https://115.com";
+        await enabled.plugin.submitResource({}, "magnet:?xt=needs-login", enabled.button, { carNum: "ABC-1" });
+        const login = enabled.$(".jhs-115-login-link");
+        expect(login).toHaveLength(1);
+        expect(login.attr("href")).toBe("https://115.com");
+        expect(login.attr("target")).toBe("_blank");
+        expect(login.attr("rel")).toContain("noopener");
+        expect(enabled.context.show.error).toHaveBeenCalledWith(expect.stringContaining("https://115.com"));
+        enabled.plugin.dispose();
+        expect(enabled.$(".jhs-115-login-link")).toHaveLength(0);
+
+        const disabled = loadOfflinePlugin(vi.fn(async () => { throw authFailure; }));
+        disabled.plugin.settings = { snapshot: () => ({ enable115LoginRedirect: false }) };
+        await disabled.plugin.submitResource({}, "magnet:?xt=disabled-login", disabled.button, { carNum: "ABC-1" });
+        expect(disabled.$(".jhs-115-login-link")).toHaveLength(0);
+        expect(disabled.context.show.error).not.toHaveBeenCalledWith(expect.stringContaining("https://115.com"));
+
+        const otherFailure = loadOfflinePlugin(vi.fn(async () => { throw new Error("network down"); }));
+        otherFailure.plugin.settings = { snapshot: () => ({ enable115LoginRedirect: true }) };
+        otherFailure.plugin.offline.getIntegrationHomeUrl = () => "https://115.com";
+        await otherFailure.plugin.submitResource({}, "magnet:?xt=network-error", otherFailure.button, { carNum: "ABC-1" });
+        expect(otherFailure.$(".jhs-115-login-link")).toHaveLength(0);
+    });
+    it("removes 115 login guidance immediately when the setting is disabled", async () => {
+        const { $, button, plugin } = loadOfflinePlugin(vi.fn());
+        const settings = new plugin.window.EventTarget();
+        let loginEnabled = true;
+        settings.snapshot = () => ({ enable115LoginRedirect: loginEnabled, enable115Offline: true, enable123Offline: false, offlineProviderMode: "115" });
+        plugin.settings = settings;
+        plugin.offline.getIntegrationHomeUrl = () => "https://115.com";
+        plugin.offline.submitWithIntegration = vi.fn(async () => { throw Object.assign(new Error("115 未登录"), { code: "AUTH_REQUIRED" }); });
+        plugin.registry = new OfflineProviderRegistry();
+        plugin.start();
+        await plugin.submitResource({}, "magnet:?xt=live-toggle", button, { carNum: "ABC-1" });
+        expect($(".jhs-115-login-link")).toHaveLength(1);
+        loginEnabled = false;
+        settings.dispatchEvent(new plugin.window.CustomEvent("settings.changed", { detail: { names: ["enable115LoginRedirect"] } }));
+        expect($(".jhs-115-login-link")).toHaveLength(0);
+        expect(plugin.scope.snapshot().listeners).toBe(1);
+        plugin.dispose();
+        expect(plugin.scope.snapshot().listeners).toBe(0);
+    });
+    it("does not attach delayed 115 login guidance to a removed button", async () => {
+        let rejectSubmit;
+        const { $, button, plugin } = loadOfflinePlugin(() => new Promise((_resolve, reject) => { rejectSubmit = reject; }));
+        plugin.settings = { snapshot: () => ({ enable115LoginRedirect: true }) };
+        plugin.offline.getIntegrationHomeUrl = () => "https://115.com";
+        const pending = plugin.submitResource({}, "magnet:?xt=closed-before-error", button, { carNum: "ABC-1" });
+        await vi.waitFor(() => expect(rejectSubmit).toBeTypeOf("function"));
+        button.remove();
+        rejectSubmit(Object.assign(new Error("115 未登录"), { code: "AUTH_REQUIRED" }));
+        await pending;
+        expect($(".jhs-115-login-link")).toHaveLength(0);
     });
     it("closes the owning detail surface after confirming the downloaded state", async () => {
         const { button, closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
@@ -156,6 +289,15 @@ describe("unified offline button state", () => {
         expect(context.show.error).toHaveBeenCalledWith("离线已提交，但标记已下载失败");
     });
 
+    it("keeps the detail open when the downloaded state disappears on readback", async () => {
+        const { closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
+        stateService.getState.mockResolvedValueOnce(null);
+        await expect(plugin.markDownloadedAndClose({ carNum: "ABC-1" }, { layerIndex: 9 })).resolves.toBe(false);
+        expect(stateService.patch).toHaveBeenCalledOnce();
+        expect(closePage).not.toHaveBeenCalled();
+        expect(context.show.error).toHaveBeenCalledWith("离线已提交，但标记已下载失败");
+    });
+
     it("keeps the downloaded state and reports a close-only error when no owner closes", async () => {
         const { closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
         closePage.mockResolvedValueOnce(false);
@@ -169,6 +311,15 @@ describe("unified offline button state", () => {
         await expect(plugin.markDownloadedAndClose({}, { layerIndex: 9 })).resolves.toBe(false);
         expect(stateService.patch).not.toHaveBeenCalled();
         expect(closePage).not.toHaveBeenCalled();
+    });
+
+    it("does not submit a remote task when the action has no movie identity", async () => {
+        const submit = vi.fn(), { button, context, plugin, stateService } = loadOfflinePlugin(submit);
+        plugin.hostAdapter.readMovieRef = () => null;
+        await plugin.submitResource({}, "magnet:?xt=urn:btih:missing-movie", button);
+        expect(submit).not.toHaveBeenCalled();
+        expect(stateService.appendOfflineHistory).not.toHaveBeenCalled();
+        expect(context.show.error).toHaveBeenCalledWith("无法确定影片身份，未执行离线操作");
     });
 
     it("uses the declared dialog service when the user must select a provider", async () => {

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import jquery from "jquery";
-import { ListPagePlugin } from "../src/plugins/status/list-page.js";
-import { PreviewVideoPlugin } from "../src/plugins/image-viewer/preview-video.js";
+import { ListPageCompatibilityService as ListPagePlugin } from "../src/features/list/list-compatibility-service.js";
+import { JavDbPreviewController as PreviewVideoPlugin } from "../src/features/detail/javdb-preview-controller.js";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { isBatchRunActive } from "../src/features/list/batch-coordinator.js";
@@ -19,20 +19,23 @@ function setup(html, url = "https://www.javbus.com/search/1234567/3") {
 }
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
 describe("reviewed UI regressions", () => {
-    it("releases blacklist batch ownership and buttons after context failure", async () => {
-        const $ = setup('<button id="filterAllVideo"></button>'), plugin = Object.create(BlacklistPlugin.prototype);
-        plugin.getRuntimeService = () => async () => null;
-        plugin.getOptionalDependency = () => ({ createEvaluationContext: async () => { throw new Error("context failed"); } });
-        await expect(plugin.filterAllVideo("actor", { confirm: false })).rejects.toThrow("context failed");
-        expect(isBatchRunActive()).toBe(false);
-        expect($("#filterAllVideo").attr("aria-disabled")).not.toBe("true");
-        expect($("#filterAllVideo").hasClass("jhs-batch-busy")).toBe(false);
+    it("routes the legacy blacklist batch API through the List Feature controller", async () => {
+        setup('<button id="filterAllVideo"></button>');
+        const batch = vi.fn(async (scope, flag, options) => ({ matched: 2, updated: 2 }));
+        const plugin = new BlacklistPlugin({ executeCommand: vi.fn(), getSubjectInfo: vi.fn(), batchAllVideos: batch });
+        await expect(plugin.filterAllVideo("Actor", { filter: "all", confirm: false, root: null })).resolves.toEqual({ matched: 2, updated: 2 });
+        expect(batch).toHaveBeenCalledWith(
+            "Actor", { filter: "all", confirm: false, root: null },
+        );
     });
     it("does not submit a stale password when only the username was edited", async () => {
         const $ = setup('<div id="form"><input id="webDavUsername" value="new-user"><input id="webDavPassword" value="stale-password"></div>');
         const root = $("#form").data("jhsDirtyManualKeys", new Set(["webDavUsername"]));
         const saveProfile = vi.fn(async () => {});
-        await saveSettingForm({ settings: { snapshot: () => ({}), update: async fn => fn({}) }, webdav: { saveProfile } }, root);
+        await saveSettingForm({
+            settings: { snapshot: () => ({}), update: async fn => fn({}) }, webdav: { saveProfile },
+            jquery: $, document: dom.window.document, legacyStorage: {}, utilities: {}, events: {}, logger: {},
+        }, root);
         expect(saveProfile).toHaveBeenCalledWith({ username: "new-user" });
     });
     it("restores JavBus text without losing the host link", async () => {
@@ -58,13 +61,13 @@ describe("reviewed UI regressions", () => {
         plugin.unmountDmmPlayer();
         expect($("#video-favoriteBtn")).toHaveLength(1);
     });
-    it("releases batch ownership when scope initialization fails", async () => {
+    it("routes the legacy batch API through its Feature-owned controller", async () => {
         setup('<button id="favoriteAllVideo"></button>');
-        const plugin = Object.create(ListPagePlugin.prototype);
-        plugin.getRuntimeService = () => async () => { throw new Error("scope failed"); };
-        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
+        const plugin = Object.create(ListPagePlugin.prototype), batchController = { run: vi.fn(async () => ({ matched: 2, updated: 2 })) };
+        plugin.listBatchController = batchController;
+        await expect(plugin.batchSaveAllVideos({ kind: "search" }, "favorite", { confirm: false })).resolves.toEqual({ matched: 2, updated: 2 });
+        expect(batchController.run).toHaveBeenCalledWith({ kind: "search" }, "favorite", { confirm: false });
         expect(isBatchRunActive()).toBe(false);
-        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
     });
     it.each(["search", "star", "genre"])("keeps numeric %s ids when resolving page one", prefix => {
         const host = new JavBusHostAdapter(null, null);

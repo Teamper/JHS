@@ -9,6 +9,7 @@ test("compact list exposes only the FAB surface", async ({ page }, testInfo) => 
   test.skip(testInfo.project.name !== "mobile", "one compact viewport covers mobile surfaces");
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
+  await expect(page.locator("html")).toHaveAttribute("data-jhs-dev-build", /^7\.0\.0-dev\.\d{12}\|[0-9a-f]{12}(?:\.dirty)?$/);
   await expect(page.locator("#jhs-fab")).toBeVisible();
   await expect(page.locator("#jhs-fab-safe-area")).toHaveCount(1);
   await expect(page.locator("#jhs-page-commandbar, #setting-btn")).toHaveCount(0);
@@ -50,6 +51,32 @@ test("full settings layer stays above the compact FAB", async ({ page }, testInf
   };
   expect(stacking.layer).toBeGreaterThan(stacking.fab);
   await save.click({ trial: true });
+});
+
+test("opening full settings preserves the mobile list columns and width", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "one compact viewport covers mobile settings layout");
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { settingOverrides: { containerColumns: 5, containerWidth: 85 } });
+  const layout = () => page.evaluate(() => ({
+    columns: document.querySelector(".movie-list")?.style.gridTemplateColumns,
+    width: document.querySelector("section .container")?.style.minWidth,
+  }));
+  await page.locator("#jhs-fab").click();
+  await page.locator('#jhs-fab-menu [data-action="setting"]').click();
+  await page.locator("#jhs-quick-setting-sheet #moreBtn").click();
+  await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  expect((await layout()).columns).toBe("repeat(1, minmax(0px, 1fr))");
+  expect((await layout()).width).toBe("100%");
+  await expect(page.locator(".layui-layer #showContainerColumns")).toHaveText("5");
+  await expect(page.locator(".layui-layer #showContainerWidth")).toHaveText("85%");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".layui-layer")).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await expect.poll(async () => (await layout()).columns).toBe("repeat(5, minmax(0px, 1fr))");
+  expect((await layout()).width).toBe("85%");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await layout()).columns).toBe("repeat(1, minmax(0px, 1fr))");
+  expect((await layout()).width).toBe("100%");
 });
 
 test("backup loading feedback stays above the full settings layer", async ({ page }, testInfo) => {

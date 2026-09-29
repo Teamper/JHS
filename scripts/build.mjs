@@ -10,7 +10,7 @@ const distDir = join(repoRoot, "dist");
 const distPath = join(distDir, "JHS.user.js");
 const rootPath = join(repoRoot, "JHS.user.js");
 
-export async function buildUserscript({ outputPaths = [distPath, rootPath], transformMetadata = (value) => value } = {}) {
+export async function buildUserscript({ outputPaths = [distPath, rootPath], transformMetadata = (value) => value, transformBundle = (value) => value } = {}) {
   const source = await readFile(srcPath, "utf8");
   const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
   const metadataMatch = source.match(/^\/\/ ==UserScript==[\s\S]*?^\/\/ ==\/UserScript==\r?\n?/m);
@@ -32,7 +32,8 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
     target: "es2020",
     charset: "utf8",
     legalComments: "none",
-    keepNames: true,
+    // Contribution manifests carry stable legacy identities, so runtime names are unnecessary.
+    keepNames: false,
     minifySyntax: true,
     minifyWhitespace: true,
     minifyIdentifiers: true,
@@ -49,7 +50,7 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
       }
     }]
   });
-  const bundledOutput = buildResult.outputFiles[0].text.trimStart().split(/\r?\n/).map((line) => line.trimEnd()).join("\n");
+  const bundledOutput = transformBundle(buildResult.outputFiles[0].text.trimStart().split(/\r?\n/).map((line) => line.trimEnd()).join("\n"));
   const output = `${metadata}\n\n${bundledOutput}`;
   const outputBytes = Buffer.byteLength(output, "utf8");
 

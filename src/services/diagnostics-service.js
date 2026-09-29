@@ -63,7 +63,7 @@ export class DiagnosticsService {
     /** @param {Array<{name: string, disableable: boolean}>} descriptors @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
     setLegacyRuntime(descriptors, startup, timings) {
         this.legacyPluginDescriptors = descriptors.map((item) => Object.freeze({ ...item }));
-        this.legacyPlugins = descriptors.map((item) => item.name);
+        this.legacyPlugins = Number(startup.registeredPlugins) > 0 ? descriptors.map((item) => item.name) : [];
         this.legacyStartup = Object.freeze({ ...startup });
         this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
     }

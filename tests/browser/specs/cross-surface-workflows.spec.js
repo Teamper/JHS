@@ -18,6 +18,18 @@ async function openFc2DialogFixture(context, page, settingOverrides = {}) {
   return dialog;
 }
 
+test("FC2 list dialog gets the Feature-managed shared magnet hub", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the list-owned FC2 magnet surface");
+  const dialog = await openFc2DialogFixture(context, page);
+  const magnetHub = await page.evaluate(() => {
+    const plugin = window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin");
+    return { available: typeof plugin?.createMagnetHub === "function", managedByFeature: plugin?.managedByFeature };
+  });
+  expect(magnetHub).toEqual({ available: true, managedByFeature: true });
+  await dialog.locator('[data-jhs-action="magnet-hub"]').click();
+  await expect(dialog.locator(".magnet-container")).toBeVisible();
+});
+
 test("FC2 dialog offline marking keeps movie identity across surfaces", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the cross-surface offline workflow");
   await fulfillHostFixtures(context);
@@ -66,6 +78,65 @@ test("FC2 dialog offline marking keeps movie identity across surfaces", async ({
   await expect.poll(() => page.evaluate(async () => (await window.stateService.getState("FC2-PPV-4959150"))?.stateFlags?.downloaded)).toBe(true);
   await expect.poll(() => page.evaluate(async () => Boolean((await window.stateService.getState("ABC-001"))?.stateFlags?.downloaded))).toBe(false);
   await expect(dialog).toHaveCount(0);
+});
+
+test("FC2 magnet result offline action preserves the dialog movie identity", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the full FC2 magnet-to-offline path");
+  const dialog = await openFc2DialogFixture(context, page, { enableLoadReview: "no", enableLoadOtherSite: "no", enableLoadScreenShot: "no" });
+  await page.evaluate(async () => {
+    await window.stateService.patch("ABC-001", { downloaded: false }, { type: "fixture-seed", record: { carNum: "ABC-001", url: "/v/abc-001", names: "" } });
+    const hub = window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin");
+    hub.initializeSources = async () => {
+      hub.searchEngines = [{
+        id: "fixture", name: "Fixture", targetPage: "#", targetUrl: () => "#",
+        search: async () => [{ title: "FC2 fixture magnet", magnet: "magnet:?xt=urn:btih:fc2-hub-fixture", size: "1 GB", seeders: 10 }],
+      }];
+    };
+    hub.applyRuntimeRules = async (results) => results;
+    const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+    offline.registry = {
+      getCandidates: async () => [{ provider: { id: "fixture", name: "Fixture", isEnabled: async () => true, submit: async (_resource, info) => { window.__hubOfflineContext = info; } }, availability: { authState: "ready" } }],
+      updateAvailability() {},
+    };
+    window.utils.q = (_event, _message, confirm) => confirm();
+  });
+  await dialog.locator('[data-jhs-action="magnet-hub"]').click();
+  const resultButton = dialog.locator(".magnet-result .jhs-offline-btn");
+  await expect(resultButton).toBeVisible();
+  await resultButton.click();
+  await expect.poll(() => page.evaluate(() => window.__hubOfflineContext?.carNum)).toBe("FC2-PPV-4959150");
+  await expect.poll(() => page.evaluate(async () => (await window.stateService.getState("FC2-PPV-4959150"))?.stateFlags?.downloaded)).toBe(true);
+  await expect.poll(() => page.evaluate(async () => Boolean((await window.stateService.getState("ABC-001"))?.stateFlags?.downloaded))).toBe(false);
+});
+
+test("FC2 aggregate magnet search excludes magnets from the underlying page", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers aggregate magnet ownership");
+  const dialog = await openFc2DialogFixture(context, page, { enableLoadReview: "no", enableLoadOtherSite: "no", enableLoadScreenShot: "no" });
+  await page.evaluate(() => {
+    const link = document.createElement("a");
+    link.href = "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    link.textContent = "Underlying movie magnet";
+    document.body.append(link);
+    const hub = window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin");
+    hub.magnet.getBuiltInSources = () => [];
+    hub.resourceSettings.getBuiltInSources = async () => [];
+    hub.resourceSettings.getMagnetSources = async () => [];
+    hub.resourceSettings.getMagnetTagRules = async () => [];
+    hub.resourceSettings.getMagnetFilterRules = async () => [];
+    hub.storage.setLocal("jhs_magnetHub_selectedEngine", "all");
+  });
+  await dialog.locator(".jhs-fc2-workspace").evaluate((workspace) => {
+    const link = document.createElement("a");
+    link.href = "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    link.textContent = "FC2 movie magnet";
+    workspace.append(link);
+  });
+  await dialog.locator('[data-jhs-action="magnet-hub"]').click();
+  await expect(dialog.locator(".magnet-container .magnet-tab.active")).toHaveAttribute("data-engine", "all");
+  await expect(dialog.locator(".magnet-container .magnet-loading")).toHaveCount(0);
+  await expect(dialog.locator(".magnet-container .magnet-result")).toHaveCount(1);
+  await expect(dialog.locator(".magnet-container .magnet-result")).toContainText("FC2 movie magnet");
+  await expect(dialog.locator(".magnet-container .magnet-result")).not.toContainText("Underlying movie magnet");
 });
 
 test("NewVideo hover preview follows its owning dialog and is destroyed on close", async ({ context, page }, testInfo) => {
@@ -201,4 +272,31 @@ test("cloud settings reject invalid numeric input by persisting the normalized f
   });
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(60);
   await expect(dialog.locator("#oneOneFiveCacheMinutes")).toHaveValue("60");
+});
+
+test("cloud settings restore the saved value when persistence fails", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers cloud settings rollback");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { settingOverrides: { oneOneFiveConcurrency: 4 } });
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  const dialog = page.locator(".layui-layer");
+  await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  await dialog.locator('.side-menu-item[data-panel="cloud-services-panel"]').click();
+  const input = dialog.locator("#oneOneFiveConcurrency");
+  await expect(input).toHaveValue("4");
+  await page.evaluate(() => {
+    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const originalSet = settings.set.bind(settings);
+    settings.set = (key, value) => key === "oneOneFiveConcurrency" ? Promise.reject(new Error("synthetic storage failure")) : originalSet(key, value);
+  });
+  await input.fill("8");
+  await input.dispatchEvent("change");
+  await expect(input).toHaveValue("4");
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(4);
+  await page.evaluate(() => window.layer.closeAll());
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  await dialog.locator('.side-menu-item[data-panel="cloud-services-panel"]').click();
+  await expect(dialog.locator("#oneOneFiveConcurrency")).toHaveValue("4");
 });

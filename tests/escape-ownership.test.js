@@ -32,6 +32,20 @@ it("a hidden preview container does not swallow parent Escape",()=>{
     frame.body.dispatchEvent(new frame.defaultView.KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
     expect(document.querySelector("#layui-layer1")).toBeNull();
 });
+it("rebinds Escape after the iframe document is replaced and cleans up on close",()=>{
+    const {utils,frame:initialDocument}=mount();
+    const iframe=document.querySelector("iframe"),loadedDocument=document.implementation.createHTMLDocument("Loaded detail");
+    Object.defineProperty(iframe,"contentDocument",{configurable:true,value:loadedDocument});
+    iframe.dispatchEvent(new Event("load"));
+
+    initialDocument.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
+    expect(document.querySelector("#layui-layer1")).not.toBeNull();
+    loadedDocument.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
+
+    expect(document.querySelector("#layui-layer1")).toBeNull();
+    expect(utils.iframeEscBindings.size).toBe(0);
+    expect(iframe.hasAttribute("data-esc-bound")).toBe(false);
+});
 it("a preview owned by a lower layer does not block closing the upper layer",()=>{
     const {utils}=mount();
     const overlay=document.createElement("div");overlay.className="fancybox-container fancybox-is-open";

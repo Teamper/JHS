@@ -3,7 +3,10 @@ import budget from "../../../performance-budget.json" with { type: "json" };
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
 const SAMPLE_COUNT = Math.max(1, Number.parseInt(process.env.JHS_STARTUP_SAMPLES || "30", 10) || 30);
-const BOOTSTRAP_PHASES = ["legacy-runtime", "pre-settings", "context", "settings-load", "settings-migration", "logger", "theme-ui", "registry", "feature-runtime", "data-prepare", "plugin-css", "plugin-runtime", "first-ready", "total"];
+const BOOTSTRAP_PHASES = ["legacy-runtime", "pre-settings", "context", "settings-load", "settings-migration", "logger", "theme-ui", "registry", "data-prepare", "feature-runtime", "feature-ready-signal", "first-ready", "total"];
+const REQUIRED_BOOTSTRAP_PHASES = process.env.JHS_STARTUP_BUNDLE
+  ? BOOTSTRAP_PHASES.filter((phase) => phase !== "feature-ready-signal")
+  : BOOTSTRAP_PHASES;
 
 function median(values) {
   const sorted = [...values].sort((left, right) => left - right);
@@ -23,7 +26,7 @@ for (const [label, url] of [
     test.skip(testInfo.project.name !== "desktop-wide", "one deterministic desktop project owns startup timing");
     const cold = process.env.JHS_STARTUP_MODE !== "warm";
     if (!cold) await fulfillHostFixtures(context);
-    const samples = [], phaseSamples = [];
+    const samples = [], phaseSamples = [], featureSamples = [], pluginSamples = [];
     for (let index = 0; index < SAMPLE_COUNT; index += 1) {
       const sampleContext = cold ? await browser.newContext({ viewport: testInfo.project.use.viewport, hasTouch: testInfo.project.use.hasTouch, isMobile: testInfo.project.use.isMobile, serviceWorkers: "block" }) : context;
       if (cold) await fulfillHostFixtures(sampleContext);
@@ -31,7 +34,7 @@ for (const [label, url] of [
       await page.goto(url, { waitUntil: "domcontentloaded" });
       if (process.env.JHS_STARTUP_BUNDLE) {
         const addScriptTag = page.addScriptTag.bind(page);
-        page.addScriptTag = options => addScriptTag(options.path?.endsWith("JHS.user.js") ? { path: process.env.JHS_STARTUP_BUNDLE } : options);
+        page.addScriptTag = options => addScriptTag(options.path?.endsWith(".user.js") ? { path: process.env.JHS_STARTUP_BUNDLE } : options);
       }
       const startedAt = performance.now();
       // 保持启动基准只测核心引导；评论默认开启的请求不纳入启动预算。
@@ -39,7 +42,13 @@ for (const [label, url] of [
       samples.push(performance.now() - startedAt);
       await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]))).toBe(true);
       phaseSamples.push(await page.evaluate(() => window.__jhsBrowserDiagnostics.bootstrapPhases));
-      for (const phase of BOOTSTRAP_PHASES) expect(typeof phaseSamples.at(-1)?.[phase], `${label} bootstrap phase ${phase} must be recorded`).toBe("number");
+      featureSamples.push(await page.evaluate(() => window.unsafeWindow.pluginManager?.diagnostics?.exportSnapshot?.().startupTimings ?? {}));
+      pluginSamples.push(await page.evaluate(() => ({
+        ...(window.unsafeWindow.pluginManager?.getStartupReport?.() ?? {}),
+        timings: window.unsafeWindow.pluginManager?.getTimings?.() ?? [],
+        cssTimings: window.unsafeWindow.pluginManager?.getCssTimings?.() ?? [],
+      })));
+      for (const phase of REQUIRED_BOOTSTRAP_PHASES) expect(typeof phaseSamples.at(-1)?.[phase], `${label} bootstrap phase ${phase} must be recorded`).toBe("number");
       await page.close();
       if (cold) await sampleContext.close();
     }
@@ -54,8 +63,20 @@ for (const [label, url] of [
     const report = `${label} fixture startup P50 ${actualMedian.toFixed(1)}ms P95 ${actualP95.toFixed(1)}ms; ${environment} baseline ${baseline}ms; samples ${samples.map((value) => value.toFixed(1)).join(", ")}`;
     const harnessPhases = Object.keys(phaseSamples[0]?.harness || {}).map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample.harness?.[phase] || 0)).toFixed(1)}ms`).join(", ");
     const bootstrapPhases = Object.keys(phaseSamples[0] || {}).filter((phase) => phase !== "harness").map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample[phase] || 0)).toFixed(1)}ms`).join(", ");
+    const featurePhases = Object.keys(featureSamples[0] || {}).map((feature) => `${feature}=${median(featureSamples.map((sample) => sample[feature] || 0)).toFixed(1)}ms`).join(", ");
+    const pluginPhases = ["registrationMs", "cssMs", "immediateMs", "readyMs"].map((phase) => `${phase}=${median(pluginSamples.map((sample) => sample[phase] || 0)).toFixed(1)}ms`).join(", ");
+    const cssPlugins = [...new Set(pluginSamples.flatMap((sample) => sample.cssTimings.map((timing) => timing.name)))].map((name) => {
+      const values = pluginSamples.map((sample) => sample.cssTimings.find((timing) => timing.name === name)?.elapsed || 0);
+      return `${name}=${median(values).toFixed(2)}ms`;
+    }).join(", ");
+    const plugins = [...new Set(pluginSamples.flatMap((sample) => sample.timings.map((timing) => timing.name)))].map((name) => {
+      const timing = pluginSamples.map((sample) => sample.timings.find((item) => item.name === name));
+      const elapsed = median(timing.map((item) => item?.elapsed || 0));
+      const status = timing.find((item) => item?.status)?.status || "missing";
+      return `${name}=${elapsed.toFixed(2)}ms/${status}`;
+    }).join(", ");
     testInfo.annotations.push({ type: "startup-median", description: report });
-    console.log(`${report}; harness phases ${harnessPhases}; bootstrap phases ${bootstrapPhases}`);
+    console.log(`${report}; harness phases ${harnessPhases}; bootstrap phases ${bootstrapPhases}; feature phases ${featurePhases}; plugin phases ${pluginPhases}; CSS by plugin ${cssPlugins}; plugin timings ${plugins}`);
     expect(baseline, `${label} startup baseline must be positive`).toBeGreaterThan(0);
     expect(actualMedian, `${report}; reviewed maximum ${maximum.toFixed(1)}ms`).toBeLessThanOrEqual(maximum);
   });

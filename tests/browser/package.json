@@ -6,7 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "pretest": "node scripts/check-local-browser.mjs",
+    "pretest": "node scripts/check-local-browser.mjs && npm --prefix ../.. run build:dev",
     "test": "npm run test:startup && npm run test:functional",
     "test:startup": "playwright test specs/startup-performance.spec.js --project=desktop-wide",
     "test:functional": "playwright test --grep-invert \"fixture startup remains within the reviewed median\"",

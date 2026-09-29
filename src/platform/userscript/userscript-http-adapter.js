@@ -13,7 +13,9 @@ export class UserscriptHttpAdapter {
     request(options) {
         if ("native-fetch" === options.transport && this.fetchImplementation) return this.requestWithNativeFetch(options).catch((error => {
             if (error instanceof JhsError && "ABORTED" === error.code) throw error;
-            return this.requestWithUserscript(options);
+            return this.requestWithUserscript(options).then((response) => ({
+                ...response, nativeFallbackCode: error instanceof JhsError ? error.code : "UNKNOWN",
+            }));
         }));
         return this.requestWithUserscript(options);
     }
@@ -30,11 +32,13 @@ export class UserscriptHttpAdapter {
             if (options.signal?.aborted) controller.abort();
             const response = await /** @type {typeof fetch} */ (this.fetchImplementation)(options.url, {
                 method: options.method ?? "GET", headers: options.headers, body: /** @type {BodyInit | null | undefined} */ (options.body), signal: controller.signal,
+                credentials: "same-origin",
             });
             const responseText = await response.text(), data = "json" === options.responseType ? JSON.parse(responseText) : responseText;
             return {
                 status: response.status, data, responseText, finalUrl: response.url || options.url,
                 responseHeaders: [ ...response.headers.entries() ].map((entry => entry.join(": "))).join("\r\n"),
+                transportUsed: "native-fetch",
             };
         } catch (cause) {
             if (options.signal?.aborted) throw new JhsError("ABORTED", "网络请求已取消", { source: "UserscriptHttpAdapter", cause });
@@ -71,6 +75,7 @@ export class UserscriptHttpAdapter {
                     status: response.status, data: response.response ?? response.responseText,
                     responseText: response.responseText ?? "", finalUrl: response.finalUrl || options.url,
                     responseHeaders: response.responseHeaders ?? "",
+                    transportUsed: "gm",
                 }),
                 onerror: (/** @type {unknown} */ cause) => finish(reject, new JhsError("NETWORK_ERROR", "网络请求失败", { source: "UserscriptHttpAdapter", cause, retryable: true })),
                 ontimeout: () => finish(reject, new JhsError("TIMEOUT", "网络请求超时", { source: "UserscriptHttpAdapter", retryable: true })),

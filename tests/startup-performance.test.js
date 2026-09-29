@@ -1,30 +1,11 @@
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { performance } from "node:perf_hooks";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { CompatibilityBeanRegistry } from "../src/core/compatibility-bean-registry.js";
 
 const repoRoot = join(import.meta.dirname, "..");
-
-function loadPluginClasses() {
-  const idleCallbacks = [];
-  const insertStyle = vi.fn();
-  const context = vm.createContext({
-    console,
-    Date,
-    performance,
-    setTimeout,
-    requestIdleCallback: (callback) => idleCallbacks.push(callback),
-    storageManager: { getSetting: async () => "[]" },
-    utils: { isMobileMode: () => false, insertStyle },
-    clog: { error: vi.fn() },
-    i: (target, key, value) => (target[key] = value)
-  });
-  const source = `${readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = PluginManager; globalThis.TestBasePlugin = BasePlugin;`;
-  vm.runInContext(source, context);
-  return { PluginManager: context.TestPluginManager, BasePlugin: context.TestBasePlugin, idleCallbacks, insertStyle };
-}
 
 function loadStorageManager(forage) {
   const context = vm.createContext({
@@ -42,31 +23,62 @@ function loadStorageManager(forage) {
 
 function loadTaskPlugin(gmHttp, overrides = {}) {
   const defaultUtils = { sleep: vi.fn(async () => {}), getNowStr: vi.fn(() => "2026-08-11 20:00:00") };
+  const legacyStorage = overrides.storageManager || { getSetting: vi.fn(async () => ({})) };
+  const runtimeStorage = { getLocal: vi.fn(() => null), setLocal: vi.fn(), removeLocal: vi.fn() };
+  const movie = { externalSiteOrigin: vi.fn(() => "https://javdb.example") };
   const context = vm.createContext({
     console,
     URL,
     gmHttp,
     i: (target, key, value) => (target[key] = value),
-    BasePlugin: class {},
     T: "javdb",
     I: "javbus",
     D: "censored",
     A: "uncensored",
+    _: "yes",
+    l: false,
+    escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] || character)),
+    normalizeCarNum: value => String(value || "").toUpperCase(),
+    readListItem: () => ({}),
     StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     show: { info: vi.fn(), error: vi.fn() },
     utils: { ...defaultUtils, ...overrides.utils },
-    storageManager: overrides.storageManager || { getSetting: vi.fn(async () => ({})) },
+    storageManager: legacyStorage,
     selectLatestPublishTime: values => values.filter(Boolean).sort().at(-1) || "",
     $: () => ({ text: vi.fn() })
   });
-  const parsers = ["src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
-  const source = `${parsers}\n${readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
+  const parsers = ["src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
+  const taskSource = readFileSync(join(repoRoot, "src/features/discovery/task-execution-service.js"), "utf8")
+    .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
+    .replace(/^export\s+(?=class\s)/gm, "");
+  const source = `${parsers}\n${taskSource}\nglobalThis.TestTaskPlugin = TaskExecutionService;`;
   vm.runInContext(source, context);
-  const task = new context.TestTaskPlugin();
+  const task = new context.TestTaskPlugin({
+    runtimeServices: {
+      storage: runtimeStorage, http: { request: vi.fn() }, actressInfo: {}, movie, state: {}, events: {}, scope: async () => null,
+      hostAdapters: {
+        javdb: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
+        javbus: { getListSelectors: () => ({ boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }) },
+      },
+      hostListParser: { parseDetailPage: context.parseDetailPage },
+    },
+    legacyStorage,
+    utilities: { ...defaultUtils, ...overrides.utils },
+    logger: context.clog,
+    jquery: context.$,
+    window: { location: new URL("https://javdb.com/"), navigator: {}, isListPage: true },
+    notifications: context.show,
+  });
   task.getRuntimeService = name => name === "actressInfo" ? {
     collection: async (_integrationId, input) => gmHttp.get(input.pageUrl)
-  } : name === "scope" ? async () => null : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" } : null;
+  } : name === "scope" ? async () => null
+    : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" }
+      : name === "hostAdapters" ? {
+        javdb: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
+        javbus: { getListSelectors: () => ({ boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }) },
+      }
+        : name === "hostListParser" ? { parseDetailPage: context.parseDetailPage } : null;
   return task;
 }
 
@@ -106,144 +118,33 @@ function loadHttpManager(requestHandler) {
   return new context.TestGmHttp({ utils: new TestUtils(), storageManager: new TestStorage() });
 }
 
-describe("startup scheduling", () => {
-  it("runs afterPluginsReady only after every immediate handle completes", async () => {
-    const { PluginManager, BasePlugin } = loadPluginClasses();
-    const events = [];
-    class SlowPlugin extends BasePlugin {
-      getName() { return "SlowPlugin"; }
-      async handle() { await new Promise((resolve) => setTimeout(resolve, 10)); events.push("slow"); }
-    }
-    class ToolbarPlugin extends BasePlugin {
-      getName() { return "ToolbarPlugin"; }
-      async handle() { events.push("toolbar-handle"); }
-      async afterPluginsReady() { events.push("toolbar-ready"); }
-    }
-    const manager = new PluginManager();
-    manager.register(SlowPlugin);
-    manager.register(ToolbarPlugin);
+describe("compatibility registry zero-runtime contract", () => {
+  it("preserves legacy bean lookup and settings descriptors without plugin execution", () => {
+    const registry = new CompatibilityBeanRegistry(), bean = { handle: vi.fn(), initCss: vi.fn() };
+    registry.registerCompatibilityBean("ListPagePlugin", bean);
+    registry.setCatalogDescriptors([{ name: "ListPagePlugin", disableable: true }]);
 
-    await manager.processPlugins();
-
-    expect(events).toEqual(["toolbar-handle", "slow", "toolbar-ready"]);
+    expect(registry.getBean("ListPagePlugin")).toBe(bean);
+    expect(registry.getPluginDescriptors()).toEqual([{ name: "ListPagePlugin", disableable: true }]);
+    expect(registry.getPluginNames()).toEqual([]);
+    expect(registry.getTimings()).toEqual([]);
+    expect(registry.getCssTimings()).toEqual([]);
+    expect(registry.getStartupReport()).toEqual({ registeredPlugins: 0, registrationMs: 0, cssMs: 0, immediateMs: 0, readyMs: 0, idlePending: 0, idleCompleted: 0 });
+    expect(registry.processPlugins).toBeUndefined();
+    expect(registry.prepareCss).toBeUndefined();
+    expect(bean.handle).not.toHaveBeenCalled();
+    expect(bean.initCss).not.toHaveBeenCalled();
   });
 
-  it("finishes immediate plugins before idle plugins", async () => {
-    const { PluginManager, BasePlugin, idleCallbacks } = loadPluginClasses();
-    const events = [];
-    class ImmediatePlugin extends BasePlugin {
-      getName() { return "ImmediatePlugin"; }
-      async handle() { events.push("immediate"); }
-    }
-    class IdlePlugin extends BasePlugin {
-      getName() { return "IdlePlugin"; }
-      getStartupMode() { return "idle"; }
-      async handle() { events.push("idle"); }
-    }
-    const manager = new PluginManager();
-    manager.register(ImmediatePlugin);
-    manager.register(IdlePlugin);
-
-    await manager.processPlugins();
-
-    expect(events).toEqual(["immediate"]);
-    expect(manager.getTimings().find((item) => item.name === "IdlePlugin")?.status).toBe("pending-idle");
-    expect(manager.getStartupReport()).toMatchObject({ idlePending: 1, idleCompleted: 0 });
-
-    await idleCallbacks[0]();
-
-    expect(events).toEqual(["immediate", "idle"]);
-    expect(manager.getStartupReport()).toMatchObject({ idlePending: 0, idleCompleted: 1 });
-  });
-
-  it("binds idle-plugin event entrances before scheduling storage decoration", async () => {
-    const { PluginManager, BasePlugin, idleCallbacks } = loadPluginClasses();
-    const events = [];
-    class IdlePlugin extends BasePlugin {
-      getName() { return "IdlePlugin"; }
-      getStartupMode() { return "idle"; }
-      bindImmediateEvents() { events.push("bind"); }
-      async handle() { events.push("idle"); }
-    }
-    const manager = new PluginManager();
-    manager.register(IdlePlugin);
-    await manager.processPlugins();
-    expect(events).toEqual(["bind"]);
-    await idleCallbacks[0]();
-    expect(events).toEqual(["bind", "idle"]);
-  });
-
-  it("shares immutable icon strings through the base prototype", () => {
-    const { PluginManager, BasePlugin } = loadPluginClasses();
-    class FirstPlugin extends BasePlugin { getName() { return "FirstPlugin"; } }
-    class SecondPlugin extends BasePlugin { getName() { return "SecondPlugin"; } }
-    const manager = new PluginManager();
-    manager.register(FirstPlugin);
-    manager.register(SecondPlugin);
-    const first = manager.getBean("FirstPlugin"), second = manager.getBean("SecondPlugin");
-
-    expect(Object.hasOwn(first, "settingSvg")).toBe(false);
-    expect(Object.hasOwn(second, "settingSvg")).toBe(false);
-    expect(first.settingSvg).toBe(second.settingSvg);
-  });
-
-  it("inserts all plugin styles in one DOM batch", async () => {
-    const { PluginManager, BasePlugin, insertStyle } = loadPluginClasses();
-    class FirstPlugin extends BasePlugin {
-      getName() { return "FirstPlugin"; }
-      initCss() { return ".first { color: red; }"; }
-    }
-    class SecondPlugin extends BasePlugin {
-      getName() { return "SecondPlugin"; }
-      initCss() { return "<style>.second { color: blue; }</style>"; }
-    }
-    const manager = new PluginManager();
-    manager.register(FirstPlugin);
-    manager.register(SecondPlugin);
-
-    await manager.processCss();
-
-    expect(insertStyle).toHaveBeenCalledTimes(1);
-    expect(insertStyle).toHaveBeenCalledWith([
-      ".first { color: red; }",
-      "<style>.second { color: blue; }</style>"
-    ]);
-  });
-
-  it("does not include removed legacy service integrations", () => {
-    const mainSource = readTestFile(join(repoRoot, "src/main.js"), "utf8");
-    const registrySource = readTestFile(join(repoRoot, "src/plugins/registry.js"), "utf8");
-    const utilsSource = readTestFile(join(repoRoot, "src/core/utils.js"), "utf8");
-
-    expect(mainSource).not.toContain("parallel_GM_xmlhttpRequest.js");
-    expect(mainSource).not.toContain("@connect      127.0.0.1");
-    expect(registrySource).not.toContain("LocalPlugin");
-    expect(utilsSource).not.toContain("pingLocalService");
-  });
-
-  it("does not include audited dead methods", () => {
-    const sourceFiles = [
-      "src/core/http.js",
-      "src/core/storage.js",
-      "src/core/utils.js",
-      "src/plugins/blacklist/blacklist.js",
-      "src/plugins/external-search/fc2-by-123av.js",
-      "src/plugins/image-viewer/screenshot.js",
-      "src/plugins/status/auto-page.js"
-    ];
-    const source = sourceFiles.map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
-    const removedMethods = [
-      "getUsedDomains", "postForm", "postFileFormData", "downloadFileInChunks",
-      "getActressMap", "getThirdPartyCacheStats", "resetCacheHitStats",
-      "simpleId", "reBuildSignature", "addCookie", "getCurrentStarUrl",
-      "parseUrlId", "getMovie", "getJavBestScreenShot", "getJavFreeScreenShot",
-      "updatePageUrl_old"
-    ];
-
-    for (const method of removedMethods) expect(source).not.toContain(`${method}(`);
+  it("rejects duplicate aliases and only releases the exact registered bean", () => {
+    const registry = new CompatibilityBeanRegistry(), bean = {};
+    registry.registerCompatibilityBean("StableAlias", bean);
+    expect(() => registry.registerCompatibilityBean("StableAlias", {})).toThrow("兼容 Bean 重复或无效: StableAlias");
+    expect(registry.unregisterCompatibilityBean("StableAlias", {})).toBe(false);
+    expect(registry.unregisterCompatibilityBean("StableAlias", bean)).toBe(true);
+    expect(registry.getBean("StableAlias")).toBeUndefined();
   });
 });
-
 describe("storage read coalescing", () => {
   it("uses one IndexedDB read for concurrent cache misses", async () => {
     const getItem = vi.fn(async (key) => key === "setting" ? { theme: "dark" } : []);
@@ -335,6 +236,27 @@ describe("blocked network task termination", () => {
     expect(updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
       newVideoList: [expect.objectContaining({ carNum: "A-1" })]
     }));
+  });
+
+  it("does not count an empty actor scan when the saved actor disappeared", async () => {
+    const updateFavoriteActress = vi.fn(async () => false);
+    const task = loadTaskPlugin({ get: vi.fn() }, { storageManager: { updateFavoriteActress } });
+
+    await expect(task.parseActorMovies([], "removed", "Actor", [], new Set())).rejects.toThrow("演员记录已不存在");
+    expect(updateFavoriteActress).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a saved fallback scan when its optional notice and warning both fail", async () => {
+    const updateFavoriteActress = vi.fn(async () => true);
+    const task = loadTaskPlugin({ get: vi.fn() }, {
+      storageManager: { getCarMap: vi.fn(async () => new Map()), updateFavoriteActress },
+    });
+    task.getRuntimeService = name => name === "state" ? { getNewVideoDecisions: async () => ({}) } : null;
+    task.logger.html = () => { throw new Error("notice unavailable"); };
+    task.logger.warn = () => { throw new Error("warning unavailable"); };
+
+    await expect(task.parseActorMovies([{ carNum: "A-1" }], "actor", "Actor", [], new Set())).resolves.toBe(1);
+    expect(updateFavoriteActress).toHaveBeenCalledOnce();
   });
 
   it("stops pagination after the first blocked page", async () => {

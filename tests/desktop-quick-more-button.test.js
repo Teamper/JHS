@@ -7,17 +7,6 @@ import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 
-const DESKTOP_DEPENDENCIES = [
-    "OtherSitePlugin",
-    "ListPagePlugin",
-    "TranslatePlugin",
-    "ActressInfoPlugin",
-    "ScreenShotPlugin",
-    "NewVideoPlugin",
-    "BlacklistPlugin",
-    "BusImgPlugin",
-];
-
 function flush() {
     return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -62,19 +51,26 @@ function createHarness({ useMini = true } = {}) {
 
     initializeRuntimeConstants(dom.window.location);
 
-    const plugin = new SettingPlugin();
-    plugin.runtimeServices = {
-        settingsRegistry: registry,
-        settings,
-        profile: { current: () => "regular" },
-        scope: async () => ({ listen() { return () => {}; }, addCleanup() {} }),
-        host: {},
-        movie: {},
-        dialog: { open() {} },
-    };
-    plugin.declaredDependencies = new Set(DESKTOP_DEPENDENCIES);
-    plugin.pluginManager = { resolveDeclaredPlugin: () => null };
-    plugin.getFormDependencies = () => ({ settingsRegistry: registry, settings });
+    const plugin = new SettingPlugin({
+        runtimeServices: {
+            settingsRegistry: registry,
+            settings,
+            profile: { current: () => "regular" },
+            scope: async () => ({ listen() { return () => {}; }, addCleanup() {} }),
+            host: {},
+            movie: {},
+            dialog: { open() {} },
+        },
+        capabilities: {},
+        jquery: jq,
+        utilities: globalThis.utils,
+        notifications: globalThis.show,
+        logger: globalThis.clog,
+        legacyStorage: globalThis.storageManager,
+        events: {},
+        document: dom.window.document,
+        window: dom.window,
+    });
     plugin.openSettingDialog = openSettingDialog;
     plugin._settingScope = { listen() { return () => {}; }, addCleanup() {} };
     plugin._desktopSettingNavMounted = false;
@@ -107,6 +103,7 @@ describe("desktop quick setting full-settings button", () => {
 
         const mini = jq(".mini-setting-box .mini-simple-setting");
         const normal = jq(".setting-box .simple-setting");
+        await vi.waitFor(() => expect(mini.data("jhsQuickSettingBinding")).toBeTruthy());
         expect(mini.data("jhsQuickSettingBinding")).toBeTruthy();
         expect(normal.data("jhsQuickSettingBinding")).toBeFalsy();
 

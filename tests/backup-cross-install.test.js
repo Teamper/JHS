@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
 
 function createStorage(initialSetting) {
@@ -24,7 +24,11 @@ function createStorage(initialSetting) {
 }
 
 describe("portable backup cross-install restore", () => {
+    afterEach(() => vi.unstubAllGlobals());
+
     it("exports A data and restores it on B while retaining B WebDAV credentials", async () => {
+        vi.stubGlobal("utils", { getNowStr: () => "2026-09-26 00:00:00" });
+        vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
         vi.stubGlobal("window", { stateService: null });
         const source = createStorage({ webDavUrl: "https://dav-a.example", webDavUsername: "alice", webDavPassword: "AES:source" });
         const destination = createStorage({ webDavUrl: "https://dav-b.example", webDavUsername: "bob", webDavPassword: "AES:destination" });
@@ -36,6 +40,8 @@ describe("portable backup cross-install restore", () => {
     });
 
     it("preserves a destination credential when importing a legacy backup that contains one", async () => {
+        vi.stubGlobal("utils", { getNowStr: () => "2026-09-26 00:00:00" });
+        vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
         vi.stubGlobal("window", { stateService: null });
         const destination = createStorage({ webDavPassword: "AES:destination", webDavUrl: "https://dav-b.example" });
         await destination.importData({ data_version: 2, setting: { webDavPassword: "AES:source", webDavUrl: "https://dav-a.example" } });

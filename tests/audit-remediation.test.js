@@ -6,6 +6,8 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { AutoPageController } from "../src/features/list/auto-page-controller.js";
+import { OtherSitesController } from "../src/features/external-sites/other-sites-controller.js";
 
 function loadClass(file, className, extras = {}) {
     const source = readTestFile(join(process.cwd(), file), "utf8"), start = source.indexOf(`class ${className}`);
@@ -16,84 +18,108 @@ function loadClass(file, className, extras = {}) {
 
 describe("6.2.0 audit remediation", () => {
     it("disables AutoPage before creating DOM or listeners", async () => {
-        const querySelector = vi.fn(), addEventListener = vi.fn(), { Class } = loadClass("src/plugins/status/auto-page.js", "AutoPagePlugin", {
-            window: { isListPage: true, location: { href: "https://javdb.com/" }, addEventListener }, document: { querySelector },
-            storageManager: { getSetting: vi.fn().mockResolvedValue("no") }, _: "yes", C: "no", clog: { error: vi.fn() }
-        });
-        const plugin = new Class();
-        await plugin.waterfall();
+        const dom = new JSDOM('<div id="list"></div>', { url: "https://javdb.com/" });
+        const jquery = jqueryFactory(dom.window);
+        const settings = { snapshot: () => ({ autoPage: "no" }), addEventListener: vi.fn(), removeEventListener: vi.fn() };
+        const hostAdapter = { site: "javdb", document: dom.window.document, location: dom.window.location, getListSelectors: vi.fn(() => ({ boxSelector: "#list", itemSelector: "#list .item", nextPageSelector: ".next" })) };
+        const scope = new LifecycleScope("audit-auto-page-off");
+        const controller = new AutoPageController({ hostAdapter, settings, http: {}, list: null, ui: { jquery }, eventBus: { on: () => () => {} }, scope, document: dom.window.document, window: dom.window, logger: { error: vi.fn() } });
+        const querySelector = vi.spyOn(dom.window.document, "querySelector"), addEventListener = vi.spyOn(dom.window, "addEventListener");
+        await controller.mount();
         expect(querySelector).not.toHaveBeenCalled();
         expect(addEventListener).not.toHaveBeenCalled();
-        expect(plugin.loader).toBeUndefined();
+        expect(controller.loader).toBeUndefined();
+        scope.dispose();
+        dom.window.close();
     });
 
     it("owns AutoPage global listeners and startup timer in its live scope", async () => {
-        const dom = new JSDOM('<div id="list"></div><a class="next" href="/page/2"></a>', { url: "https://javdb.com/" });
+        const dom = new JSDOM('<div id="list"></div><a class="next" href="/page/2"></a>', { url: "https://javdb.com/", pretendToBeVisual: true });
         const add = vi.spyOn(dom.window, "addEventListener"), remove = vi.spyOn(dom.window, "removeEventListener");
-        const { Class } = loadClass("src/plugins/status/auto-page.js", "AutoPagePlugin", {
-            window: dom.window, document: dom.window.document, requestAnimationFrame: callback => callback(), setTimeout: vi.fn(() => 1),
-            storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, _: "yes", C: "no", clog: { error: vi.fn() },
-            LifecycleScope,
+        const timeout = vi.fn(() => 11), clearTimeoutSpy = vi.fn();
+        vi.stubGlobal("setTimeout", timeout);
+        vi.stubGlobal("clearTimeout", clearTimeoutSpy);
+        const settings = { snapshot: () => ({ autoPage: "yes" }), addEventListener: vi.fn(), removeEventListener: vi.fn() };
+        const hostAdapter = {
+            site: "javdb", document: dom.window.document, location: dom.window.location,
+            getListSelectors: () => ({ boxSelector: "#list", itemSelector: "#list .item", coverImgSelector: ".cover img", requestDomItemSelector: "#list .item", nextPageSelector: ".next" }),
+        };
+        const scope = new LifecycleScope("audit-auto-page-live");
+        const controller = new AutoPageController({
+            hostAdapter, settings, http: {}, list: null, ui: { jquery: jqueryFactory(dom.window) },
+            eventBus: { on: () => () => {} }, scope, document: dom.window.document, window: dom.window,
+            logger: { error: vi.fn() },
         });
-        const plugin = new Class();
-        plugin.shouldDisablePaging = vi.fn().mockResolvedValue(false);
-        plugin.getSelector = () => ({ boxSelector: "#list", nextPageSelector: ".next" });
-        plugin.getRuntimeService = name => "settings" === name ? { snapshot: () => ({ autoPage: "yes" }) } : "scope" === name ? async () => ({ addCleanup: () => {} }) : {};
-        plugin.checkLoad = vi.fn();
-        await plugin.start();
-        const live = plugin.liveScope;
+        controller.shouldDisablePaging = vi.fn().mockResolvedValue(false);
+        await controller.mount();
+        const live = controller.liveScope;
         expect(live.snapshot().listeners).toBe(1);
         expect(add).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
-        plugin.stop();
+        expect(timeout).toHaveBeenCalledWith(expect.any(Function), 1000);
+        controller.stop();
         expect(live.snapshot()).toMatchObject({ listeners: 0, disposed: true });
         expect(remove).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(11);
+        scope.dispose();
+        vi.unstubAllGlobals();
+        dom.window.close();
     });
 
     it("binds OtherSite settings idempotently and recovers malformed storage", () => {
         const dom = new JSDOM('<button id="settingSiteBtn"></button><div id="settingsArea" class="jhs-is-hidden"><input type="checkbox" data-site-id="javDbBtn"></div>'), $ = jqueryFactory(dom.window), warn = vi.fn();
         const storage = new Map([["jhs_enabled_sites", "broken-json"]]);
         const storageService = { getLocal: key => storage.get(key) ?? null, setLocal: (key, value) => storage.set(key, value) };
-        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", {
-            window: dom.window, document: dom.window.document, $, clog: { warn }, normalizeCarNum: value => value
+        const scope = new LifecycleScope("other-sites-settings"), controller = new OtherSitesController({
+            window: dom.window, document: dom.window.document, jquery: $, hostAdapter: {}, movie: {}, storage: storageService,
+            settings: { snapshot: () => ({}) }, events: {}, scope, ui: { isHidden: () => false, openPage: vi.fn() },
+            notifications: { debug: warn }, site: "javdb", route: "detail",
         });
-        const plugin = new Class();
-        plugin.getRuntimeService = name => "storage" === name ? storageService : {};
-        expect(Array.from(plugin.getEnabledSites())).toEqual(Array.from(plugin.siteConfigs, site => site.id));
+        expect(Array.from(controller.getEnabledSites())).toEqual(Array.from(controller.siteConfigs, site => site.id));
         expect(warn).toHaveBeenCalledOnce();
-        plugin.saveEnabledSites(["javDbBtn"]);
+        controller.saveEnabledSites(["javDbBtn"]);
         expect(storage.get("jhs_enabled_sites")).toBe('["javDbBtn"]');
-        plugin.setupEventListeners(); plugin.setupEventListeners();
+        controller.setupEventListeners(); controller.setupEventListeners();
         $("#settingSiteBtn").trigger("click");
         expect($("#settingsArea").hasClass("jhs-is-hidden")).toBe(false);
+        scope.dispose();
+        dom.window.close();
     });
 
     it("loads external-site definitions through MovieIdentityService", async () => {
-        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", { normalizeCarNum: value => value });
-        const plugin = new Class();
-        plugin.getSettingCache = vi.fn(async () => ({ javBusUrl: "configured" }));
+        const dom = new JSDOM("", { url: "https://javdb.com/v/ABC-1" }), scope = new LifecycleScope("other-sites-definitions");
+        const settings = { javBusUrl: "configured" };
         const externalSites = vi.fn(() => [{ id: "javBusBtn", baseUrl: "normalized" }]);
-        plugin.getRuntimeService = () => ({ externalSites });
-        await expect(plugin.getSiteConfigs()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "javBusBtn", baseUrl: "normalized" })]));
+        const controller = new OtherSitesController({
+            window: dom.window, document: dom.window.document, jquery: jqueryFactory(dom.window), hostAdapter: {}, movie: { externalSites }, storage: {},
+            settings: { snapshot: () => settings }, events: {}, scope, ui: { isHidden: () => false, openPage: vi.fn() },
+            notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
+        });
+        await expect(controller.getSiteConfigs()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "javBusBtn", baseUrl: "normalized" })]));
         expect(externalSites).toHaveBeenCalledWith({ javBusUrl: "configured" });
+        scope.dispose();
+        dom.window.close();
     });
 
     it("builds the DMM external link without shadowing its site config", async () => {
         const dom = new JSDOM('<a data-jhs-site-id="fanzaBtn"></a>'), $ = jqueryFactory(dom.window);
-        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", {
-            window: dom.window, document: dom.window.document, $, normalizeCarNum: value => value
+        const scope = new LifecycleScope("other-sites-dmm-link"), searchUrl = vi.fn(() => "https://www.dmm.co.jp/search/ABC-1");
+        const controller = new OtherSitesController({
+            window: dom.window, document: dom.window.document, jquery: $, hostAdapter: {}, movie: { searchUrl },
+            storage: { getLocal: () => null, setLocal: vi.fn() }, settings: { snapshot: () => ({}) }, events: {}, scope,
+            ui: { isHidden: () => false, openPage: vi.fn() }, notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
         });
-        const plugin = new Class(), searchUrl = vi.fn(() => "https://www.dmm.co.jp/search/ABC-1");
-        plugin.getRuntimeService = name => "movie" === name ? { searchUrl } : { getLocal: () => null };
-        await expect(plugin.handleSite("ABC-1", { id: "fanzaBtn", providerId: "dmm", noHandle: true }, { root: $(dom.window.document), configs: [], isActive: () => true })).resolves.toBeUndefined();
+        await expect(controller.handleSite("ABC-1", { id: "fanzaBtn", providerId: "dmm", noHandle: true }, { root: $(dom.window.document), configs: [], isActive: () => true })).resolves.toBeUndefined();
         expect(searchUrl).toHaveBeenCalledWith("dmm", { carNum: "ABC-1" });
         expect($("[data-jhs-site-id='fanzaBtn']").attr("href")).toBe("https://www.dmm.co.jp/search/ABC-1");
+        scope.dispose();
+        dom.window.close();
     });
 
     it("keeps all JHS UI layout decisions on mobileMode", () => {
-        const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/plugins/avatar/search-by-image.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
+        const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/features/identity/image-search-controller.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-controller.js"), "utf8");
         expect(setting).not.toContain("utils.isMobile()");
         expect(search).not.toContain("utils.isMobile()");
-        expect(search).toContain("utils.isMobileMode()");
+        expect(search).toContain("this.settings.snapshot().mobileMode");
         expect(mobile).not.toContain("@media (min-width: 769px)");
     });
 });

@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { OneTwoThreeOfflinePlugin } from "../src/plugins/one-two-three/offline.js";
+import { Pan123CredentialService } from "../src/services/pan123-credential-service.js";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -21,29 +21,52 @@ function createHarness(localEntries = []) {
     vi.stubGlobal("document", dom.window.document);
     vi.stubGlobal("show", { info: vi.fn() });
     vi.stubGlobal("clog", { debug: vi.fn() });
-    const plugin = new OneTwoThreeOfflinePlugin();
-    plugin.runtimeServices = Object.freeze({ storage, scope: () => scope });
-    return { plugin, scope, storage, values };
+    const notifications = { info: vi.fn(), debug: vi.fn() };
+    const service = new Pan123CredentialService(storage, notifications, { window: dom.window, document: dom.window.document, crypto: globalThis.crypto });
+    return { service, scope, storage, values, notifications };
 }
 
 describe("123Pan platform boundary", () => {
     it("encrypts the shared token while separating site-local discovery from GM storage", async () => {
-        const { plugin, storage, values } = createHarness([["authorToken", "site-token"]]);
-        await plugin.syncTokenOnce();
-        expect(values.get("jhs_123pan_author_token")).toMatch(/^AES:/);
-        expect(values.get("jhs_123pan_author_token")).not.toContain("site-token");
-        expect(values.get("jhs_123pan_author_token_meta")).toMatchObject({ source: "authorToken" });
-        await expect(plugin.getStoredToken()).resolves.toBe("site-token");
+        const { service, values } = createHarness([["authorToken", "site-token"]]);
+        await service.syncTokenOnce();
+        expect(values.get(service.tokenKey)).toMatch(/^AES:/);
+        expect(values.get(service.tokenKey)).not.toContain("site-token");
+        expect(values.get(service.tokenMetaKey)).toMatchObject({ source: "authorToken" });
+        await expect(service.getStoredToken()).resolves.toBe("site-token");
     });
 
     it("removes all global listeners and polling when the Feature scope is disposed", async () => {
         vi.useFakeTimers();
-        const { plugin, scope } = createHarness();
-        await plugin.handle();
+        const { service, scope } = createHarness();
+        expect(service.startTokenSync(scope)).toBe(true);
         expect(scope.snapshot().listeners).toBe(3);
-        expect(plugin.syncTimer).not.toBeNull();
+        expect(service.syncTimer).not.toBeNull();
+        const generationBeforeDispose = service.syncGeneration;
         scope.dispose();
         expect(scope.snapshot()).toMatchObject({ listeners: 0, disposed: true });
-        expect(plugin.syncTimer).toBeNull();
+        expect(service.syncTimer).toBeNull();
+        expect(service.syncGeneration).toBe(generationBeforeDispose + 1);
+    });
+
+    it("invalidates an in-flight token sync when the owning Feature stops", async () => {
+        const { service, storage, values } = createHarness([ ["authorToken", "site-token"] ]);
+        let resolveStoredToken;
+        service.getStoredToken = () => new Promise((resolve) => { resolveStoredToken = resolve; });
+        const pending = service.syncTokenOnce();
+        await vi.waitFor(() => expect(resolveStoredToken).toBeTypeOf("function"));
+        service.stop();
+        resolveStoredToken("");
+        await pending;
+        expect(storage.setValue).not.toHaveBeenCalledWith(service.tokenKey, expect.stringMatching(/^AES:/));
+        expect(values.has(service.tokenKey)).toBe(false);
+    });
+
+    it("does not read or sync credentials outside the 123Pan account host", () => {
+        const { service, scope } = createHarness();
+        service.window = new JSDOM("", { url: "https://www.123pan.com/" }).window;
+        expect(service.startTokenSync(scope)).toBe(false);
+        expect(service.syncTimer).toBeNull();
+        expect(scope.snapshot().listeners).toBe(0);
     });
 });

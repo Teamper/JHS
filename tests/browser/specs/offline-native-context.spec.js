@@ -57,3 +57,30 @@ for (const providerId of ["123","115"]) for (const surface of ["javdb-detail","j
         expect(result.history).toEqual([expect.objectContaining({providerId,carNum:"ABC-123",status:"submitted"})]);
     });
 }
+
+test("115 authentication failure offers a safe login link only while enabled", async ({ page, context }) => {
+    await fulfillHostFixtures(context);
+    const html = await readFile(new URL("../fixtures/javdb-detail-interactions.html", import.meta.url), "utf8");
+    await context.route("https://javdb.com/v/**", route => route.fulfill({ contentType: "text/html", body: html }));
+    await page.goto("https://javdb.com/v/test-id");
+    await injectUserscriptRuntime(page, { settingOverrides: {
+        enableLoadReview: "no", enableLoadPreviewVideo: "no", enable115Offline: true,
+        enable123Offline: false, enable115LoginRedirect: true, offlineProviderMode: "115",
+    } });
+    await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
+    await page.evaluate(() => {
+        const plugin = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+        plugin.offline.submitWithIntegration = async () => { throw Object.assign(new Error("115 未登录"), { code: "AUTH_REQUIRED" }); };
+    });
+    const button = page.locator(".jhs-offline-native").first();
+    await expect(button).toBeVisible();
+    await button.click();
+    const login = page.locator(".jhs-115-login-link");
+    await expect(login).toBeVisible();
+    await expect(login).toHaveAttribute("href", "https://115.com");
+    await expect(login).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(login).toHaveText("登录 115");
+    await expect(login).toHaveAttribute("title", "https://115.com");
+    await page.evaluate(() => window.settingsService.set("enable115LoginRedirect", false));
+    await expect(login).toHaveCount(0);
+});

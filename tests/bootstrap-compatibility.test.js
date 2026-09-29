@@ -44,6 +44,30 @@ describe("bootstrap compatibility P0", () => {
         expect(startIndex).toBeGreaterThan(attachIndex);
     });
 
+    it("finishes migration and journal recovery before starting Features", () => {
+        const prepareIndex = bootstrap.indexOf("await storageMutationCoordinator.runExclusive(async () =>");
+        const startIndex = bootstrap.indexOf("await context.registries.features.start();");
+        expect(prepareIndex).toBeGreaterThan(-1);
+        expect(bootstrap.indexOf("runDataMigrations(storageManager, storageMutationCoordinator, true)", prepareIndex)).toBeLessThan(startIndex);
+        expect(bootstrap.indexOf("recoverPendingTransactionWithoutLock", prepareIndex)).toBeLessThan(startIndex);
+    });
+
+    it("schedules idle Features only after the first-ready mark", () => {
+        const readyIndex = bootstrap.indexOf('markPhase("first-ready");');
+        const scheduleIndex = bootstrap.indexOf("context.registries.features.scheduleIdle();");
+        expect(readyIndex).toBeGreaterThan(-1);
+        expect(scheduleIndex).toBeGreaterThan(readyIndex);
+    });
+
+    it("does not run a legacy CSS stage and publishes feature readiness after activation", () => {
+        const featureIndex = bootstrap.indexOf("await context.registries.features.start();");
+        const readyIndex = bootstrap.indexOf('await jhsEventBus.emit("jhs-features-ready", {}, { broadcast: false });');
+        expect(featureIndex).toBeGreaterThan(-1);
+        expect(readyIndex).toBeGreaterThan(featureIndex);
+        expect(bootstrap).not.toContain("prepareCss");
+        expect(bootstrap).not.toContain("processPlugins");
+    });
+
     it("logger runtime is frozen and exposes clog/show/loading before mirroring to window", () => {
         expect(logger).toContain("loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog })");
         expect(logger).toContain("window.clog = loggerRuntime.clog");
