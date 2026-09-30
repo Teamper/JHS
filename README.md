@@ -135,22 +135,33 @@ src/main.js
 
 ## 本地开发
 
+仓库使用两个长期分支：
+
+- `main`：正式版本和发布产物，当前为 6.5.1。
+- `develop`：最新 7.0 源码、修复和回归测试，作为开发版本持续验证。
+
+日常开发在 `develop` 上进行，功能分支合入 `develop`；正式发布前完成验证，再通过 PR 合入 `main`。`main` 上的热修复须同步到 `develop`，沿用现有 24 小时同步规则。
+
 基础测试与构建支持 Node.js 20；完整开发和浏览器回归使用 **Node.js 22 或更高版本**。
 
 克隆仓库并进入项目根目录后执行：
 
 ```bash
+git switch develop
 npm ci
 npm run check
 ```
+
+`develop` 的默认构建输出为 `dist/dev/JHS-7.0.dev.user.js`，名称为 `JHS Dev 7.0`，版本为带时间戳的 `7.0.0-dev.*`。开发构建保留独立安装身份，不改写正式 `JHS.user.js`，也不配置正式版自动更新地址。安装开发版时只启用一个 JHS 脚本。
 
 常用命令：
 
 | 命令 | 用途 |
 | --- | --- |
 | `npm run test` | 运行 Vitest 单元测试 |
-| `npm run build` | 从 `src/` 构建根目录和 `dist/` 下的用户脚本 |
-| `npm run build:dev` | 构建开发调试版本 |
+| `npm run build` | 在 `develop` 构建 `dist/dev/JHS-7.0.dev.user.js` |
+| `npm run build:dev` | 构建同一 7.0 开发版本 |
+| `npm run build:release` | 构建正式产物，仅用于正式发布准备 |
 | `npm run check` | 执行单元测试、构建、类型/架构/集成检查、性能预算、发布契约和 UI 审计 |
 | `npm run check:browser` | 运行启动性能与浏览器功能回归 |
 | `npm run check:visual` | 检查桌面和移动端截图差异 |
@@ -195,7 +206,8 @@ pluginManager.getTimings().sort((a, b) => b.elapsed - a.elapsed)
 
 ## 发布方式
 
-- PR 和 `main` push 均执行 Node 20 兼容检查、Node 22 完整检查、浏览器/视觉回归及构建产物同步检查。
+- `main` / `develop` push，以及目标为这两个分支的 PR，均执行 Node 20 兼容检查、Node 22 完整检查、浏览器/视觉回归及构建产物同步检查。
+- `develop` push 只运行开发检查，不创建正式版本标签或 Release。
 - `package.json` 的稳定版 `version` 是正式发布信号；`main` 检测到版本严格递增后，CI 自动验证版本契约、创建 annotated `vX.Y.Z` 标签、提取 CHANGELOG 说明并发布 `JHS.user.js`。
 - 未修改版本号的提交不会创建 Release；版本回退、指向其他提交的同名标签以及已有 Release 均会阻止发布，历史版本和资产不会被覆盖。
 - `workflow_dispatch` 仅运行检查，不会创建标签或 Release。发布失败时应先检查原 `main` push 流水线，再重跑对应任务；已有 Release 不会被覆盖。
