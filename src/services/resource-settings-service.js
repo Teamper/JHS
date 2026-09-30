@@ -4,8 +4,8 @@ import { parseBooleanSetting as parseBooleanSettingValue } from "../core/feature
 import { MAGNET_SOURCE_IDS, validateCustomMagnetSource, validateHttpsBaseUrl } from "./magnet-source-registry.js";
 
 export const BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
-    { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true },
-    { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true }
+    { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true, testMode: "host-page" },
+    { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true, testMode: "host-page" }
 ]);
 export const BUILT_IN_MAGNET_SOURCES = BUILT_IN_NATIVE_MAGNET_SOURCES;
 

@@ -5,6 +5,7 @@ import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, should
 import { readListItem } from "../../core/list-item-reader.js";
 import { detectSite } from "../../core/site-context.js";
 import { StorageQueue } from "../../core/storage-queue.js";
+import { getTaskIntervalDefinition, parseTaskInterval } from "./task-intervals.js";
 
 /** @typedef {"blacklist" | "favoriteActress" | "newVideo"} TaskName */
 /** @typedef {Record<string, any>} TaskRecord */
@@ -138,9 +139,9 @@ export class TaskExecutionService {
     getTaskSchedule(name) {
         /** @type {Record<string, { completedKey: string, attemptKey: string, nextKey: string, intervalSetting: string, defaultInterval: number }>} */
         const schedules = {
-            blacklist: { completedKey: this.lastCheckBlacklistTimeKey, attemptKey: this.lastCheckBlacklistAttemptKey, nextKey: this.lastCheckBlacklistNextKey, intervalSetting: "checkBlacklist_intervalTime", defaultInterval: 12 },
-            favoriteActress: { completedKey: this.lastCheckFavoriteActressTimeKey, attemptKey: this.lastCheckFavoriteActressAttemptKey, nextKey: this.lastCheckFavoriteActressNextKey, intervalSetting: "checkFavoriteActress_IntervalTime", defaultInterval: 24 },
-            newVideo: { completedKey: this.lastCheckNewVideoTimeKey, attemptKey: this.lastCheckNewVideoAttemptKey, nextKey: this.lastCheckNewVideoNextKey, intervalSetting: "checkNewVideo_intervalTime", defaultInterval: 12 }
+            blacklist: { completedKey: this.lastCheckBlacklistTimeKey, attemptKey: this.lastCheckBlacklistAttemptKey, nextKey: this.lastCheckBlacklistNextKey, intervalSetting: getTaskIntervalDefinition("blacklist").key, defaultInterval: getTaskIntervalDefinition("blacklist").fallback },
+            favoriteActress: { completedKey: this.lastCheckFavoriteActressTimeKey, attemptKey: this.lastCheckFavoriteActressAttemptKey, nextKey: this.lastCheckFavoriteActressNextKey, intervalSetting: getTaskIntervalDefinition("favoriteActress").key, defaultInterval: getTaskIntervalDefinition("favoriteActress").fallback },
+            newVideo: { completedKey: this.lastCheckNewVideoTimeKey, attemptKey: this.lastCheckNewVideoAttemptKey, nextKey: this.lastCheckNewVideoNextKey, intervalSetting: getTaskIntervalDefinition("newVideo").key, defaultInterval: getTaskIntervalDefinition("newVideo").fallback }
         };
         if (!schedules[name]) throw new Error(`未知任务调度: ${name}`);
         return schedules[name];
@@ -196,7 +197,7 @@ export class TaskExecutionService {
     async getLatestTaskInterval(name) {
         const schedule = this.getTaskSchedule(name);
         this.legacyStorage._invalidateCache?.(this.legacyStorage.setting_key);
-        return parseNumberSetting(await this.legacyStorage.getSetting(schedule.intervalSetting, schedule.defaultInterval), schedule.defaultInterval, { min: Number.EPSILON });
+        return parseTaskInterval(name, await this.legacyStorage.getSetting(schedule.intervalSetting, schedule.defaultInterval));
     }
     /** @param {TaskName} name @param {boolean} [force] */
     async shouldStartTask(name, force = !1) {
@@ -273,12 +274,12 @@ export class TaskExecutionService {
                     checkConcurrencyCount: parseNumberSetting(e.checkConcurrencyCount, 2, { min: 2, max: 5 }),
                     checkRequestSleep: parseNumberSetting(e.checkRequestSleep, 100, { min: 0, max: 3e3 }),
                     enableCheckBlacklist: e.enableCheckBlacklist || _,
-                    checkBlacklist_intervalTime: parseNumberSetting(e.checkBlacklist_intervalTime, 12, { min: Number.EPSILON }),
+                    checkBlacklist_intervalTime: parseTaskInterval("blacklist", e.checkBlacklist_intervalTime),
                     checkBlacklist_ruleTime: parseNumberSetting(e.checkBlacklist_ruleTime, 8760, { min: 0 }),
                     enableCheckFavoriteActress: e.enableCheckFavoriteActress || _,
-                    checkFavoriteActress_IntervalTime: parseNumberSetting(e.checkFavoriteActress_IntervalTime, 24, { min: Number.EPSILON }),
+                    checkFavoriteActress_IntervalTime: parseTaskInterval("favoriteActress", e.checkFavoriteActress_IntervalTime),
                     enableCheckNewVideo: e.enableCheckNewVideo || _,
-                    checkNewVideo_intervalTime: parseNumberSetting(e.checkNewVideo_intervalTime, 12, { min: Number.EPSILON }),
+                    checkNewVideo_intervalTime: parseTaskInterval("newVideo", e.checkNewVideo_intervalTime),
                     checkNewVideo_ruleTime: parseNumberSetting(e.checkNewVideo_ruleTime, 8760, { min: 0 }),
                     httpTimeout: parseNumberSetting(e.httpTimeout, 5e3, { min: 1000, max: 120e3 }),
                     httpRetryCount: parseNumberSetting(e.httpRetryCount, 3, { min: 0, max: 5 }),

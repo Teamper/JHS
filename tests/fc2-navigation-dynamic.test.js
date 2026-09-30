@@ -129,6 +129,43 @@ describe("FC2 dynamic navigation protection", () => {
         scope.dispose();
     });
 
+    it("leaves FC2 cover-tool clicks to delegated card handlers", async () => {
+        document.body.innerHTML = '<div class="movie-list"></div>';
+        const list = document.querySelector(".movie-list"), card = fc2Card("FC2-2238344", "/v/fc2-tools");
+        const tools = document.createElement("div");
+        tools.className = "jhs-cover-tools";
+        const button = document.createElement("button");
+        button.type = "button";
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        icon.append(document.createElementNS("http://www.w3.org/2000/svg", "path"));
+        button.append(icon);
+        tools.append(button);
+        card.querySelector("a").append(tools);
+        list.append(card);
+        vi.stubGlobal("$", jquery), vi.stubGlobal("jQuery", jquery), vi.stubGlobal("clog", { warn: vi.fn(), error: vi.fn() });
+        globalThis.BroadcastChannel = FakeBroadcastChannel;
+        FakeBroadcastChannel.channels = [];
+        const eventBus = new JhsEventBus("fc2-navigation-tool-test");
+        const fc2 = makeFc2Mock(), scope = makeScope(), controller = new Fc2NavigationController({
+            hostAdapter: { locateListRoot: () => list }, fc2, scope, eventBus, ui: { jquery },
+        });
+        await controller.start();
+
+        const delegated = vi.fn(event => event.preventDefault());
+        document.addEventListener("click", delegated);
+        const toolClick = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+        icon.querySelector("path").dispatchEvent(toolClick);
+        expect(toolClick.defaultPrevented).toBe(true);
+        expect(delegated).toHaveBeenCalledOnce();
+        expect(fc2.openFc2Dialog).not.toHaveBeenCalled();
+        expect(fc2.resolveMovieIdForRecord).not.toHaveBeenCalled();
+
+        card.querySelector(".video-title").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+        await vi.waitFor(() => expect(fc2.openFc2Dialog).toHaveBeenCalledOnce());
+        document.removeEventListener("click", delegated);
+        scope.dispose();
+    });
+
     it("falls back to the original URL when FC2 lookup fails and does nothing without the FC2 capability", async () => {
         document.body.innerHTML = '<div class="movie-list"></div>';
         const list = document.querySelector(".movie-list"), card = fc2Card("FC2-321", "/v/fallback");

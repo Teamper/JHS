@@ -316,6 +316,7 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
         const start = settingPlugin.indexOf("async testSource"), testSource = settingPlugin.slice(start, settingPlugin.indexOf("previewCarNumbers", start));
         expect(testSource).toContain('getRuntimeService("http").request');
         expect(testSource).toContain('getRuntimeService("scope")');
+        expect(testSource).toContain("new LifecycleScope(");
         expect(testSource).toContain('trustClass: "custom-public"');
         expect(testSource).toContain('trustClass: "builtin-public"');
         expect(testSource).not.toContain("gmHttp");

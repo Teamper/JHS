@@ -8,6 +8,9 @@ export const AUTO_PAGE_STYLES = `
     .jhs-scroll { text-align:center; padding-top:20px; font-size:14px; }
     .jhs-scroll.waterfall-loading { color:var(--jhs-text); }
     .jhs-scroll.waterfall-error { color:var(--jhs-status-filter); cursor:pointer; }
+    .jhs-scroll.waterfall-stopped { color:var(--jhs-status-filter); }
+    .jhs-scroll.waterfall-paused { color:var(--jhs-text); }
+    .jhs-scroll__continue { display:inline-flex; margin-inline-start:var(--jhs-space-2); }
     .jhs-scroll.waterfall-no-more { color:var(--jhs-status-down); }
 `;
 
@@ -36,6 +39,8 @@ export class AutoPageController {
         /** @type {string | null} */ this.nextUrl = null;
         this.hasMore = false;
         this.isLoading = false;
+        this.pausedFilter = null;
+        this.visibilitySnapshot = this.list?.getVisibilitySnapshot?.() ?? null;
         this.mounted = false;
         this.disposed = false;
         this.settingsListener = null;
@@ -54,9 +59,12 @@ export class AutoPageController {
         this.settings.addEventListener("settings.changed", this.settingsListener);
         this.scope.addCleanup(() => this.settings.removeEventListener("settings.changed", this.settingsListener));
         this.unsubscribeItems = this.eventBus?.on?.("list-items-added", (/** @type {any} */ payload) => {
+            this.visibilitySnapshot = this.list?.getVisibilitySnapshot?.() ?? this.visibilitySnapshot;
             if (payload?.items?.length) this.checkLoad();
         }) ?? null;
         if (this.unsubscribeItems) this.scope.addCleanup(this.unsubscribeItems);
+        this.unsubscribeVisibility = this.eventBus?.on?.("list-visibility-changed", (/** @type {any} */ snapshot) => this.onVisibilityChanged(snapshot)) ?? null;
+        if (this.unsubscribeVisibility) this.scope.addCleanup(this.unsubscribeVisibility);
         await this.reconfigure();
         return !this.disposed && !this.scope.disposed;
     }
@@ -87,6 +95,7 @@ export class AutoPageController {
         this.nextUrl = null;
         this.hasMore = false;
         this.isLoading = false;
+        this.pausedFilter = null;
         this.loader?.remove();
         this.loader = undefined;
         this.container = undefined;
@@ -126,9 +135,7 @@ export class AutoPageController {
         loader.className = "jhs-scroll";
         container.parentNode.insertBefore(loader, container.nextSibling);
         this.pageItems.push({ page: this.currentPage, top: 0, url: this.window.location.href });
-        loader.addEventListener("click", () => {
-            if (loader.classList.contains("waterfall-error")) void this.loadNextPage().catch((/** @type {unknown} */ error) => this.log("error", "瀑布流重试失败", error));
-        });
+        loader.addEventListener("click", (/** @type {MouseEvent} */ event) => this.handleLoaderClick(event));
         let scheduled = false;
         scope.listen(this.window, "scroll", () => {
             if (scheduled) return;
@@ -142,13 +149,54 @@ export class AutoPageController {
         const next = /** @type {HTMLAnchorElement | null} */ (this.document.querySelector(selectors.nextPageSelector));
         this.nextUrl = next?.href ?? null;
         this.hasMore = Boolean(this.nextUrl);
+        this.onVisibilityChanged(this.list?.getVisibilitySnapshot?.() ?? this.visibilitySnapshot);
         scope.ownTimeout(setTimeout(() => this.checkLoad(), 1000));
         if (!this.hasMore) this.setState("waterfall-no-more", "已经到底了");
     }
 
-    async loadNextPage() {
+    /** Pause automatic pagination when a quick filter has no matching loaded cards. */
+    /** @param {any} snapshot */
+    onVisibilityChanged(snapshot) {
+        if (!snapshot || !Number.isFinite(snapshot.visible) || !Number.isFinite(snapshot.total)) return;
+        const previousFilter = this.visibilitySnapshot?.filter;
+        this.visibilitySnapshot = snapshot;
+        const filter = String(snapshot.filter || "waitCheck");
+        const hasNoMatches = filter !== "all" && snapshot.visible === 0;
+        if (this.pausedFilter) {
+            if (filter !== previousFilter && !hasNoMatches) {
+                this.pausedFilter = null;
+                if (!this.hasMore) return this.loader?.classList.contains("waterfall-stopped") ? undefined : this.setState("waterfall-no-more", "已经到底了");
+                this.setState("waterfall-loading", "");
+                this.checkLoad();
+                return;
+            }
+            this.pausedFilter = filter;
+            this.renderPausedState();
+            return;
+        }
+        if (hasNoMatches) {
+            this.pausedFilter = filter;
+            this.renderPausedState();
+        }
+    }
+
+    renderPausedState() {
+        if (!this.loader || this.isLoading) return;
+        if (!this.hasMore) return this.loader.classList.contains("waterfall-stopped") ? undefined : this.setState("waterfall-no-more", "已经到底了");
+        const hasMatches = this.visibilitySnapshot?.filter === this.pausedFilter && this.visibilitySnapshot.visible > 0;
+        this.setState("waterfall-paused", hasMatches ? "自动翻页已暂停" : "已加载内容无匹配");
+        const button = this.document.createElement("button");
+        button.type = "button";
+        button.className = "jhs-btn jhs-btn--secondary jhs-scroll__continue";
+        button.textContent = "继续加载一页";
+        this.loader.append(" ", button);
+    }
+
+    /** @param {{manual?: boolean}} [options] */
+    async loadNextPage({ manual = false } = {}) {
         if (!this.started) return;
         if (this.settings.snapshot().autoPage === "no") return this.setState("waterfall-loading", "");
+        if (this.pausedFilter && !manual) return;
         if (this.isLoading || !this.nextUrl || !this.container) return;
         if (!this.list) {
             this.nextUrl = null;
@@ -172,7 +220,7 @@ export class AutoPageController {
             if (this.hasRepeatedCarNumbers(this.readCarNumbers(this.ui.jquery(selectors.itemSelector)), this.readCarNumbers(cards))) {
                 this.nextUrl = null;
                 this.hasMore = false;
-                return this.setState("waterfall-error", "翻页内容出现重复数据, 页码受JavDB限制, 已停止瀑布流");
+                return this.setState("waterfall-stopped", "下一页包含重复内容，已停止自动翻页");
             }
             if (!this.isCurrent(generation, scope)) return;
             const container = this.container;
@@ -190,7 +238,24 @@ export class AutoPageController {
             this.started && this.loader && this.setState("waterfall-error", "加载失败，点击重试");
             this.log("error", "加载失败:", error);
         } finally {
-            if (generation === this.generation) this.isLoading = false;
+            if (generation === this.generation) {
+                this.isLoading = false;
+                if (this.pausedFilter) this.renderPausedState();
+            }
+        }
+    }
+
+    /** @param {MouseEvent} event */
+    handleLoaderClick(event) {
+        if (!this.loader) return;
+        if (event.target instanceof Element && event.target.closest(".jhs-scroll__continue")) {
+            event.preventDefault();
+            event.stopPropagation();
+            void this.loadNextPage({ manual: true }).catch((/** @type {unknown} */ error) => this.log("error", "手动加载下一页失败", error));
+            return;
+        }
+        if (this.loader.classList.contains("waterfall-error")) {
+            void this.loadNextPage({ manual: Boolean(this.pausedFilter) }).catch((/** @type {unknown} */ error) => this.log("error", "瀑布流重试失败", error));
         }
     }
 
@@ -231,7 +296,7 @@ export class AutoPageController {
     }
 
     checkLoad() {
-        if (!this.loader || this.loader.classList.contains("waterfall-error")) return;
+        if (!this.loader || !this.hasMore || this.pausedFilter || this.loader.classList.contains("waterfall-error") || this.loader.classList.contains("waterfall-stopped")) return;
         if (this.loader.getBoundingClientRect().top < this.window.innerHeight + this.preloadDistance) {
             void this.loadNextPage().catch((/** @type {unknown} */ error) => this.log("error", "瀑布流自动加载失败", error));
         }

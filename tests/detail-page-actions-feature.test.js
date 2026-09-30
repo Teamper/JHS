@@ -22,6 +22,7 @@ function createFixture({ carNum = "ABC123", mount = true, subtitleResults = [] }
     };
     const notifications = { error: vi.fn(), info: vi.fn() };
     const diagnostics = { recordError: vi.fn() };
+    const dialog = { open: vi.fn(() => 7), close: vi.fn() };
     const controller = new DetailPageActionsController({
         hostAdapter: {
             document, location: { href: "https://javdb.example/v/test" },
@@ -29,11 +30,11 @@ function createFixture({ carNum = "ABC123", mount = true, subtitleResults = [] }
             mountDetailActions: (row) => { if (!mount) return false; document.querySelector("#detail").append(row); return true; },
         },
         route: "detail", scope, settings: { snapshot: () => ({ enableMagnetsFilter: "no" }) },
-        dialog: { open: vi.fn() }, subtitle: { search: vi.fn(async () => subtitleResults), download: vi.fn() },
+        dialog, subtitle: { search: vi.fn(async () => subtitleResults), download: vi.fn() },
         ui, notifications, events: { on: vi.fn((_name, listener) => { stateChanged = listener; return () => { stateChanged = null; }; }) }, diagnostics,
     });
     controller.getFeatureStateActionsAdapter().attach(stateActions);
-    return { controller, scope, stateActions, ui, notifications, diagnostics, loadingClose, get stateChanged() { return stateChanged; } };
+    return { controller, scope, stateActions, ui, notifications, diagnostics, dialog, loadingClose, get stateChanged() { return stateChanged; } };
 }
 
 describe("Detail page actions Feature controller", () => {
@@ -69,6 +70,54 @@ describe("Detail page actions Feature controller", () => {
         await fixture.controller.searchXunLeiSubtitle("");
         expect(fixture.notifications.error).toHaveBeenCalledWith("迅雷中找不到相关字幕!");
         expect(fixture.loadingClose).toHaveBeenCalledOnce();
+        fixture.scope.dispose();
+    });
+
+    it("waits for magnet content, prevents duplicate dialogs and discards late results", async () => {
+        const fixture = createFixture();
+        let resolveHub;
+        const createMagnetHub = vi.fn(() => new Promise(resolve => { resolveHub = resolve; }));
+        fixture.controller.attachFeatureMagnetHubAdapter({ createMagnetHub });
+        fixture.controller.start();
+        $("#magnetSearchBtn").trigger("click").trigger("click");
+        expect(fixture.dialog.open).toHaveBeenCalledOnce();
+        const options = fixture.dialog.open.mock.calls[0][0];
+        expect(typeof options.content).toBe("string");
+        const root = $("<div class='layui-layer'></div>").append(options.content).appendTo(document.body);
+        options.success(root);
+        const content = root.find(".jhs-magnet-dialog");
+        expect(content.text()).toContain("正在加载");
+        await vi.waitFor(() => expect(createMagnetHub).toHaveBeenCalledOnce());
+        resolveHub($("<div>磁力结果</div>"));
+        await vi.waitFor(() => expect(content.text()).toContain("磁力结果"));
+        options.end();
+        $("#magnetSearchBtn").trigger("click");
+        const later = fixture.dialog.open.mock.calls[1][0];
+        const laterRoot = $("<div class='layui-layer'></div>").append(later.content).appendTo(document.body);
+        later.success(laterRoot);
+        await vi.waitFor(() => expect(createMagnetHub).toHaveBeenCalledTimes(2));
+        later.end();
+        resolveHub($("<div>迟到的结果</div>"));
+        await Promise.resolve();
+        expect(laterRoot.text()).not.toContain("迟到的结果");
+        fixture.scope.dispose();
+    });
+
+    it("shows a retry after magnet initialization fails and closes on feature detach", async () => {
+        const fixture = createFixture();
+        const adapter = { createMagnetHub: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue($("<div>磁力结果</div>")) };
+        fixture.controller.attachFeatureMagnetHubAdapter(adapter);
+        fixture.controller.start();
+        $("#magnetSearchBtn").trigger("click");
+        const options = fixture.dialog.open.mock.calls[0][0];
+        const root = $("<div class='layui-layer'></div>").append(options.content).appendTo(document.body);
+        options.success(root);
+        const content = root.find(".jhs-magnet-dialog");
+        await vi.waitFor(() => expect(content.find("button").text()).toBe("重试"));
+        content.find("button").trigger("click");
+        await vi.waitFor(() => expect(content.text()).toContain("磁力结果"));
+        fixture.controller.detachFeatureMagnetHubAdapter(adapter);
+        expect(fixture.dialog.close).toHaveBeenCalledExactlyOnceWith(7);
         fixture.scope.dispose();
     });
 });

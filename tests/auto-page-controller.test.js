@@ -20,7 +20,7 @@ function card(carNum, href) {
     return item;
 }
 
-function setup(autoPage = "yes", response = "") {
+function setup(autoPage = "yes", response = "", visibilitySnapshot = null) {
     document.body.innerHTML = `<div class="movie-list">${card("ABC-001", "/v/abc-001").outerHTML}</div><a class="pagination-next" href="/page/2">下一页</a><div class="pagination">旧分页</div>`;
     window.isListPage = true;
     const $ = jqueryFactory;
@@ -44,7 +44,7 @@ function setup(autoPage = "yes", response = "") {
     };
     const hostAdapter = { site: "javdb", document, location: window.location, getListSelectors: () => selectors };
     const http = { request: vi.fn(async () => ({ data: response })) };
-    const list = { replaceCoverImages: vi.fn() };
+    const list = { replaceCoverImages: vi.fn(), getVisibilitySnapshot: () => visibilitySnapshot };
     const logger = { log: vi.fn(), error: vi.fn(), warn: vi.fn() };
     const controller = new AutoPageController({ hostAdapter, http, settings, list, ui: { jquery: (value) => $(value) }, eventBus, scope, document, window, logger });
     return { controller, settings, scope, eventBus, handlers, http, list, selectors, logger };
@@ -104,8 +104,41 @@ describe("List Feature auto-page controller", () => {
         await controller.loadNextPage();
         expect(document.querySelectorAll(".movie-list .item")).toHaveLength(1);
         expect(controller.nextUrl).toBeNull();
-        expect(controller.loader.classList.contains("waterfall-error")).toBe(true);
+        expect(controller.loader.classList.contains("waterfall-stopped")).toBe(true);
+        expect(controller.loader.textContent).toContain("下一页包含重复内容");
         scope.dispose();
+    });
+
+    it("pauses an empty quick filter and lets each manual action load only one page", async () => {
+        const pages = [
+            `<div class="movie-list">${card("ABC-002", "/v/abc-002").outerHTML}</div><a class="pagination-next" href="/page/3">下一页</a>`,
+            `<div class="movie-list">${card("ABC-003", "/v/abc-003").outerHTML}</div><a class="pagination-next" href="/page/4">下一页</a>`,
+            `<div class="movie-list">${card("ABC-004", "/v/abc-004").outerHTML}</div><a class="pagination-next" href="/page/5">下一页</a>`,
+        ];
+        const fixture = setup("yes", "", { filter: "favorite", visible: 0, total: 30 });
+        fixture.http.request.mockImplementation(async () => ({ data: pages.shift() }));
+        await fixture.controller.mount();
+        fixture.controller.loader.getBoundingClientRect = () => ({ top: 0 });
+
+        expect(fixture.controller.loader.textContent).toContain("已加载内容无匹配");
+        fixture.controller.checkLoad();
+        expect(fixture.http.request).not.toHaveBeenCalled();
+
+        fixture.controller.loader.querySelector(".jhs-scroll__continue").click();
+        await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledOnce());
+        await vi.waitFor(() => expect(document.querySelectorAll(".movie-list .item")).toHaveLength(2));
+        await fixture.eventBus.emit("list-items-added", { items: [document.querySelectorAll(".movie-list .item")[1]] });
+        expect(fixture.http.request).toHaveBeenCalledOnce();
+        expect(fixture.controller.loader.querySelector(".jhs-scroll__continue")).not.toBeNull();
+
+        fixture.controller.loader.querySelector(".jhs-scroll__continue").click();
+        await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(document.querySelectorAll(".movie-list .item")).toHaveLength(3));
+        expect(fixture.http.request).toHaveBeenCalledTimes(2);
+
+        fixture.controller.onVisibilityChanged({ filter: "all", visible: 32, total: 32 });
+        await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledTimes(3));
+        fixture.scope.dispose();
     });
 
     it("rejects an in-flight page after AutoPage is switched off", async () => {

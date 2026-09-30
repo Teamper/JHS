@@ -94,6 +94,20 @@ describe("native list card actions Feature", () => {
         expect(display()).not.toBe("none");
     });
 
+    it("opens the screenshot viewer when the enabled card action is clicked", async () => {
+        current = createController({ screenshotAvailable: true });
+        await current.controller.start();
+
+        current.document.querySelector(".screenSvg").click();
+
+        await vi.waitFor(() => expect(current.controller.screenshot.resolve).toHaveBeenCalledWith(
+            { carNum: "ABC-123" },
+            expect.objectContaining({ allowWhenDisabled: true, scope: current.scope }),
+        ));
+        expect(current.ui.openImageViewer).toHaveBeenCalledOnce();
+        expect(current.ui.openImageViewer.mock.calls[0][0].src).toBe("https://images.example.test/screenshot.jpg");
+    });
+
     it("applies third-party and copy card switches live", async () => {
         current = createController();
         await current.controller.start();

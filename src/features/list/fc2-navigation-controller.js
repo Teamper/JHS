@@ -115,7 +115,7 @@ export class Fc2NavigationController {
     async handleNavigation(event) {
         if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
         const $ = this.ui.jquery;
-        if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
+        if (event.shiftKey || event.altKey || $(event.target).closest("button,input,select,textarea,[role='button'],[role='menu'],[role='menuitem'],[contenteditable='true'],a[href]:not([data-jhs-fc2-primary]),.jhs-cover-tools,.tool-box,.jhs-card-menu,.jhs-toolbar,div.meta-buttons,[class^='jhs-match-']").length) return;
         const item = $(event.currentTarget).closest(".item");
         const shouldOpenTab = Boolean(event.ctrlKey || event.metaKey || 1 === event.button);
         const fallbackToNative = (/** @type {string} */ href, /** @type {string} */ carNum, /** @type {unknown} */ error) => {

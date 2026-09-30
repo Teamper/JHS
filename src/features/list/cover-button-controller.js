@@ -36,7 +36,7 @@ export class CoverButtonController {
         return `
             <style>
                 .box .tags { justify-content:space-between; }
-                .jhs-cover-tools { display:flex; align-items:center; justify-content:flex-end; gap:var(--jhs-space-2); margin-left:auto; }
+                .jhs-cover-tools { display:flex; flex-wrap:wrap; max-width:100%; align-items:center; justify-content:flex-end; gap:var(--jhs-space-2); margin-left:auto; }
                 .jhs-cover-tools svg path { fill:var(--jhs-icon-color); }
                 .jhs-cover-tools .screenSvg, .jhs-cover-tools .videoSvg { opacity:.65; }
                 .jhs-cover-tools .screenSvg:hover, .jhs-cover-tools .videoSvg:hover { opacity:1; }
@@ -222,7 +222,9 @@ export class CoverButtonController {
         const settings = this.settings.snapshot(), movie = this.movie;
         const missAv = movie.externalSiteOrigin("missAvBtn", settings), jable = movie.externalSiteOrigin("jableBtn", settings), avgle = movie.externalSiteOrigin("avgleBtn", settings), av123 = movie.providerOrigin("av123") || "";
         $(this.list.getSelector().itemSelector).each(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
-            const card = $(element), { carNum } = list.findCarNumAndHref(card);
+            const card = $(element);
+            if (this.isJavBus && card.find(".avatar-box").length) return;
+            const { carNum } = list.findCarNumAndHref(card);
             card.find(".site-jable").attr({ href: `${jable}/search/${carNum}/`, target: "_blank", rel: "noopener noreferrer" });
             card.find(".site-avgle").attr({ href: `${avgle}/vod/search.html?wd=${carNum}`, target: "_blank", rel: "noopener noreferrer" });
             card.find(".site-miss-av").attr({ href: `${missAv}/search/${carNum}`, target: "_blank", rel: "noopener noreferrer" });

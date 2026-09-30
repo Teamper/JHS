@@ -12,6 +12,7 @@ import { applyLayoutRangeValue, disposeQuickSettingHost, initQuickSettingForm, l
 import { buildSettingCss } from "./setting-styles.js";
 import { bindSettingControl } from "../../ui/settings/setting-binding-controller.js";
 import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 export class SettingPlugin {
     /** @param {any} options */
@@ -28,6 +29,10 @@ export class SettingPlugin {
         this.domUi = options.domUi;
         this.document = options.document;
         this.window = options.window;
+        this.site = options.site;
+        this.route = options.route;
+        this._resourceTestScopes = new Set();
+        this._sourceRenderGeneration = 0;
         /** @type {any} */ this.featureExternalSitesAdapter = null;
         /** @type {any} */ this.featureCoverButtonAdapter = null;
         i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
@@ -119,6 +124,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         });
         this._settingScope = scope;
         scope.addCleanup((() => this.unmountDesktopSettingNav()));
+        scope.listen(profile, "profile.changed", () => this.syncDesktopSettingNav(profile.current() === "compact"));
         this.syncDesktopSettingNav(profile.current() === "compact");
     }
     disposeQuickSettings() {
@@ -151,14 +157,20 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             this._settingNavResizeCleanup?.();
             this._settingNavResizeCleanup = scope.listen(this.window, "resize", e);
         }
-        l && (this.window.isDetailPage ? this.jquery("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : this.window.isListPage && this.utils.loopDetector((() => {
-            const waitButton = this.jquery("#waitCheckBtn");
-            return waitButton.length && (!this.jquery("#jhs-page-commandbar").length || waitButton.closest(".jhs-commandbar__primary").length);
-        }), (() => {
-            if (generation !== this._desktopNavGeneration || !this._desktopSettingNavMounted) return;
-            const waitButton = this.jquery("#waitCheckBtn"), primary = waitButton.closest(".jhs-commandbar__primary");
-            (primary.length ? primary : waitButton.parent()).append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-        }), 1, 1e4, !1, scope)),
+        if (this.site === "javbus" && this.route === "detail") {
+            const anchor = this.jquery('<div class="container-fluid jhs-setting-detail-anchor"><div id="top-right-box" class="jhs-setting-anchor"><div class="setting-box"><button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark"><span>设置</span></button><div class="simple-setting"></div></div></div></div>');
+            const target = this.jquery("h3").first();
+            if (target.length) target.before(anchor);
+            else this.jquery(this.getRuntimeService("host")?.locateDetailRoot?.()).first().before(anchor);
+        } else if (this.site === "javbus" && this.route === "list") {
+            const anchor = this.jquery('<div id="top-right-box" class="jhs-setting-anchor"><div class="setting-box"><button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark"><span>设置</span></button><div class="simple-setting"></div></div></div>');
+            const primary = this.jquery("#jhs-page-commandbar .jhs-commandbar__primary").first();
+            const commandbar = this.jquery("#jhs-page-commandbar .jhs-commandbar__left").first();
+            const listRoot = this.jquery(this.getRuntimeService("host")?.locateListRoot?.()).first();
+            if (primary.length) primary.append(anchor);
+            else if (commandbar.length) this.jquery('<div class="jhs-commandbar__primary"></div>').append(anchor).appendTo(commandbar);
+            else if (listRoot.length) listRoot.before(anchor);
+        }
         this.jquery(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async (event) => {
             const host = this.jquery(event.currentTarget).find(".simple-setting");
             disposeQuickSettingHost(host, this.jquery);
@@ -274,6 +286,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             },
             end: () => {
                 this._settingsDialogGeneration++;
+                this.cancelResourceTests();
                 this._fullSettingBinding?.dispose?.();
                 this._fullSettingBinding = null;
                 this._cloudSettingBinding?.dispose?.();
@@ -615,9 +628,12 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         this._cloudSettingBinding = bindSettingRows(host, descriptors, { settings });
     }
     renderResourceSettings(root = this.jquery(this.document)) {
+        this.cancelResourceTests();
+        const renderGeneration = ++this._sourceRenderGeneration;
         const card = (source, custom, kind) => {
             const node = this.jquery('<article class="jhs-card jhs-resource-card"></article>');
-            node.append(this.jquery('<div class="jhs-setting-row"></div>').append(this.jquery('<div></div>').append(this.jquery("<strong></strong>").text(source.name), source.experimental ? '<span class="jhs-badge">实验性</span>' : "", this.jquery("<small></small>").text(`${source.type || "截图来源"} · ${source.domain || (() => { try { return new URL(source.searchUrlTemplate).hostname; } catch { return "未配置域名"; } })()} · 优先级 ${source.priority}`)), this.jquery('<input type="checkbox" class="mini-switch jhs-source-toggle">').prop("checked", source.enabled)));
+            const defaultType = "magnet" === kind ? "磁力来源" : "截图来源";
+            node.append(this.jquery('<div class="jhs-setting-row"></div>').append(this.jquery('<div></div>').append(this.jquery("<strong></strong>").text(source.name), source.experimental ? '<span class="jhs-badge">实验性</span>' : "", this.jquery("<small></small>").text(`${source.type || defaultType} · ${source.domain || (() => { try { return new URL(source.searchUrlTemplate).hostname; } catch { return "未配置域名"; } })()} · 优先级 ${source.priority}`)), this.jquery('<input type="checkbox" class="mini-switch jhs-source-toggle">').prop("checked", source.enabled)));
             const actions = this.jquery('<div class="jhs-toolbar"></div>').append('<button type="button" class="jhs-btn jhs-source-test">测试</button>');
             if (custom) actions.append('<button type="button" class="jhs-btn jhs-source-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-source-delete">删除</button>');
             node.append(actions);
@@ -653,7 +669,10 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                     this.notifications.error("来源设置保存失败，已恢复原设置");
                 }
             });
-            node.on("click", ".jhs-source-test", event => this.testSource(event.currentTarget, source.baseUrl || source.searchUrlTemplate?.replace("{keyword}", "test"), { custom, source }));
+            node.on("click", ".jhs-source-test", event => {
+                const url = source.testMode === "host-page" ? null : source.testUrl || source.baseUrl || source.searchUrlTemplate?.replace("{keyword}", "test");
+                void this.testSource(event.currentTarget, url, { custom, source, renderGeneration });
+            });
             custom && node.on("click", ".jhs-source-edit", (() => this.openSourceDialog(source, root))).on("click", ".jhs-source-delete", (event => this.utils.q(event, `确认删除来源「${escapeHtml(source.name)}」？`, (async () => {
                 try {
                     await this.resourceSettings.updateArray("customMagnetSources", (list) => list.filter((item => item.id !== source.id)));
@@ -701,9 +720,12 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);
         });
         content.on("change", '[name="parserType"]', renderFields), renderFields(), content.appendTo("body").hide();
+        let saving = false;
         dialog.open({ type: 1, title: existing ? "编辑自定义磁力源" : "添加自定义磁力源", content, ui: { size: "md", body: "scroll" }, area: this.utils.getDialogArea("md"), btn: ["保存", "取消"], success: () => content.show(), end: () => content.remove(), yes: async index => {
-            const form = Object.fromEntries(content.find("input,select").map(((i, element) => [element.name, "checkbox" === element.type ? element.checked : element.value])).get());
+            if (saving) return;
+            saving = true;
             try {
+                const form = Object.fromEntries(Array.from(content.find("input,select"), element => [element.name, "checkbox" === element.type ? element.checked : element.value]));
                 const source = buildCustomMagnetSource(form, existing);
                 await this.resourceSettings.updateArray("customMagnetSources", (list) => {
                     const target = existing ? list.findIndex((item => item.id === existing.id)) : -1;
@@ -714,6 +736,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 this.resourceState.custom = await this.resourceSettings.getMagnetSources();
                 dialog.close(index), root && this.renderResourceSettings(root);
             } catch (error) { this.notifications.error(error.message); }
+            finally { saving = false; }
         } });
     }
     openRuleDialog(kind, existing = null, root = null) {
@@ -724,10 +747,15 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);
         });
         content.appendTo("body").hide();
+        let saving = false;
         dialog.open({ type: 1, title: `${existing ? "编辑" : "新建"}${isTag ? "标签" : "过滤"}规则`, content, ui: { size: "sm", body: "scroll" }, area: this.utils.getDialogArea("sm"), btn: ["保存", "取消"], success: () => content.show(), end: () => content.remove(), yes: async index => {
-            const rule = Object.fromEntries(content.find("input,select").map(((i, element) => [element.name, "checkbox" === element.type ? element.checked : element.value])).get());
-            rule.id = existing?.id || `rule-${Date.now()}`, rule.weight = Number(rule.weight), rule.penalty = Number(rule.penalty);
+            if (saving) return;
+            saving = true;
             try {
+                const rule = Object.fromEntries(Array.from(content.find("input,select"), element => [element.name, "checkbox" === element.type ? element.checked : element.value]));
+                rule.id = existing?.id || `rule-${Date.now()}`;
+                if (isTag) rule.weight = Number(rule.weight);
+                else rule.penalty = Number(rule.penalty);
                 validateRule(rule);
                 await this.resourceSettings.updateArray(isTag ? "magnetTagRules" : "magnetFilterRules", (list) => {
                     const target = existing ? list.findIndex((item => item.id === existing.id)) : -1;
@@ -738,6 +766,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 this.resourceState[isTag ? "tags" : "filters"] = await this.resourceSettings.getArray(isTag ? "magnetTagRules" : "magnetFilterRules");
                 dialog.close(index), root && this.renderRules(kind, root);
             } catch (error) { this.notifications.error(error.message); }
+            finally { saving = false; }
         } });
     }
     async saveCloudSettings(root = this.jquery(this.document)) {
@@ -752,7 +781,44 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             badge.text("检测失败");
         }
     }
-    async testSource(button, url, options = {}) { if (!url) return this.notifications.info("本站来源无需跨站测试"); const node = this.jquery(button).prop("disabled", true), badge = node.siblings(".jhs-source-test-state").length ? node.siblings(".jhs-source-test-state") : this.jquery('<span class="jhs-badge jhs-source-test-state"></span>').insertAfter(node); badge.text("检测中"); try { const parsed = new URL(url), scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({ providerId: `settings-source-${options.source?.id || "unknown"}`, method: "GET", url: parsed.href, responseType: "text", cacheScope: "none", urlPolicy: options.custom ? { trustClass: "custom-public" } : { trustClass: "builtin-public", hosts: [options.source?.domain || parsed.hostname] } }, scope); badge.text(response.data ? "200 · 可解析" : "空响应"); } catch (error) { badge.text("NOT_FOUND" === error?.code ? "404" : "RATE_LIMITED" === error?.code ? "限流" : "AUTH_REQUIRED" === error?.code ? "需要授权" : "请求失败"); } finally { node.prop("disabled", false).text("测试"); } }
+    cancelResourceTests() {
+        for (const scope of this._resourceTestScopes) scope.dispose();
+        this._resourceTestScopes.clear();
+    }
+    async testSource(button, url, options = {}) {
+        if (!url) return this.notifications.info(options.source?.testMode === "host-page" ? "本站资源依赖当前页面，无需单独检测" : "未配置来源检测地址");
+        const node = this.jquery(button);
+        if (node.prop("disabled")) return;
+        const generation = this._settingsDialogGeneration, renderGeneration = options.renderGeneration ?? this._sourceRenderGeneration;
+        const badge = node.siblings(".jhs-source-test-state").length ? node.siblings(".jhs-source-test-state") : this.jquery('<span class="jhs-badge jhs-source-test-state"></span>').insertAfter(node);
+        const parentScope = await this.getRuntimeService("scope")?.();
+        const scope = new LifecycleScope(`settings-source-test-${options.source?.id || "unknown"}`);
+        const releaseParentScope = parentScope?.addCleanup?.(() => scope.dispose());
+        this._resourceTestScopes.add(scope);
+        const isCurrent = () => node[0]?.isConnected && generation === this._settingsDialogGeneration && renderGeneration === this._sourceRenderGeneration && !scope.disposed;
+        node.prop("disabled", true);
+        badge.text("检测中");
+        try {
+            const parsed = new URL(url);
+            const response = await this.getRuntimeService("http").request({
+                providerId: `settings-source-${options.source?.id || "unknown"}`, method: "GET", url: parsed.href, responseType: "text", cacheScope: "none",
+                urlPolicy: options.custom ? { trustClass: "custom-public" } : { trustClass: "builtin-public", hosts: [options.source?.domain || parsed.hostname] },
+            }, scope);
+            if (!isCurrent()) return;
+            const status = Number(response?.status) || 0, body = response?.data ?? response?.responseText ?? "";
+            badge.text(status ? `HTTP ${status} · ${body ? "已响应（未验证解析）" : "空响应"}` : body ? "已响应（未验证解析）" : "空响应");
+        } catch (error) {
+            if (!isCurrent()) return;
+            const status = Number(error?.details?.status ?? error?.status) || 0;
+            badge.text(status === 404 || error?.code === "NOT_FOUND" ? "404" : status === 429 || error?.code === "RATE_LIMITED" ? "限流" : [401, 403].includes(status) || error?.code === "AUTH_REQUIRED" ? "需要授权" : error?.code === "TIMEOUT" ? "超时" : "请求失败");
+        } finally {
+            const restoreButton = isCurrent();
+            this._resourceTestScopes.delete(scope);
+            releaseParentScope?.();
+            scope.dispose();
+            if (restoreButton) node.prop("disabled", false).text("测试");
+        }
+    }
     previewCarNumbers(root = this.jquery(this.document)) {
         const parsed = parseCarNumberText(root.find("#car-number-import").val()), actionType = root.find("#car-number-import-status").val();
         this.pendingCarImport = actionType && parsed.values.length ? { ...parsed, actionType } : null;

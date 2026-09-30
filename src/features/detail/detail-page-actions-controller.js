@@ -27,6 +27,7 @@ export class DetailPageActionsController {
         this.featureWorkspace = null;
         this.featureMagnetFilterAdapter = null;
         this.featureMagnetHubAdapter = null;
+        this.magnetDialog = null;
         this.stateBinding = null;
     }
 
@@ -58,7 +59,56 @@ export class DetailPageActionsController {
     /** @param {any} adapter */
     attachFeatureMagnetHubAdapter(adapter) { this.featureMagnetHubAdapter = adapter; }
     /** @param {any} adapter */
-    detachFeatureMagnetHubAdapter(adapter) { if (this.featureMagnetHubAdapter === adapter) this.featureMagnetHubAdapter = null; }
+    detachFeatureMagnetHubAdapter(adapter) { if (this.featureMagnetHubAdapter === adapter) { this.featureMagnetHubAdapter = null; this.closeMagnetDialog(); } }
+
+    closeMagnetDialog() {
+        const active = this.magnetDialog;
+        if (!active) return;
+        active.open = false;
+        this.magnetDialog = null;
+        if (active.index !== null) this.dialog.close(active.index);
+    }
+
+    /** Await the source surface inside its own dialog and discard late results after closing. */
+    /** @param {string} carNum */
+    openMagnetDialog(carNum) {
+        const magnetHub = this.featureMagnetHubAdapter;
+        if (!magnetHub) return void this.notifications.info("磁力搜索功能已禁用");
+        if (this.magnetDialog?.open) return;
+        /** @type {{open: boolean, index: number|null, content: any}} */
+        const active = { open: true, index: null, content: null };
+        this.magnetDialog = active;
+        const load = async () => {
+            const content = active.content;
+            if (!content?.length) return;
+            content.empty().text("正在加载磁力来源…");
+            try {
+                const hub = await magnetHub.createMagnetHub(carNum);
+                if (!active.open || this.scope.disposed || this.featureMagnetHubAdapter !== magnetHub || !content[0]?.isConnected) return;
+                content.removeAttr("role").empty().append(hub);
+            } catch (error) {
+                if (!active.open || this.scope.disposed || !content[0]?.isConnected) return;
+                this.diagnostics.recordError({ source: "detail-page-actions", message: "磁力来源初始化失败", error });
+                content.empty().append(this.jquery('<p class="magnet-error"></p>').text("磁力来源加载失败"), this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary">重试</button>').on("click", () => void load()));
+            }
+        };
+        try {
+            active.index = this.dialog.open({
+                type: 1, title: `磁力搜索 ${carNum}`, content: '<div class="jhs-magnet-dialog" role="status" aria-live="polite">正在加载磁力来源…</div>',
+                area: this.ui.getResponsiveArea(["60%", "80%"]), scrollbar: false,
+                success: (/** @type {any} */ element) => {
+                    active.content = this.jquery(element).find(".jhs-magnet-dialog");
+                    void load();
+                },
+                end: () => { active.open = false; if (this.magnetDialog === active) this.magnetDialog = null; },
+            });
+        } catch (error) {
+            active.open = false;
+            this.magnetDialog = null;
+            this.diagnostics.recordError({ source: "detail-page-actions", message: "磁力搜索弹窗打开失败", error });
+            this.notifications.error("磁力搜索弹窗打开失败");
+        }
+    }
 
     getPageInfo() {
         const info = this.hostAdapter.readMovieInfo?.() ?? this.hostAdapter.readMovieRef?.() ?? {};
@@ -100,19 +150,10 @@ export class DetailPageActionsController {
         let mounted = false;
         if (workspaceSlot?.length) { workspaceSlot.append(row); mounted = true; }
         else mounted = this.hostAdapter.mountDetailActions?.(row[0]) === true;
-        this.scope.addCleanup(() => { row.off(".jhsDetailActions").remove(); });
+        this.scope.addCleanup(() => { this.closeMagnetDialog(); row.off(".jhsDetailActions").remove(); });
         if (!mounted) return false;
 
-        row.on("click.jhsDetailActions", "#magnetSearchBtn", () => {
-            const magnetHub = this.featureMagnetHubAdapter;
-            if (!magnetHub) return void this.notifications.info("磁力搜索功能已禁用");
-            const content = magnetHub.createMagnetHub(carNum);
-            this.dialog.open({
-                type: 1, title: `磁力搜索 ${carNum}`, content: '<div id="magnetHubBox"></div>',
-                area: this.ui.getResponsiveArea(["60%", "80%"]), scrollbar: false,
-                success: () => $("#magnetHubBox").append(content),
-            });
-        });
+        row.on("click.jhsDetailActions", "#magnetSearchBtn", () => this.openMagnetDialog(carNum ?? ""));
 
         const magnetFilter = this.featureMagnetFilterAdapter, current = this.settings.snapshot().enableMagnetsFilter ?? _;
         if (!magnetFilter) row.find("#enable-magnets-filter").remove();

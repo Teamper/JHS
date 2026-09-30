@@ -138,6 +138,10 @@ export class ListController {
         this.cardStateStyleRelease = null;
         /** @type {ListFilterContextProvider | null} */ this.filterContextProvider = null;
         this.activeFilter = "waitCheck";
+        /** @type {WeakMap<Element, boolean>} */ this.visibilityByItem = new WeakMap();
+        this.visibleItemCount = 0;
+        this.totalItemCount = 0;
+        this.hasVisibilitySnapshot = false;
         this.sortController = options.sortController ?? null;
         this.styleRelease = null;
         /** @type {ListView | null} */ this.view = null;
@@ -320,8 +324,32 @@ export class ListController {
         if (this.listRefreshController.disposed) return false;
         const isCurrent = this.legacyPlugin.isCurrentListGeneration?.(revision) ?? revision === (this.legacyPlugin.captureListRevision?.() ?? "0");
         if (!isCurrent || !this.view) return false;
-        this.view.applyVisibility(items, this.view.getActiveFilter?.() ?? this.activeFilter);
+        const document = this.hostAdapter?.document ?? globalThis.document;
+        const elements = items ?? (document?.querySelectorAll ? Array.from(document.querySelectorAll(this.view.selectors.itemSelector)) : null);
+        if (items === null) {
+            this.visibilityByItem = new WeakMap();
+            this.visibleItemCount = 0;
+            this.totalItemCount = 0;
+        }
+        this.view.applyVisibility(elements, this.view.getActiveFilter?.() ?? this.activeFilter, (element, visible) => {
+            const known = this.visibilityByItem.has(element), previous = this.visibilityByItem.get(element);
+            if (!known) {
+                this.totalItemCount++;
+                if (visible) this.visibleItemCount++;
+            } else if (previous !== visible) this.visibleItemCount += visible ? 1 : -1;
+            this.visibilityByItem.set(element, visible);
+        });
+        this.hasVisibilitySnapshot = true;
+        const pending = this.events?.emit?.("list-visibility-changed", this.getVisibilitySnapshot(revision), { broadcast: false });
+        pending?.catch?.((/** @type {unknown} */ error) => this.logger.error("列表显隐状态通知失败", error));
         return true;
+    }
+
+    /** Return the cached filter counts without walking the card list. */
+    /** @param {string} [revision] */
+    getVisibilitySnapshot(revision = this.legacyPlugin.captureListRevision?.() ?? "0") {
+        if (!this.hasVisibilitySnapshot) return null;
+        return { filter: this.view?.getActiveFilter?.() ?? this.activeFilter, visible: this.visibleItemCount, total: this.totalItemCount, revision };
     }
 
     /** Coalesce card-state summary updates in the List Feature scope. */
@@ -351,6 +379,7 @@ export class ListController {
     /** @param {unknown} filter @param {{syncUi?: boolean}} [options] */
     setQuickFilter(filter, { syncUi = true } = {}) {
         this.activeFilter = normalizeQuickFilterKey(filter);
+        this.hasVisibilitySnapshot = false;
         this.view?.setActiveFilter(this.activeFilter);
         if (syncUi) this.view?.syncQuickFilterUi(this.activeFilter);
         if (typeof this.legacyPlugin.beginQuickFilterTransition === "function") {

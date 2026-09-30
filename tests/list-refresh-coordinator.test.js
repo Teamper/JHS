@@ -56,7 +56,19 @@ describe("ListRefreshCoordinator", () => {
 
         expect(options.filterAll).not.toHaveBeenCalled();
         expect(options.filterItems).not.toHaveBeenCalled();
-        expect(options.reconcile).toHaveBeenCalledWith([], "0");
+        expect(options.reconcile).toHaveBeenCalledWith(null, "0");
+    });
+
+    it("evaluates added cards before reconciling all cards when visibility also changes", async () => {
+        const { coordinator, options, calls } = setup();
+        const connected = { isConnected: true };
+
+        await coordinator.request({ items: [connected], visibilityOnly: true, reason: "append-and-filter" });
+
+        expect(options.filterAll).not.toHaveBeenCalled();
+        expect(options.filterItems).toHaveBeenCalledWith([connected], "1");
+        expect(options.reconcile).toHaveBeenCalledWith(null, "1");
+        expect(calls.findIndex(([phase]) => phase === "items")).toBeLessThan(calls.findIndex(([phase]) => phase === "reconcile"));
     });
 
     it("does not reconcile or restart work after disposal during an async filter", async () => {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { ListView } from "../src/features/list/list-view.js";
+import { ListController } from "../src/features/list/list-controller.js";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
@@ -45,6 +46,35 @@ describe("ListView", () => {
         expect($("#blocked").css("display")).not.toBe("none");
         expect($("#favorite").css("display")).toBe("none");
         expect($(".jhs-filter-option[aria-checked=true]").data("jhs-filter")).toBe("blockedItems");
+        view.dispose();
+    });
+
+    it("reports each filter visibility change without rescanning cards afterward", () => {
+        const { $, view } = createHarness(), /** @type {Array<[string, boolean]>} */ changes = [];
+        view.applyVisibility(null, "favorite", (element, visible) => changes.push([element.id, visible]));
+        expect(changes).toEqual([["pending", false], ["favorite", true], ["blocked", false]]);
+        expect($("#favorite").css("display")).not.toBe("none");
+        view.dispose();
+    });
+
+    it("keeps a cached visible count accurate across full and incremental card refreshes", () => {
+        const { dom, view, hostAdapter } = createHarness();
+        view.setActiveFilter("favorite");
+        const controller = Object.assign(Object.create(ListController.prototype), {
+            listRefreshController: { disposed: false },
+            legacyPlugin: { isCurrentListGeneration: () => true, captureListRevision: () => "r1" },
+            view, hostAdapter, activeFilter: "favorite", visibilityByItem: new WeakMap(), visibleItemCount: 0,
+            totalItemCount: 0, hasVisibilitySnapshot: false, events: { emit: vi.fn() }, logger: { error: vi.fn() },
+        });
+
+        expect(controller.reconcileListItems(null, "r1")).toBe(true);
+        expect(controller.getVisibilitySnapshot("r1")).toEqual({ filter: "favorite", visible: 1, total: 3, revision: "r1" });
+        const pending = dom.window.document.querySelector("#pending"), favorite = dom.window.document.querySelector("#favorite");
+        pending.setAttribute("data-jhs-flags", '{"favorite":true}');
+        favorite.setAttribute("data-jhs-flags", "{}");
+        controller.reconcileListItems([pending, favorite], "r2");
+        expect(controller.getVisibilitySnapshot("r2")).toEqual({ filter: "favorite", visible: 1, total: 3, revision: "r2" });
+        expect(controller.events.emit).toHaveBeenLastCalledWith("list-visibility-changed", expect.objectContaining({ visible: 1, total: 3 }), { broadcast: false });
         view.dispose();
     });
 

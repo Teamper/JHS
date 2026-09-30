@@ -121,6 +121,13 @@ export class ResponsiveShellController {
                 position: fixed;
                 bottom: calc(92px + env(safe-area-inset-bottom, 0px));
                 right: 16px;
+                max-height: calc(100vh - 108px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+                max-height: calc(100dvh - 108px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+                max-width: calc(100vw - 32px);
+                overflow-y: auto;
+                overflow-x: hidden;
+                overscroll-behavior: contain;
+                scrollbar-width: thin;
                 z-index: var(--jhs-z-fab-menu);
                 display: flex;
                 flex-direction: column;
@@ -143,8 +150,10 @@ export class ResponsiveShellController {
                 flex-direction: column;
                 gap: 10px;
                 align-items: flex-end;
+                flex-shrink: 0;
             }
             .jhs-fab-divider {
+                flex-shrink: 0;
                 width: 32px;
                 height: 2px;
                 background: var(--jhs-border);
@@ -533,7 +542,7 @@ export class ResponsiveShellController {
                 const gen = ++this._fabGeneration;
                 const self = this;
                 const items = menu.find(".jhs-fab-menu-item");
-                items.first().trigger("focus");
+                items.first().trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
                 items.each(((/** @type {number} */ i, /** @type {Element} */ element) => {
                     const el = this.jquery(element);
                     const timer = this.window.setTimeout(() => {
@@ -554,7 +563,7 @@ export class ResponsiveShellController {
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-            items.eq(next).trigger("focus");
+            items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
         }));
         filterMenu.on("keydown", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             const items = filterMenu.find(".jhs-mobile-filter-option"), index = items.index(event.currentTarget);
@@ -562,7 +571,7 @@ export class ResponsiveShellController {
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-            items.eq(next).trigger("focus");
+            items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
         })).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             event.stopPropagation(), this.getCapability("ListPagePlugin")?.setQuickFilter?.(this.jquery(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
@@ -572,7 +581,7 @@ export class ResponsiveShellController {
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-            items.eq(next).trigger("focus");
+            items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
         })).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
             event.stopPropagation();
             const value = this.jquery(event.currentTarget).data("jhs-sort");

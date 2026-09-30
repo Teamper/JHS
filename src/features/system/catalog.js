@@ -39,7 +39,7 @@ export const systemFeatureManifests = Object.freeze([
                     capabilities: Object.fromEntries(["ListPagePlugin", "NewVideoPlugin", "BlacklistPlugin", "TaskPlugin"].map((name) => [name, runtime.resolveCompatibilityBean(name)])),
                     jquery: deps[SERVICE.domUi].jquery, utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
                     logger: deps[SERVICE.clog], legacyStorage: deps[SERVICE.legacyStorage], events: deps[SERVICE.events], domUi: deps[SERVICE.domUi],
-                    document: pageDocument, window: pageWindow,
+                    document: pageDocument, window: pageWindow, site: runtime.site, route: runtime.route,
                 });
                 compatibilityBean.connect(adapter);
                 runtime.scope.addCleanup(() => compatibilityBean.disconnect(adapter));

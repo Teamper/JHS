@@ -24,13 +24,15 @@ export class ListView {
         /** @type {any} */ this.videoRoot = null;
     }
 
-    /** @param {Element[] | null} items @param {unknown} filter */
-    applyVisibility(items, filter) {
+    /** @param {Element[] | null} items @param {unknown} filter @param {(element: Element, visible: boolean) => void} [onVisibility] */
+    applyVisibility(items, filter, onVisibility) {
         const elements = items ? $(items) : $(this.selectors.itemSelector), normalizedFilter = normalizeQuickFilterKey(filter);
         elements.each(((/** @type {number} */ _index, /** @type {Element} */ element) => {
             const item = $(element), flags = normalizeStateFlags(parseData(item.attr("data-jhs-flags") || "{}", {}));
             const visibilityReasons = parseData(item.attr("data-jhs-visibility") || "{}", {}), recent = item.attr("data-jhs-recent") === "yes";
-            shouldShowItem({ filter: normalizedFilter, flags, visibilityReasons, recent }) ? item.show() : item.hide();
+            const visible = shouldShowItem({ filter: normalizedFilter, flags, visibilityReasons, recent });
+            visible ? item.show() : item.hide();
+            onVisibility?.(element, visible);
         }));
     }
 

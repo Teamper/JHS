@@ -21,8 +21,10 @@ export class ListRefreshCoordinator {
         (full || items !== null) && this.options.advanceGeneration?.();
         this.refreshDirty = true;
         if (full) this.refreshAllRequested = true;
-        else if (visibilityOnly) this.refreshVisibilityRequested = true;
-        else (items || []).forEach((item) => this.refreshItems.add(item));
+        else {
+            if (visibilityOnly) this.refreshVisibilityRequested = true;
+            items?.forEach((item) => this.refreshItems.add(item));
+        }
         this.options.recordPhase?.(`refresh-request:${reason}`);
         if (this.refreshRunning) return this.refreshPromise ?? Promise.resolve(false);
         this.refreshRunning = true;
@@ -42,7 +44,7 @@ export class ListRefreshCoordinator {
                     if (fullRefresh) {
                         this.options.invalidateContext?.();
                         filtered = await this.options.filterAll(revision);
-                    } else if (visibilityRefresh) {
+                    } else if (visibilityRefresh && !itemsToRefresh.length) {
                         filtered = true;
                     } else {
                         filtered = await this.options.filterItems(itemsToRefresh.filter((item) => item.isConnected), revision);
@@ -53,7 +55,7 @@ export class ListRefreshCoordinator {
                         this.refreshAllRequested = true;
                         continue;
                     }
-                    filtered !== false && this.options.reconcile(fullRefresh ? null : itemsToRefresh, revision);
+                    filtered !== false && this.options.reconcile(fullRefresh || visibilityRefresh ? null : itemsToRefresh, revision);
                     if (fullRefresh) this.options.syncHistory?.();
                     this.options.recordPhase?.("refresh-end");
                 }

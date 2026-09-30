@@ -151,7 +151,7 @@ export class ListPageCompatibilityService {
         /** @type {any} */ this.featureListHoverPreviewAdapter = null;
         /** @type {any} */ this.featureListTagExpansionAdapter = null;
         /** @type {any} */ this.featureListNavigationAdapter = null;
-        /** @type {{processAddedItems: (items: Element[], revision?: string) => Promise<any>} | null} */ this.featureListAddedItemsAdapter = null;
+        /** @type {{processAddedItems: (items: Element[], revision?: string) => Promise<any>, getVisibilitySnapshot?: () => any} | null} */ this.featureListAddedItemsAdapter = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -180,7 +180,10 @@ export class ListPageCompatibilityService {
     detachFeatureCoverButtonAdapter(adapter) { if (this.featureCoverButtonAdapter === adapter) this.featureCoverButtonAdapter = null; }
     /** Exposes the cover upgrade operation required by native list pagination. */
     getAutoPageCapability() {
-        return Object.freeze({ replaceCoverImages: (/** @type {any} */ images) => this.replaceHdImg(images) });
+        return Object.freeze({
+            replaceCoverImages: (/** @type {any} */ images) => this.replaceHdImg(images),
+            getVisibilitySnapshot: () => this.featureListAddedItemsAdapter?.getVisibilitySnapshot?.() ?? null,
+        });
     }
     /** @param {any} adapter */
     attachFeatureCoverImageAdapter(adapter) { this.featureCoverImageAdapter = adapter; }
@@ -213,7 +216,7 @@ export class ListPageCompatibilityService {
     }
     /** @param {ListRefreshCoordinator} adapter */
     detachFeatureListRefreshAdapter(adapter) { if (this.featureListRefreshAdapter === adapter) this.featureListRefreshAdapter = null; }
-    /** @param {{processAddedItems: (items: Element[], revision?: string) => Promise<any>}} adapter */
+    /** @param {{processAddedItems: (items: Element[], revision?: string) => Promise<any>, getVisibilitySnapshot?: () => any}} adapter */
     attachFeatureListAddedItemsAdapter(adapter) { this.featureListAddedItemsAdapter = adapter; }
     /** @param {{processAddedItems: (items: Element[], revision?: string) => Promise<any>}} adapter */
     detachFeatureListAddedItemsAdapter(adapter) { if (this.featureListAddedItemsAdapter === adapter) this.featureListAddedItemsAdapter = null; }

@@ -5,6 +5,7 @@ import { mapLimit, normalizeHttpUrl, parseNumberSetting, shouldSkipStopped } fro
 import { FEATURE_ICONS } from "../../core/feature-icons.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
+import { parseTaskInterval } from "../../features/discovery/task-intervals.js";
 
 const AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
 
@@ -23,6 +24,7 @@ export class NewVideoWorkspaceService {
         this.document = options.document;
         this.window = options.window;
         this.disposed = false;
+        this._tipSettingsChanged = null;
         Object.assign(this, FEATURE_ICONS);
         i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvCoverPreview", null), i(this, "nvWorkspaceRoot", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
         /** @type {(() => Promise<void>) | null} */ this.featureNewVideoStyleLoader = null;
@@ -115,9 +117,26 @@ export class NewVideoWorkspaceService {
         if (this.disposed) return;
         this.jquery("#newVideoCount").text(`${e}`);
     }
+    async getTaskButtonTips() {
+        const task = this.getOptionalDependency("TaskPlugin");
+        if (!task) return { favorite: "后台任务功能已禁用", newVideo: "后台任务功能已禁用" };
+        const storage = this.getRuntimeService("storage"), settings = await this.legacyStorage.getSetting();
+        const interval = async (name, value) => typeof task.getLatestTaskInterval === "function"
+            ? await task.getLatestTaskInterval(name)
+            : parseTaskInterval(name, value);
+        const [favoriteHours, newVideoHours] = await Promise.all([
+            interval("favoriteActress", settings.checkFavoriteActress_IntervalTime),
+            interval("newVideo", settings.checkNewVideo_intervalTime),
+        ]);
+        return {
+            favorite: `上次完整同步: ${storage.getLocal(task.lastCheckFavoriteActressTimeKey) || "无"}; 检测间隔时间: ${favoriteHours}小时`,
+            newVideo: `上次整批检测: ${storage.getLocal(task.lastCheckNewVideoTimeKey) || "无"}; 检测间隔时间: ${newVideoHours}小时`,
+        };
+    }
     async resetBtnTip() {
-        const storage = this.getRuntimeService("storage"), e = this.getOptionalDependency("TaskPlugin"), t = await this.legacyStorage.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
-        this.jquery("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n}; 检测间隔时间: ${a}小时`), this.jquery("#checkNewVideo").attr("data-tip", `上次整批检测: ${i}; 检测间隔时间: ${s}小时`);
+        const tips = await this.getTaskButtonTips();
+        this.jquery("#checkFavoriteActress").attr("data-tip", tips.favorite);
+        this.jquery("#checkNewVideo").attr("data-tip", tips.newVideo);
     }
     async openDialog() {
         if (this.disposed) return;
@@ -125,13 +144,13 @@ export class NewVideoWorkspaceService {
         if (this.disposed) return;
         const storage = this.getRuntimeService("storage");
         this.cleanupNewVideoWorkspace(), this._viewMode = "list" === storage.getLocal("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
-        const e = this.getOptionalDependency("TaskPlugin"), t = await this.legacyStorage.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
+        const tips = await this.getTaskButtonTips();
         let o = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
                     <div class="jhs-new-video-toolbar__actions">
-                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkFavoriteActress" data-tip="上次完整同步: ${n}; 检测间隔时间: ${a}小时">${this.actressSvg}<span>手动同步演员</span></button>
-                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkNewVideo" data-tip="上次整批检测: ${i}; 检测间隔时间: ${s}小时">${this.newSvg}<span>手动检测最新作品</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkFavoriteActress" data-tip="${escapeHtml(tips.favorite)}">${this.actressSvg}<span>手动同步演员</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkNewVideo" data-tip="${escapeHtml(tips.newVideo)}">${this.newSvg}<span>手动检测最新作品</span></button>
                         <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>
                         <span id="checkNewVideoMsg" role="status" aria-live="polite"></span>
                     </div>
@@ -167,6 +186,11 @@ export class NewVideoWorkspaceService {
             anim: -1,
             success: async (e, t) => {
                 this.nvWorkspaceMounted = !0, this.nvWorkspaceRoot = e, JhsSelect.enhance(e), this.bindClick(), this.applyViewMode(), this.renderTaskStatuses(), await this.reloadNewVideoWorkspaceData(), this.utils.setupEscClose(t);
+                const settings = this.getRuntimeService("settings");
+                this._tipSettingsChanged = event => {
+                    if (event.detail?.names?.some(name => ["checkFavoriteActress_IntervalTime", "checkNewVideo_intervalTime"].includes(name))) void this.resetBtnTip();
+                };
+                settings?.addEventListener?.("settings.changed", this._tipSettingsChanged);
             },
             end: () => { this.nvDialogId = null; this.cleanupNewVideoWorkspace(); }
         });
@@ -182,6 +206,8 @@ export class NewVideoWorkspaceService {
         this.cleanupNewVideoWorkspace();
     }
     cleanupNewVideoWorkspace() {
+        if (this._tipSettingsChanged) this.getRuntimeService("settings")?.removeEventListener?.("settings.changed", this._tipSettingsChanged);
+        this._tipSettingsChanged = null;
         this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = !1, this.nvWorkspaceRoot = null, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
         this.nvCoverPreview?.destroy?.(), this.nvCoverPreview = null,
         this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
@@ -251,6 +277,7 @@ export class NewVideoWorkspaceService {
             this.logger.error("手动任务执行失败", error), task.isNetworkBlocked(error) && this.notifications.error(error.message || "任务执行失败");
         } finally {
             button.removeAttr("aria-busy").prop("disabled", !1), label.text(previous), this.renderTaskStatuses();
+            await this.resetBtnTip();
         }
     }
     setViewMode(mode) {

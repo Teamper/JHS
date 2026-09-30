@@ -53,7 +53,7 @@ describe("List FeatureRuntime ownership", () => {
         expect(controller.filterListItems).toHaveBeenCalledWith(null, "1:0");
         expect(card.dataset.jhsProcessed).toBe("true");
         expect(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry)).toEqual([
-            "generation", "filter", "quick-filter", "visibility", "index", "phase", "event", "observer",
+            "generation", "filter", "quick-filter", "visibility", "event", "index", "phase", "event", "observer",
         ]);
         expect(events.emit).toHaveBeenCalledWith("list-items-added", { items: [card] }, { broadcast: false });
         controller.dispose();
@@ -80,7 +80,7 @@ describe("List FeatureRuntime ownership", () => {
 
         await expect(controller.processAddedItems([card], "stale-observer-revision")).resolves.toBe(true);
 
-        expect(order.map((entry) => Array.isArray(entry) ? entry[0] : entry)).toEqual(["filter", "visibility", "sort", "buttons", "index", "event"]);
+        expect(order.map((entry) => Array.isArray(entry) ? entry[0] : entry)).toEqual(["filter", "visibility", "event", "sort", "buttons", "index", "event"]);
         expect(card.dataset.jhsProcessed).toBe("true");
         expect(controller.itemIndex.add).toHaveBeenCalledWith([card]);
         expect(controller.events.emit).toHaveBeenCalledWith("list-items-added", { items: [card] }, { broadcast: false });
@@ -135,7 +135,7 @@ describe("List FeatureRuntime ownership", () => {
         const applyVisibility = vi.spyOn(controller.view, "applyVisibility");
         await attached.request({ full: true, reason: "test" });
         expect(controller.filterListItems).toHaveBeenCalledWith(null, "4:0");
-        expect(applyVisibility).toHaveBeenCalledWith(null, "waitCheck");
+        expect(applyVisibility).toHaveBeenCalledWith(null, "waitCheck", expect.any(Function));
         expect(legacyPlugin.advanceListGeneration).toHaveBeenCalledOnce();
 
         controller.dispose();
