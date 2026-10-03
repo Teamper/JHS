@@ -12,6 +12,7 @@ export async function fulfillHostFixtures(context) {
   const javdb = await readFile(join(browserRoot, "fixtures", "javdb-detail.html"), "utf8");
   const javbus = await readFile(join(browserRoot, "fixtures", "javbus-detail.html"), "utf8");
   const javdbList = await readFile(join(browserRoot, "fixtures", "javdb-list.html"), "utf8");
+  const javdbFc2Owned = await readFile(join(browserRoot, "fixtures", "javdb-fc2-owned.html"), "utf8");
   const javdbFc2List = await readFile(join(browserRoot, "fixtures", "javdb-fc2-list.html"), "utf8");
   const javdbRanking = await readFile(join(browserRoot, "fixtures", "javdb-native-rankings.html"), "utf8");
   const javbusList = await readFile(join(browserRoot, "fixtures", "javbus-list.html"), "utf8");
@@ -22,6 +23,7 @@ export async function fulfillHostFixtures(context) {
       if (url.hostname === "javdb.com") {
         if (url.pathname === "/advanced_search") return route.fulfill({ status: 404, contentType: "text/html; charset=utf-8", body: "<!doctype html><title>404</title><h1>404 Not Found</h1>" });
         const body = url.pathname.startsWith("/v/") ? javdb
+          : url.pathname === "/users/collection_codes" ? javdbFc2Owned
           : ["/rankings/movies", "/rankings/playback", "/rankings/top"].includes(url.pathname) ? javdbRanking
           : url.pathname === "/search_advanced" || url.pathname === "/tags/fc2" ? javdbFc2List
           : javdbList;

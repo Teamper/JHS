@@ -22,8 +22,12 @@ export class Fc2OwnedPageController {
         if (this.started || this.disposed || this.scope.disposed) return false;
         const pageUrl = new URL(this.location.href);
         if (pageUrl.pathname !== "/users/collection_codes" || !pageUrl.searchParams.has("movieId")) return false;
-        this.host = this.document.querySelector("section");
-        if (!this.host) return false;
+        const hosts = this.document.querySelectorAll("body > section.section > .container");
+        if (hosts.length !== 1) {
+            this.onError(new Error(`FC2 详情正文容器匹配异常：预期 1 个，实际 ${hosts.length} 个`));
+            return false;
+        }
+        this.host = /** @type {HTMLElement} */ (hosts[0]);
 
         this.started = true;
         this.originalNodes = [...this.host.childNodes];
