@@ -34,5 +34,5 @@ it("routes canonical and overridden sources through the correct URL policy", asy
     expect(request.mock.calls[0][0]).toMatchObject({ providerId: "magnet:u9a9", capability: "magnet.search", urlPolicy: { trustClass: "builtin-public", hosts: ["u9a9.com"], expectedOrigin: "https://u9a9.com" } });
     await adapter.search("u9a9", "ABC-123", { baseUrl: "https://mirror.example.com", scope: "scope" });
     expect(request.mock.calls[1][0].urlPolicy).toEqual({ trustClass: "custom-public", expectedOrigin: "https://mirror.example.com" });
-    expect(adapter.targetUrl("btsow", "ABC 123")).toBe("https://btsow.lol/search/ABC%20123");
+    expect(adapter.targetUrl("btsow", "ABC 123")).toBe("https://so2.btsow.top/search?key=ABC%20123");
 });

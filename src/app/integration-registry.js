@@ -18,6 +18,7 @@ export const CACHE_POLICIES = Object.freeze({
 export function resolveIntegrationCachePolicy(manifest, capability, options = {}) {
     const declared = manifest.cachePolicy === "none" ? "none" : manifest.cachePolicy?.[capability];
     const policy = /** @type {Record<string, any>} */ ({ ...(CACHE_POLICIES[/** @type {keyof typeof CACHE_POLICIES} */ (declared)] || CACHE_POLICIES.none) });
+    if (declared === "source-configured" && options.cacheScope === "none") return Object.freeze({ cacheScope: "none", ttlMs: 0 });
     if (policy.getOnly && String(options.method || "GET").toUpperCase() !== "GET") return Object.freeze({ cacheScope: "none", ttlMs: 0 });
     delete policy.getOnly;
     if (declared === "session-configured") /** @type {any} */ (policy).sessionScopeId = String(options.sessionScopeId || `${manifest.id}-session`);

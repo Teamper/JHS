@@ -8,7 +8,7 @@ const SOURCES = Object.freeze([
     Object.freeze({ id: "u9a9", name: "U9A9", type: "网页来源", domain: "u9a9.com", baseUrl: "https://u9a9.com", priority: 20, enabled: true, searchPath: (/** @type {string} */ keyword) => `/?type=2&search=${encodeURIComponent(keyword)}` }),
     Object.freeze({ id: "u3c3", name: "U3C3", type: "网页来源", domain: "u3c3.com", baseUrl: "https://u3c3.com", priority: 30, enabled: true, searchPath: (/** @type {string} */ keyword) => `/?search2=a8lr16lo&search=${encodeURIComponent(keyword)}` }),
     Object.freeze({ id: "sukebei", name: "Sukebei", type: "网页来源", domain: "sukebei.nyaa.si", baseUrl: "https://sukebei.nyaa.si", priority: 40, enabled: true, searchPath: (/** @type {string} */ keyword) => `/?f=0&c=0_0&q=${encodeURIComponent(keyword)}` }),
-    Object.freeze({ id: "btsow", name: "BTSOW", type: "API 来源", domain: "btsow.lol", baseUrl: "https://btsow.lol", priority: 50, enabled: true, searchPath: (/** @type {string} */ keyword) => `/search/${encodeURIComponent(keyword)}` }),
+    Object.freeze({ id: "btsow", name: "BTSOW", type: "网页来源", domain: "so2.btsow.top", baseUrl: "https://so2.btsow.top", priority: 50, enabled: true, searchPath: (/** @type {string} */ keyword) => `/search?key=${encodeURIComponent(keyword)}` }),
 ]);
 
 /** @param {unknown} value @param {string} source */
@@ -61,6 +61,43 @@ export function parseBtsowSource(payload) {
     }));
 }
 
+/** Read the current BTSOW search page; unrelated landing pages are failures. */
+export function parseBtsowHtml(/** @type {string} */ html) {
+    if (typeof html !== "string") throw new JhsError("INVALID_RESPONSE", "BTSOW 响应不是 HTML", { source: "btsow" });
+    const document = new DOMParser().parseFromString(html, "text/html");
+    if (/Just a moment|cf-chl-|Cloudflare/i.test(`${document.title} ${document.body?.textContent || ""}`)) {
+        throw new JhsError("CF_BLOCKED", "BTSOW 被 Cloudflare 拦截", { source: "btsow" });
+    }
+    const app = document.querySelector("#app");
+    if (!app?.querySelector("h4")?.textContent?.includes("磁力搜索结果") || !document.querySelector('form[action="/search"] input[name="key"]')) {
+        throw new JhsError("INVALID_RESPONSE", "BTSOW 返回的不是搜索结果页", { source: "btsow" });
+    }
+    /** @type {Map<string, NonNullable<ReturnType<typeof normalizeMagnet>>>} */
+    const results = new Map();
+    for (const link of app.querySelectorAll('a[href*="/hash/"]')) {
+        let hash;
+        try { hash = new URL(link.getAttribute("href") || "", "https://so2.btsow.top").pathname.match(/^\/hash\/([a-f\d]{40}|[a-z2-7]{32})\/?$/i)?.[1]; }
+        catch { continue; }
+        const title = link.getAttribute("title")?.trim() || link.textContent?.trim();
+        if (!hash || !title) continue;
+        const text = link.closest(".card2")?.textContent || "";
+        const result = normalizeMagnet({
+            title, magnet: `magnet:?xt=urn:btih:${hash.toUpperCase()}`,
+            size: text.match(/\b\d+(?:\.\d+)?\s*(?:[KMGT]i?B|bytes)\b/i)?.[0],
+            date: text.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0],
+        }, "btsow");
+        if (result && !results.has(hash.toUpperCase())) results.set(hash.toUpperCase(), result);
+    }
+    if (!results.size && app.querySelector(".card2")) throw new JhsError("INVALID_RESPONSE", "BTSOW 结果无法解析", { source: "btsow" });
+    return Object.freeze([...results.values()]);
+}
+
+/** Replace only the retired built-in origin; preserve user-selected mirrors. */
+function sourceOrigin(/** @type {{id: string, baseUrl: string}} */ source, /** @type {string | undefined} */ baseUrl) {
+    const origin = new URL(baseUrl || source.baseUrl).origin;
+    return source.id === "btsow" && origin === "https://btsow.lol" ? source.baseUrl : origin;
+}
+
 /** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http */
 export function createTorrentSourcesAdapter(http) {
     const find = (/** @type {string} */ id) => SOURCES.find((source) => source.id === id);
@@ -71,28 +108,24 @@ export function createTorrentSourcesAdapter(http) {
         targetUrl(sourceId, keyword, options = {}) {
             const source = find(sourceId);
             if (!source) throw new JhsError("UNSUPPORTED", `未知磁力来源：${sourceId}`, { source: "torrent-sources" });
-            const origin = new URL(options.baseUrl || source.baseUrl).origin;
+            const origin = sourceOrigin(source, options.baseUrl);
             return `${origin}${source.searchPath(keyword)}`;
         },
         /** @param {string} sourceId @param {string} keyword @param {{baseUrl?: string, scope?: any}} [options] */
         async search(sourceId, keyword, options = {}) {
             const source = find(sourceId);
             if (!source) throw new JhsError("UNSUPPORTED", `未知磁力来源：${sourceId}`, { source: "torrent-sources" });
-            const origin = new URL(options.baseUrl || source.baseUrl).origin, overridden = new URL(origin).hostname !== source.domain;
+            const origin = sourceOrigin(source, options.baseUrl), overridden = new URL(origin).hostname !== source.domain;
             const urlPolicy = overridden ? { trustClass: "custom-public", expectedOrigin: origin } : { trustClass: "builtin-public", hosts: [source.domain], expectedOrigin: origin };
-            if (source.id === "btsow") {
-                const response = await http.request({ capability: "magnet.search", providerId: "magnet:btsow", method: "POST", url: `${origin}/search`, body: JSON.stringify([{ search: keyword }, 50, 1]), headers: { "Content-Type": "application/json" }, responseType: "json", urlPolicy }, options.scope);
-                return parseBtsowSource(response.data);
-            }
             const url = `${origin}${source.searchPath(keyword)}`;
-            const response = await http.request({ capability: "magnet.search", providerId: `magnet:${source.id}`, method: "GET", url, responseType: "text", urlPolicy }, options.scope);
-            return parseTorrentSource(response.data, keyword, source.id);
+            const response = await http.request({ capability: "magnet.search", providerId: `magnet:${source.id}`, method: "GET", url, responseType: "text", urlPolicy, ...(source.id === "btsow" ? { cacheScope: "none" } : {}) }, options.scope);
+            return source.id === "btsow" ? parseBtsowHtml(response.data) : parseTorrentSource(response.data, keyword, source.id);
         },
     });
 }
 
 export default defineIntegration({
-    id: "torrent-sources", trustClass: "builtin-public", hosts: ["u9a9.com", "u3c3.com", "sukebei.nyaa.si", "btsow.lol"],
+    id: "torrent-sources", trustClass: "builtin-public", hosts: ["u9a9.com", "u3c3.com", "sukebei.nyaa.si", "so2.btsow.top"],
     capabilities: ["magnet.search"], requires: [SERVICE.http],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }),
     createAdapter: (/** @type {any} */ client) => createTorrentSourcesAdapter(client.http), createHostAdapter: null,
