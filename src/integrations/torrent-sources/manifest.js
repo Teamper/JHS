@@ -25,8 +25,17 @@ export function parseTorrentSource(html, keyword, source) {
     if (/Just a moment|cf-chl-|Cloudflare/i.test(challenge)) throw new JhsError("CF_BLOCKED", "磁力来源被 Cloudflare 拦截", { source });
     return Object.freeze([...document.querySelectorAll(".torrent-list tbody tr")].flatMap((row) => {
         if (row.textContent?.includes("置顶")) return [];
-        const titleNode = row.querySelector("td:nth-child(2) a"), title = titleNode?.getAttribute("title") || titleNode?.textContent?.trim() || "";
-        if (!title.toLowerCase().includes(keyword.toLowerCase())) return [];
+        const titleNode = source === "sukebei"
+            ? [...row.querySelectorAll("td:nth-child(2) a")].find((link) => {
+                if (link.classList.contains("comments")) return false;
+                try {
+                    const url = new URL(link.getAttribute("href") || "", "https://sukebei.nyaa.si");
+                    return /^\/view\/\d+\/?$/.test(url.pathname) && !url.hash;
+                } catch { return false; }
+            })
+            : row.querySelector("td:nth-child(2) a");
+        const title = titleNode?.getAttribute("title")?.trim() || titleNode?.textContent?.trim() || "";
+        if (!title || !title.toLowerCase().includes(keyword.toLowerCase())) return [];
         const result = normalizeMagnet({
             title, magnet: row.querySelector('td:nth-child(3) a[href^="magnet:"]')?.getAttribute("href"),
             size: row.querySelector("td:nth-child(4)")?.textContent?.trim(), date: row.querySelector("td:nth-child(5)")?.textContent?.trim(),

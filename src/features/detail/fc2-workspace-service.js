@@ -37,6 +37,8 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
  * @property {number | undefined} translationGeneration
  * @property {number | undefined} screenshotGeneration
  * @property {number | undefined} otherSiteGeneration
+ * @property {((external?: boolean) => Promise<void>) | undefined} openMagnetHub
+ * @property {(() => void) | undefined} syncMagnetHub
  */
 /** @typedef {{ id: string, name: string, gender?: number }} MovieActor */
 /** @typedef {{ title?: string, originalTitle?: string, coverUrl?: string | null, carNum?: string, releaseDate?: string, score?: number | string, duration?: number | string, actors?: MovieActor[], imageUrls?: string[] }} Fc2Movie */
@@ -77,9 +79,27 @@ export class Fc2WorkspaceService {
     /** @param {string} name */
     getOptionalDependency(name) { return this.resolveDependency(name); }
     /** @param {any} adapter */
-    attachFeatureMagnetHubAdapter(adapter) { this.featureMagnetHubAdapter = adapter; }
+    attachFeatureMagnetHubAdapter(adapter) {
+        this.featureMagnetHubAdapter = adapter;
+        this.refreshMagnetHubAvailability();
+    }
     /** @param {any} adapter */
-    detachFeatureMagnetHubAdapter(adapter) { if (this.featureMagnetHubAdapter === adapter) this.featureMagnetHubAdapter = null; }
+    detachFeatureMagnetHubAdapter(adapter) {
+        if (this.featureMagnetHubAdapter !== adapter) return;
+        this.featureMagnetHubAdapter = null;
+        this.refreshMagnetHubAvailability();
+    }
+    /** Refresh existing empty states when the optional search Feature changes. */
+    refreshMagnetHubAvailability() {
+        if (typeof $ !== "function") return;
+        $(".jhs-fc2-workspace").each((/** @type {number} */ _, /** @type {HTMLElement} */ element) => {
+            const context = /** @type {Fc2DetailContext | undefined} */ ($(element).data("jhsFc2Context"));
+            if (!context?.isAlive()) return;
+            context.syncMagnetHub?.();
+            const message = context?.root.find('[data-jhs-role="native-magnets"]').data("jhsNativeEmptyMessage");
+            if (context?.isAlive() && message) this.renderNativeMagnetEmpty(context, message);
+        });
+    }
     /** @param {any} adapter */
     attachFeatureExternalSitesAdapter(adapter) {
         this.featureExternalSitesAdapter = adapter;
@@ -170,6 +190,7 @@ export class Fc2WorkspaceService {
         context.getSlot("gallery").append(gallery, screenshot);
         const resources = $('<div class="jhs-fc2-resource-stack"></div>'), nativeGroup = this.createResourceGroup("站内磁力", "native-magnets"), sitesGroup = this.createResourceGroup("第三方站点", "other-sites"), hubGroup = this.createResourceGroup("更多磁力来源", "magnet-hub"), hubButton = $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="magnet-hub" aria-expanded="false">展开磁力搜索</button>');
         let magnetHubPromise = null;
+        /** @type {any} */ let mountedMagnetHub = null;
         hubGroup.find('[data-jhs-role="magnet-hub"]').append(hubButton, '<div data-jhs-role="magnet-hub-content"></div>'), resources.append(nativeGroup, sitesGroup, hubGroup), context.getSlot("resources").append(resources);
         toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', ((/** @type {MouseEvent} */ event) => {
             const target = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["subtitlecat"])[0]?.url;
@@ -177,18 +198,49 @@ export class Fc2WorkspaceService {
         }));
         const detailActions = this.getOptionalDependency("DetailPageButtonPlugin");
         detailActions ? toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => detailActions.searchXunLeiSubtitle(context.carNum))) : toolbar.find('[data-jhs-action="xunlei"]').remove();
-        const magnetHub = this.featureMagnetHubAdapter;
-        if (!magnetHub) hubGroup.remove();
-        hubButton.on(`click${context.namespace}`, (async () => {
+        context.syncMagnetHub = () => {
+            if (this.featureMagnetHubAdapter) {
+                if (!hubGroup[0].isConnected) resources.append(hubGroup);
+            } else {
+                hubGroup.detach().find('[data-jhs-role="magnet-hub-content"]').empty();
+                hubButton.attr("aria-expanded", "false").text("展开磁力搜索");
+                magnetHubPromise = null;
+                mountedMagnetHub = null;
+            }
+        };
+        context.syncMagnetHub();
+        context.openMagnetHub = async (external = false) => {
+            const magnetHub = this.featureMagnetHubAdapter;
             if (!magnetHub) return;
             if (!context.isAlive()) return;
+            if (!hubGroup[0].isConnected) resources.append(hubGroup);
             const box = hubGroup.find('[data-jhs-role="magnet-hub-content"]'), expanded = "true" === hubButton.attr("aria-expanded");
-            if (expanded) return hubGroup.addClass("is-collapsed"), void hubButton.attr("aria-expanded", "false").text("展开磁力搜索");
-            magnetHubPromise ||= magnetHub.createMagnetHub({ movieContext: context.movieContext, root: context.root });
-            const hub = await magnetHubPromise;
-            if (context.isAlive() && !box.children().length) box.append(hub);
-            if (context.isAlive()) hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
-        }));
+            if (expanded && !external) return hubGroup.addClass("is-collapsed"), void hubButton.attr("aria-expanded", "false").text("展开磁力搜索");
+            if (mountedMagnetHub !== magnetHub) {
+                mountedMagnetHub = magnetHub;
+                magnetHubPromise = null;
+                box.empty();
+            }
+            try {
+                magnetHubPromise ||= magnetHub.createMagnetHub({ movieContext: context.movieContext, root: context.root }, {
+                    initialEngineId: external ? "all" : undefined,
+                    requireExternal: external,
+                    isActive: () => context.isAlive() && this.featureMagnetHubAdapter === magnetHub,
+                });
+                const hub = await magnetHubPromise;
+                if (!context.isAlive() || this.featureMagnetHubAdapter !== magnetHub) return;
+                if (!box.children().length) box.append(hub);
+                if (external) hub.data("jhsOpenExternalMagnets")?.();
+                hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
+            } catch (error) {
+                if (!context.isAlive() || this.featureMagnetHubAdapter !== magnetHub) return;
+                magnetHubPromise = null;
+                renderFc2State(box, "磁力搜索初始化失败", () => void context.openMagnetHub?.(true));
+                hubButton.attr("aria-expanded", "false");
+                this.logger.error("FC2 磁力搜索初始化失败", error);
+            }
+        };
+        hubButton.on(`click${context.namespace}`, () => void context.openMagnetHub?.());
         this.getDetailStateController().bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
         "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
         this.mountFc2OtherSites(context, sitesGroup, this.featureExternalSitesAdapter);
@@ -425,14 +477,15 @@ export class Fc2WorkspaceService {
     /** @param {Fc2DetailContext} context @param {string | null | undefined} [movieId] */
     async fetchAndRenderNativeMagnets(context, movieId = context.movieId) {
         const host = context.root.find('[data-jhs-role="native-magnets"]');
+        host.removeData("jhsNativeEmptyMessage");
         renderFc2State(host, "正在加载站内磁力…");
         try {
-            if (!movieId) return renderFc2State(host, "JavDB 暂无对应作品");
+            if (!movieId) return this.renderNativeMagnetEmpty(context, "JavDB 暂无对应作品");
             const scope = await this.getRuntimeService("scope")();
             const magnets = /** @type {NativeMagnet[]} */ (await this.getRuntimeService("magnet").listNative({ movieId, providerId: "javdb" }, { scope }));
             if (!context.isAlive()) return;
             host.empty();
-            if (!magnets.length) return renderFc2State(host, "暂无站内磁力");
+            if (!magnets.length) return this.renderNativeMagnetEmpty(context, "暂无站内磁力");
             /** @type {MagnetAssessment[]} */
             const assessments = [];
             const magnetService = this.getRuntimeService("magnet");
@@ -445,6 +498,20 @@ export class Fc2WorkspaceService {
             }));
             await this.bindNativeMagnetFilter(context, host, assessments.some((item => item.highQuality)));
         } catch (error) { context.isAlive() && renderFc2State(host, "站内磁力加载失败", (() => void this.fetchAndRenderNativeMagnets(context, movieId))), this.logger.error("FC2 磁力加载失败", error); }
+    }
+    /** Offer external search without making requests while rendering a native empty state. */
+    /** @param {Fc2DetailContext} context @param {string} message */
+    renderNativeMagnetEmpty(context, message) {
+        if (!context.isAlive()) return;
+        const host = context.root.find('[data-jhs-role="native-magnets"]');
+        host.data("jhsNativeEmptyMessage", message);
+        renderFc2State(host, message);
+        if (!this.featureMagnetHubAdapter) {
+            host.append($("<p></p>").text("外部磁力搜索未启用，请在设置中启用磁力搜索功能"));
+            return;
+        }
+        host.append($("<p></p>").text("站内结果不包含 Sukebei 等外部来源，可继续查询已启用的来源。"),
+            $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="search-external-magnets">搜索外部磁力</button>').on(`click${context.namespace}`, () => void context.openMagnetHub?.(true)));
     }
     /** @param {Fc2DetailContext} context @param {JQueryHandle} host @param {boolean} hasMatch */
     async bindNativeMagnetFilter(context, host, hasMatch) {

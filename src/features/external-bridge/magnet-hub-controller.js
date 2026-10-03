@@ -13,7 +13,9 @@ import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, parse
 /** @typedef {{ title: string, magnet: string, size?: string | number, date?: string, seeders?: number, tags?: string[], customTagWeight?: number, filterPenalty?: number, hidden?: boolean, _score?: any, [key: string]: any }} MagnetResult */
 /** @typedef {{ id: string, name: string, enabled?: boolean, searchUrlTemplate: string, targetUrlTemplate: string, parserType?: string, [key: string]: any }} CustomSource */
 /** @typedef {{ root?: JQueryHandle | Element, method?: string, body?: unknown, headers?: Record<string, string>, responseType?: string, ttlMs?: number, custom?: boolean, hosts?: string[] }} MagnetRequestOptions */
-/** @typedef {{ movieContext?: import("../../core/movie-context.js").MovieContext, root?: JQueryHandle | Element }} MagnetHubOptions */
+/** @typedef {{ movieContext?: import("../../core/movie-context.js").MovieContext, root?: JQueryHandle | Element, initialEngineId?: string, requireExternal?: boolean, isActive?: () => boolean }} MagnetHubOptions */
+/** @typedef {{ source: MagnetSource, status: "success" | "empty" | "error", results: MagnetResult[] }} MagnetSourceOutcome */
+/** @typedef {{ generation: number, engines: MagnetSource[], outcomes: MagnetSourceOutcome[], engineId: string, pending: boolean, isActive: () => boolean }} MagnetPanelState */
 
 export const MAGNET_HUB_STYLES = `
     .magnet-container { width:100%; margin:var(--jhs-space-4) auto; }
@@ -90,7 +92,7 @@ export class MagnetHubController {
         const storage = this.storage, t = this.jquery('<div class="magnet-container jhs-ui"></div>'), n = this.jquery('<div class="magnet-tabs"></div>'), a = "jhs_magnetHub_selectedEngine", i = storage.getLocal(a);
         t.data("jhsMovieContext", movieContext);
         const o = this.jquery('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
-        const initialEngine = engines.find((engine => engine.id === i)) || engines[0];
+        const initialEngine = engines.find((engine => engine.id === (options.initialEngineId ?? input?.initialEngineId ?? i))) || engines[0];
         if (!initialEngine) return t.append(this.jquery('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
         /** @type {MagnetSource} */
         let currentEngine = initialEngine;
@@ -99,39 +101,114 @@ export class MagnetHubController {
         n.append(o), n.append(target),
         o.find(".magnet-tab.active").attr({ "aria-selected": "true", tabindex: "0" }),
         t.append(n);
-        const r = this.jquery('<div class="magnet-results"></div>');
-        return t.append(r), t.on("click", ".magnet-tab", ((/** @type {MouseEvent} */ n) => {
-            const i = this.jquery(n.target).data("engine");
-            currentEngine = engines.find((engine => engine.id === i)) || currentEngine;
-            if (!currentEngine) return;
-            t.find('[data-jhs-role="magnet-target"]').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(keyword))).toggle("all" !== currentEngine.id),
-            storage.setLocal(a, i), t.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), this.jquery(n.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }),
-            this.searchEngine(r, currentEngine, keyword, root);
-        })), t.on("keydown", ".magnet-tab", ((/** @type {KeyboardEvent} */ e) => {
+        const r = this.jquery('<div class="magnet-results" aria-live="polite"></div>');
+        /** @type {MagnetPanelState} */
+        const state = { generation: 0, engines, outcomes: [], engineId: "", pending: false, isActive: options.isActive ?? input?.isActive ?? (() => root[0]?.isConnected !== false) };
+        r.data("jhsMagnetPanel", state);
+        /** @param {string} id @param {boolean} [remember] @param {boolean} [requireExternal] */
+        const selectEngine = (id, remember = false, requireExternal = false) => {
+            const engine = engines.find((candidate => candidate.id === id));
+            if (!engine || !state.isActive() || this.scope?.disposed) return;
+            currentEngine = engine;
+            t.find('[data-jhs-role="magnet-target"]').attr("href", engine.targetUrl(keyword)).toggle("all" !== id);
+            if (remember) storage.setLocal(a, id);
+            o.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
+            o.find(".magnet-tab").filter((/** @type {number} */ _, /** @type {HTMLElement} */ tab) => tab.dataset.engine === id).addClass("active").attr({ "aria-selected": "true", tabindex: "0" });
+            const hasExternal = engines.some((source => source.id !== "all" && !source.id.startsWith("native-")));
+            if (state.engineId === id && !remember && (!requireExternal || hasExternal)) return;
+            void this.searchEngine(r, engine, keyword, root, { requireExternal });
+        };
+        t.data("jhsOpenExternalMagnets", () => selectEngine("all", false, true));
+        t.append(r);
+        t.on("click", ".magnet-tab", ((/** @type {MouseEvent} */ event) => selectEngine(this.jquery(event.currentTarget).data("engine"), true)));
+        r.on("click", '[data-jhs-action="retry-magnets"]', () => void this.searchEngine(r, currentEngine, keyword, root, { retryFailed: true }));
+        this.bindResultActions(r);
+        t.on("keydown", ".magnet-tab", ((/** @type {KeyboardEvent} */ e) => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;
             e.preventDefault();
             const n = t.find(".magnet-tab"), a = n.index(e.currentTarget);
             let i = "Home" === e.key ? 0 : "End" === e.key ? n.length - 1 : "ArrowRight" === e.key ? (a + 1) % n.length : (a - 1 + n.length) % n.length;
             n.eq(i).trigger("click").trigger("focus");
-        })), this.searchEngine(r, currentEngine, keyword, root), t;
+        }));
+        selectEngine(initialEngine.id, false, options.requireExternal ?? input?.requireExternal ?? false);
+        return t;
     }
-    /** @param {JQueryHandle} e @param {MagnetSource} t @param {string} n @param {JQueryHandle} [root] */
-    async searchEngine(e, t, n, root = this.jquery(this.document)) {
-        e.html(`<div class="magnet-loading">正在从 ${escapeHtml(t.name)} 搜索 "${escapeHtml(n)}"...</div>`);
-        const a = `${t.name}_${n}`;
-        if (t.search) try {
-            return void this.displayResults(e, await this.applyRuntimeRules(/** @type {MagnetResult[]} */ (deduplicateMagnetResults(await t.search(n, root)))), t.name);
+    /** Query one panel without allowing old responses to replace a newer selection. */
+    /** @param {JQueryHandle} panel @param {MagnetSource} engine @param {string} keyword @param {JQueryHandle | Document} [root] @param {{retryFailed?: boolean, requireExternal?: boolean}} [options] */
+    async searchEngine(panel, engine, keyword, root = this.jquery(this.document), options = {}) {
+        /** @type {MagnetPanelState} */
+        const state = panel.data("jhsMagnetPanel") || { generation: 0, engines: this.searchEngines, outcomes: [], engineId: "", pending: false, isActive: () => true };
+        panel.data("jhsMagnetPanel", state);
+        if (!state.isActive() || this.scope?.disposed || (options.retryFailed && state.pending)) return;
+        const previous = state.engineId === engine.id ? state.outcomes : [];
+        const sources = engine.id === "all" ? state.engines.filter((source => source.id !== "all")) : [engine];
+        const generation = ++state.generation;
+        state.engineId = engine.id;
+        const canCommit = () => generation === state.generation && state.isActive() && !this.scope?.disposed;
+        if (options.requireExternal && !sources.some((source => !source.id.startsWith("native-")))) {
+            state.pending = false;
+            state.outcomes = [];
+            panel.empty().append(this.jquery('<div class="magnet-query-status" role="status"></div>').text("外部磁力来源未启用，请在设置 → 资源来源 → 磁力来源中启用"));
+            return;
+        }
+        const retrySources = previous.filter((outcome => outcome.status === "error")).map((outcome => outcome.source));
+        const selected = options.retryFailed && retrySources.length ? retrySources : sources;
+        state.pending = true;
+        panel.find('[data-jhs-action="retry-magnets"]').prop("disabled", true);
+        if (!options.retryFailed) panel.empty();
+        panel.find(".magnet-loading").remove();
+        panel.prepend(this.jquery('<div class="magnet-loading" role="status"></div>').text(`正在从 ${engine.name} 搜索 "${keyword}"…`));
+        try {
+            const queried = await this.querySources(selected, keyword, root);
+            if (!canCommit()) return;
+            const outcomes = options.retryFailed && retrySources.length
+                ? previous.map((outcome => queried.find((item => item.source.id === outcome.source.id)) || outcome)) : queried;
+            const raw = /** @type {MagnetResult[]} */ (deduplicateMagnetResults(outcomes.flatMap((outcome => outcome.results))));
+            const results = await this.applyRuntimeRules(raw);
+            if (!canCommit()) return;
+            state.outcomes = outcomes;
+            state.pending = false;
+            const failures = outcomes.filter((outcome => outcome.status === "error"));
+            const allFailed = outcomes.length > 0 && failures.length === outcomes.length;
+            if (results.length) await this.displayResults(panel, results, engine.name);
+            else panel.empty().append(this.jquery('<div class="magnet-query-status" role="status"></div>').text(
+                allFailed ? "磁力查询失败" : raw.length ? "相关资源已被当前过滤规则隐藏" : failures.length ? "已完成查询的来源未找到资源，部分来源查询失败" : "未找到相关资源"
+            ));
+            if (!canCommit()) return;
+            if (failures.length) {
+                const warning = this.jquery('<div class="magnet-error" role="status"></div>').text(`查询失败：${failures.map((outcome => outcome.source.name)).join("、")} `);
+                warning.append(this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" data-jhs-action="retry-magnets"></button>').text(engine.id === "all" ? "重试失败来源" : "重试"));
+                panel.prepend(warning);
+            }
         } catch (error) {
-            this.diagnostics?.recordError?.({ source: "magnet-hub", message: `磁力源 ${t.name} 请求失败`, error });
-            return void e.html(`<div class="magnet-error">${escapeHtml(t.name)} 请求失败</div>`);
+            if (!canCommit()) return;
+            state.pending = false;
+            this.diagnostics?.recordError?.({ source: "magnet-hub", message: "磁力查询结果处理失败", error });
+            panel.empty().append(this.jquery('<div class="magnet-error" role="status"></div>').text("磁力查询结果处理失败，请检查资源规则后重试 ").append(this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" data-jhs-action="retry-magnets">重试</button>')));
         }
-        if (t.parseHtml) try {
-            const i = /** @type {string} */ (t.url).replace("{keyword}", encodeURIComponent(n)), payload = await this.requestSource(t.id, i, { ttlMs: 216e5 }), s = t.parseHtml.call(this, payload, n);
-            return void this.displayResults(e, s, t.name);
-        } catch (s) {
-            return void e.html(`<div class="magnet-error">解析 ${escapeHtml(t.name)} 结果失败: ${escapeHtml(s instanceof Error ? s.message : String(s))}</div>`);
-        }
-        t.parseJson && await t.parseJson.call(this, e, t, n, a);
+    }
+    /** Keep source failures separate from successful empty searches. */
+    /** @param {MagnetSource[]} sources @param {string} keyword @param {JQueryHandle | Document} root @returns {Promise<MagnetSourceOutcome[]>} */
+    async querySources(sources, keyword, root) {
+        return mapLimit(sources, 3, async source => {
+            try {
+                const results = await source.search(keyword, root);
+                return /** @type {MagnetSourceOutcome} */ ({ source, status: results.length ? "success" : "empty", results });
+            } catch (error) {
+                this.diagnostics?.recordError?.({ source: "magnet-hub", message: `磁力源 ${source.name} 请求失败`, error });
+                return /** @type {MagnetSourceOutcome} */ ({ source, status: "error", results: [] });
+            }
+        });
+    }
+    /** Bind delegated copy actions once for this result panel. @param {JQueryHandle} panel */
+    bindResultActions(panel) {
+        if (panel.data("jhsMagnetCopyBound")) return;
+        panel.data("jhsMagnetCopyBound", true).on("click", ".copy-btn", async (/** @type {MouseEvent} */ event) => {
+            const button = this.jquery(event.currentTarget), label = button.text();
+            if (!await this.clipboard.copyText("磁力链接", button.data("magnet"))) return;
+            button.addClass("copied").text("已复制");
+            setTimeout(() => button.removeClass("copied").text(label), 2000);
+        });
     }
     /** @param {string} keyword */
     async searchCustomSources(keyword) {
@@ -174,13 +251,7 @@ export class MagnetHubController {
     }
     /** @param {JQueryHandle} e @param {MagnetResult[]} t @param {string} n */
     async displayResults(e, t, n) {
-        /** @param {JQueryHandle} e */
-        function a(e) {
-            const t = e.text();
-            e.addClass("copied").text("已复制"), setTimeout((() => {
-                e.removeClass("copied").text(t);
-            }), 2e3);
-        }
+        this.bindResultActions(e);
         e.empty(), 0 !== t.length ? (t.forEach((e => { const base = this.calcMagnetScore(e); e._score = { ...base, total: Math.max(0, Math.min(100, base.total + (e.customTagWeight || 0) + (e.filterPenalty || 0))) }; })),
         t.sort(((e, t) => t._score.total - e._score.total)),
         t.forEach((t => {
@@ -192,10 +263,7 @@ export class MagnetHubController {
             item.find(".copy-btn").removeClass("magnet-hub-btn").addClass("jhs-btn--secondary");
             copyBox.append(this.jquery(`<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${safeMagnet}">离线</button>`));
             item.appendTo(e);
-        })), e.on("click", ".copy-btn", (async (/** @type {MouseEvent} */ event) => {
-            const e = this.jquery(event.currentTarget), t = e.data("magnet");
-            await this.clipboard.copyText("磁力链接", t) && a(e);
-        }))) : e.append('<div class="magnet-error">没有找到相关结果</div>');
+        }))) : e.append('<div class="magnet-query-status">未找到相关资源</div>');
     }
     /** @param {MagnetResult} e */
     calcMagnetScore(e) {
