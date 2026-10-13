@@ -9,6 +9,7 @@
  * changes apply immediately through the feature owner's mount/unmount/reconfigure.
  */
 import { parseBooleanSetting } from "../core/feature-helpers.js";
+import { DEFAULT_QUICK_FILTER_OPTIONS } from "../features/list/list-filters.js";
 
 /** @param {import("./settings-registry.js").SettingsRegistry} registry */
 export function registerDefaultSettings(registry) {
@@ -68,10 +69,7 @@ export function registerDefaultSettings(registry) {
         key: "defaultQuickFilterTab", owner: "ListPageFeature", label: "列表默认筛选",
         description: "进入列表页时默认选中的筛选标签，修改后下次进入列表生效。",
         type: "select", defaultValue: "waitCheck", effect: "nextNavigation", surfaces: ["full"],
-        options: Object.freeze([
-            { value: "all", label: "全部" }, { value: "waitCheck", label: "待鉴定" }, { value: "favorite", label: "收藏" },
-            { value: "hasDown", label: "下载" }, { value: "hasWatch", label: "已看" }, { value: "blockedItems", label: "屏蔽项" },
-        ]),
+        options: DEFAULT_QUICK_FILTER_OPTIONS,
     });
 
     // ---- 详情 ----

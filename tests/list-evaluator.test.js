@@ -50,6 +50,31 @@ describe("ListEvaluator (唯一列表判定器)", () => {
         expect(result.visibilityReasons).toEqual({ keyword: false, actorBlacklist: false, actressBlacklist: false });
     });
 
+    it("undownloaded includes pending, favorite and watched items while excluding downloads and every blocking rule", () => {
+        const context = makeContext({
+            cars: {
+                pending: {}, favorite: { favorite: true }, watched: { watched: true },
+                favoriteWatched: { favorite: true, watched: true },
+                downloaded: { downloaded: true }, favoriteDownloaded: { favorite: true, downloaded: true },
+                watchedDownloaded: { watched: true, downloaded: true },
+                favoriteWatchedDownloaded: { favorite: true, watched: true, downloaded: true },
+                blocked: { blocked: true }, favoriteBlocked: { favorite: true, blocked: true },
+            },
+            titleKeywords: [ "禁播" ],
+            actorBlacklist: { actorBlocked: "男优甲" },
+            actressBlacklist: { actressBlocked: "女优甲" },
+        });
+        const records = [
+            ...Array.from(context.carMap.keys()).map(carNum => ({ carNum })),
+            { carNum: "keywordBlocked", title: "禁播合集" },
+            { carNum: "actorBlocked" }, { carNum: "actressBlocked" },
+        ];
+        const before = structuredClone(context.carMap);
+        expect(records.filter(record => evaluateListItem(record, context, { filter: "undownloaded" }).matchesCurrentFilter)
+            .map(record => record.carNum)).toEqual([ "pending", "favorite", "watched", "favoriteWatched" ]);
+        expect(context.carMap).toEqual(before);
+    });
+
     it("finds the matched keyword for badge tips", () => {
         expect(findMatchedTitleKeyword([ "禁播", "4K" ], "4K 合集", "ABC-123")).toBe("4K");
         expect(findMatchedTitleKeyword([ "ABC" ], "普通标题", "ABC-001")).toBe("ABC");

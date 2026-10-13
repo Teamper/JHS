@@ -8,9 +8,10 @@ describe("multi-state list visibility", () => {
     it("normalizes legacy and invalid quick-filter keys at the boundary", () => {
         expect(api.normalizeQuickFilterKey("filter")).toBe("blockedItems");
         expect(api.normalizeQuickFilterKey("recent7d")).toBe("recent7d");
+        expect(api.normalizeQuickFilterKey("undownloaded")).toBe("undownloaded");
         expect(api.normalizeQuickFilterKey("unknown")).toBe("waitCheck");
         expect(Array.from(api.PRIMARY_QUICK_FILTERS)).toEqual(["all", "waitCheck", "favorite", "hasDown", "hasWatch"]);
-        expect(Array.from(api.SECONDARY_QUICK_FILTERS)).toEqual(["blockedItems", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d"]);
+        expect(Array.from(api.SECONDARY_QUICK_FILTERS)).toEqual(["blockedItems", "undownloaded", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d"]);
     });
 
     it.each([
@@ -70,6 +71,8 @@ describe("multi-state list visibility", () => {
         expect(visible("hasDown")).toEqual([ "C", "E", "G", "H" ]);
         expect(visible("hasWatch")).toEqual([ "D", "F", "G", "H" ]);
         expect(visible("blockedItems")).toEqual([ "I" ]);
+        expect(visible("undownloaded")).toEqual([ "A", "B", "D", "F" ]);
+        expect(visible("favoriteUndownloaded")).toEqual([ "B", "F" ]);
     });
 
     it("keeps all hard-hidden reasons inside all and exposes them through blocked items", () => {
@@ -78,6 +81,8 @@ describe("multi-state list visibility", () => {
             expect(api.shouldShowItem({ filter: "blockedItems", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(true);
             expect(api.shouldShowItem({ filter: "favorite", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(false);
             expect(api.shouldShowItem({ filter: "waitCheck", flags: flags(), visibilityReasons, recent: false })).toBe(false);
+            expect(api.shouldShowItem({ filter: "undownloaded", flags: flags("favorite", "watched"), visibilityReasons, recent: false })).toBe(false);
+            expect(api.shouldShowItem({ filter: "favoriteUndownloaded", flags: flags("favorite", "watched"), visibilityReasons, recent: false })).toBe(false);
         }
     });
 });

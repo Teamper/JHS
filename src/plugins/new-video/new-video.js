@@ -30,6 +30,7 @@ function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()
 export class NewVideoPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvCoverPreview", null), i(this, "nvWorkspaceRoot", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
+        i(this, "nvWorkspaceFullReloadRequested", !1), i(this, "nvPendingRemovals", new Set), i(this, "nvRemovingCards", new Set);
     }
     getName() {
         return "NewVideoPlugin";
@@ -118,7 +119,7 @@ export class NewVideoPlugin extends BasePlugin {
     }
     async handle() {
         this.initializeLocalState();
-        this.nvEventUnsubscribe || (this.nvEventUnsubscribe = jhsEventBus.on("new-video-changed", (() => this.scheduleWorkspaceReload())));
+        this.nvEventUnsubscribe || (this.nvEventUnsubscribe = jhsEventBus.on("new-video-changed", (payload => this.scheduleWorkspaceReload(payload))));
         this.taskStatusUnsubscribe || (this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.isWorkspaceMounted() && this.renderTaskStatuses())));
         await this.showNewVideoCount();
     }
@@ -130,7 +131,10 @@ export class NewVideoPlugin extends BasePlugin {
     isWorkspaceMounted() {
         return this.nvWorkspaceMounted && $(".newVideoToolBox").length > 0;
     }
-    scheduleWorkspaceReload() {
+    scheduleWorkspaceReload(payload = {}) {
+        const carNums = Array.isArray(payload?.carNums) ? payload.carNums.map(normalizeCarNum).filter(Boolean) : [];
+        if ([ "browse", "state-handled", "manual" ].includes(payload?.reason) && carNums.length) carNums.forEach(carNum => this.nvPendingRemovals.add(carNum));
+        else this.nvWorkspaceFullReloadRequested = !0;
         this.nvWorkspaceReloadDirty = !0;
         this.nvInvalidationTimer || (this.nvInvalidationTimer = setTimeout((() => {
             this.nvInvalidationTimer = null, void this.flushWorkspaceReload();
@@ -140,12 +144,44 @@ export class NewVideoPlugin extends BasePlugin {
         if (this.nvWorkspaceReloadPromise) return this.nvWorkspaceReloadPromise;
         return this.nvWorkspaceReloadPromise = (async () => {
             do {
+                const fullReload = this.nvWorkspaceFullReloadRequested, removals = new Set(this.nvPendingRemovals);
+                this.nvWorkspaceFullReloadRequested = !1, this.nvPendingRemovals.clear();
                 this.nvWorkspaceReloadDirty = !1, await this.showNewVideoCount();
-                this.isWorkspaceMounted() && await this.reloadNewVideoWorkspaceData({ preservePage: !0 });
+                if (this.isWorkspaceMounted()) {
+                    if (!fullReload && removals.size && this._viewMode === "list" && $("#nv-grid").length) await this.applyNewVideoRemovals(removals);
+                    else await this.reloadNewVideoWorkspaceData({ preservePage: !0 });
+                }
             } while (this.nvWorkspaceReloadDirty);
         })().catch((error => clog.error("新作品数据刷新失败", error))).finally((() => {
             this.nvWorkspaceReloadPromise = null;
         })), this.nvWorkspaceReloadPromise;
+    }
+    async applyNewVideoRemovals(carNums) {
+        if (this.nvWorkspaceFullReloadRequested) return;
+        const generation = this.nvRenderGeneration, container = $("#new-video-list-container"), root = container[0];
+        const cards = container.find(".nv-card").filter((_, card) => carNums.has(normalizeCarNum($(card).attr("data-car"))));
+        carNums.forEach(carNum => { this.nvAllItemsMap.delete(carNum); this.nvSelected.delete(carNum); });
+        this.nvActressesCache = this.nvActressesCache.map(actress => Array.isArray(actress.newVideoList) ? {
+            ...actress, newVideoList: actress.newVideoList.filter(item => !carNums.has(normalizeCarNum(typeof item === "string" ? item : item?.carNum)))
+        } : actress);
+        if (this.nvCoverPreview?.currentTarget && cards.toArray().some(card => card.contains(this.nvCoverPreview.currentTarget))) this.nvCoverPreview.hidePreview();
+        const duration = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? 0 : 180;
+        cards.each((_, card) => this.nvRemovingCards.add(card));
+        try {
+            // Only fade opacity: keep the grid height stable until the replacement cards are ready.
+            await Promise.all(cards.toArray().map(card => new Promise(resolve => {
+                $(card).animate({ opacity: 0 }, duration, resolve);
+            })));
+        } finally {
+            cards.each((_, card) => this.nvRemovingCards.delete(card));
+        }
+        if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration || root !== $("#new-video-list-container")[0] || this.nvWorkspaceFullReloadRequested) return;
+        const positions = container.add(container.parentsUntil(this.nvWorkspaceRoot || ".newVideoToolBox")).add(this.nvWorkspaceRoot || container.closest(".newVideoToolBox"))
+            .map((_, element) => ({ element, top: element.scrollTop, left: element.scrollLeft })).get();
+        await this.renderNewVideoList({ incremental: !0 });
+        if (this.isWorkspaceMounted() && generation === this.nvRenderGeneration && root === $("#new-video-list-container")[0]) {
+            positions.forEach(({ element, top, left }) => { element.scrollTop = top; element.scrollLeft = left; });
+        }
     }
     getPendingNewVideoCount(e, t) {
         return Array.isArray(e?.newVideoList) ? new Set(e.newVideoList.map((item => normalizeCarNum("string" == typeof item ? item : item.carNum))).filter((carNum => carNum && !t.has(carNum) && !this.isDecisionHidden(carNum)))).size : 0;
@@ -222,9 +258,11 @@ export class NewVideoPlugin extends BasePlugin {
         });
     }
     cleanupNewVideoWorkspace() {
+        clearTimeout(this.nvInvalidationTimer), this.nvInvalidationTimer = null, this.nvWorkspaceReloadDirty = !1, this.nvWorkspaceFullReloadRequested = !1, this.nvPendingRemovals.clear();
         this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = !1, this.nvWorkspaceRoot = null, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
         this.nvCoverPreview?.destroy?.(), this.nvCoverPreview = null,
         this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
+        $(Array.from(this.nvRemovingCards)).stop(!0, !0), this.nvRemovingCards.clear();
     }
     bindClick() {
         const taskPlugin = this.getOptionalDependency("TaskPlugin");
@@ -324,7 +362,7 @@ export class NewVideoPlugin extends BasePlugin {
             this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
             const items = aggregateNewVideoRecords(actresses, carMap, decisions), nextMap = new Map;
             items.forEach((item => nextMap.set(normalizeCarNum(item.carNum), { ...item, carNum: normalizeCarNum(item.carNum) }))), this.nvAllItemsMap = nextMap;
-            for (const carNum of [ ...this.nvSelected ]) nextMap.has(carNum) || this.nvSelected.delete(carNum);
+            this.pruneNewVideoSelection();
             preservePage || (this.currentPage = 1, this.nvCurrentPage = 1), await this.renderCurrentView(), this.renderTaskStatuses();
         } catch (error) {
             if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
@@ -462,16 +500,21 @@ export class NewVideoPlugin extends BasePlugin {
             }
         }));
     }
-    async renderNewVideoList() {
+    pruneNewVideoSelection() {
+        for (const carNum of [ ...this.nvSelected ]) this.nvAllItemsMap.has(carNum) || this.nvSelected.delete(carNum);
+    }
+    async renderNewVideoList({ incremental = !1 } = {}) {
         const container = $("#new-video-list-container"), generation = this.nvRenderGeneration;
         if (!container.length) return;
         const items = await this.getNewVideoFlatList();
         if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
-        $("#nv-pagination-bar").remove();
+        this.pruneNewVideoSelection();
+        incremental || $("#nv-pagination-bar").remove();
         this.nvFlatListCache = items, this.nvSortBy = $("#nvSortBy").val() || this.nvSortBy;
         const totalPages = Math.ceil(items.length / this.nvPageSize);
         this.nvCurrentPage = totalPages ? Math.min(this.nvCurrentPage, totalPages) : 1;
         if (!items.length) {
+            this.nvCurrentPageItems = [], $("#nv-pagination-bar").remove();
             const query = String($("#nvSearch").val() || "").trim(), filtered = [ "nvCategoryFilter", "nvStateFilter", "nvDecisionFilter" ].some((id => $("#" + id).val() !== ("nvCategoryFilter" === id ? "all" : "pending")));
             if (!this.nvAllItemsMap.size) renderStateView(container, { type: "empty", title: "暂无新作品记录" }); else if (query) renderStateView(container, { type: "empty", title: `没有找到“${query}”的作品`, actionLabel: "清除搜索", onAction: () => {
                 $("#nvSearch").val(""), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
@@ -480,7 +523,7 @@ export class NewVideoPlugin extends BasePlugin {
             } }); else renderStateView(container, { type: "empty", title: "暂无待处理的新作品" });
             return void this.renderBatchBar();
         }
-        this.nvRenderPage(generation), this.renderBatchBar();
+        this.nvRenderPage(generation, { incremental }), this.renderBatchBar();
     }
     selectedItems() {
         return [ ...this.nvSelected ].map((carNum => this.nvAllItemsMap.get(normalizeCarNum(carNum)))).filter(Boolean);
@@ -540,46 +583,75 @@ export class NewVideoPlugin extends BasePlugin {
             return "desc" === a ? -i : i;
         }));
     }
-    nvRenderPage(generation = this.nvRenderGeneration) {
+    nvCardHtml(n) {
+        const r = this.nvJavDbUrl;
+        let c = "";
+        const key = normalizeCarNum(n.carNum), e = escapeHtml(key), t = escapeHtml(n.title || key), cachedCover = this.nvCoverCache.get(key), a = escapeHtml((cachedCover || n.coverUrl || "").replace("thumbs", "covers")), i = escapeHtml(n.url || `${r}/search?q=${encodeURIComponent(key)}`);
+        let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${escapeHtml(String(n.publishTime || "未知"))}`;
+        n.voteCount && (o += `\\n评价人数: ${n.voteCount}`);
+        const l = n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n.voteCount}人评价</span>` : "";
+        c += `<div class="nv-card" data-car="${e}" title="${o}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e}" ${this.nvSelected.has(key) ? "checked" : ""}><span>选择</span></label>`;
+        c += `<a class="nv-card__link" href="${i}" target="_blank" rel="noopener noreferrer">`;
+        c += `<div class="nv-card__cover">`;
+        a ? c += `<img class="nv-cover-img" src="${a}" data-full="${a}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');">${l}<div class="nv-card__empty jhs-is-hidden">无封面</div>` : c += `<div class="nv-placeholder nv-card__empty">加载中...</div>`;
+        c += `</div>`;
+        c += `<div class="nv-card__body">`;
+        c += `<div class="nv-card__title" title="${e}">${e}</div>`;
+        c += `<div class="nv-card__actress" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
+        n.publishTime && (c += `<div class="nv-card__date">${escapeHtml(String(n.publishTime))}</div>`);
+        n.decisionState && "pending" !== n.decisionState && (c += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n.decisionState ? "已忽略" : "dismissed" === n.decisionState ? "已移除" : "已暂缓"}</span>`), c += `</div></a></div>`;
+        return c;
+    }
+    nvRenderPage(generation = this.nvRenderGeneration, { incremental = !1 } = {}) {
         const e = this.nvFlatListCache;
         if (!e || 0 === e.length) return;
-        const t = this.nvSortList(e), n = this.nvPageSize, a = (this.nvCurrentPage - 1) * n, i = a + n, s = t.slice(a, i), o = Math.ceil(t.length / n), r = this.nvJavDbUrl;
+        const t = this.nvSortList(e), n = this.nvPageSize, a = (this.nvCurrentPage - 1) * n, i = a + n, s = t.slice(a, i), o = Math.ceil(t.length / n);
         this.nvCurrentPageItems = s;
         if (generation !== this.nvRenderGeneration) return;
         $("#nv-pagination-bar").remove();
-            const l = $("#new-video-list-container");
-            let c = "";
-            c += '<div id="nv-grid" class="jhs-new-video-grid">';
-            for (const n of s) {
-                const key = normalizeCarNum(n.carNum), e = escapeHtml(key), t = escapeHtml(n.title || key), cachedCover = this.nvCoverCache.get(key), a = escapeHtml((cachedCover || n.coverUrl || "").replace("thumbs", "covers")), i = escapeHtml(n.url || `${r}/search?q=${encodeURIComponent(key)}`);
-                let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${escapeHtml(String(n.publishTime || "未知"))}`;
-                n.voteCount && (o += `\\n评价人数: ${n.voteCount}`);
-                const l = n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n.voteCount}人评价</span>` : "";
-                c += `<div class="nv-card" data-car="${e}" title="${o}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e}" ${this.nvSelected.has(key) ? "checked" : ""}><span>选择</span></label>`;
-                c += `<a class="nv-card__link" href="${i}" target="_blank" rel="noopener noreferrer">`;
-                c += `<div class="nv-card__cover">`;
-                a ? c += `<img class="nv-cover-img" src="${a}" data-full="${a}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');">${l}<div class="nv-card__empty jhs-is-hidden">无封面</div>` : c += `<div class="nv-placeholder nv-card__empty">加载中...</div>`;
-                c += `</div>`;
-                c += `<div class="nv-card__body">`;
-                c += `<div class="nv-card__title" title="${e}">${e}</div>`;
-                c += `<div class="nv-card__actress" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
-                n.publishTime && (c += `<div class="nv-card__date">${escapeHtml(String(n.publishTime))}</div>`);
-                n.decisionState && "pending" !== n.decisionState && (c += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n.decisionState ? "已忽略" : "dismissed" === n.decisionState ? "已移除" : "已暂缓"}</span>`), c += `</div></a></div>`;
+        const l = $("#new-video-list-container"), grid = l.find("#nv-grid");
+        incremental = incremental && grid.length > 0;
+        const existingCards = incremental ? new Map(grid.children(".nv-card").toArray().map(card => [ normalizeCarNum($(card).attr("data-car")), card ])) : new Map;
+        const focusedCard = $(document.activeElement).closest(".nv-card")[0], focusIndex = grid.children(".nv-card").index(focusedCard);
+        let c = "";
+        c += '<div id="nv-grid" class="jhs-new-video-grid">';
+        for (const item of s) {
+            if (!incremental || !existingCards.has(normalizeCarNum(item.carNum))) c += this.nvCardHtml(item);
+        }
+        c += "</div>";
+        if (o > 1) {
+            c += '<div id="nv-pagination-bar" class="jhs-new-video-pagination">';
+            this.nvCurrentPage > 1 && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage - 1}">上一页</button>`);
+            let e = Math.max(1, this.nvCurrentPage - 2), n = Math.min(o, e + 4);
+            n - e < 4 && (e = Math.max(1, n - 4));
+            for (let t = e; t <= n; t++) c += `<button type="button" class="jhs-btn jhs-btn--secondary ${t === this.nvCurrentPage ? "is-current" : ""} pagination-btn" data-nvpage="${t}" ${t === this.nvCurrentPage ? 'aria-current="page"' : ""}>${t}</button>`;
+            this.nvCurrentPage < o && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`),
+            c += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
+        }
+        let createdCards;
+        if (incremental) {
+            const content = $(c), additions = content.filter("#nv-grid").children(".nv-card");
+            const wanted = new Set(s.map(item => normalizeCarNum(item.carNum))), added = new Map(additions.toArray().map(card => [ normalizeCarNum($(card).attr("data-car")), card ]));
+            grid.children(".nv-card").filter((_, card) => !wanted.has(normalizeCarNum($(card).attr("data-car")))).remove();
+            let cursor = grid[0].firstElementChild;
+            for (const item of s) {
+                const key = normalizeCarNum(item.carNum), card = existingCards.get(key) || added.get(key);
+                if (card === cursor) cursor = cursor.nextElementSibling;
+                else grid[0].insertBefore(card, cursor);
+                $(card).find(".nv-select").prop("checked", this.nvSelected.has(key));
             }
-            c += "</div>";
-            if (o > 1) {
-                c += '<div id="nv-pagination-bar" class="jhs-new-video-pagination">';
-                this.nvCurrentPage > 1 && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage - 1}">上一页</button>`);
-                let e = Math.max(1, this.nvCurrentPage - 2), n = Math.min(o, e + 4);
-                n - e < 4 && (e = Math.max(1, n - 4));
-                for (let t = e; t <= n; t++) c += `<button type="button" class="jhs-btn jhs-btn--secondary ${t === this.nvCurrentPage ? "is-current" : ""} pagination-btn" data-nvpage="${t}" ${t === this.nvCurrentPage ? 'aria-current="page"' : ""}>${t}</button>`;
-                this.nvCurrentPage < o && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`),
-                c += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
+            l.append(content.filter("#nv-pagination-bar"));
+            createdCards = additions;
+            if (focusIndex >= 0 && !wanted.has(normalizeCarNum($(focusedCard).attr("data-car")))) {
+                grid.children(".nv-card").eq(Math.min(focusIndex, s.length - 1)).find(".nv-card__link")[0]?.focus({ preventScroll: !0 });
             }
-            l.html(c), l.find(".nv-cover-img").on("error", (function() { $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden"); })), l.find(".nv-select").on("change", (event => { const carNum = normalizeCarNum(event.currentTarget.value); event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), this.renderBatchBar(); })), l.find(".pagination-btn").off("click").on("click", (e => {
-                const n = parseInt($(e.currentTarget).data("nvpage"));
-                n >= 1 && n <= o && n !== this.nvCurrentPage && (this.nvCurrentPage = n, this.nvRenderGeneration++, this.nvRenderPage(this.nvRenderGeneration), this.renderBatchBar(), l.scrollTop(0));
-            })), l.find("#nv-pagination-bar").insertAfter(l), this.nvCoverPreview ??= new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", owner: this.nvWorkspaceRoot, resolveOwner: () => this.nvWorkspaceRoot, zIndexStrategy: "owner" }), void this.hydrateVisibleCovers(s, generation);
+        } else {
+            l.html(c), createdCards = l.find(".nv-card");
+        }
+        createdCards.find(".nv-cover-img").on("error", (function() { $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden"); })), createdCards.find(".nv-select").on("change", (event => { const carNum = normalizeCarNum(event.currentTarget.value); event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), this.renderBatchBar(); })), l.find(".pagination-btn").off("click").on("click", (e => {
+            const n = parseInt($(e.currentTarget).data("nvpage"));
+            n >= 1 && n <= o && n !== this.nvCurrentPage && (this.nvCurrentPage = n, this.nvRenderGeneration++, this.nvRenderPage(this.nvRenderGeneration), this.renderBatchBar(), l.scrollTop(0));
+        })), l.find("#nv-pagination-bar").insertAfter(l), this.nvCoverPreview ??= new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", owner: this.nvWorkspaceRoot, resolveOwner: () => this.nvWorkspaceRoot, zIndexStrategy: "owner" }), void this.hydrateVisibleCovers(s, generation);
     }
     async editActress(e) {
         const dialog = this.getRuntimeService("dialog");

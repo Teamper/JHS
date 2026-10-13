@@ -7,7 +7,7 @@ import { hasAnyState } from "../../core/state-model.js";
 
 export const QUICK_FILTER_LABELS = Object.freeze({
     all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看",
-    blockedItems: "屏蔽项", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看",
+    blockedItems: "屏蔽项", undownloaded: "全部未下载", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看",
     downloadedUnwatched: "下载未观看", recent7d: "最近 7 天"
 });
 
@@ -15,7 +15,10 @@ export const QUICK_FILTER_LABELS = Object.freeze({
 /** @type {ReadonlyArray<QuickFilterKey>} */
 export const PRIMARY_QUICK_FILTERS = Object.freeze([ "all", "waitCheck", "favorite", "hasDown", "hasWatch" ]);
 /** @type {ReadonlyArray<QuickFilterKey>} */
-export const SECONDARY_QUICK_FILTERS = Object.freeze([ "blockedItems", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d" ]);
+export const SECONDARY_QUICK_FILTERS = Object.freeze([ "blockedItems", "undownloaded", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d" ]);
+export const DEFAULT_QUICK_FILTER_OPTIONS = Object.freeze([ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ]
+    .filter(filter => filter !== "blockedItems")
+    .map(value => Object.freeze({ value, label: QUICK_FILTER_LABELS[value] })));
 const VALID_QUICK_FILTERS = new Set([ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ]);
 
 /** @param {unknown} value @returns {QuickFilterKey} */
@@ -40,7 +43,7 @@ export function matchesQuickFilter(filter, flags, { visibilityReasons = {}, rece
     if ("favorite" === normalizedFilter) return !!flags.favorite;
     if ("hasDown" === normalizedFilter) return !!flags.downloaded;
     if ("hasWatch" === normalizedFilter) return !!flags.watched;
-    if ("favoriteUndownloaded" === normalizedFilter) return !!flags.favorite && !flags.downloaded;
+    if ("undownloaded" === normalizedFilter || "favoriteUndownloaded" === normalizedFilter) return !flags.downloaded && ("undownloaded" === normalizedFilter || !!flags.favorite);
     if ("favoriteUnwatched" === normalizedFilter) return !!flags.favorite && !flags.watched;
     if ("downloadedUnwatched" === normalizedFilter) return !!flags.downloaded && !flags.watched;
     return "recent7d" === normalizedFilter && recent;

@@ -1,6 +1,7 @@
 // @ts-check
 
 import { L, r } from "../../core/constants.js";
+import { DEFAULT_QUICK_FILTER_OPTIONS } from "../../features/list/list-filters.js";
 import { buildQuickSettingsHtml } from "../../ui/settings/setting-control-renderer.js";
 
 /**
@@ -134,12 +135,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems) {
                                 <span class="setting-label">默认显示选项卡:</span>
                                 <div class="form-content">
                                     <select id="defaultQuickFilterTab" class="jhs-select-source">
-                                        <option value="all">全部</option>
-                                        <option value="waitCheck">待鉴定</option>
-                                        <option value="favorite">收藏</option>
-                                        <option value="hasDown">下载</option>
-                                        <option value="hasWatch">已看</option>
-                                        <option value="blockedItems">屏蔽项</option>
+                                        ${DEFAULT_QUICK_FILTER_OPTIONS.map(({ value, label }) => `<option value="${value}">${label}</option>`).join("")}
                                     </select>
                                 </div>
                             </div>

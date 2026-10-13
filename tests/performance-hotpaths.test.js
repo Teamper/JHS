@@ -206,6 +206,17 @@ describe("list mutation hot path", () => {
         expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);
         expect($(".jhs-segmented__item[data-jhs-filter='favorite']").attr("aria-selected")).toBe("true");
         expect($(".jhs-quick-filter__label").text()).toBe("更多筛选");
+
+        $(".jhs-quick-filter__toggle").trigger("click");
+        const undownloadedOption = $('.jhs-quick-filter__menu [data-jhs-filter="undownloaded"]');
+        expect(undownloadedOption.text()).toBe("全部未下载");
+        undownloadedOption.trigger("click");
+        expect(plugin.activeQuickFilter).toBe("undownloaded");
+        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);
+        expect(appended.css("display")).toBe("none");
+        expect(undownloadedOption.attr("aria-checked")).toBe("true");
+        expect($(".jhs-quick-filter__label").text()).toBe("筛选：全部未下载");
+        expect($(".jhs-quick-filter__menu").hasClass("is-open")).toBe(false);
     });
 });
 
