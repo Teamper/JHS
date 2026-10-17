@@ -3,6 +3,19 @@ import { JSDOM } from "jsdom";
 import { prepareDialogOptions } from "../src/core/dialog-shell.js";
 let dom;
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
+it("does not focus generic iframe dialogs on mount or load", () => {
+    dom = new JSDOM('<button id="trigger">演员</button><div id="dialog"><iframe></iframe></div>', { url: "https://javdb.com/" });
+    vi.stubGlobal("window", dom.window);
+    const document = dom.window.document, trigger = document.querySelector("#trigger"), frame = document.querySelector("iframe");
+    trigger.focus();
+    const options = prepareDialogOptions({ type: 2 });
+    options.success(document.querySelector("#dialog"), 1);
+    expect(document.activeElement).toBe(trigger);
+    frame.dispatchEvent(new dom.window.Event("load"));
+    expect(document.activeElement).toBe(trigger);
+    options.end();
+    expect(document.activeElement).toBe(trigger);
+});
 it("consumes UI metadata, preserves callbacks and releases resize listeners", () => {
     dom = new JSDOM('<div id="dialog"></div>');
     vi.stubGlobal("window", dom.window);

@@ -2,6 +2,8 @@
 
 本矩阵冻结 Feature 的能力边界；独立启停单位以 Contribution ID 为准。FeatureRuntime 在注册时校验 Feature ID 与 Contribution owner 唯一性，旧 Plugin 名通过 `LEGACY_PLUGIN_CONTRIBUTION_MAP` 迁移。
 
+详情鉴定快捷键由 `detail.shortcuts` Contribution 独立启停，仅在详情页监听按键，设置录制面板使用 SettingsService 持久化 `detailShortcuts`，不注册列表页快捷键。
+
 | Feature | Kind | Sites / route | Startup | Contributions |
 | --- | --- | --- | --- | --- |
 | `settings` | system | all | on-command | `settings.core` |

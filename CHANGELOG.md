@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [6.5.3](../../compare/v6.5.2...v6.5.3) - 2026-10-17
+
+### 新增
+
+- 详情页新增独立的“详情鉴定快捷键”插件，可为屏蔽、收藏、已下载和已观看录制单键或 Ctrl / Alt / Shift / Meta 组合键，鉴定按钮内显示对应按键。
+- 设置新增“快捷键”面板，支持冲突提示、清除和即时保存；面板入口随插件开关显示或隐藏，配置可随备份导入和恢复。
+- 从列表打开详情弹窗后，启用的快捷键插件自动聚焦详情 iframe；输入框和可见弹窗内不触发鉴定快捷键。
+
 ## [6.5.2](../../compare/v6.5.1...v6.5.2) - 2026-10-16
 
 ### 新增
@@ -672,7 +680,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: ../../compare/v6.5.1...HEAD
+[Unreleased]: ../../compare/v6.5.3...HEAD
 [6.2.1]: ../../compare/v6.2.0...v6.2.1
 [6.2.0]: ../../compare/v6.1.1...v6.2.0
 [6.1.1]: ../../compare/v6.1.0...v6.1.1

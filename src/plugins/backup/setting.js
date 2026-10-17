@@ -16,6 +16,7 @@ import { applyLayoutFromSettings, buildSettingCss } from "./setting-styles.js";
 import { buildQuickSettingHtml, buildSettingDialogHtml, injectHealthPanel, injectNetworkPanel, injectPluginMgmtPanel, injectResourceSourcesPanel, injectSnapshotPanel } from "./setting-templates.js";
 import { bindSettingControl } from "../../ui/settings/setting-binding-controller.js";
 import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
+import { bindShortcutRecorder } from "../../ui/settings/shortcut-recorder.js";
 
 export class SettingPlugin extends BasePlugin {
     constructor() {
@@ -239,7 +240,9 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel();
                 const binding = this.hydrateLiveSettings(layerRoot);
                 this._fullSettingBinding = binding;
+                this._shortcutRecorderCleanup?.();
                 this.bindClick(layerRoot);
+                this._shortcutRecorderCleanup = bindShortcutRecorder(layerRoot, this.getRuntimeService("settings"), this._settingScope ?? undefined);
                 layerRoot.find(".side-menu-item.active").attr("aria-current", "page");
                 utils.setupEscClose(n), t && t();
                 this.renderTaskStatuses(layerRoot), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses(layerRoot)));
@@ -254,6 +257,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             },
             end: () => {
                 this._settingsDialogGeneration++;
+                this._shortcutRecorderCleanup?.();
+                this._shortcutRecorderCleanup = null;
                 this._fullSettingBinding?.dispose?.();
                 this._fullSettingBinding = null;
                 this._cloudSettingBinding?.dispose?.();

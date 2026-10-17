@@ -25,6 +25,7 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     PreviewVideoPlugin: "detail.javdb-preview",
     CoverButtonPlugin: "detail.cover-state-actions",
     DetailPageButtonPlugin: "detail.page-state-actions",
+    DetailShortcutPlugin: "detail.shortcuts",
     HighlightMagnetPlugin: "detail.native-magnets",
     OtherSitePlugin: "detail.external-sites",
     SubTitleCatPlugin: "external-bridge.subtitle",

@@ -3,6 +3,7 @@
 import { L, r } from "../../core/constants.js";
 import { DEFAULT_QUICK_FILTER_OPTIONS } from "../../features/list/list-filters.js";
 import { buildQuickSettingsHtml } from "../../ui/settings/setting-control-renderer.js";
+import { DETAIL_SHORTCUT_ACTIONS } from "../../core/detail-shortcuts.js";
 
 /**
  * Build the plugin categories configuration shared between inject and render.
@@ -12,6 +13,7 @@ export function getPluginCategories() {
     /** @type {Record<string, [string, string]>} */
     const pluginMeta = {
         SettingPlugin:["设置中心","core"], StatsPlugin:["统计中心","core"], MobileBottomBarPlugin:["工具栏与移动操作","core"],
+        DetailShortcutPlugin:["详情鉴定快捷键","detail"],
         ListPagePlugin:["列表状态处理","list"], NavBarPlugin:["JavDB 导航","list"], BusNavBarPlugin:["JavBus 导航","list"], ListPageButtonPlugin:["列表操作","list"], HighlightMagnetPlugin:["磁力标记","list"], FoldCategoryPlugin:["分类折叠","list"], AutoPagePlugin:["自动翻页","list"], HitShowPlugin:["热播榜单","list"], TOP250Plugin:["TOP 250","list"],
         DetailPagePlugin:["JavDB 详情页","detail"], BusDetailPagePlugin:["JavBus 详情页","detail"], DetailPageButtonPlugin:["详情操作","detail"], ReviewPlugin:["评论","detail"], RelatedPlugin:["相关影片","detail"], TranslatePlugin:["标题翻译","detail"], WantAndWatchedVideosPlugin:["想看与看过","detail"],
         CoverButtonPlugin:["封面快捷操作","media"], PreviewVideoPlugin:["JavDB 预览视频","media"], BusPreviewVideoPlugin:["JavBus 预览视频","media"], ScreenShotPlugin:["剧照","media"], BusImgPlugin:["JavBus 图片适配","media"], ActressInfoPlugin:["演员资料","media"], SearchByImagePlugin:["以图搜图","media"],
@@ -65,6 +67,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems) {
                 <nav class="jhs-mobile-sidebar" aria-label="设置分类">
                     <button type="button" class="jhs-btn side-menu-item ${"backup-panel" === activePanel ? "active" : ""}" data-panel="backup-panel" aria-controls="backup-panel">数据备份</button>
                     <button type="button" class="jhs-btn side-menu-item ${"base-panel" === activePanel ? "active" : ""}" data-panel="base-panel" aria-controls="base-panel">基础配置</button>
+                    <button type="button" class="jhs-btn side-menu-item ${"shortcut-panel" === activePanel ? "active" : ""}" data-panel="shortcut-panel" aria-controls="shortcut-panel">快捷键</button>
                     <button type="button" class="jhs-btn side-menu-item ${"filter-panel" === activePanel ? "active" : ""}" data-panel="filter-panel" aria-controls="filter-panel">屏蔽配置</button>
                     <button type="button" class="jhs-btn side-menu-item ${"task-panel" === activePanel ? "active" : ""}" data-panel="task-panel" aria-controls="task-panel">定时任务</button>
                     <button type="button" class="jhs-btn side-menu-item ${"domain-panel" === activePanel ? "active" : ""}" data-panel="domain-panel" aria-controls="domain-panel" title="第三方视频资源域名配置">外部网站</button>
@@ -74,6 +77,12 @@ export function buildSettingDialogHtml(activePanel, cacheItems) {
 
                 <div class="jhs-setting-main">
                     <div class="jhs-setting-body">
+                        <div id="shortcut-panel" class="content-panel ${"shortcut-panel" === activePanel ? "active" : ""}" role="region">
+                            <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>详情鉴定快捷键</h3><p>点击录制框后按下单键或组合键，自动保存；Escape 取消，Tab 切换。默认未设置。</p><p>仅在详情页生效；在插件管理 → 详情页中启停，开关修改后刷新页面。</p></header><div class="jhs-setting-group">
+                            ${Object.entries(DETAIL_SHORTCUT_ACTIONS).map(([key, action]) => `<div class="jhs-setting-row"><label class="setting-label" for="shortcut-${key}">${action.label}</label><div class="form-content"><input id="shortcut-${key}" class="jhs-field" type="text" readonly placeholder="点击后按键录制" data-shortcut-action="${key}" aria-describedby="shortcut-status"><button type="button" class="jhs-btn jhs-btn--secondary" data-shortcut-clear="${key}" aria-label="清除${action.label}快捷键">清除</button></div></div>`).join("")}
+                            <p id="shortcut-status" class="jhs-helper-text" role="status" aria-live="polite"></p>
+                            </div></section>
+                        </div>
 
 
                         <div id="backup-panel" class="content-panel ${"backup-panel" === activePanel ? "active" : ""}" role="region">

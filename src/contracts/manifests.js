@@ -44,7 +44,7 @@ export function defineFeature(manifest) {
     return Object.freeze({ ...manifest });
 }
 
-/** @param {Record<string, unknown>} manifest */
+/** @template {Record<string, unknown> & { sites: string[], routes: string[], surfaces: string[], order: Record<string, number> }} T @param {T} manifest @returns {Readonly<Omit<T, "sites" | "routes" | "surfaces" | "order"> & { sites: readonly string[], routes: readonly string[], surfaces: readonly string[], order: Readonly<Record<string, number>> }>} */
 export function defineContribution(manifest) {
     requireNonEmptyString(manifest.id, "Contribution id");
     requireNonEmptyString(manifest.featureId, "Contribution featureId");
@@ -55,7 +55,7 @@ export function defineContribution(manifest) {
     requireUniqueTokens(manifest.requires, "requires");
     if (typeof manifest.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
     if (!manifest.order || typeof manifest.order !== "object") throw new TypeError("Contribution order must be explicit");
-    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), routes: Object.freeze([...(/** @type {unknown[]} */ (manifest.routes))]), surfaces: Object.freeze([...(/** @type {unknown[]} */ (manifest.surfaces))]), order: Object.freeze({ ...manifest.order }) });
+    return Object.freeze({ ...manifest, sites: Object.freeze([...manifest.sites]), routes: Object.freeze([...manifest.routes]), surfaces: Object.freeze([...manifest.surfaces]), order: Object.freeze({ ...manifest.order }) });
 }
 
 /** @param {Record<string, unknown>} manifest */

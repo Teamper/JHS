@@ -27,7 +27,7 @@ export class FeatureRuntime {
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
     }
 
-    /** @param {Array<Record<string, any>>} manifests */
+    /** @param {ReadonlyArray<Record<string, any>>} manifests */
     setContributionManifests(manifests) { this.contributionManifests = new Map(manifests.map((item) => [item.id, item])); }
 
     activeSurfaces() {

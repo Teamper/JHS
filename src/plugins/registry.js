@@ -34,6 +34,7 @@ import { BusDetailPagePlugin } from "./status/bus-detail-page.js";
 import { BusNavBarPlugin } from "./status/bus-nav-bar.js";
 import { CompatibilityEnhancementsPlugin } from "./status/compat-enhancements.js";
 import { DetailPageButtonPlugin } from "./status/detail-page-button.js";
+import { DetailShortcutPlugin } from "./status/detail-shortcut.js";
 import { DetailPagePlugin } from "./status/detail-page.js";
 import { DetailWorkspacePlugin } from "./status/detail-workspace.js";
 import { Fc2NavigationPlugin } from "./status/fc2-navigation.js";
@@ -48,6 +49,7 @@ import { WantAndWatchedVideosPlugin } from "./status/want-and-watched-videos.js"
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
 import { TranslatePlugin } from "./translate/translate.js";
 
+/** @param {string} id @param {string} featureId @param {(new () => import("../core/plugin-manager.js").BasePlugin) & { name: string, legacyPluginId?: string }} plugin @param {string[]} sites @param {Record<string, number>} order @param {symbol[]} [requires] @param {{ routes?: string[], surfaces?: string[] }} [options] */
 const manifest = (id, featureId, plugin, sites, order, requires = [], options = {}) => defineContribution({
     id, featureId, legacyPluginId: plugin.legacyPluginId ?? plugin.name, plugin, sites, order, requires,
     routes: options.routes ?? (featureId === "detail" ? ["detail", "owned-detail"] : []),
@@ -74,6 +76,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
     manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.settings]),
+    manifest("detail.shortcuts", "detail", DetailShortcutPlugin, ["javdb", "javbus"], { javdb: 18.5, javbus: 12.5 }, [SERVICE.settings]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings]),
     manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie, SERVICE.dialog]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
@@ -122,7 +125,7 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
         .sort((left, right) => Number(left.order[site]) - Number(right.order[site]))
         .forEach((item) => {
             const dependencies = featureRuntime.resolveDeclaredDependencies(item.requires);
-            const runtimeServices = {};
+            const runtimeServices = /** @type {Record<string, unknown>} */ ({});
             runtimeServices.scope = () => featureRuntime.getContributionScope(item.featureId, item.id, item.legacyPluginId);
             const runtimeNames = new Map([
                 [PORT.host, "host"], [SERVICE.diagnostics, "diagnostics"], [SERVICE.review, "review"],
