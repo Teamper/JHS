@@ -58,7 +58,7 @@ git worktree list
 
 启动性能测试通过 Base64 传输源码字节，在浏览器中原生解码为原始 UTF-8 内联脚本，避免 Chromium 调试协议处理大段非 ASCII 参数的额外耗时。读文件、编码、传输、解码及全部 eager 功能完成仍计入计时；独立冷上下文、30 个样本、`first-ready` 定义和预算均保持不变。这是 fixture 测量开销的修复，不代表正式用户脚本自身启动加速；普通功能测试沿用原有注入方式，并有两种传输方式的等价性回归。
 
-本地功能回归默认使用已安装的 Edge；Windows PowerShell 可用 `$env:JHS_BROWSER_CHANNEL = 'chrome'` 选择已安装的 Chrome。视觉回归使用锁定的 Playwright Chromium，并固定灰度文字抗锯齿，避免本地与托管 runner 的 LCD 子像素渲染差异；只维护 Windows（`win32`）截图基线。develop CI 的启动和功能回归在 Ubuntu 24.04 上运行，视觉门禁在 Windows Server 2025 上运行；发布依赖两项检查全部通过。Firefox 控件项目与六视口配置以实际 Playwright 配置为准。
+本地功能回归默认使用已安装的 Edge；Windows PowerShell 可用 `$env:JHS_BROWSER_CHANNEL = 'chrome'` 选择已安装的 Chrome。视觉回归使用锁定的 Playwright Chromium，并固定灰度文字抗锯齿；Windows CI 还将当前 runner 会话的系统菜单字体设为 `Microsoft YaHei UI`，与现有基线的 `system-ui` 映射一致，保留产品 CSS。只维护 Windows（`win32`）截图基线。develop CI 的启动和功能回归在 Ubuntu 24.04 上运行，视觉门禁在 Windows Server 2025 上运行；发布依赖两项检查全部通过。Firefox 控件项目与六视口配置以实际 Playwright 配置为准。
 
 浏览器子项目首次准备：
 
@@ -72,6 +72,8 @@ cd ../..
 这是显式安装视觉浏览器的步骤；本地功能检查不会自动下载浏览器。develop 完整功能回归还包含 Firefox 控件项目，需在 tests/browser 中运行 `npx playwright install firefox`（Linux 可加 `--with-deps`）。develop CI 的 Linux 功能作业安装 Chromium 和 Firefox，Windows 视觉作业只安装 Chromium。
 
 fixture 自动回归与真实登录站点验收分别记录。实站验收先核对管理器版本及 develop 页面构建标识，再验证对应滚轮、焦点、Viewer、关闭/重开等操作。第三方网络、登录状态和资源变化会影响实站，fixture 通过不能替代安装后的验证。
+
+本地可用 `pwsh -File tests/browser/scripts/configure-visual-font.ps1 -CheckOnly` 只读核对系统字体；配置脚本只允许在临时 GitHub Actions runner 中修改字体，不写入持久用户配置。
 
 视觉基线按实际审图结果逐项更新，注明平台、视口、主题和预期变化；不得批量接受未审图差异。历史发布记录中的 PASS 只代表其标注版本及当时环境，不代表当前 main/develop。
 

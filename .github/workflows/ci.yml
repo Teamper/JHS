@@ -101,6 +101,9 @@ jobs:
       - name: Install visual browser
         working-directory: tests/browser
         run: npx playwright install chromium
+      - name: Align Windows visual system font
+        shell: pwsh
+        run: ./tests/browser/scripts/configure-visual-font.ps1
       - name: Run visual regression gate
         run: npm run check:visual
       - uses: actions/upload-artifact@v4
