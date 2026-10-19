@@ -259,6 +259,16 @@ Object.entries(diagnostics.startupTimings).sort((a, b) => b[1] - a[1]);
 
 </details>
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=teamper%2Fjhs&amp;type=date&amp;legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=teamper/jhs&amp;type=date&amp;theme=dark&amp;legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=teamper/jhs&amp;type=date&amp;legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=teamper/jhs&amp;type=date&amp;legend=top-left" />
+  </picture>
+</a>
+
 ## 许可
 
 用户脚本元数据声明为 [MIT](src/main.js)。第三方网站、接口和脚本依赖分别受其自身条款与许可证约束。
