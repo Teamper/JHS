@@ -28,7 +28,11 @@ export default defineConfig({
   },
   projects: [...viewports.map(([name, width, height, touch]) => ({
     name,
-    use: { viewport: { width, height }, hasTouch: touch, isMobile: touch }
+    use: {
+      viewport: { width, height }, hasTouch: touch, isMobile: touch,
+      // Keep screenshot text grayscale across local and hosted Windows renderers.
+      launchOptions: visualRegression ? { args: ["--disable-lcd-text"] } : {}
+    }
   })), {
     name: "firefox-controls",
     testMatch: /ui-control-states\.spec\.js/,
