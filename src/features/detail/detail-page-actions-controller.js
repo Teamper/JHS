@@ -209,6 +209,7 @@ export class DetailPageActionsController {
 
     /** @param {string} carNum */
     async searchXunLeiSubtitle(carNum) {
+        const trigger = /** @type {HTMLElement | null} */ (this.document.activeElement);
         let loader;
         try {
             loader = this.ui.loading();
@@ -216,10 +217,11 @@ export class DetailPageActionsController {
             if (!results?.length) return void this.notifications.error("未找到该番号的迅雷字幕");
             this.dialog.open({
                 type: 1, title: "迅雷字幕", content: '<div class="jhs-layout-8ddc7c91"><div id="xunlei-table-container" class="jhs-layout-583c2485"></div></div>',
+                ui: { body: "table" },
                 scrollbar: false, area: this.ui.getResponsiveArea(["60%", "70%"]), anim: -1,
                 success: (/** @type {any} */ _element, /** @type {number} */ layerIndex) => {
                     createJhsTable(/** @type {any} */ (globalThis).Tabulator, "#xunlei-table-container", {
-                        pagination: false, layout: "fitColumns", placeholder: "暂无数据", virtualDom: true, data: results,
+                        pagination: false, layout: "fitColumns", placeholder: "暂无数据", virtualDom: true, data: results.map((/** @type {SubtitleRecord} */ item) => ({ ...item })),
                         responsiveLayout: "collapse", responsiveLayoutCollapse: true,
                         columnDefaults: { headerHozAlign: "center", hozAlign: "center" },
                         columns: [
@@ -243,6 +245,7 @@ export class DetailPageActionsController {
                     });
                     this.ui.setupEscClose(layerIndex);
                 },
+                end: () => { if (trigger?.isConnected) trigger.focus({ preventScroll: true }); },
             });
         } catch (error) {
             this.diagnostics.recordError({ source: "detail-page-actions", contributionId: "detail.page-state-actions", message: `迅雷字幕搜索失败: ${error instanceof Error ? error.message : String(error)}` });
@@ -253,6 +256,7 @@ export class DetailPageActionsController {
     /** @param {SubtitleRecord} subtitle @param {string} filename */
     async previewSubtitle(subtitle, filename) {
         if (!subtitle?.url) return void this.diagnostics.recordError({ source: "detail-page-actions", message: "字幕预览未提供文件 URL" });
+        const trigger = /** @type {HTMLElement | null} */ (this.document.activeElement);
         const extension = String(subtitle.extension || "").toLowerCase();
         if (!["ass", "srt"].includes(extension)) return void this.notifications.error("仅支持 ASS 和 SRT 字幕");
         try {
@@ -262,7 +266,9 @@ export class DetailPageActionsController {
             const escaped = lines.map((/** @type {string} */ line, /** @type {number} */ index) => `<span class="jhs-code-line-number">${String(index + 1).padStart(width, " ")}. </span>${escapeHtml(line)}`).join("\n");
             this.dialog.open({
                 type: 1, title, area: this.ui.getResponsiveArea(["80%", "80%"]), scrollbar: false,
+                ui: { body: "scroll" },
                 content: `<div class="jhs-code-viewer">${escaped}</div>`, btn: ["下载", "关闭"],
+                end: () => { if (trigger?.isConnected) trigger.focus({ preventScroll: true }); },
                 btn1: () => { this.ui.download(data, filename); return false; },
             });
         } catch (error) {
