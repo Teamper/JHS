@@ -155,7 +155,7 @@ assertIncludes(ciWorkflow, "git diff --exit-code -- JHS.user.js", "CI tracked ar
 assertIncludes(ciWorkflow, "workflow_dispatch:", "manual CI trigger");
 assertIncludes(ciWorkflow, "node-version: 20", "minimum Node compatibility check");
 assertIncludes(ciWorkflow, "node-version: 22", "full Node check");
-assertIncludes(ciWorkflow, "needs: [node20, check, browser-smoke]", "release check dependency");
+assertIncludes(ciWorkflow, "needs: [node20, check, browser-smoke, visual]", "release check dependency");
 assertIncludes(ciWorkflow, "contents: write", "release write permission");
 assertIncludes(ciWorkflow, "--base-ref", "version-change release detection");
 assertIncludes(ciWorkflow, "github.ref == 'refs/heads/main'", "release restricted to main pushes");
