@@ -56,6 +56,8 @@ git worktree list
 
 `check:browser` 使用串行条件执行，启动性能失败会阻断功能回归；`check:release` 中前项失败也会阻断后项。需要独立运行后续检查时分开执行并分别报告结果，不能把单独通过的功能/视觉检查写成完整门禁通过。
 
+启动性能测试通过 Base64 传输源码字节，在浏览器中原生解码为原始 UTF-8 内联脚本，避免 Chromium 调试协议处理大段非 ASCII 参数的额外耗时。读文件、编码、传输、解码及全部 eager 功能完成仍计入计时；独立冷上下文、30 个样本、`first-ready` 定义和预算均保持不变。这是 fixture 测量开销的修复，不代表正式用户脚本自身启动加速；普通功能测试沿用原有注入方式，并有两种传输方式的等价性回归。
+
 本地功能回归默认使用已安装的 Edge；Windows PowerShell 可用 `$env:JHS_BROWSER_CHANNEL = 'chrome'` 选择已安装的 Chrome。视觉回归使用锁定的 Playwright Chromium；CI 使用临时 runner 上的 Chromium。develop 的 Firefox 控件项目与六视口配置以实际 Playwright 配置为准。
 
 浏览器子项目首次准备：

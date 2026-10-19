@@ -8,6 +8,23 @@ const repoRoot = resolve(browserRoot, "..", "..");
 const defaultUserscriptPath = process.env.JHS_TEST_BUNDLE_PATH || join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js");
 const getUserscriptPath = (options) => process.env.JHS_TEST_BUNDLE_PATH || options.userscriptPath || defaultUserscriptPath;
 
+async function addUserscript(page, options) {
+  const script = options.userscriptSource ? { content: options.userscriptSource } : { path: getUserscriptPath(options) };
+  if (options.userscriptTransport !== "base64") return page.addScriptTag(script);
+  // Large non-ASCII arguments add measurable Chromium protocol overhead.
+  // Only the transport is encoded; the original UTF-8 source executes as an inline script.
+  const source = script.content ?? `${await readFile(script.path, "utf8")}\n//# sourceURL=${script.path.replace(/\n/g, "")}`;
+  await page.evaluate((encoded) => {
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(Uint8Array.fromBase64(encoded));
+    let error = null;
+    script.onerror = (event) => { error = event; };
+    document.head.appendChild(script);
+    if (error) throw error;
+  }, Buffer.from(source, "utf8").toString("base64"));
+}
+
 export async function fulfillHostFixtures(context) {
   const javdb = await readFile(join(browserRoot, "fixtures", "javdb-detail.html"), "utf8");
   const javbus = await readFile(join(browserRoot, "fixtures", "javbus-detail.html"), "utf8");
@@ -200,13 +217,11 @@ export async function injectUserscriptRuntime(page, options = {}) {
   markPhase("fixture-setup");
   if (typeof options.beforeUserscriptInjection === "function") await options.beforeUserscriptInjection(hostPage);
   if (options.expectRedirect) {
-    const script = options.userscriptSource ? { content: options.userscriptSource } : { path: getUserscriptPath(options) };
-    try { await page.addScriptTag(script); }
+    try { await addUserscript(page, options); }
     catch (error) { if (!/Execution context was destroyed|Target closed|navigation/i.test(String(error))) throw error; }
     return;
   }
-  const script = options.userscriptSource ? { content: options.userscriptSource } : { path: getUserscriptPath(options) };
-  await page.addScriptTag(script);
+  await addUserscript(page, options);
   markPhase("userscript-eval");
   try {
     await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]), null, { timeout: 15_000 });
