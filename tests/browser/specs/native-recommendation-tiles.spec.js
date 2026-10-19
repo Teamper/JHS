@@ -55,7 +55,7 @@ for(const theme of ['light','dark'])for(const path of ['direct','iframe'])test(`
  await fulfillNativeCss(context);
  const html=await nativeHtml(theme);
  await context.route('https://javdb.com/v/**',route=>route.fulfill({contentType:'text/html',body:html}));
- await context.route('https://images.example.test/**',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="#63768c"/><text x="12" y="45" fill="white" font-size="20">HOST COVER</text></svg>'}));
+ await context.route('https://images.example.test/**',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" font-family="Arial, Microsoft YaHei UI, sans-serif" width="200" height="300"><rect width="200" height="300" fill="#63768c"/><text x="12" y="45" fill="white" font-size="20">HOST COVER</text></svg>'}));
  let frame=page;
  if(path==='direct'){await page.goto('https://javdb.com/v/native-tiles');await injectUserscriptRuntime(page,options(theme));}
  else {await page.goto('https://javdb.com/');await injectUserscriptRuntime(page,options(theme));const navigation=page.waitForEvent('framenavigated',{predicate:f=>f.url().includes('/v/native-tiles')});await page.evaluate(()=>window.utils.openPage('https://javdb.com/v/native-tiles','ABC-123'));frame=await navigation;await frame.waitForLoadState('domcontentloaded');await injectUserscriptRuntime(frame,options(theme));}

@@ -6,7 +6,7 @@ import {injectRealLayer} from '../harness/real-layer.js';
 
 const image=page=>page.locator('.viewer-canvas img');
 const config=theme=>({hostStyles:true,realFeedback:true,beforeUserscriptInjection:injectRealLayer,settingOverrides:{themeMode:theme,enableLoadScreenShot:'no',enableLoadPreviewVideo:'no',enableLoadReview:'no',enableLoadRelated:'no',enableLoadOtherSite:'no',defaultQuickFilterTab:'all'}});
-const svg=(width,height)=>`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#59778f"/><rect width="${width}" height="80" fill="#24537a"/><rect y="${height-80}" width="${width}" height="80" fill="#426341"/><text x="20" y="50" fill="white" font-size="28">TOP</text><text x="20" y="${height-20}" fill="white" font-size="28">BOTTOM</text></svg>`;
+const svg=(width,height)=>`<svg xmlns="http://www.w3.org/2000/svg" font-family="Arial, Microsoft YaHei UI, sans-serif" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#59778f"/><rect width="${width}" height="80" fill="#24537a"/><rect y="${height-80}" width="${width}" height="80" fill="#426341"/><text x="20" y="50" fill="white" font-size="28">TOP</text><text x="20" y="${height-20}" fill="white" font-size="28">BOTTOM</text></svg>`;
 async function routes(context){
  await fulfillHostFixtures(context);
  await context.route('https://images.example.test/**',route=>{

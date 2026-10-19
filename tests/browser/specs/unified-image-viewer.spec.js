@@ -11,7 +11,7 @@ async function boot(page, context, { theme = "light", frame = false } = {}) {
     await context.route("https://images.example.test/**", route => {
         const name = new URL(route.request().url()).pathname;
         const height = name === "/full-0.svg" ? 3600 : name.includes("thumb") ? 80 : 720;
-        return route.fulfill({contentType:"image/svg+xml",body:`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="${height}"><rect width="1280" height="${height}" fill="#59778f"/><path d="M0 0h1280v140H0z" fill="#24537a"/><path d="M0 ${height-140}h1280v140H0z" fill="#426341"/><text x="40" y="90" font-size="48" fill="white">TOP · 全图</text><text x="40" y="${height-50}" font-size="48" fill="white">BOTTOM · 底部</text></svg>`});
+        return route.fulfill({contentType:"image/svg+xml",body:`<svg xmlns="http://www.w3.org/2000/svg" font-family="Arial, Microsoft YaHei UI, sans-serif" width="1280" height="${height}"><rect width="1280" height="${height}" fill="#59778f"/><path d="M0 0h1280v140H0z" fill="#24537a"/><path d="M0 ${height-140}h1280v140H0z" fill="#426341"/><text x="40" y="90" font-size="48" fill="white">TOP · 全图</text><text x="40" y="${height-50}" font-size="48" fill="white">BOTTOM · 底部</text></svg>`});
     });
     const originalHtml = await readFile(new URL("../fixtures/javdb-detail-native-media.html", import.meta.url), "utf8");
     const html = originalHtml.replace('<select data-action="change->magnet-sort#sort">', '<span class="select is-small" id="native-sort-wrapper"><select data-action="change->magnet-sort#sort">').replace('</select>', '</select></span>');
