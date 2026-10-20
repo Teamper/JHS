@@ -37,7 +37,11 @@ export class CommandRegistry {
     registerHandler(command, handler, featureId) {
         if (this.owners.get(command) !== featureId) throw new Error(`Feature ${featureId} does not own command ${command}`);
         if (this.handlers.has(command)) throw new Error(`Duplicate command handler: ${command}`);
-        this.handlers.set(command, handler);
+        const registered = (/** @type {any[]} */ ...args) => handler(...args);
+        this.handlers.set(command, registered);
+        return () => {
+            if (this.owners.get(command) === featureId && this.handlers.get(command) === registered) this.handlers.delete(command);
+        };
     }
 
     /** @param {string} command @param  {...any} args */

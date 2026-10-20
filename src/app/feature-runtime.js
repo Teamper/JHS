@@ -127,7 +127,7 @@ export class FeatureRuntime {
         if (!this.isEligible(manifest)) return Promise.reject(new Error(`Feature is disabled or ineligible: ${id}`));
         const activation = this.activateManifest(manifest);
         this.activations.set(id, activation);
-        activation.catch(() => this.activations.delete(id));
+        activation.catch(() => { if (this.activations.get(id) === activation) this.activations.delete(id); });
         return activation;
     }
 
@@ -135,6 +135,32 @@ export class FeatureRuntime {
     async activateManifest(manifest) {
         const started = performance.now();
         const scope = new LifecycleScope(`feature:${manifest.id}`, { onChange: (snapshot) => this.diagnostics.updateScope(snapshot) });
+        /** @type {Record<string, any> | undefined} */ let result;
+        /** @type {readonly string[]} */ let activeContributions = [];
+        /** @type {Array<() => void>} */ const releaseCommands = [];
+        let disposed = false;
+        const dispose = () => {
+            if (disposed) return;
+            disposed = true;
+            /** @type {unknown} */ let failure;
+            const clean = (/** @type {() => void} */ operation) => {
+                try { operation(); } catch (error) { failure ??= error; }
+            };
+            clean(() => result?.dispose?.());
+            releaseCommands.splice(0).reverse().forEach((release) => clean(release));
+            for (const id of manifest.contributes) {
+                const contributionScope = this.contributionScopes.get(id);
+                if (contributionScope) {
+                    this.contributionScopes.delete(id);
+                    clean(() => contributionScope.dispose());
+                }
+            }
+            clean(() => scope.dispose());
+            this.activations.delete(manifest.id);
+            clean(() => this.diagnostics.setFeature(manifest.id, false));
+            activeContributions.forEach((id) => clean(() => this.diagnostics.setContribution(id, false)));
+            if (failure) throw failure;
+        };
         try {
             const requiredFeatures = manifest.requiresFeaturesByRoute?.[this.route] ?? [];
             if (!Array.isArray(requiredFeatures)) throw new TypeError(`Feature ${manifest.id} has invalid route dependencies for ${this.route}`);
@@ -144,7 +170,7 @@ export class FeatureRuntime {
                 const contribution = this.contributionManifests.get(id);
                 return this.isContributionEnabled(manifest.id, id, contribution?.legacyPluginId || id);
             }));
-            const result = await manifest.activate(dependencies, Object.freeze({
+            result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, site: this.site, route: this.route,
                 isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionEnabled(featureId, contributionId, legacyPluginId),
                 executeCommand: /** @type {(command: string, ...args: unknown[]) => Promise<unknown>} */ ((command, ...args) => this.commands.execute(command, ...args)),
@@ -152,34 +178,19 @@ export class FeatureRuntime {
                 registerCompatibilityBean: (/** @type {string} */ name, /** @type {any} */ bean) => this.compatibilityBeanRegistrar?.(name, bean),
                 diagnostics: this.diagnostics,
             }));
-            const activeContributions = Object.freeze(result?.activeContributions ?? enabledContributions);
+            scope.assertActive();
+            activeContributions = Object.freeze(result?.activeContributions ?? enabledContributions);
             for (const command of manifest.providesCommands) {
                 const handler = result?.commands?.[command];
                 if (typeof handler !== "function") throw new Error(`Feature ${manifest.id} did not provide command ${command}`);
-                this.commands.registerHandler(command, handler, manifest.id);
             }
+            for (const command of manifest.providesCommands) releaseCommands.push(scope.addCleanup(this.commands.registerHandler(command, result?.commands?.[command], manifest.id)));
             this.diagnostics.setFeature(manifest.id, true);
             activeContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, true));
             this.diagnostics.recordStartup(manifest.id, performance.now() - started);
-            return Object.freeze({ manifest, scope, enabledContributions: activeContributions, dispose: () => {
-                result?.dispose?.();
-                // 6.5: contribution scopes belong to the feature that owns their contribution ids;
-                // disposing the feature must tear down those scopes too so listeners/observers/timers
-                // do not leak across activate -> dispose -> activate cycles.
-                for (const contributionId of manifest.contributes) {
-                    const contributionScope = this.contributionScopes.get(contributionId);
-                    if (contributionScope) {
-                        contributionScope.dispose();
-                        this.contributionScopes.delete(contributionId);
-                    }
-                }
-                scope.dispose();
-                this.diagnostics.setFeature(manifest.id, false);
-                activeContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, false));
-                this.activations.delete(manifest.id);
-            } });
+            return Object.freeze({ manifest, scope, enabledContributions: activeContributions, dispose });
         } catch (error) {
-            scope.dispose();
+            try { dispose(); } catch (cleanupError) { this.diagnostics.recordError(cleanupError); }
             this.diagnostics.recordError(error);
             throw error;
         }
