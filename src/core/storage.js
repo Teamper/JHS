@@ -1,5 +1,5 @@
 import { A, B, D, P, a, d, escapeHtml, g, h, i, normalizeCarNum, p, s } from "./constants.js";
-import { IMPORTABLE_DATA_KEYS, PORTABLE_DATA_KEYS, hasPortableUserData, mergePortableSettings, runDataMigrations, selectPortableSettings, validatePortableData } from "./migration.js";
+import { LEGACY_DATA_ALIASES, assertSupportedDataVersion, getPortableDataKeys, hasPortableUserData, mergePortableSettings, normalizeLegacyDomains, normalizeLegacySettings, normalizePortableData, runDataMigrations, selectPortableSettings } from "./migration.js";
 import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 import { readReviewKeywords } from "./review-keywords.js";
@@ -545,23 +545,21 @@ export class StorageManager {
         await this._saveSettingWithoutLock(settings);
     }
     async importData(e) {
-        validatePortableData(e);
-        const imported = { ...e };
-        const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]);
+        const { data: imported, warnings } = normalizePortableData(e);
+        let refreshSettings = false;
         // Snapshot, import, and migration must share one write window. A gap between
         // snapshot creation and import could omit a concurrent tab's last mutation.
+        try {
         await this._withCrossTabLock("jhs_state_mutation", async () => {
+            const targetVersion = await assertSupportedDataVersion(this);
             await this.stateService?.recoverPendingTransactionWithoutLock?.();
-            if (imported.setting && "object" === typeof imported.setting && !Array.isArray(imported.setting)) {
-                imported.setting = mergePortableSettings(await this.forage.getItem(this.setting_key) || {}, imported.setting);
-            }
             if (await hasPortableUserData(this)) {
                 const createSnapshot = () => this._createSnapshotWithoutMutation("导入前自动备份", "auto-import");
                 if (this.mutationCoordinator?.runExclusive) await createSnapshot();
                 else await this._withSnapshotLock(createSnapshot);
             }
             const canEnumerateKeys = typeof this.forage.keys === "function";
-            const knownKeys = [ ...new Set([ ...PORTABLE_DATA_KEYS, "data_version", "mutation_journal", "snapshots", "data_health_warnings", "filter_actor_actress_info_list", "favorite_actresses_info_list", "car_list_filter_actor_actress", "title_filter_keyword", "review_filter_keyword", "highlightedTags", ...Object.keys(imported) ]) ];
+            const knownKeys = [ ...new Set([ ...getPortableDataKeys(0), "data_version", "mutation_journal", "snapshots", "data_health_warnings", ...Object.keys(imported) ]) ];
             const keysBefore = canEnumerateKeys ? await this.forage.keys() : knownKeys;
             const keysAfter = () => canEnumerateKeys ? this.forage.keys() : knownKeys;
             const before = new Map;
@@ -570,14 +568,17 @@ export class StorageManager {
                 if (canEnumerateKeys || null != value) before.set(key, value && "object" == typeof value ? (globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value))) : value);
             }
             try {
-                for (const key in imported) {
-                    if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
-                    if ("third_party_ttl_cache" === key) continue;
-                    if ("data_version" === key) await this.setDataVersion(imported[key]);
-                    else await this._setItemAndInvalidate(key, imported[key]);
-                }
-                this._invalidateCache();
+                refreshSettings = targetVersion < 1 || Object.hasOwn(imported, this.setting_key);
+                // Upgrade the destination using its own version, never the source's.
                 await runDataMigrations(this, this.mutationCoordinator, true);
+                if (Object.hasOwn(imported, this.setting_key)) {
+                    imported.setting = mergePortableSettings(await this.forage.getItem(this.setting_key) || {}, imported.setting);
+                }
+                for (const key in imported) {
+                    await this._setItemAndInvalidate(key, imported[key]);
+                }
+                if (warnings.length) await this.forage.setItem("data_health_warnings", [...(await this.forage.getItem("data_health_warnings") || []), ...warnings]);
+                this._invalidateCache();
             } catch (error) {
                 const rollbackErrors = [];
                 let currentKeys;
@@ -607,14 +608,29 @@ export class StorageManager {
                 throw error;
             }
         });
+        } finally {
+            // Refresh only after releasing the mutation lock: SettingsService owns
+            // its own queue/lock, and a rolled-back migration may have changed its snapshot.
+            if (refreshSettings) try { await globalThis.settingsService?.refresh?.(this.setting_key); }
+            catch (error) { warnAfterCommittedStorageMutation("[settings] import refresh failed", error); }
+        }
     }
     async exportPortableData() {
+        return this._withCrossTabLock("jhs_state_mutation", async () => {
+            await assertSupportedDataVersion(this);
+            await this.stateService?.recoverPendingTransactionWithoutLock?.();
+            return this._exportPortableDataWithoutLock();
+        });
+    }
+    /** Caller already owns the shared lock; migration snapshots retain the source version. */
+    async _exportPortableDataWithoutLock(requireData = false) {
         const data = { data_version: await this.getDataVersion() };
-        for (const key of PORTABLE_DATA_KEYS) {
+        for (const key of getPortableDataKeys(data.data_version)) {
             const value = await this.forage.getItem(key);
             if (null == value) continue;
             data[key] = key === this.setting_key ? selectPortableSettings(value) : value;
         }
+        if (requireData && Object.keys(data).length <= 1) throw new Error("没有可导出的数据");
         return data;
     }
     async exportData() {
@@ -781,17 +797,13 @@ export class StorageManager {
     }
     /** 数据迁移: 将旧版扁平键名重命名为新格式 */
     async merge_table_name() {
-        let e = "filter_actor_actress_info_list", t = await this.forage.getItem(e) || [];
-        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.blacklist_key, t)),
-        await this.forage.removeItem(e), e = "favorite_actresses_info_list", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.favorite_actresses_key, t)),
-        await this.forage.removeItem(e), e = "car_list_filter_actor_actress", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.blacklist_car_list_key, t)),
-        await this.forage.removeItem(e), e = "title_filter_keyword", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.filter_keyword_title_key, t)),
-        await this.forage.removeItem(e), await this._getReviewFilterKeywordListWithoutLock(), e = "highlightedTags", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.highlighted_tags_key, t)),
-        await this.forage.removeItem(e);
+        for (const [old, current] of Object.entries(LEGACY_DATA_ALIASES)) {
+            if (old === "review_filter_keyword") continue;
+            const value = await this.forage.getItem(old);
+            if (value?.length) await this._setItemAndInvalidate(current, value);
+            await this.forage.removeItem(old);
+        }
+        await this._getReviewFilterKeywordListWithoutLock();
     }
     async clean_no_url_blacklist() {
         const [e, t] = await Promise.all([ this.getBlacklistCarList(), this.getBlacklist() ]);
@@ -808,88 +820,29 @@ export class StorageManager {
         clog.debug("清理 Blacklist 后", s.length), await this._setItemAndInvalidate(this.blacklist_key, s));
     }
     async async_merge_other() {
-        let t = !1;
-        const n = {
-            enableCheckFilterActorActress: "enableCheckBlacklist",
-            checkIntervalTime_filterActorActress: "checkBlacklist_intervalTime",
-            checkIntervalTime_ruleTime: "checkNewVideo_ruleTime",
-            checkIntervalTime_newVideo: "checkNewVideo_intervalTime",
-            checkIntervalTime_favoriteActress: "checkFavoriteActress_IntervalTime"
-        };
         await this.updateSettingWithoutLock((e) => {
-            for (const a in n) {
-                const i = n[a];
-                Object.prototype.hasOwnProperty.call(e, a) && (e[i] = e[a], delete e[a], t = !0);
-            }
-            e.checkFilterTime && (delete e.checkFilterTime, t = !0);
-            e.checkFilterConcurrencyCount && (delete e.checkFilterConcurrencyCount, t = !0);
-            e.checkFilterSleep && (delete e.checkFilterSleep, t = !0);
+            normalizeLegacySettings(e);
         });
-        t && clog.debug("配置数据已更正");
     }
     /** 数据迁移: 补全黑名单条目缺失的 role/starId/allName/movieType 字段 */
     async merge_blacklist() {
-        const e = await this.getBlacklist();
-        if (!e || 0 === e.length) return;
-        let t = !1;
-        const n = e.map((e => {
-            let n = !1;
-            if (Object.prototype.hasOwnProperty.call(e, "isActor") && !e.role && (e.role = e.isActor ? B : P,
-            delete e.isActor, n = !0), !e.starId && e.url) try {
-                const t = new URL(e.url).pathname, a = t.split("/").filter((e => "" !== e.trim())).pop();
-                e.starId !== a && (e.starId = a, n = !0);
-            } catch (a) {
-                clog.error("提取url-starId发生错误", e.url, a);
-            }
-            if (e.allName || (e.allName = e.name ? [ e.name ] : [], n = !0), e.movieType || (e.movieType = D,
-            n = !0), e.url && e.url.includes("sort_type")) {
-                const t = new URL(e.url);
-                t.searchParams.delete("sort_type"), e.url = t.toString(), clog.debug("去除黑名单地址sort_type参数");
-            }
-            return n && (t = !0), e;
-        }));
-        t && (clog.debug("更正 Blacklist 数据结构"), await this._setItemAndInvalidate(this.blacklist_key, n));
-        const a = await this.getBlacklistCarList();
-        t = !1;
-        const i = a.map((n => {
-            if (!n.starId) {
-                let a = e.find((e => e.name === n.actress));
-                a && (n.starId = a.starId), t = !0;
-            }
-            return n.type && (delete n.type, t = !0), n;
-        }));
-        t && (clog.debug("更正 blacklistCarList 数据结构"), await this._setItemAndInvalidate(this.blacklist_car_list_key, i));
+        const data = { blacklist: await this.getBlacklist(), blacklist_car_list: await this.getBlacklistCarList() };
+        normalizeLegacyDomains(data);
+        for (const [key, value] of Object.entries(data)) await this._setItemAndInvalidate(key, value);
     }
     async merge_favoriteActress() {
-        const e = await this.getFavoriteActressList();
-        if (!e || 0 === e.length) return;
-        let t = !1;
-        const n = e.map((e => {
-            let n = !1;
-            return e.dbId && (e.starId = e.dbId, delete e.dbId, n = !0), n && (t = !0), e;
-        }));
-        t && (clog.debug("更正 favoriteActressesInfoList 数据结构"), await this._setItemAndInvalidate(this.favorite_actresses_key, n));
+        const data = { favorite_actresses: await this.getFavoriteActressList() };
+        normalizeLegacyDomains(data);
+        await this._setItemAndInvalidate(this.favorite_actresses_key, data.favorite_actresses);
     }
     async merge_tow_car_list_table() {
-        const e = await this.getBlacklistCarList(), t = await this.getCarList();
-        let n = !1;
-        const a = e.map((e => {
-            let t = !1;
-            return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0),
-            t && (n = !0), e;
-        }));
-        n && (clog.debug("更正 blacklistCarList 数据结构 actress->names"), await this._setItemAndInvalidate(this.blacklist_car_list_key, a)),
-        n = !1;
-        const i = t.map((e => {
-            let t = !1;
-            return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0),
-            t && (n = !0), e;
-        }));
-        n && (clog.debug("更正 carList 数据结构 actress->names"), await this._setItemAndInvalidate(this.car_list_key, i));
+        const data = { blacklist_car_list: await this.getBlacklistCarList(), car_list: await this.getCarList() };
+        normalizeLegacyDomains(data);
+        for (const [key, value] of Object.entries(data)) await this._setItemAndInvalidate(key, value);
     }
     /* ───── 快照管理 ───── */
     _snapshotKey() { return "snapshots"; }
-    _snapshotMetaKeys() { return [ "snapshots", "data_version" ]; }
+    _snapshotMetaKeys() { return [ "snapshots" ]; }
     async _getSnapshots() { return await this.forage.getItem(this._snapshotKey()) || []; }
     async _saveSnapshots(e) { await this._setItemAndInvalidate(this._snapshotKey(), e); }
     async _withSnapshotLock(e) {
@@ -899,7 +852,7 @@ export class StorageManager {
     }
     /** Caller must already hold StorageMutationCoordinator when available. */
     async _createSnapshotWithoutMutation(e = "", t = "manual") {
-            const n = await this._getSnapshots(), a = await this.exportData();
+            const n = await this._getSnapshots(), a = await this._exportPortableDataWithoutLock(true);
             for (const i of this._snapshotMetaKeys()) delete a[i];
             let i = 0;
             for (const s of Object.values(a)) Array.isArray(s) ? i += s.length : "object" == typeof s && s && i++;
@@ -916,7 +869,11 @@ export class StorageManager {
             return await this._saveSnapshots(n), clog.log(`创建快照: ${s.name} (${t})`), s;
     }
     async createSnapshot(e = "", t = "manual") {
-        return this._withSnapshotLock(async () => this._createSnapshotWithoutMutation(e, t));
+        return this._withSnapshotLock(async () => {
+            await assertSupportedDataVersion(this);
+            await this.stateService?.recoverPendingTransactionWithoutLock?.();
+            return this._createSnapshotWithoutMutation(e, t);
+        });
     }
     async getSnapshotList() {
         return (await this._getSnapshots()).map((e => ({ id: e.id, name: e.name, source: e.source, time: e.time, itemCount: e.itemCount, kind: e.kind || "snapshot", targetDataVersion: e.targetDataVersion, appVersion: e.appVersion })));

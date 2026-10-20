@@ -53,22 +53,34 @@ function captureNewVideoEffect(actresses, decisions, carNum) {
     /** @type {StateRecord[]} */
     const actressItems = [];
     actresses.forEach(((actress, actressIndex) => (actress.newVideoList || []).forEach(((/** @type {any} */ item, /** @type {number} */ itemIndex) => {
-        normalizeCarNum("string" == typeof item ? item : item.carNum) === key && actressItems.push({ actressIndex, itemIndex, item: cloneStateValue(item) });
+        normalizeCarNum("string" == typeof item ? item : item.carNum) === key && actressItems.push({ starId: findEffectActress(actresses, actress)?.starId ?? null, actressIndex, itemIndex, item: cloneStateValue(item) });
     }))));
     return { actressItems, decision: cloneStateValue(decisions[key] || null) };
+}
+
+/** @param {StateRecord[]} actresses @param {StateRecord} entry */
+function findEffectActress(actresses, entry) {
+    const identity = (/** @type {unknown} */ value) => typeof value === "string" && value.trim() || typeof value === "number" && Number.isFinite(value) ? String(value) : null;
+    const id = identity(entry.starId);
+    if (id === null) return null;
+    const matches = actresses.filter((actress) => identity(actress.starId) === id);
+    return matches.length === 1 ? matches[0] : null;
 }
 
 /** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {unknown} carNum @param {StateRecord} effect @param {StateRecord | null} [expectedDecision] */
 function canRestoreNewVideoEffect(actresses, decisions, carNum, effect, expectedDecision = null) {
     const key = /** @type {string} */ (normalizeCarNum(carNum));
     if (stableStateValue(decisions[key] || null) !== stableStateValue(expectedDecision)) return !1;
-    return (/** @type {StateRecord[]} */ (effect.actressItems)).every((entry => !(actresses[entry.actressIndex]?.newVideoList || []).some((/** @type {any} */ item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key)));
+    return (/** @type {StateRecord[]} */ (effect.actressItems)).every((entry => {
+        const actress = findEffectActress(actresses, entry);
+        return actress != null && !(actress.newVideoList || []).some((/** @type {any} */ item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key);
+    }));
 }
 
 /** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {unknown} carNum @param {StateRecord} effect */
 function restoreNewVideoEffect(actresses, decisions, carNum, effect) {
     (/** @type {StateRecord[]} */ (effect.actressItems)).forEach((entry => {
-        const actress = actresses[entry.actressIndex];
+        const actress = findEffectActress(actresses, entry);
         if (!actress) return;
         const list = [ ...(actress.newVideoList || []) ], index = Math.min(entry.itemIndex, list.length);
         list.splice(index, 0, cloneStateValue(entry.item)), actress.newVideoList = list;
@@ -237,18 +249,26 @@ export class StateService {
             touched.includes("carList") && await this.domains.carList.write(next.carList), touched.includes("activity") && await this._writeActivity(pendingLog),
             touched.includes("actresses") && await this.domains.actresses.write(next.actresses), touched.includes("decisions") && await this.domains.decisions.write(next.decisions);
             activity.commitState = "committed", pendingLog.entries = pendingLog.entries.map((/** @param {StateRecord} entry */ entry => entry.id === activity.id ? activity : entry)), await this._writeActivity(pendingLog);
-            await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
         } catch (error) {
             await this._recoverJournal(journal);
             throw error;
         }
+        // All domain writes precede the durable committed marker. Cleanup must
+        // not turn that successful mutation into a failed non-idempotent toggle.
+        try { await this.storage.forage.removeItem("mutation_journal"); }
+        catch (error) {
+            try { clog.warn("[状态] 已提交，事务日志待清理", error); } catch { /* Keep the durable result. */ }
+        }
+        try { this.storage._invalidateCache(); } catch { /* Cache cleanup is post-commit. */ }
     }
     /** @param {StateRecord} journal */
     async _recoverJournal(journal) {
         const log = await this.getActivityLog(), activity = log.entries.find((/** @param {StateRecord} entry */ entry => entry.id === journal.id));
         const touched = Array.isArray(journal.touchedDomains) ? journal.touchedDomains : ["carList", "actresses", "decisions", "activity"];
         if ("committed" === activity?.commitState) {
-            touched.includes("carList") && await this.domains.carList.write(journal.after.carList), touched.includes("actresses") && await this.domains.actresses.write(journal.after.actresses), touched.includes("decisions") && await this.domains.decisions.write(journal.after.decisions);
+            if (journal.schema !== 2) {
+                touched.includes("carList") && await this.domains.carList.write(journal.after.carList), touched.includes("actresses") && await this.domains.actresses.write(journal.after.actresses), touched.includes("decisions") && await this.domains.decisions.write(journal.after.decisions);
+            }
         } else {
             const current = await this._readDomains(touched), keys = touched.filter((key) => key !== "activity");
             const conflict = keys.some((key => {

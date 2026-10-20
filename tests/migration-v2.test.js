@@ -20,7 +20,7 @@ function fakeStorage(version, initial = {}) {
         setDataVersion: vi.fn(async value => data.set("data_version", value)),
         _setItemAndInvalidate: vi.fn(async (key, value) => data.set(key, value)),
         _getSnapshots: async () => snapshots, _saveSnapshots: vi.fn(async value => { snapshots.splice(0, snapshots.length, ...value); }),
-        exportPortableData: async () => Object.fromEntries(data),
+        _exportPortableDataWithoutLock: async () => Object.fromEntries(data),
         merge_table_name: vi.fn(), clean_no_url_blacklist: vi.fn(), async_merge_other: vi.fn(), merge_blacklist: vi.fn(), merge_favoriteActress: vi.fn(), merge_tow_car_list_table: vi.fn()
     };
     return { storage, data, snapshots };

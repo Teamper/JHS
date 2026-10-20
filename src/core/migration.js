@@ -1,6 +1,6 @@
 // @ts-check
 
-import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
+import { B, D, P, CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
 import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./state-model.js";
 
 /** @typedef {Record<string, any>} MigrationRecord */
@@ -13,6 +13,102 @@ export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins", "w
 export const CREDENTIAL_SETTING_KEYS = Object.freeze([ "webDavPassword" ]);
 const PORTABLE_ARRAY_KEYS = new Set([ "car_list", "filter_keyword_title", "filter_keyword_review", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "offline_history" ]);
 const PORTABLE_OBJECT_KEYS = new Set([ "setting", "third_party_ttl_cache", "activity_log", "new_video_decisions" ]);
+export const LEGACY_DATA_ALIASES = Object.freeze({
+    filter_actor_actress_info_list: "blacklist", favorite_actresses_info_list: "favorite_actresses",
+    car_list_filter_actor_actress: "blacklist_car_list", title_filter_keyword: "filter_keyword_title",
+    review_filter_keyword: "filter_keyword_review", highlightedTags: "highlighted_tags",
+});
+
+/** Mutate only the supplied draft; no storage or global service access. @param {MigrationRecord} draft */
+export function normalizeLegacySettings(draft) {
+    const names = {
+        enableCheckFilterActorActress: "enableCheckBlacklist", checkIntervalTime_filterActorActress: "checkBlacklist_intervalTime",
+        checkIntervalTime_ruleTime: "checkNewVideo_ruleTime", checkIntervalTime_newVideo: "checkNewVideo_intervalTime",
+        checkIntervalTime_favoriteActress: "checkFavoriteActress_IntervalTime",
+    };
+    for (const [old, current] of Object.entries(names)) if (Object.hasOwn(draft, old)) {
+        if (!Object.hasOwn(draft, current)) draft[current] = draft[old];
+        delete draft[old];
+    }
+    for (const name of ["checkFilterTime", "checkFilterConcurrencyCount", "checkFilterSleep"]) delete draft[name];
+}
+
+/** @param {MigrationRecord[]} actresses */
+function normalizeActressNewVideos(actresses) {
+    return actresses.map((actress) => !Array.isArray(actress.newVideoList) ? actress : {
+        ...actress, newVideoList: actress.newVideoList.filter(Boolean).map((/** @type {any} */ item) => typeof item === "string" ? normalizeCarNum(item) : {
+            ...item, carNum: normalizeCarNum(item.carNum),
+        }).filter((item) => typeof item === "string" ? item : item?.carNum),
+    });
+}
+
+/** Normalize legacy fields in an owned draft without filtering paired domains. @param {MigrationRecord} data */
+export function normalizeLegacyDomains(data) {
+    if (data.setting) normalizeLegacySettings(data.setting);
+    for (const item of data.blacklist || []) {
+        if (Object.hasOwn(item, "isActor") && !item.role) item.role = item.isActor ? B : P;
+        delete item.isActor;
+        if (Object.hasOwn(item, "recordTime") && !Object.hasOwn(item, "createTime")) item.createTime = item.recordTime;
+        delete item.recordTime; delete item.key;
+        item.allName ||= item.name ? [item.name] : [];
+        item.movieType ||= D;
+        if (item.url) try {
+            const url = new URL(item.url);
+            item.starId ||= url.pathname.split("/").filter(Boolean).pop();
+            url.searchParams.delete("sort_type");
+            item.url = url.toString();
+        } catch { /* Preserve unrecognized historical URLs. */ }
+    }
+    for (const item of data.blacklist_car_list || []) {
+        item.starId ||= data.blacklist?.find((/** @type {MigrationRecord} */ actor) => actor.name === item.actress)?.starId;
+        delete item.type;
+    }
+    for (const item of data.favorite_actresses || []) {
+        if (!Object.hasOwn(item, "starId") && item.dbId) item.starId = item.dbId;
+        delete item.dbId;
+    }
+    for (const item of [...(data.car_list || []), ...(data.blacklist_car_list || [])]) if (Object.hasOwn(item, "actress")) {
+        if (!Object.hasOwn(item, "names")) item.names = item.actress;
+        delete item.actress;
+    }
+}
+
+/** Normalize only supplied portable domains, never a destination database. @param {MigrationRecord} source */
+export function normalizePortableData(source) {
+    const version = validatePortableData(source), selected = { ...source };
+    for (const [old, current] of Object.entries(LEGACY_DATA_ALIASES)) {
+        if (!Object.hasOwn(selected, current) && Object.hasOwn(source, old)) selected[current] = source[old];
+    }
+    validatePortableData(selected);
+    /** @type {MigrationRecord} */
+    const data = {};
+    for (const key of PORTABLE_DATA_KEYS) if (Object.hasOwn(selected, key)) {
+        data[key] = selected[key] == null ? (PORTABLE_ARRAY_KEYS.has(key) ? [] : {}) : JSON.parse(JSON.stringify(selected[key]));
+    }
+    if (version < 1) normalizeLegacyDomains(data);
+    /** @type {MigrationRecord[]} */
+    const warnings = [];
+    if (version < 2) {
+        if (data.car_list) {
+            const result = mergeCanonicalCarRecords(data.car_list);
+            data.car_list = result.list;
+            appendStateMigrationWarnings(warnings, result);
+        }
+        if (data.favorite_actresses) data.favorite_actresses = normalizeActressNewVideos(data.favorite_actresses);
+    }
+    // Partial backups must not borrow destination evidence or rewrite omitted domains.
+    if (version < 3 && ["car_list", "activity_log", "new_video_decisions"].every((key) => Object.hasOwn(data, key))) {
+        const result = normalizeNewVideoTombstones(data.car_list, data.new_video_decisions, data.activity_log);
+        data.car_list = result.remaining; data.new_video_decisions = result.nextDecisions;
+    }
+    return { data, warnings };
+}
+
+/** @param {MigrationRecord[]} warnings @param {ReturnType<typeof mergeCanonicalCarRecords>} result */
+function appendStateMigrationWarnings(warnings, result) {
+    result.collisions.length && warnings.push({ type: "canonical-collision", createdAt: new Date().toISOString(), items: result.collisions });
+    result.unknownStatuses.length && warnings.push({ type: "unknown-legacy-status", createdAt: new Date().toISOString(), items: result.unknownStatuses });
+}
 
 /** Remove installation-local and credential fields before exporting portable settings. */
 export function selectPortableSettings(/** @type {Record<string, any>} */ settings) {
@@ -32,7 +128,7 @@ export function mergePortableSettings(/** @type {Record<string, any>} */ current
 
 export function validatePortableData(/** @type {Record<string, any>} */ data) {
     if (!data || "object" != typeof data || Array.isArray(data)) throw new TypeError("备份数据格式无效");
-    const version = Number(data.data_version || 0);
+    const version = Number(data.data_version ?? 0);
     if (!Number.isInteger(version) || version < 0) throw new TypeError("备份数据版本无效");
     if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
     for (const key of PORTABLE_ARRAY_KEYS) if (null != data[key] && !Array.isArray(data[key])) throw new TypeError(`备份字段 ${key} 必须为数组`);
@@ -40,8 +136,18 @@ export function validatePortableData(/** @type {Record<string, any>} */ data) {
     return version;
 }
 
+/** Read-only guard, also used before bootstrap settings/credential persistence. @param {any} storage */
+export async function assertSupportedDataVersion(storage) {
+    return validatePortableData({ data_version: await storage.getDataVersion() });
+}
+
+/** Old databases can still store user data under pre-v1 keys. @param {number} version */
+export function getPortableDataKeys(version) {
+    return version < 1 ? [...PORTABLE_DATA_KEYS, ...Object.keys(LEGACY_DATA_ALIASES)] : PORTABLE_DATA_KEYS;
+}
+
 export async function hasPortableUserData(/** @type {any} */ storage) {
-    for (const key of PORTABLE_DATA_KEYS) {
+    for (const key of getPortableDataKeys(await storage.getDataVersion())) {
         const value = await storage.forage.getItem(key);
         if (Array.isArray(value) ? value.length : value && "object" == typeof value ? Object.keys(value).length : null != value) return !0;
     }
@@ -52,7 +158,7 @@ async function ensureV2MigrationSnapshot(/** @type {any} */ storage) {
     if (!await hasPortableUserData(storage)) return null;
     const snapshots = await storage._getSnapshots(), existing = snapshots.find((/** @type {Record<string, any>} */ item) => "migration-snapshot" === item.kind && 2 === item.targetDataVersion);
     if (existing) return existing;
-    const data = await storage.exportPortableData(), snapshot = {
+    const data = await storage._exportPortableDataWithoutLock(), snapshot = {
         id: "migration_v2_" + Date.now(),
         name: "6.4.0-migration-backup",
         source: "migration",
@@ -82,18 +188,10 @@ async function migrateStateFlags(/** @type {any} */ storage) {
     const cars = await storage.forage.getItem(storage.car_list_key) || [], result = mergeCanonicalCarRecords(cars);
     await storage._setItemAndInvalidate(storage.car_list_key, result.list);
     const actresses = await storage.forage.getItem(storage.favorite_actresses_key) || [];
-    const migratedActresses = actresses.map((/** @type {Record<string, any>} */ actress) => {
-        if (!Array.isArray(actress.newVideoList)) return actress;
-        const newVideoList = actress.newVideoList.map((/** @type {any} */ item) => "string" == typeof item ? normalizeCarNum(item) : {
-            ...item,
-            carNum: normalizeCarNum(item.carNum)
-        }).filter((item => "string" == typeof item ? item : item.carNum));
-        return { ...actress, newVideoList };
-    });
+    const migratedActresses = normalizeActressNewVideos(actresses);
     await storage._setItemAndInvalidate(storage.favorite_actresses_key, migratedActresses);
     const warnings = await storage.forage.getItem("data_health_warnings") || [];
-    result.collisions.length && warnings.push({ type: "canonical-collision", createdAt: new Date().toISOString(), items: result.collisions });
-    result.unknownStatuses.length && warnings.push({ type: "unknown-legacy-status", createdAt: new Date().toISOString(), items: result.unknownStatuses });
+    appendStateMigrationWarnings(warnings, result);
     warnings.length && await storage.forage.setItem("data_health_warnings", warnings);
 }
 
@@ -108,6 +206,15 @@ export async function repairNewVideoTombstones(storage) {
         storage.forage.getItem("new_video_decisions"),
         storage.forage.getItem("activity_log"),
     ]);
+    const { migrated, nextDecisions, remaining } = normalizeNewVideoTombstones(cars, decisions, activity);
+    if (!migrated.length) return [];
+    await storage.forage.setItem("new_video_decisions", nextDecisions);
+    await storage._setItemAndInvalidate(storage.car_list_key, remaining);
+    return migrated;
+}
+
+/** @param {MigrationRecord[]} cars @param {MigrationRecord} decisions @param {MigrationRecord} activity */
+function normalizeNewVideoTombstones(cars, decisions, activity) {
     const list = Array.isArray(cars) ? cars : [], nextDecisions = { ...(decisions || {}) }, entries = Array.isArray(activity?.entries) ? activity.entries : [];
     const evidence = new Map;
     entries.filter((/** @param {MigrationRecord} entry */ entry => "new-video-remove" === entry?.type && "committed" === entry?.commitState)).forEach((/** @param {MigrationRecord} entry */ entry => (Array.isArray(entry.changes) ? entry.changes : []).forEach((/** @param {MigrationRecord} change */ change => {
@@ -127,10 +234,7 @@ export async function repairNewVideoTombstones(storage) {
         nextDecisions[key] = { action: "dismissed", until: null, createdAt: previous?.createdAt || timestamp, updatedAt: previous?.updatedAt || timestamp };
         migrated.push(key);
     }));
-    if (!migrated.length) return [];
-    await storage.forage.setItem("new_video_decisions", nextDecisions);
-    await storage._setItemAndInvalidate(storage.car_list_key, remaining);
-    return migrated;
+    return { migrated, nextDecisions, remaining };
 }
 
 async function migrateV3(/** @type {any} */ storage) {
@@ -146,8 +250,7 @@ export async function runDataMigrations(/** @type {any} */ storage, coordinator 
     // 迁移是“读版本→整表覆写→写版本”的多步过程，必须跨标签页互斥，防止双标签页同时执行互相丢数据
     const locks = globalThis.navigator?.locks;
     const run = async () => {
-        let version = await storage.getDataVersion();
-        if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
+        let version = await assertSupportedDataVersion(storage);
         for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
             const migration = DATA_MIGRATIONS[target];
             if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);

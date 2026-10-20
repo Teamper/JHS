@@ -5,7 +5,7 @@ import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { detectSite, resolveLegacyJavDbUrl } from "../core/site-context.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
-import { runDataMigrations } from "../core/migration.js";
+import { assertSupportedDataVersion, runDataMigrations } from "../core/migration.js";
 import { CompatibilityBeanRegistry } from "../core/compatibility-bean-registry.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
@@ -60,8 +60,8 @@ async function readDisabledPluginSettings(storageManager) {
 }
 
 /** Apply bootstrap compatibility values in one atomic settings write. */
-async function persistBootstrapMigration(settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration = null) {
-    await settings.update((draft) => {
+async function persistBootstrapMigration(settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration = null, alreadyLocked = false) {
+    await (alreadyLocked ? settings.updateWithoutLock : settings.update).call(settings, (draft) => {
         const previous = parseDisabledPlugins(typeof draft.disabledPlugins === "string" ? draft.disabledPlugins : "[]");
         const migrated = migrateDisabledPlugins(previous);
         if (JSON.stringify(previous) !== JSON.stringify(migrated)) draft.disabledPlugins = JSON.stringify(migrated);
@@ -116,6 +116,7 @@ export async function bootstrapJhs() {
         const vendors = getVendorRuntime();
         const jhsEventBus = initializeEventBus();
         const { utils, gmHttp, storageManager, stateService, storageMutationCoordinator } = createLegacyRuntime(jhsEventBus);
+        await assertSupportedDataVersion(storageManager);
         markPhase("legacy-runtime");
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
         // 黑名单/关键词规则可被其他标签页修改：内存派生缓存不随事件自动失效，必须在此主动清空
@@ -150,16 +151,17 @@ export async function bootstrapJhs() {
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings, credentialService: context.services.credential });
-        await context.services.settings.load();
-        markPhase("settings-load");
-        const credentialMigration = await context.services.credential.migrateLegacy(context.services.settings, { deferCleanup: true });
+        const credentialMigration = await context.services.settings.runExclusive(async () => {
+            await assertSupportedDataVersion(storageManager);
+            markPhase("settings-load");
+            const migration = await context.services.credential.migrateLegacy(context.services.settings, { deferCleanup: true });
+            migration.cleanup = await context.services.credential.validateLegacyCleanup(migration.cleanup);
+            await persistBootstrapMigration(context.services.settings, disabledMigration, localOriginSettings,
+                localStorage.getItem("jhs_sortMethod"), localStorage.getItem("jhs_foldCategory"), localStorage.getItem("jhs_videoMuted"), migration, true);
+            await context.services.credential.cleanupLegacyPageStorage(migration.cleanup?.pageKeys, context.services.settings);
+            return migration;
+        });
         context.services.profile.start();
-        const legacySortMethod = localStorage.getItem("jhs_sortMethod");
-        const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
-        const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
-        credentialMigration.cleanup = await context.services.credential.validateLegacyCleanup(credentialMigration.cleanup);
-        await persistBootstrapMigration(context.services.settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration);
-        await context.services.credential.cleanupLegacyPageStorage(credentialMigration.cleanup?.pageKeys, context.services.settings);
         markPhase("settings-migration");
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
