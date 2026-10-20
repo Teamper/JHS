@@ -4,6 +4,7 @@ import { createStateActions } from "../../ui/detail/state-actions.js";
 import { C, _, escapeHtml, normalizeCarNum } from "../../core/constants.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 import { createLatestSettingWriter } from "../../ui/settings/setting-binding-controller.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 /** @typedef {{ url?: string, extension?: string, [key: string]: any }} SubtitleRecord */
 
@@ -209,18 +210,32 @@ export class DetailPageActionsController {
 
     /** @param {string} carNum */
     async searchXunLeiSubtitle(carNum) {
-        const trigger = /** @type {HTMLElement | null} */ (this.document.activeElement);
-        let loader;
+        if (this.scope.disposed) return;
+        const scope = new LifecycleScope("subtitle-table");
+        const releaseParent = this.scope.addCleanup(() => scope.dispose());
+        scope.addCleanup(releaseParent);
+        /** @type {number | null} */ let index = null;
+        /** @type {any} */ let table;
+        scope.addCleanup(() => {
+            try { table?.destroy(); }
+            finally { if (index !== null) { const id = index; index = null; this.dialog.close(id); } }
+        });
+        let releaseLoading = () => {};
         try {
-            loader = this.ui.loading();
-            const results = await this.subtitle.search("xunlei", { carNum }, { scope: this.scope });
+            const loader = this.ui.loading();
+            releaseLoading = scope.addCleanup(() => loader?.close?.());
+            const results = await this.subtitle.search("xunlei", { carNum }, { scope });
+            if (scope.disposed) return;
             if (!results?.length) return void this.notifications.error("未找到该番号的迅雷字幕");
-            this.dialog.open({
+            index = this.dialog.open({
                 type: 1, title: "迅雷字幕", content: '<div class="jhs-layout-8ddc7c91"><div id="xunlei-table-container" class="jhs-layout-583c2485"></div></div>',
                 ui: { body: "table" },
                 scrollbar: false, area: this.ui.getResponsiveArea(["60%", "70%"]), anim: -1,
                 success: (/** @type {any} */ _element, /** @type {number} */ layerIndex) => {
-                    createJhsTable(/** @type {any} */ (globalThis).Tabulator, "#xunlei-table-container", {
+                    index = layerIndex;
+                    const root = _element?.nodeType === 1 ? _element : _element[0];
+                    if (root.parentNode) scope.observe(root.parentNode, () => { if (!root.isConnected) scope.dispose(); }, { childList: true });
+                    table = createJhsTable(/** @type {any} */ (globalThis).Tabulator, root.querySelector("#xunlei-table-container"), {
                         pagination: false, layout: "fitColumns", placeholder: "暂无数据", virtualDom: true, data: results.map((/** @type {SubtitleRecord} */ item) => ({ ...item })),
                         responsiveLayout: "collapse", responsiveLayoutCollapse: true,
                         columnDefaults: { headerHozAlign: "center", hozAlign: "center" },
@@ -230,13 +245,17 @@ export class DetailPageActionsController {
                             { title: "操作", responsive: 0, headerSort: false, formatter: (/** @type {any} */ cell, /** @type {any} */ _params, /** @type {(callback: () => void) => void} */ onRendered) => {
                                 const item = cell.getData();
                                 onRendered(() => {
+                                    if (scope.disposed) return;
                                     const preview = cell.getElement().querySelector(".subtitle-preview-btn");
                                     const download = cell.getElement().querySelector(".subtitle-download-btn");
-                                    preview?.addEventListener("click", () => void this.previewSubtitle(item, `${carNum}.${item.extension}`));
-                                    download?.addEventListener("click", async () => {
-                                        const filename = `${carNum}.${item.extension}`;
-                                        const data = await this.subtitle.download("xunlei", item, { scope: this.scope });
-                                        this.ui.download(data, filename);
+                                    if (preview) scope.listen(preview, "click", () => void this.previewSubtitle(item, `${carNum}.${item.extension}`, scope));
+                                    if (download) scope.listen(download, "click", async () => {
+                                        try {
+                                            const data = await this.subtitle.download("xunlei", item, { scope });
+                                            if (!scope.disposed) this.ui.download(data, `${carNum}.${item.extension}`);
+                                        } catch (error) {
+                                            if (!scope.disposed) this.subtitleError("下载", error);
+                                        }
                                     });
                                 });
                                 return '<button type="button" class="jhs-btn jhs-btn--secondary subtitle-preview-btn">预览</button> <button type="button" class="jhs-btn jhs-btn--secondary subtitle-download-btn">下载</button>';
@@ -245,35 +264,44 @@ export class DetailPageActionsController {
                     });
                     this.ui.setupEscClose(layerIndex);
                 },
-                end: () => { if (trigger?.isConnected) trigger.focus({ preventScroll: true }); },
+                end: () => { index = null; scope.dispose(); },
             });
         } catch (error) {
-            this.diagnostics.recordError({ source: "detail-page-actions", contributionId: "detail.page-state-actions", message: `迅雷字幕搜索失败: ${error instanceof Error ? error.message : String(error)}` });
-            this.notifications.error("字幕搜索失败，请重试");
-        } finally { loader?.close?.(); }
+            if (!scope.disposed) this.subtitleError("搜索", error);
+            scope.dispose();
+        } finally { releaseLoading(); if (index === null) scope.dispose(); }
     }
 
-    /** @param {SubtitleRecord} subtitle @param {string} filename */
-    async previewSubtitle(subtitle, filename) {
+    /** @param {string} action @param {unknown} error */
+    subtitleError(action, error) {
+        this.notifications.error(`字幕${action}失败，请重试`);
+        this.diagnostics.recordError({ source: "detail-page-actions", message: `字幕${action}失败: ${error instanceof Error ? error.message : String(error)}` });
+    }
+
+    /** @param {SubtitleRecord} subtitle @param {string} filename @param {LifecycleScope} scope */
+    async previewSubtitle(subtitle, filename, scope = this.scope) {
+        if (scope.disposed) return;
         if (!subtitle?.url) return void this.diagnostics.recordError({ source: "detail-page-actions", message: "字幕预览未提供文件 URL" });
-        const trigger = /** @type {HTMLElement | null} */ (this.document.activeElement);
         const extension = String(subtitle.extension || "").toLowerCase();
         if (!["ass", "srt"].includes(extension)) return void this.notifications.error("仅支持 ASS 和 SRT 字幕");
         try {
-            const data = await this.subtitle.download("xunlei", subtitle, { scope: this.scope });
-            const title = extension === "ass" ? `ASS 字幕预览：${filename}` : `SRT 字幕预览：${filename}`;
+            const data = await this.subtitle.download("xunlei", subtitle, { scope });
+            if (scope.disposed) return;
+            const title = `${extension.toUpperCase()} 字幕预览：${filename}`;
             const lines = data.split("\n"), width = String(lines.length).length;
             const escaped = lines.map((/** @type {string} */ line, /** @type {number} */ index) => `<span class="jhs-code-line-number">${String(index + 1).padStart(width, " ")}. </span>${escapeHtml(line)}`).join("\n");
-            this.dialog.open({
+            let release = () => {}, open = true;
+            const index = this.dialog.open({
                 type: 1, title, area: this.ui.getResponsiveArea(["80%", "80%"]), scrollbar: false,
                 ui: { body: "scroll" },
                 content: `<div class="jhs-code-viewer">${escaped}</div>`, btn: ["下载", "关闭"],
-                end: () => { if (trigger?.isConnected) trigger.focus({ preventScroll: true }); },
-                btn1: () => { this.ui.download(data, filename); return false; },
+                success: (/** @type {any} */ _element, /** @type {number} */ id) => this.ui.setupEscClose(id),
+                end: () => { open = false; release(); },
+                btn1: () => { if (!scope.disposed) this.ui.download(data, filename); return false; },
             });
+            release = scope.addCleanup(() => { if (open) this.dialog.close(index); });
         } catch (error) {
-            this.notifications.error("字幕预览失败，请重试");
-            this.diagnostics.recordError({ source: "detail-page-actions", message: `字幕预览失败: ${error instanceof Error ? error.message : String(error)}` });
+            if (!scope.disposed) this.subtitleError("预览", error);
         }
     }
 }

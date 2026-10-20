@@ -72,17 +72,20 @@ test.describe("详情鉴定快捷键", () => {
     });
 
     test("JavBus 视频预览和输入不会消费空格鉴定键", async ({ page, context }) => {
-        await boot(page, context, "https://www.javbus.com/ABP-123", { settingOverrides: { enableLoadPreviewVideo: "yes", detailShortcuts: { favorite: { code: "Space" } } } });
+        await boot(page, context, "https://www.javbus.com/ABC-123", { settingOverrides: { enableLoadPreviewVideo: "yes", detailShortcuts: { favorite: { code: "Space" } } } });
         await page.evaluate(() => {
-            const modal = document.querySelector("#bus-preview-modal");
-            if (!modal) throw new Error("真实预览控制器未挂载 modal");
-            modal.classList.add("is-open");
-            modal.querySelector(".bus-preview-modal-content").innerHTML = '<video controls tabindex="0"></video>';
+            document.querySelector("#sample-waterfall").style.display = "";
+            localStorage.setItem("jhs_dmm_video", JSON.stringify({ "ABC-123": { hhb: "https://example.test/fixture.mp4", time: Date.now() } }));
+            HTMLMediaElement.prototype.play = async function () {};
+            HTMLMediaElement.prototype.pause = function () {};
         });
+        await page.locator(".preview-video-container").click();
+        await expect(page.locator("#bus-preview-modal")).toBeVisible();
         await page.locator("#bus-preview-modal video").focus();
         await page.keyboard.press("Space");
         await expect(page.locator("#favoriteBtn")).toHaveAttribute("aria-pressed", "false");
         await page.keyboard.press("Escape");
+        await expect(page.locator("#bus-preview-modal")).toHaveCount(0);
         await page.evaluate(() => { document.activeElement.blur(); });
         await page.keyboard.press("Space");
         await expect(page.locator("#favoriteBtn")).toHaveAttribute("aria-pressed", "true");

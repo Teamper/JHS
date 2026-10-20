@@ -7,16 +7,14 @@ import { Z, canUseDmmPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from 
 import { getIcon } from "../../core/icons.js";
 
 export const JAVBUS_PREVIEW_STYLES = `
-    .bus-preview-modal { position:fixed; inset:0; z-index:var(--jhs-z-modal); display:flex; align-items:center; justify-content:center; visibility:hidden; opacity:0; background:var(--jhs-overlay); transition:opacity var(--jhs-motion-base) var(--jhs-ease); }
-    .bus-preview-modal.is-open { visibility:visible; opacity:1; }
-    .bus-preview-modal-content { position:relative; display:flex; max-width:95%; max-height:95%; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }
-    .video-player-wrapper { position:relative; width:80vw; max-width:100%; max-height:85vh; aspect-ratio:16/9; background:var(--jhs-media-bg); }
+    .bus-preview-modal-content { position:relative; display:flex; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }
+    .bus-preview-modal .video-player-wrapper { position:relative; width:100%; max-width:calc((100dvh - 140px) * 16 / 9); aspect-ratio:16/9; background:var(--jhs-media-bg); }
     .video-player-wrapper #preview-video { position:absolute; inset:0; }
 `;
 
 /** Owns the JavBus DMM preview surface and its asynchronous media lifetime. */
 export class JavBusPreviewController {
-    /** @param {{document: Document, window: Window, hostAdapter: any, route: string, settings: any, events: any, storage: any, movie: any, ui: any, diagnostics: any, scope: LifecycleScope}} options */
+    /** @param {{document: Document, window: Window, hostAdapter: any, route: string, settings: any, events: any, storage: any, movie: any, dialog: any, ui: any, diagnostics: any, scope: LifecycleScope}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -26,15 +24,17 @@ export class JavBusPreviewController {
         this.events = options.events;
         this.storage = options.storage;
         this.movie = options.movie;
+        this.dialog = options.dialog;
         this.ui = options.ui;
         this.diagnostics = options.diagnostics;
         this.scope = options.scope;
         this.started = false;
         this.previewIntentConsumed = false;
         this.mounted = false;
-        this.busy = false;
         this.generation = 0;
-        /** @type {LifecycleScope | null} */ this.requestScope = null;
+        /** @type {{scope: LifecycleScope, index: number | null} | null} */ this.session = null;
+        /** @type {any} */ this.player = null;
+        /** @type {LifecycleScope | null} */ this.playerScope = null;
         this.legacyPluginsReady = false;
     }
 
@@ -45,10 +45,6 @@ export class JavBusPreviewController {
         this.scope.listen(this.settings, "settings.changed", (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (this.legacyPluginsReady && names?.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) this.reconfigure();
-        });
-        this.scope.listen(this.document, "keydown", (/** @type {Event} */ rawEvent) => {
-            const event = /** @type {KeyboardEvent} */ (rawEvent);
-            if (event.key === "Escape" && this.document.querySelector("#bus-preview-modal.is-open")) this.closeVideoModal();
         });
         this.scope.addCleanup(this.events.on("jhs-features-ready", () => {
             this.legacyPluginsReady = true;
@@ -62,36 +58,35 @@ export class JavBusPreviewController {
     reconfigure() {
         if (this.scope.disposed) return;
         this.generation += 1;
-        this.cancelRequest();
+        this.closeVideoModal();
         if (!canUseDmmPreview(this.settings.snapshot())) return this.unmountPreview();
         this.mountPreview();
     }
 
     initModal() {
-        const $ = this.ui.jquery;
-        let modal = $(this.document).find("#bus-preview-modal").first();
-        if (!modal.length) {
-            modal = $('<div id="bus-preview-modal" class="bus-preview-modal"><div class="bus-preview-modal-content"></div></div>');
-            $(this.document.body).append(modal);
-            modal.on("click.jhsBusPreview", (/** @type {MouseEvent} */ event) => {
-                if (event.target === modal[0]) this.closeVideoModal();
-            });
-        }
-        return modal;
+        return this.player ||= this.ui.jquery('<div id="bus-preview-modal" class="bus-preview-modal"><div class="bus-preview-modal-content"></div></div>');
     }
 
-    closeVideoModal() {
-        const $ = this.ui.jquery, video = this.document.querySelector("#preview-video");
-        if (video?.tagName === "VIDEO") /** @type {HTMLVideoElement} */ (video).pause();
-        $(this.document).find("#bus-preview-modal").removeClass("is-open");
+    closeVideoModal(session = this.session) {
+        if (!session || session.scope.disposed) return;
+        session.scope.dispose();
+        if (this.session !== session) return;
+        this.session = null;
+        this.generation += 1;
+        this.player?.find("video")[0]?.pause();
+        // Keep the paused player (time, quality and mute) without retaining a dialog lock.
+        this.player?.removeClass("is-open").detach();
+        if (session.index !== null) this.dialog.close(session.index);
     }
 
     unmountPreview() {
         this.mounted = false;
-        this.busy = false;
-        this.cancelRequest();
         this.closeVideoModal();
-        this.ui.jquery(this.document).find("#bus-preview-modal, .preview-video-container").off(".jhsBusPreview").remove();
+        this.playerScope?.dispose();
+        this.playerScope = null;
+        this.player?.remove();
+        this.player = null;
+        this.ui.jquery(this.document).find(".preview-video-container").off(".jhsBusPreview").remove();
     }
 
     mountPreview() {
@@ -99,55 +94,73 @@ export class JavBusPreviewController {
         const $ = this.ui.jquery, galleryElement = this.hostAdapter.locateNativeGallery?.();
         if (!galleryElement) return;
         this.mounted = true;
-        this.initModal();
         const gallery = $(galleryElement), imageSource = gallery.find(".sample-box .photo-frame img").first().attr("src");
         const button = $(`<button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65"><div class="photo-frame jhs-layout-87db2275"><img class="video-cover" alt=""><span class="play-icon jhs-play-overlay" aria-hidden="true">${getIcon("play")}</span></div></button>`);
         if (imageSource) button.find("img.video-cover").attr("src", imageSource);
-        button.on("click.jhsBusPreview", async (/** @type {MouseEvent} */ event) => {
+        button.on("click.jhsBusPreview", (/** @type {MouseEvent} */ event) => {
             event.preventDefault();
             event.stopPropagation();
-            if (this.busy) return this.ui.notifications?.info?.("正在加载，请稍候");
-            this.busy = true;
-            try { await this.handleVideo(); }
-            finally { this.busy = false; }
+            void this.handleVideo();
         });
         gallery.prepend(button);
         if (!this.previewIntentConsumed && this.window.location.href.includes("autoPlay=1")) { this.previewIntentConsumed = true; button[0].scrollIntoView?.({block:"center"}); button.trigger("focus").trigger("click"); }
     }
 
     async handleVideo() {
-        const generation = this.generation, $ = this.ui.jquery;
-        const modal = $(this.document).find("#bus-preview-modal"), content = modal.find(".bus-preview-modal-content");
-        let video = this.document.querySelector("#preview-video");
-        if (generation !== this.generation || !isPreviewEnabled(this.settings.snapshot())) return;
-        if (video?.tagName === "VIDEO") {
-            modal.addClass("is-open");
-            await safePlay(/** @type {HTMLVideoElement} */ (video), { context: "JavBus 预览视频", notify: true });
-            return;
-        }
-        const carNum = this.hostAdapter.readMovieRef?.()?.carNum ?? null;
-        if (!carNum) return this.ui.notifications?.error?.("番号不可用，无法加载预览");
-        const requestScope = new LifecycleScope(`javbus-preview:${carNum}`);
-        this.requestScope = requestScope;
+        if (this.scope.disposed || !canUseDmmPreview(this.settings.snapshot())) return;
+        if (this.session) return this.ui.notifications?.info?.("正在加载，请稍候");
+        const generation = this.generation, modal = this.initModal();
+        const session = { scope: new LifecycleScope("javbus-preview"), index: /** @type {number | null} */ (null) };
+        this.session = session;
         try {
-            const { sources, error } = await fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, requestScope, this.settings.snapshot());
-            if (generation !== this.generation || this.scope.disposed || !isPreviewEnabled(this.settings.snapshot())) return;
-            if (!sources || !Object.keys(sources).length) {
-                this.ui.notifications?.error?.(error?.code === "REGION_BLOCKED" ? "视频访问受限" : "未找到可用视频");
-                return;
+            let video = modal.find("video")[0];
+            if (!video) {
+                const carNum = this.hostAdapter.readMovieRef?.()?.carNum;
+                if (!carNum) throw new Error("番号不可用");
+                const { sources, error } = await fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, session.scope, this.settings.snapshot());
+                if (generation !== this.generation || this.scope.disposed || !isPreviewEnabled(this.settings.snapshot())) return;
+                if (!sources || !Object.keys(sources).length) throw new Error(error?.code === "REGION_BLOCKED" ? "视频访问受限" : "未找到可用视频");
+                await this.createVideoPlayerAndControls(sources, modal.find(".bus-preview-modal-content"));
+                if (!this.isActive(session)) return;
+                video = modal.find("video")[0];
             }
-            await this.createVideoPlayerAndControls(sources, content);
-            video = this.document.querySelector("#preview-video");
-            if (video?.tagName !== "VIDEO") return this.ui.notifications?.error?.("视频播放器创建失败");
-            modal.addClass("is-open");
-            await safePlay(/** @type {HTMLVideoElement} */ (video), {
-                context: "JavBus 预览视频", notify: true,
-                message: error?.code === "REGION_BLOCKED" ? "视频访问受限" : "当前视频源无法播放",
+            // A quality change may have replaced the source before its old play promise settled.
+            modal.find(".jhs-video-quality-btn").each((/** @type {number} */ _index, /** @type {Element} */ element) => {
+                const button = this.ui.jquery(element), selected = button.attr("data-video-src") === video.querySelector("source")?.getAttribute("src");
+                button.toggleClass("active", selected).attr("aria-pressed", String(selected));
             });
+            session.index = this.dialog.open({
+                type: 1, title: "视频预览", content: '<div data-jhs-bus-preview-host></div>', shadeClose: true, scrollbar: false, anim: -1,
+                area: this.ui.getResponsiveArea(["80%", "80%"]), ui: { size: "lg", body: "media", initialFocus: "#preview-video" },
+                success: (/** @type {any} */ element, /** @type {number} */ id) => {
+                    session.index = id; modal.addClass("is-open"); this.ui.setupEscClose(id);
+                    const root = element?.nodeType === 1 ? element : element[0];
+                    // Layer requires connected object content; keep its shell textual and move the live player.
+                    root.querySelector("[data-jhs-bus-preview-host]").append(modal[0]);
+                    session.scope.observe(root.parentNode, () => { if (!root.isConnected) this.closeVideoModal(session); }, { childList: true });
+                },
+                end: () => { session.index = null; this.closeVideoModal(session); },
+            });
+            await this.playVideo(video, session);
+        } catch (error) {
+            if (this.isActive(session)) this.ui.notifications?.error?.(error instanceof Error ? error.message : "视频预览失败，请重试");
+            this.closeVideoModal(session);
         } finally {
-            if (this.requestScope === requestScope) this.requestScope = null;
-            requestScope.dispose();
+            if (session.index === null) this.closeVideoModal(session);
         }
+    }
+
+    /** @param {NonNullable<JavBusPreviewController["session"]>} session */
+    isActive(session) { return this.session === session && !session.scope.disposed && !this.scope.disposed; }
+
+    /** @param {HTMLVideoElement} media @param {NonNullable<JavBusPreviewController["session"]>} session */
+    async playVideo(media, session) {
+        if (!this.isActive(session)) return false;
+        const generation = session.scope.nextGeneration();
+        const active = () => this.isActive(session) && session.scope.canCommit(generation);
+        const played = await safePlay(media, { context: "JavBus 预览视频", notify: true, notifyUser: message => { if (active()) this.ui.notifications?.error?.(message); } });
+        if (!this.session || this.player?.find("video")[0] !== media) media.pause();
+        return played && active();
     }
 
     /** @param {Record<string, string>} sources @param {any} target */
@@ -155,7 +168,7 @@ export class JavBusPreviewController {
         const $ = this.ui.jquery, settings = this.settings.snapshot(), quality = Z(Object.keys(sources), settings.videoQuality);
         if (!quality) return;
         const wrapper = $('<div class="video-player-wrapper"></div>');
-        const video = $('<video id="preview-video" class="jhs-video-player" controls playsinline></video>');
+        const video = $('<video id="preview-video" class="jhs-video-player" controls playsinline tabindex="0" aria-label="影片预览"></video>');
         const source = this.document.createElement("source");
         source.src = sources[quality];
         video.append(source);
@@ -165,34 +178,32 @@ export class JavBusPreviewController {
         const media = /** @type {HTMLVideoElement | undefined} */ (video[0]);
         if (!media) return;
         media.muted = settings.videoMuted == null || settings.videoMuted === true;
-        video.on("volumechange.jhsBusPreview", () => {
+        this.playerScope?.dispose();
+        const scope = this.playerScope = new LifecycleScope("javbus-player");
+        scope.listen(media, "volumechange", () => {
+            if (!this.session || !this.isActive(this.session)) return;
             void this.settings.set("videoMuted", media.muted).catch((/** @type {unknown} */ error) => this.diagnostics.recordError({ source: "javbus-preview", message: error instanceof Error ? error.message : String(error) }));
         });
         for (const item of L) {
             const sourceUrl = sources[item.quality];
             if (!sourceUrl) continue;
             const active = quality === item.quality, button = $('<button type="button" class="jhs-btn jhs-video-quality-btn"></button>');
-            button.attr({ "data-quality": item.quality, "aria-pressed": String(active) }).text(item.text).data("video-src", sourceUrl).toggleClass("active", active);
+            button.attr({ "data-quality": item.quality, "data-video-src": sourceUrl, "aria-pressed": String(active) }).text(item.text).toggleClass("active", active);
             toolbar.append(button);
         }
-        toolbar.on("click.jhsBusPreview", ".jhs-video-quality-btn", async (/** @type {MouseEvent} */ event) => {
-            const selected = $(event.currentTarget);
-            if (selected.hasClass("active") || !media.isConnected || this.scope.disposed) return;
-            const nextSource = /** @type {string} */ (selected.data("video-src"));
+        scope.listen(toolbar[0], "click", async (event) => {
+            const selected = $(/** @type {Element} */ (event.target)).closest(".jhs-video-quality-btn"), session = this.session;
+            if (!selected.length || selected.hasClass("active") || !session || !this.isActive(session)) return;
+            const nextSource = selected.attr("data-video-src");
             const currentTime = media.currentTime;
             source.src = nextSource;
             media.load();
             try { media.currentTime = currentTime; } catch { /* Preserve the newly selected source when metadata is not ready. */ }
-            if (await safePlay(media, { context: "JavBus 画质切换", notify: true }) && !this.scope.disposed) {
+            if (await this.playVideo(media, session)) {
                 toolbar.find(".jhs-video-quality-btn").removeClass("active").attr("aria-pressed", "false");
                 selected.addClass("active").attr("aria-pressed", "true");
             }
         });
-    }
-
-    cancelRequest() {
-        this.requestScope?.dispose();
-        this.requestScope = null;
     }
 
     stop() {

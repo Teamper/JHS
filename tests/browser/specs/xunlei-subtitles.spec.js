@@ -65,7 +65,7 @@ async function boot(page, context, { theme = "light", mode = "results" } = {}) {
     const feedback = window.show;
     const report = feedback.error.bind(feedback);
     window.__subtitleMessages = [];
-    feedback.error = (...args) => { window.__subtitleMessages.push(args.map(String).join(" ")); return report(...args); };
+    feedback.error = (message, ...args) => { window.__subtitleMessages.push(String(message)); return report(message, ...args); };
   });
   return errors;
 }
@@ -127,6 +127,44 @@ for (const mode of ["empty", "failure"]) test(`Xunlei ${mode} response reports f
   await expect.poll(() => page.evaluate(() => window.__subtitleMessages.length)).toBeGreaterThan(0);
   await expect(page.locator("#xunlei-table-container")).toHaveCount(0);
   await expect(page.locator(".layui-layer-loading")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__subtitleRejections)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+for (const action of ["preview", "download"]) test(`closing the subtitle table cancels a pending ${action} and its late response`, async ({ page, context }) => {
+  const errors = await boot(page, context);
+  await page.locator("#xunLeiSubtitleBtn").click();
+  await expect(page.locator("#xunlei-table-container .subtitle-preview-btn").first()).toBeVisible();
+  await page.evaluate(() => {
+    const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+    window.__subtitleDownloads = 0; window.__subtitleTableDestroyed = 0;
+    owner.ui.download = () => { window.__subtitleDownloads++; };
+    owner.subtitle.download = (_provider, _item, { scope }) => new Promise(resolve => { window.__subtitlePending = { resolve, scope }; });
+    const table = window.Tabulator.findTable("#xunlei-table-container")[0], destroy = table.destroy.bind(table);
+    table.destroy = () => { window.__subtitleTableDestroyed++; return destroy(); };
+  });
+  await page.locator(`.subtitle-${action}-btn`).first().click();
+  await expect.poll(() => page.evaluate(() => Boolean(window.__subtitlePending))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#xunlei-table-container")).toHaveCount(0);
+  expect(await page.evaluate(() => ({ disposed: window.__subtitlePending.scope.disposed, destroyed: window.__subtitleTableDestroyed }))).toEqual({ disposed: true, destroyed: 1 });
+  await page.locator("#xunLeiSubtitleBtn").click();
+  await expect(page.locator("#xunlei-table-container .subtitle-preview-btn")).toHaveCount(2);
+  await page.evaluate(async () => { window.__subtitlePending.resolve("late subtitle"); await new Promise(resolve => setTimeout(resolve, 0)); });
+  await expect(page.locator(".layui-layer .jhs-code-viewer")).toHaveCount(0);
+  expect(await page.evaluate(() => ({ downloads: window.__subtitleDownloads, messages: window.__subtitleMessages, rejections: window.__subtitleRejections }))).toEqual({ downloads: 0, messages: [], rejections: [] });
+  expect(errors).toEqual([]);
+});
+
+test("a direct subtitle download failure reports feedback without an unhandled rejection", async ({ page, context }) => {
+  const errors = await boot(page, context);
+  await page.locator("#xunLeiSubtitleBtn").click();
+  await page.evaluate(() => {
+    window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").subtitle.download = async () => { throw new Error("Fixture direct download failure"); };
+  });
+  await page.locator(".subtitle-download-btn").first().click();
+  await expect.poll(() => page.evaluate(() => window.__subtitleMessages)).toContain("字幕下载失败，请重试");
+  await expect(page.locator("#xunlei-table-container")).toBeVisible();
   expect(await page.evaluate(() => window.__subtitleRejections)).toEqual([]);
   expect(errors).toEqual([]);
 });

@@ -2,6 +2,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { prepareDialogOptions } from "../src/core/dialog-shell.js";
 import { OwnedPopover } from "../src/core/owned-popover.js";
+import jquery from "jquery";
+import { readTestFile } from "./helpers/read-test-file.js";
+import { join } from "node:path";
 let dom;
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
 it("consumes UI metadata, preserves callbacks and releases resize listeners", () => {
@@ -92,4 +95,33 @@ it("lets nested viewers and portal menus own focus without trapping the backgrou
     viewer.querySelector('button').focus();expect(doc.activeElement.id).toBe('viewerAction');
     viewer.remove();doc.querySelector('#anchor').focus();expect(doc.activeElement.id).toBe('anchor');
     options.end();expect(doc.activeElement).toBe(opener);
+});
+
+it("restores nested Layer focus after native removal and still respects later higher layers", async () => {
+    dom = new JSDOM('<button id="opener">打开</button><script src="https://example.test/layer.js"></script>', { runScripts: "outside-only" });
+    const { window } = dom, doc = window.document;
+    window.jQuery = jquery(window);
+    window.eval(readTestFile(join(import.meta.dirname, "browser/fixtures/layer-runtime/layer-1.0.9.min.js"), "utf8"));
+    vi.stubGlobal("window", window);
+    const computed = window.getComputedStyle.bind(window);
+    // Chromium returns no computed z-index after Layer removes its DOM, unlike jsdom.
+    vi.spyOn(window, "getComputedStyle").mockImplementation(node => !node.isConnected
+        ? new Proxy(computed(node), { get: (style, key) => key === "zIndex" ? "" : Reflect.get(style, key) })
+        : computed(node));
+    const open = (label, zIndex) => window.layer.open(prepareDialogOptions({ type: 1, title: label, content: `<button id="${label}">${label}</button>`, zIndex, anim: -1, ui: {} }));
+    const close = async id => { window.layer.close(id); await new Promise(resolve => window.setTimeout(resolve, 0)); };
+    doc.querySelector("#opener").focus();
+    const parent = open("parent", 100); await Promise.resolve();
+    const child = open("child", 200); await Promise.resolve();
+    doc.querySelector(`#layui-layer${child}`).style.zIndex = "300";
+    await close(child);
+    expect(doc.activeElement.id).toBe("parent");
+    const lower = open("lower", 200); await Promise.resolve();
+    const higher = doc.createElement("div"); higher.className = "layui-layer"; higher.style.zIndex = "400";
+    higher.innerHTML = '<button id="higher">higher</button>'; doc.body.append(higher); higher.firstChild.focus();
+    await close(lower);
+    expect(doc.activeElement.id).toBe("higher");
+    higher.remove(); doc.querySelector("#parent").focus();
+    await close(parent);
+    expect(doc.activeElement.id).toBe("opener");
 });

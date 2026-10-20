@@ -100,9 +100,9 @@ describe("preview playback contracts", () => {
         }
     });
     it("injects movie, storage, and abortable request scope into the JavBus DMM preview", () => {
-        expect(bus).toContain("fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, requestScope, this.settings.snapshot())");
-        expect(bus).toContain("this.requestScope = requestScope");
-        expect(bus).toContain("requestScope.dispose()");
+        expect(bus).toContain("fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, session.scope, this.settings.snapshot())");
+        expect(bus).toContain('scope: new LifecycleScope("javbus-preview")');
+        expect(bus).toContain("session.scope.dispose()");
         expect(cover).toContain("fetchDmmPreviewIfEnabled(carNum,this.storage,this.movie,session.scope,this.settings.snapshot())");
         expect(cover).toContain("const settings = this.settings.snapshot()");
     });

@@ -146,7 +146,7 @@ export default defineFeature({
                 const previewController = new JavBusPreviewController({
                     document, window, hostAdapter: deps[PORT.host], route: runtime.route,
                     settings: deps[SERVICE.settings], events: deps[SERVICE.events], storage: deps[SERVICE.storage],
-                    movie: deps[SERVICE.movie], ui: { ...deps[SERVICE.domUi], notifications: deps[SERVICE.notifications] },
+                    movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], ui: { ...deps[SERVICE.domUi], notifications: deps[SERVICE.notifications] },
                     diagnostics: runtime.diagnostics, scope: runtime.scope,
                 });
                 if (!previewController.start()) { releaseStyle(); return false; }

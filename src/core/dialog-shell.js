@@ -24,7 +24,7 @@ function bindDialogFocus(root, initialFocus) {
         return true;
     };
     const blocked = () => {
-        const z = Number(view?.getComputedStyle(root).zIndex) || 0;
+        const z = Number(view?.getComputedStyle(root).zIndex || root.style.zIndex) || 0;
         const layers = [...doc.querySelectorAll('.layui-layer,.jhs-quick-setting-sheet,.viewer-container')];
         return layers.some(node => {
             const element = /** @type {HTMLElement} */ (node);

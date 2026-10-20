@@ -2,6 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { DetailPageActionsController } from "../src/features/detail/detail-page-actions-controller.js";
 import { parseXunleiSubtitles } from "../src/integrations/xunlei/parser.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = ""; });
 
@@ -11,13 +12,14 @@ it("gives the subtitle table writable rows without changing frozen integration r
     const table = vi.fn(function (_target, options) { this.options = options; });
     vi.stubGlobal("Tabulator", table);
     const controller = new DetailPageActionsController({
-        hostAdapter: { document }, scope: {}, dialog: { open }, subtitle: { search: vi.fn(async () => results) },
+        hostAdapter: { document }, scope: new LifecycleScope("subtitle-test"), dialog: { open }, subtitle: { search: vi.fn(async () => results) },
         ui: { loading: () => ({ close }), getResponsiveArea: area => area, setupEscClose: vi.fn() },
         notifications: { error: vi.fn() }, diagnostics: { recordError: vi.fn() },
     });
 
     await controller.searchXunLeiSubtitle("ABC-123");
-    open.mock.calls[0][0].success(null, 1);
+    const root = document.createElement("div"); root.innerHTML = open.mock.calls[0][0].content;
+    open.mock.calls[0][0].success(root, 1);
     const rows = table.mock.calls[0][1].data;
 
     expect(rows).toEqual(results);
