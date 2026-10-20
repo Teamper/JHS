@@ -9,9 +9,9 @@ export class UserscriptHttpAdapter {
         this.requestImplementation = requestImplementation, this.fetchImplementation = fetchImplementation;
     }
 
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, nativeTimeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>, transport?: string}} options */
+    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, nativeTimeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>, transport?: string, onDispatch?: () => void}} options */
     request(options) {
-        if ("native-fetch" === options.transport && this.fetchImplementation) return this.requestWithNativeFetch(options).catch((error => {
+        if ("native-fetch" === options.transport && !options.onDispatch && this.fetchImplementation) return this.requestWithNativeFetch(options).catch((error => {
             if (error instanceof JhsError && "ABORTED" === error.code) throw error;
             return this.requestWithUserscript(options).then((response) => ({
                 ...response, nativeFallbackCode: error instanceof JhsError ? error.code : "UNKNOWN",
@@ -50,7 +50,7 @@ export class UserscriptHttpAdapter {
         }
     }
 
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>}} options */
+    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>, onDispatch?: () => void}} options */
     requestWithUserscript(options) {
         return new Promise((resolve, reject) => {
             let settled = false, abortRequested = false, aborted = false;
@@ -83,6 +83,11 @@ export class UserscriptHttpAdapter {
             options.signal?.addEventListener("abort", onAbort, { once: true });
             const timeoutMs = Number(options.timeout);
             if (Number.isFinite(timeoutMs) && timeoutMs > 0) timeoutId = setTimeout(onTimeout, timeoutMs);
+            // The callback may refuse dispatch. Once GM is invoked even a synchronous
+            // error cannot prove that the remote mutation was not accepted.
+            try { options.onDispatch?.(); }
+            catch (error) { finish(reject, error); return; }
+            if (settled) return;
             try { handle = this.requestImplementation({
                 ...options.requestOptions,
                 method: options.method ?? "GET", url: options.url, headers: options.headers,

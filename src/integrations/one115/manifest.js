@@ -11,7 +11,7 @@ const URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["115.co
 function parsePayload(value) {
     if (typeof value !== "string") return value;
     try { return JSON.parse(value); }
-    catch { return { state: false, error_msg: /login|登录|sign in|未授权|授权|expire|expired|token|cookie/i.test(value) ? "115 未登录" : "115 返回异常响应" }; }
+    catch (cause) { throw new JhsError("PARSE_ERROR", "115 返回异常响应", { source: "one115", cause }); }
 }
 
 /** @param {string} message */
@@ -37,7 +37,7 @@ export function createOne115Adapter(http) {
     /** @param {string} url @param {Record<string, any>} options */
     const request = (url, options = {}) => http.request({
         providerId: "one115", capability: options.capability || "account.status", method: options.method || "GET", url, body: options.body, headers: options.headers,
-        responseType: options.responseType || "json", urlPolicy: URL_POLICY,
+        responseType: options.responseType || "json", urlPolicy: URL_POLICY, ...(options.method === "POST" ? { retryCount: 0 } : {}), onDispatch: options.onDispatch,
     }, options.scope);
     return Object.freeze({
         contracts: ["AccountStatus", "CloudFile", "OfflineSubmission"],
@@ -55,18 +55,18 @@ export function createOne115Adapter(http) {
             const response = await request(url.href, { capability: "file.search", scope: options.scope, force: options.force });
             return normalize115SearchResults(response.data);
         },
-        /** @param {string} resource @param {{scope?: any, folderId?: string}} [options] */
+        /** @param {string} resource @param {{scope?: any, folderId?: string, onMutationDispatch?: () => void}} [options] */
         async submit(resource, options = {}) {
             if (!/^magnet:/i.test(resource) && !/^ed2k:/i.test(resource)) throw new JhsError("UNSUPPORTED", "Unsupported offline URL", { source: "one115" });
             const infoResponse = await request(`https://115.com/?ct=offline&ac=space&_=${Date.now()}`, { capability: "offline.submit", scope: options.scope });
             const info = /** @type {any} */ (infoResponse.data);
             if (!info?.sign) throw new JhsError("AUTH_REQUIRED", "115 未登录或离线空间信息获取失败", { source: "one115" });
             const body = new URLSearchParams({ url: resource, wp_path_id: options.folderId || "", uid: String(info.uid || ""), sign: info.sign, time: String(info.time || "") }).toString();
-            const response = await request("https://115.com/web/lixian/?ct=lixian&ac=add_task_url", { capability: "offline.submit", scope: options.scope, method: "POST", body, responseType: "text", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+            const response = await request("https://115.com/web/lixian/?ct=lixian&ac=add_task_url", { capability: "offline.submit", scope: options.scope, method: "POST", body, responseType: "text", headers: { "Content-Type": "application/x-www-form-urlencoded" }, onDispatch: options.onMutationDispatch });
             const payload = /** @type {any} */ (parsePayload(response.data));
             if (!payload || payload.state === false || payload.state === 0) {
                 const message = String(payload?.error_msg || payload?.error || payload?.msg || "115 离线任务创建失败"), code = classify115OfflineError(message);
-                throw new JhsError(code, message, { source: "one115", details: { state: payload?.state ?? null } });
+                throw new JhsError(code, message, { source: "one115", details: { state: payload?.state ?? null, ...(payload && { submissionOutcome: "rejected" }) } });
             }
             if (payload.state !== true && payload.state !== 1) throw new JhsError("INVALID_RESPONSE", "115 未返回明确的离线任务创建成功状态", { source: "one115" });
             return Object.freeze({ success: true, taskId: String(payload.task_id || payload.info_hash || "") });

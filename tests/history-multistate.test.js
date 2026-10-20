@@ -168,6 +168,29 @@ describe("History multi-state editor", () => {
         expect(loaded.patch.mock.calls[0][1]).toEqual({ favorite: false, downloaded: true, watched: true, blocked: false });
     });
 
+    it("renders new and legacy uncertain offline attempts without calling them failed", async () => {
+        const { plugin, $ } = loadHistory();
+        plugin.historyRoot = $('<div><div id="table-container"></div></div>');
+        plugin.historyRepository.offline.mockResolvedValue([
+            { id: "new", providerId: "115", status: "pending", submissionOutcome: "unknown", createdAt: "2026-10-20", errorCode: "TIMEOUT" },
+            { id: "old", providerId: "123", status: "failed", createdAt: "2026-10-19", errorCode: "NETWORK_ERROR" },
+            { id: "exists", providerId: "115", status: "submitted", submissionOutcome: "exists", createdAt: "2026-10-20" },
+        ]);
+        await plugin.renderOfflineHistory();
+        expect(plugin.historyRoot.text().match(/提交结果待确认/g)).toHaveLength(2);
+        expect(plugin.historyRoot.text()).toContain("云端任务已存在");
+        expect(plugin.historyRoot.text()).not.toContain("提交失败");
+    });
+
+    it("keeps a recorded pre-dispatch network failure distinct from an uncertain legacy failure", async () => {
+        const { plugin, $ } = loadHistory();
+        plugin.historyRoot = $('<div><div id="table-container"></div></div>');
+        plugin.historyRepository.offline.mockResolvedValue([{ id: "pre", status: "failed", submissionOutcome: "failed", errorCode: "NETWORK_ERROR" }]);
+        await plugin.renderOfflineHistory();
+        expect(plugin.historyRoot.text()).toContain("提交失败");
+        expect(plugin.historyRoot.text()).not.toContain("提交结果待确认");
+    });
+
     it("confirms blocked false-to-true exactly once", async () => {
         const loaded = await openAndSubmit(
             { favorite: false, downloaded: false, watched: false, blocked: false },

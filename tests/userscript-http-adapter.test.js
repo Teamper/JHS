@@ -2,6 +2,29 @@ import { describe, expect, it, vi } from "vitest";
 import { UserscriptHttpAdapter } from "../src/platform/userscript/userscript-http-adapter.js";
 
 describe("UserscriptHttpAdapter", () => {
+    it("marks dispatch only at the GM boundary and lets a preflight callback refuse it", async () => {
+        const order = [], onDispatch = vi.fn(() => order.push("dispatch"));
+        const request = vi.fn(options => { order.push("gm"); options.onload({ status: 200 }); });
+        const adapter = new UserscriptHttpAdapter(request);
+        await adapter.request({ url: "https://example.test/task", onDispatch });
+        expect(order).toEqual(["dispatch", "gm"]);
+        const cancelled = new AbortController(); cancelled.abort();
+        await expect(adapter.request({ url: "https://example.test/task", onDispatch, signal: cancelled.signal })).rejects.toMatchObject({ code: "ABORTED" });
+        expect(onDispatch).toHaveBeenCalledOnce();
+        const failure = Object.assign(new Error("disabled"), { code: "SERVICE_DISABLED" });
+        await expect(adapter.request({ url: "https://example.test/task", onDispatch: () => { throw failure; } })).rejects.toBe(failure);
+        expect(request).toHaveBeenCalledOnce();
+    });
+
+    it("never falls back or replays a mutation carrying a dispatch callback", async () => {
+        const native = vi.fn(), onDispatch = vi.fn();
+        const request = vi.fn(options => options.ontimeout());
+        await expect(new UserscriptHttpAdapter(request, native).request({ method: "POST", url: "https://example.test/task", transport: "native-fetch", onDispatch })).rejects.toMatchObject({ code: "TIMEOUT" });
+        expect(native).not.toHaveBeenCalled();
+        expect(request).toHaveBeenCalledOnce();
+        expect(onDispatch).toHaveBeenCalledOnce();
+    });
+
     it.each([{}, { redirect: "manual" }, { anonymous: true }, { fetch: true }])("times out a silent GM request independently of native callbacks (%j)", async requestOptions => {
         vi.useFakeTimers();
         try {

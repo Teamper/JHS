@@ -28,4 +28,17 @@ describe("offline submission receipts", () => {
             expect(storage.getItem("site-setting")).toBe("host-value");
         } finally { vi.useRealTimers(); }
     });
+
+    it("preserves legacy unknown receipts indefinitely and round-trips attempt metadata", () => {
+        const storage = storageFixture(), receipts = new OfflineSubmissionReceiptService(storage);
+        const key = "jhs_offline_receipt_v1:unknown";
+        storage.setItem(key, JSON.stringify({ state: "pending", at: Date.now() - 7 * 86_400_000 }));
+        receipts.prune(86_400_000);
+        expect(receipts.read(key, 86_400_000)).toMatchObject({ state: "pending" });
+        receipts.write(key, "pending", { attemptId: "attempt", providerId: "115" });
+        const previous = receipts.getRaw(key);
+        receipts.write(key, "submitted", { attemptId: "retry", providerId: "115" });
+        receipts.restore(key, previous);
+        expect(receipts.read(key, 86_400_000)).toMatchObject({ state: "pending", attemptId: "attempt", providerId: "115" });
+    });
 });

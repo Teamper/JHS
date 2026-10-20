@@ -202,7 +202,7 @@ test("123 disabled during token decryption never dispatches a cloud request", as
         const provider=plugin.registry.providers.get("123");
         plugin.registry.getCandidates=async()=>[{provider,availability:{authState:"ready"}}];
         const button=$("<button id=token-boundary-button>离线</button>").appendTo("body");
-        window.tokenBoundaryTask=plugin.submitResource({},"magnet:?xt=fixture",button,{carNum:"ABC-123"},{preferredProviderId:"123"});
+        window.tokenBoundaryTask=plugin.submitResource({},"magnet:?xt=fixture",button,{carNum:"ABC-123"},null,{preferredProviderId:"123"});
     });
     await expect.poll(()=>page.evaluate(()=>typeof window.releaseBoundaryToken)).toBe("function");
     await page.evaluate(async()=>{

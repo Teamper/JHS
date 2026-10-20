@@ -21,7 +21,7 @@ it.each(["disabled","disposed","removed","success"])("checks the actual 123 subm
     const provider=plugin.registry.providers.get("123");
     plugin.registry.getCandidates=async()=>[{provider,availability:{authState:"ready"}}];
     plugin.getVideoInfo=()=>({carNum:"ABC-123"});
-    const button=jquery("button"),pending=plugin.submitResource({},"magnet:?xt=mock",button,{carNum:"ABC-123"},{preferredProviderId:"123"});
+    const button=jquery("button"),pending=plugin.submitResource({},"magnet:?xt=mock",button,{carNum:"ABC-123"},null,{preferredProviderId:"123"});
     await ready;
     if(mode==="disabled")settings.enable123Offline=false;
     if(mode==="disposed")scope.dispose();
@@ -29,6 +29,6 @@ it.each(["disabled","disposed","removed","success"])("checks the actual 123 subm
     release("mock-token");await pending;
     expect(submit).toHaveBeenCalledTimes(mode==="success"?1:0);
     expect(history).toHaveBeenCalledTimes(mode==="success"?1:0);
-    if(mode!=="success")expect(button.hasClass("loading")).toBe(false);
+    if(mode!=="success")expect(button.hasClass("loading")).toBe(["disposed","removed"].includes(mode));
     scope.dispose();
 });

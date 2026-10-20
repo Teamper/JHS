@@ -174,7 +174,9 @@ describe("unified offline button state", () => {
             const pending = plugin.submitResource({}, "magnet:?xt=closed", button, {carNum:"ABC-1"});
             if (mode === "scope") plugin.lifecycleScope.disposed = true; else button.remove();
             release(candidates); await pending;
-            expect(submit).not.toHaveBeenCalled(); expect(button.hasClass("loading")).toBe(false);
+            expect(submit).not.toHaveBeenCalled();
+            // Closing owns UI cleanup; completion must not mutate the inactive surface.
+            expect(button.hasClass("loading")).toBe(true);
         }
     });
     it("releases a cancelled provider choice without submitting", async () => {

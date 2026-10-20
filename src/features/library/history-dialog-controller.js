@@ -202,7 +202,7 @@ export class HistoryDialogController {
                     const viewGeneration = this.historyViewGeneration;
                     const id = this.jquery(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), offline = this.resolveLegacy("UnifiedOfflinePlugin");
                     if (!this.isCurrentHistoryView(root, viewGeneration)) return;
-                    item && offline && await offline.submitResource(event, item.resource, this.jquery(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId });
+                    item && offline && await offline.submitResource(event, item.resource, this.jquery(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId, previousOutcome: item.submissionOutcome });
                     if (this.isCurrentHistoryView(root, viewGeneration)) await this.renderOfflineHistory();
                 })).on("click.jhsHistory", ".jhs-open-offline", (async (/** @type {any} */ event) => {
                     const id = this.jquery(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), provider = this.resolveLegacy("UnifiedOfflinePlugin")?.registry?.providers?.get(item?.providerId), url = provider?.openUrl?.();
@@ -269,14 +269,15 @@ export class HistoryDialogController {
         if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
         history.slice().reverse().forEach((/** @type {HistoryRecord} */ item) => {
             const offline = this.resolveLegacy("UnifiedOfflinePlugin"), provider = offline?.registry?.providers?.get?.(item.providerId);
+            const unknown = item.status === "pending" || item.submissionOutcome === "unknown" || !item.submissionOutcome && item.status === "failed" && ["TIMEOUT", "NETWORK_ERROR", "ABORTED"].includes(item.errorCode);
             const actions = this.jquery("<div class=\"jhs-toolbar\"></div>").append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-copy-offline\">复制资源</button>").attr("data-resource", item.resource));
-            if (offline && provider) actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-retry-offline\">重试</button>").attr("data-id", item.id));
+            if (offline && provider) actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-retry-offline\"></button>").text(unknown ? "核实后重试" : "重试").attr("data-id", item.id));
             if (provider && typeof provider.openUrl === "function") actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-open-offline\">打开服务</button>").attr("data-id", item.id));
             actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-btn--danger jhs-delete-offline\">移除记录</button>").attr("data-id", item.id));
             const statuses = { submitted: "已提交", success: "已完成", failed: "提交失败", pending: "待提交" };
-            const status = statuses[/** @type {keyof typeof statuses} */ (item.status)] || "状态待确认";
+            const status = unknown ? "提交结果待确认" : item.submissionOutcome === "exists" ? "云端任务已存在" : statuses[/** @type {keyof typeof statuses} */ (item.status)] || "状态待确认";
             const providerName = item.providerId === "115" ? PRODUCT_NAMES.one115 : item.providerId === "123" ? PRODUCT_NAMES.pan123 : item.providerName || "离线服务";
-            host.append(this.jquery("<article class=\"jhs-card jhs-record-card\"></article>").append(this.jquery("<strong></strong>").text(`${providerName} · ${status}`), this.jquery("<p></p>").text(`${item.carNum || "未关联番号"} · ${formatUiDateTime(item.createdAt)}${item.retryOf ? " · 重试任务" : ""}`), this.jquery("<p></p>").text(item.errorMessage ? "离线提交失败，请检查授权后重试" : item.resource), actions));
+            host.append(this.jquery("<article class=\"jhs-card jhs-record-card\"></article>").append(this.jquery("<strong></strong>").text(`${providerName} · ${status}`), this.jquery("<p></p>").text(`${item.carNum || "未关联番号"} · ${formatUiDateTime(item.createdAt)}${item.retryOf ? " · 重试任务" : ""}`), this.jquery("<p></p>").text(unknown ? "请先打开云盘核实任务，再确认是否重新提交" : item.errorMessage || item.status === "failed" ? "离线提交失败，请检查授权后重试" : item.resource), actions));
         });
     }
     async reloadTable(resetSelection = !0) {

@@ -4,6 +4,7 @@ test.beforeEach(({}, testInfo) => { test.skip(!["desktop-wide", "mobile"].includ
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { injectRealLayer } from "../harness/real-layer.js";
 
 const injectRuntime = async (page, options) => {
   if (!process.env.JHS_AUDIT_BASELINE) return injectUserscriptRuntime(page, options);
@@ -12,12 +13,12 @@ const injectRuntime = async (page, options) => {
   try { return await injectUserscriptRuntime(page, options); } finally { page.addScriptTag = original; }
 };
 
-async function boot(page, context, { hiddenVideo = false, iframe = false, disabledPlugins = [] } = {}) {
+async function boot(page, context, { hiddenVideo = false, iframe = false, disabledPlugins = [], realLayer = false } = {}) {
   await fulfillHostFixtures(context);
   const base = await readFile(new URL("../fixtures/javdb-detail-interactions.html", import.meta.url), "utf8");
   await context.route("https://javdb.com/v/**", route => route.fulfill({ contentType: "text/html", body: base }));
   await page.goto(iframe ? "https://javdb.com/" : "https://javdb.com/v/test-id");
-  await injectRuntime(page, { disabledPlugins, settingOverrides: { enableLoadPreviewVideo: "no", enableLoadReview: "no", enableMagnetsFilter: "no", needClosePage: "no" } });
+  await injectRuntime(page, { disabledPlugins, beforeUserscriptInjection: realLayer ? injectRealLayer : undefined, settingOverrides: { enableLoadPreviewVideo: "no", enableLoadReview: "no", enableMagnetsFilter: "no", needClosePage: "no" } });
   await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
   if (!iframe) return page;
   const navigation = page.waitForEvent("framenavigated", { predicate: frame => frame !== page.mainFrame() && frame.url().includes("/v/") });
@@ -212,7 +213,7 @@ test("two rapid offline clicks during availability checks must submit only once"
     window.jQuery("#audit-offline").data("jhsMovieContext", { carNum: "ABC-123", surface: "native-detail" });
     window.auditOffline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
     window.auditPendingAvailability = []; window.auditSubmits = 0;
-    window.auditCandidate = { provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { window.auditSubmits++; } }, availability: { authState: "ready" } };
+    window.auditCandidate = { provider: { id: "123", name: "123", isEnabled: async () => true, submit: async (_resource, _info, options) => { options.onMutationDispatch(); window.auditSubmits++; } }, availability: { authState: "ready" } };
     window.auditOffline.registry = { getCandidates: () => new Promise(resolve => window.auditPendingAvailability.push(resolve)), updateAvailability() {} };
   });
   await page.locator("#audit-offline").click(); await page.locator("#audit-offline").dispatchEvent("click");
@@ -223,19 +224,26 @@ test("two rapid offline clicks during availability checks must submit only once"
 });
 
 test("offline remote success followed by history failure must not be recorded as remote failure", async ({ page, context }) => {
-  await boot(page, context);
-  const result = await page.evaluate(async () => {
+  await boot(page, context, { realLayer: true });
+  await page.evaluate(async () => {
     const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), button = window.jQuery('<button>离线</button>').appendTo(document.body);
     let calls = 0; const history = [], errors = [], successes = [];
     window.show.error = message => errors.push(String(message));
     window.show.ok = message => successes.push(String(message));
-    offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { calls++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
+    offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", openUrl: () => "https://yun.123pan.com", isEnabled: async () => true, submit: async (_resource, _info, options) => { options.onMutationDispatch(); calls++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
     offline.getRuntimeService("state").appendOfflineHistory = async row => { history.push(row.status); if (history.length === 1) throw new Error("local history write failed"); };
     await offline.submitResource({ currentTarget: button[0] }, "magnet:?xt=urn:btih:audit", button, { carNum: "ABC-123" });
+    const buttonText = button.text();
     const retryButton = window.jQuery('<button>离线</button>').appendTo(document.body);
-    await offline.submitResource({ currentTarget: retryButton[0] }, "magnet:?xt=urn:btih:audit", retryButton, { carNum: "ABC-123" });
-    return { calls, history, errors, successes, buttonText: button.text() };
+    window.auditOfflineRetry = offline.submitResource({ currentTarget: retryButton[0] }, "magnet:?xt=urn:btih:audit", retryButton, { carNum: "ABC-123" });
+    window.auditOfflineResult = () => ({ calls, history, errors, successes, buttonText });
   });
+  const confirmation = page.getByRole("dialog", { name: "确认重新提交" });
+  await expect(confirmation).toBeVisible();
+  expect(await page.evaluate(() => window.auditOfflineResult().calls)).toBe(1);
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await page.evaluate(() => window.auditOfflineRetry);
+  const result = await page.evaluate(() => window.auditOfflineResult());
   console.log("offline-history-failure", result);
   expect(result.calls).toBe(1);
   expect(result.history).not.toContain("failed");
@@ -245,20 +253,27 @@ test("offline remote success followed by history failure must not be recorded as
 });
 
 test("offline remote success survives a throwing local-history warning", async ({ page, context }) => {
-  await boot(page, context);
-  const result = await page.evaluate(async () => {
+  await boot(page, context, { realLayer: true });
+  await page.evaluate(async () => {
     const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), button = window.jQuery('<button>离线</button>').appendTo(document.body);
     let submissions = 0;
     const history = [];
     window.show.error = () => { throw new Error("toast unavailable"); };
     window.show.ok = () => { throw new Error("unexpected success notice"); };
-    offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { submissions++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
+    offline.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", openUrl: () => "https://yun.123pan.com", isEnabled: async () => true, submit: async (_resource, _info, options) => { options.onMutationDispatch(); submissions++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
     offline.getRuntimeService("state").appendOfflineHistory = async row => { history.push(row.status); throw new Error("local history write failed"); };
     await offline.submitResource({ currentTarget: button[0] }, "magnet:?xt=urn:btih:warning-fault", button, { carNum: "ABC-123" });
+    const buttonText = button.text();
     const retryButton = window.jQuery('<button>离线</button>').appendTo(document.body);
-    await offline.submitResource({ currentTarget: retryButton[0] }, "magnet:?xt=urn:btih:warning-fault", retryButton, { carNum: "ABC-123" });
-    return { submissions, history, buttonText: button.text() };
+    window.auditOfflineRetry = offline.submitResource({ currentTarget: retryButton[0] }, "magnet:?xt=urn:btih:warning-fault", retryButton, { carNum: "ABC-123" });
+    window.auditOfflineResult = () => ({ submissions, history, buttonText });
   });
+  const confirmation = page.getByRole("dialog", { name: "确认重新提交" });
+  await expect(confirmation).toBeVisible();
+  expect(await page.evaluate(() => window.auditOfflineResult().submissions)).toBe(1);
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await page.evaluate(() => window.auditOfflineRetry);
+  const result = await page.evaluate(() => window.auditOfflineResult());
   expect(result).toEqual({ submissions: 1, history: ["submitted"], buttonText: "已提交" });
 });
 

@@ -304,7 +304,8 @@ assert((newVideoTaskSource.match(/锁任务出现错误:/g) || []).length === 1,
 assertIncludes(unifiedOffline, '.attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中")', "focusable offline submitting button state");
 assertIncludes(unifiedOffline, '.removeAttr("aria-busy aria-disabled").text(original)', "offline idle button restoration");
 assert(!unifiedOffline.includes('.prop("disabled", !0)'), "offline submission must preserve button focus");
-  assertIncludes(unifiedOffline, "this.window.setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS)", "offline success cooldown and immediate failure restoration");
+assertIncludes(unifiedOffline, "this.window.setTimeout(() => { release(); if (active()) restoreButton(); }, this.BUTTON_COOLDOWN_MS)", "offline success cooldown releases ownership and only restores an active surface");
+assertIncludes(unifiedOffline, "} else if (active()) restoreButton();", "offline failure restores an active surface immediately");
 for (const removedSetting of [ "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ])
   assert(!listPageSource.includes(removedSetting) && !settingFormsSource.includes(removedSetting) && !settingTemplatesSource.includes(removedSetting), `retired visibility setting returned: ${removedSetting}`);
 assert(!listPageSource.includes("data-jhs-auto-hide"), "retired auto-hide card attribute returned");

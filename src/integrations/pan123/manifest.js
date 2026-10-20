@@ -8,7 +8,7 @@ const URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["123pan
 
 /** @typedef {{id: string | number, size: number}} Pan123File */
 /** @typedef {{id: string | number, files: readonly Pan123File[]}} Pan123ResolvedResource */
-/** @typedef {{token?: string, scope?: import("../../core/lifecycle-scope.js").LifecycleScope}} Pan123Context */
+/** @typedef {{token?: string, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, onMutationDispatch?: () => void}} Pan123Context */
 
 /** @param {string} value */
 export function crc32(value) {
@@ -52,19 +52,20 @@ function assertSuccess(payload, action) {
     if (!payload || typeof payload !== "object") throw new JhsError("INVALID_RESPONSE", `123 云盘${action}响应无效`, { source: "pan123" });
     if (payload.code === 0) return payload;
     const message = String(payload.message || payload.msg || `${action}失败`);
-    if (/token is expired|unauthorized|登录|授权/i.test(message)) throw new JhsError("AUTH_REQUIRED", message, { source: "pan123" });
-    throw new JhsError("INVALID_RESPONSE", message, { source: "pan123" });
+    const details = Number.isFinite(payload.code) ? { submissionOutcome: "rejected" } : undefined;
+    if (/token is expired|unauthorized|登录|授权/i.test(message)) throw new JhsError("AUTH_REQUIRED", message, { source: "pan123", details });
+    throw new JhsError("INVALID_RESPONSE", message, { source: "pan123", details });
 }
 
 /** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {{now?: () => Date, nonce?: () => number, getTimeout?: () => number}} [runtime] */
 export function createPan123Adapter(http, runtime = {}) {
-    /** @param {string} path @param {unknown} body @param {string} token @param {import("../../core/lifecycle-scope.js").LifecycleScope | undefined} scope @param {string} capability */
-    const request = async (path, body, token, scope, capability) => {
+    /** @param {string} path @param {unknown} body @param {string} token @param {import("../../core/lifecycle-scope.js").LifecycleScope | undefined} scope @param {string} capability @param {(() => void) | undefined} [onDispatch] */
+    const request = async (path, body, token, scope, capability, onDispatch) => {
         const url = signPan123Url(`https://yun.123pan.com${path}`, { now: runtime.now?.(), nonce: runtime.nonce?.() });
         return http.request({
             providerId: "pan123", capability, method: "POST", url, body: JSON.stringify(body), responseType: "json", timeout: runtime.getTimeout?.() ?? 5000,
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "App-Version": "3", platform: "web", Origin: "https://yun.123pan.com", Referer: "https://yun.123pan.com/" },
-            urlPolicy: URL_POLICY,
+            urlPolicy: URL_POLICY, retryCount: 0, onDispatch,
         }, scope);
     };
     return Object.freeze({
@@ -84,7 +85,7 @@ export function createPan123Adapter(http, runtime = {}) {
             if (!token) throw new JhsError("AUTH_REQUIRED", "尚未同步 123 授权", { source: "pan123" });
             if (!resource?.id || !Array.isArray(resource.files) || resource.files.length === 0) throw new JhsError("INVALID_RESPONSE", "没有可建立离线的文件", { source: "pan123" });
             const fileIds = resource.files.map((file) => file.id), totalSize = resource.files.reduce((sum, file) => sum + Number(file.size || 0), 0);
-            const response = await request("/b/api/v2/offline_download/task/submit", { resource_list: [{ resource_id: resource.id, select_file_id: fileIds }] }, token, scope, "offline.submit");
+            const response = await request("/b/api/v2/offline_download/task/submit", { resource_list: [{ resource_id: resource.id, select_file_id: fileIds }] }, token, scope, "offline.submit", context.onMutationDispatch);
             assertSuccess(parsePayload(response.data), "提交");
             return Object.freeze({ fileCount: fileIds.length, totalSize });
         },

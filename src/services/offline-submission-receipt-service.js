@@ -1,6 +1,6 @@
 // @ts-check
 
-/** Stores short-lived offline submission receipts separately from IndexedDB history. */
+/** Stores offline submission receipts separately from IndexedDB history; pending receipts require manual verification. */
 export class OfflineSubmissionReceiptService {
     /** @param {Storage} storage */
     constructor(storage) { this.storage = storage; }
@@ -14,7 +14,7 @@ export class OfflineSubmissionReceiptService {
         if (!raw) return null;
         try {
             const receipt = JSON.parse(raw);
-            if (["submitted", "pending"].includes(receipt?.state) && Number.isFinite(receipt.at) && Date.now() - receipt.at < maxAgeMs) return receipt;
+            if (["submitted", "pending"].includes(receipt?.state) && Number.isFinite(receipt.at) && (receipt.state === "pending" || Date.now() - receipt.at < maxAgeMs)) return receipt;
         } catch { /* Invalid receipts are replaced by the next submission. */ }
         return null;
     }
@@ -27,8 +27,8 @@ export class OfflineSubmissionReceiptService {
         }
     }
 
-    /** @param {string} key @param {"pending"|"submitted"} state */
-    write(key, state) { this.storage.setItem(key, JSON.stringify({ state, at: Date.now() })); }
+    /** @param {string} key @param {"pending"|"submitted"} state @param {{attemptId?: string, providerId?: string}} [attempt] */
+    write(key, state, attempt = {}) { this.storage.setItem(key, JSON.stringify({ ...attempt, state, at: Date.now() })); }
 
     /** @param {string} key @param {string|null} previous */
     restore(key, previous) {
