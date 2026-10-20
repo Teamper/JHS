@@ -11,6 +11,11 @@ const PRIVATE_IPV4 = [
 function isPrivateLiteral(hostname) {
     const value = hostname.replace(/^\[|\]$/g, "").toLowerCase();
     if (value === "localhost" || value.endsWith(".localhost") || value === "::1") return true;
+    const mapped = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/.exec(value);
+    if (mapped) {
+        const high = parseInt(mapped[1], 16), low = parseInt(mapped[2], 16);
+        return PRIVATE_IPV4.some((pattern) => pattern.test(`${high >>> 8}.${high & 255}.${low >>> 8}.${low & 255}`));
+    }
     if (value.includes(":")) return value.startsWith("fc") || value.startsWith("fd") || value.startsWith("fe8") || value.startsWith("fe9") || value.startsWith("fea") || value.startsWith("feb");
     return PRIVATE_IPV4.some((pattern) => pattern.test(value));
 }
