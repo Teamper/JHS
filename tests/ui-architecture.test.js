@@ -178,7 +178,7 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
         expect(commandbar).not.toContain('this.getCapability("SettingPlugin")?.openSettingDialog()');
         expect(commandbar).toMatch(/const action = this\.jquery\(e\.currentTarget\)\.data\("action"\);[\s\S]*"quickFilter" === action[\s\S]*closeMenu\(!0\);\s*void this\.handleAction\(action\)\.catch/);
         expect(commandbar).toContain('id="jhs-fab" class="jhs-btn jhs-ui"');
-        expect(commandbar).toContain('role="menuitem" class="jhs-btn jhs-fab-menu-item"');
+        expect(commandbar).toContain('role="menuitem" tabindex="-1" class="jhs-btn jhs-fab-menu-item"');
         expect(commandbar).toContain('aria-expanded="false"');
         expect(commandbar).toMatch(/ArrowDown[\s\S]*ArrowUp[\s\S]*Home[\s\S]*End/);
         expect(settingPlugin).toMatch(/previousFocus[\s\S]*isConnected/);

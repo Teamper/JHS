@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { CoverButtonController } from "../src/features/list/cover-button-controller.js";
+import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
 
 function createSettings(initial) {
     let values = { ...initial };
@@ -173,6 +174,100 @@ describe("native list card actions Feature", () => {
             record: { carNum: "ABC-123", url: "/v/abc-123", names: "测试演员", publishTime: "2026-08-25", fc2Source: null },
         });
         expect(current.notifications.ok).toHaveBeenCalledWith("已更新影片状态");
+    });
+
+    it("returns menu actions to their trigger before opening a confirmation", async () => {
+        current = createController(); await current.controller.start();
+        const trigger = current.document.querySelector(".handleSvg .jhs-card-menu-trigger");
+        current.ui.confirm.mockImplementation(() => {
+            expect(current.document.activeElement).toBe(trigger);
+            const dialogButton = current.document.createElement("button");
+            dialogButton.id = "confirmation"; current.document.body.append(dialogButton); dialogButton.focus();
+        });
+        trigger.click(); current.document.querySelector(".filterBtn").click();
+        expect(current.document.activeElement.id).toBe("confirmation");
+    });
+
+    it("restores keyboard focus after copying from the portalled menu", async () => {
+        current = createController(); await current.controller.start();
+        const trigger = current.document.querySelector(".copySvg .jhs-card-menu-trigger");
+        trigger.click(); current.document.querySelector(".carNumSvg").click();
+        expect(current.controller.clipboard.copyText).toHaveBeenCalledWith("番号", "ABC-123");
+        expect(current.document.activeElement).toBe(trigger);
+    });
+
+    it.each([false, true])("uses the next visible card after filtering unless focus moved, moved=%s", async moved => {
+        current = createController();
+        const card = current.document.querySelector(".item"), next = card.cloneNode(true);
+        card.after(next); current.document.body.insertAdjacentHTML("beforeend", '<button id="elsewhere">其他操作</button>');
+        vi.spyOn(window.HTMLElement.prototype, "getClientRects").mockImplementation(function () { return this.closest("[hidden]") ? [] : [{}]; });
+        let finish;
+        current.state.patch.mockImplementation(() => new Promise(resolve => { finish = () => { card.hidden = true; card.querySelector("button")?.blur(); resolve({}); }; }));
+        await current.controller.start();
+        const trigger = card.querySelector(".handleSvg .jhs-card-menu-trigger");
+        trigger.click(); current.document.querySelector(".favoriteBtn").click();
+        await vi.waitFor(() => expect(current.state.patch).toHaveBeenCalledOnce());
+        if (moved) current.document.querySelector("#elsewhere").focus();
+        finish(); await vi.waitFor(() => expect(current.notifications.ok).toHaveBeenCalledOnce());
+        expect(current.document.activeElement).toBe(moved ? current.document.querySelector("#elsewhere") : next.querySelector("a"));
+    });
+
+    it("falls back to the card link if the menu trigger disappears during its action", async () => {
+        current = createController(); await current.controller.start();
+        vi.spyOn(window.HTMLElement.prototype, "getClientRects").mockImplementation(function () { return this.isConnected ? [{}] : []; });
+        const trigger = current.document.querySelector(".copySvg .jhs-card-menu-trigger"), link = current.document.querySelector(".item a");
+        trigger.click(); trigger.remove(); current.document.querySelector(".carNumSvg").click();
+        expect(current.document.activeElement).toBe(link);
+    });
+
+    it.each([false, true])("does not commit or notify after a disposed actor lookup, rejecting=%s", async reject => {
+        current = createController(); let finish;
+        current.list.parseActressName.mockImplementation(() => new Promise((yes, no) => { finish = reject ? no : yes; }));
+        await current.controller.start(); current.document.querySelector(".favoriteBtn").click();
+        expect(current.list.parseActressName).toHaveBeenCalledWith("/v/abc-123", current.scope);
+        current.scope.dispose(); finish(reject ? new Error("cancelled lookup") : "演员");
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(current.state.patch).not.toHaveBeenCalled();
+        expect(current.notifications.ok).not.toHaveBeenCalled(); expect(current.notifications.error).not.toHaveBeenCalled();
+    });
+
+    it("passes the optional cover scope through the compatibility capability and preserves old callers", async () => {
+        const listScope = new LifecycleScope("list"), coverScope = new LifecycleScope("cover");
+        const request = vi.fn(async () => ({ data: "<main></main>" })), resolveScope = vi.fn(async () => listScope);
+        vi.stubGlobal("utils", { htmlTo$dom: jqueryFactory });
+        const list = new ListPageCompatibilityService({ runtimeServices: { legacyStorage: { getSetting: async () => "yes" }, scope: resolveScope, http: { request }, logger: { debug() {} } } });
+        await list.getCoverButtonCapability().parseActressName("https://javdb.com/v/abc-123", coverScope);
+        expect(request.mock.calls[0][1]).toBe(coverScope); expect(resolveScope).not.toHaveBeenCalled();
+        await list.getCoverButtonCapability().parseActressName("https://javdb.com/v/abc-123");
+        expect(request.mock.calls[1][1]).toBe(listScope); expect(resolveScope).toHaveBeenCalledOnce();
+        coverScope.dispose(); listScope.dispose();
+    });
+
+    it("does not start the actor GET if its cover scope expires while the setting loads", async () => {
+        const coverScope = new LifecycleScope("cover"), request = vi.fn(); let finish;
+        const list = new ListPageCompatibilityService({ runtimeServices: { legacyStorage: { getSetting: () => new Promise(resolve => { finish = resolve; }) }, http: { request }, logger: { debug() {} } } });
+        const pending = list.getCoverButtonCapability().parseActressName("https://javdb.com/v/abc-123", coverScope);
+        coverScope.dispose(); finish("yes");
+        await expect(pending).rejects.toMatchObject({ name: "AbortError" }); expect(request).not.toHaveBeenCalled();
+    });
+
+    it("does not start actor resolution when confirmation arrives after disposal", async () => {
+        current = createController(); await current.controller.start();
+        current.document.querySelector(".filterBtn").click();
+        const confirm = current.ui.confirm.mock.calls[0][2];
+        current.scope.dispose(); await confirm();
+        expect(current.list.parseActressName).not.toHaveBeenCalled(); expect(current.state.patch).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])("lets an issued patch settle without late UI after disposal, rejecting=%s", async reject => {
+        current = createController(); let finish;
+        current.state.patch.mockImplementation(() => new Promise((yes, no) => { finish = reject ? no : yes; }));
+        await current.controller.start(); current.document.querySelector(".favoriteBtn").click();
+        await vi.waitFor(() => expect(current.state.patch).toHaveBeenCalledOnce());
+        current.scope.dispose(); finish(reject ? new Error("write failure") : {});
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(current.state.patch).toHaveBeenCalledOnce();
+        expect(current.notifications.ok).not.toHaveBeenCalled(); expect(current.notifications.error).not.toHaveBeenCalled();
     });
 
     it("escapes card numbers before the confirmation reaches an HTML renderer", async () => {

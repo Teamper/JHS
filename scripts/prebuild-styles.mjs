@@ -14,6 +14,8 @@ const staticStyleFiles = new Set([
     "src/features/library/blacklist-styles.js", "src/ui/detail/fc2-workspace-styles.js",
     "src/plugins/backup/setting-styles.js", "src/ui/settings/shortcut-recorder.js",
     "src/features/detail/detail-shortcut-controller.js",
+    "src/features/system/responsive-shell-controller.js", "src/features/list/cover-button-controller.js",
+    "src/features/detail/javbus-preview-controller.js",
 ]);
 
 /** Keep the existing style envelope while compacting CSS with the build's CSS parser. */

@@ -14,6 +14,25 @@ import { Z, canUseCardPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from
 /** @typedef {any} JQueryHandle */
 /** @typedef {MouseEvent & { ctrlKey?: boolean, metaKey?: boolean }} CardActionEvent */
 
+const COVER_BUTTON_STYLES = `
+                .box .tags { justify-content:space-between; }
+                .jhs-cover-tools { display:flex; flex-wrap:wrap; max-width:100%; align-items:center; justify-content:flex-end; gap:var(--jhs-space-2); margin-left:auto; }
+                .jhs-cover-tools .screenSvg, .jhs-cover-tools .videoSvg { opacity:.65; }
+                .jhs-cover-tools .screenSvg:hover, .jhs-cover-tools .videoSvg:hover { opacity:1; }
+                `;
+const COVER_MENU_STYLES = `
+                .more-tools-container { position:relative; }
+                .jhs-card-menu .jhs-btn, .jhs-card-menu .site-btn { width:100%; min-height:var(--jhs-control-height); justify-content:flex-start; margin:0; }
+                .jhs-card-menu__dot { width:8px; height:8px; flex:none; border-radius:50%; background:var(--jhs-border-strong); }
+                .jhs-card-menu__dot--watch { background:var(--jhs-status-watch); }
+                .jhs-card-menu__dot--down { background:var(--jhs-status-down); }
+                .jhs-card-menu__dot--fav { background:var(--jhs-status-fav); }
+                .jhs-card-menu__dot--filter { background:var(--jhs-status-filter); }
+                .loading { opacity:.7; filter:blur(1px); }
+                .loading-spinner { position:absolute; top:50%; left:50%; width:64px; height:12px; transform:translate(-50%,-50%); z-index:var(--jhs-z-elevated); }
+                .loading-spinner .loading-animation { display:block; }
+            `;
+
 export class CoverButtonController {
     /** @param {{document: Document, window: Window & typeof globalThis, list: any, settings: any, state: any, screenshot: any, storage: any, movie: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, ui: any, clipboard: any, notifications: any, diagnostics: any, navigation: any, screenshotAvailable: boolean, isJavBus: boolean}} options */
     constructor(options) {
@@ -39,26 +58,7 @@ export class CoverButtonController {
         /** @type {OwnedPopover | null} */ this.activeCardPopover = null;
         this.started = false;
     }
-    getStyles() {
-        return `
-            <style>
-                .box .tags { justify-content:space-between; }
-                .jhs-cover-tools { display:flex; flex-wrap:wrap; max-width:100%; align-items:center; justify-content:flex-end; gap:var(--jhs-space-2); margin-left:auto; }
-                .jhs-cover-tools .screenSvg, .jhs-cover-tools .videoSvg { opacity:.65; }
-                .jhs-cover-tools .screenSvg:hover, .jhs-cover-tools .videoSvg:hover { opacity:1; }
-                ${this.isJavBus ? ".jhs-cover-tools .icon, .setting-label .icon{height:24px;width:24px}" : ""}
-                .more-tools-container { position:relative; }
-                .jhs-card-menu .jhs-btn, .jhs-card-menu .site-btn { width:100%; min-height:var(--jhs-control-height); justify-content:flex-start; margin:0; }
-                .jhs-card-menu__dot { width:8px; height:8px; flex:none; border-radius:50%; background:var(--jhs-border-strong); }
-                .jhs-card-menu__dot--watch { background:var(--jhs-status-watch); }
-                .jhs-card-menu__dot--down { background:var(--jhs-status-down); }
-                .jhs-card-menu__dot--fav { background:var(--jhs-status-fav); }
-                .jhs-card-menu__dot--filter { background:var(--jhs-status-filter); }
-                .loading { opacity:.7; filter:blur(1px); }
-                .loading-spinner { position:absolute; top:50%; left:50%; width:64px; height:12px; transform:translate(-50%,-50%); z-index:var(--jhs-z-elevated); }
-                .loading-spinner .loading-animation { display:block; }
-            </style>`;
-    }
+    getStyles() { return `<style>${COVER_BUTTON_STYLES}${this.isJavBus ? ".jhs-cover-tools .icon, .setting-label .icon{height:24px;width:24px}" : ""}${COVER_MENU_STYLES}</style>`; }
     async start() {
         this.scope.assertActive();
         if (this.started) return;
@@ -152,8 +152,18 @@ export class CoverButtonController {
         return direct.length ? direct : this.ui.jquery(button.closest(".jhs-card-menu").data("jhsCardOwner"));
     }
     closeCardMenus(focus = !1) {
-        const $ = this.ui.jquery;
-        this.activeCardPopover?.close(focus); this.activeCardPopover=null;
+        const popover = this.activeCardPopover;
+        popover?.close(focus); this.activeCardPopover = null;
+        if (focus && popover && this.document.activeElement === this.document.body) this.focusCard(popover.anchor, this.ui.jquery(popover.menu).data("jhsCardOwner"));
+    }
+    /** @param {HTMLElement | undefined} anchor @param {HTMLElement | undefined} card */
+    focusCard(anchor, card) {
+        if (this.scope.disposed) return;
+        const cards = [...this.document.querySelectorAll(this.list.getSelector().itemSelector)], index = cards.indexOf(card);
+        const candidates = [anchor, card?.querySelector("a[href]"), ...cards.slice(index + 1), ...cards.slice(0, index).reverse()].map(node => node?.matches(".item") ? node.querySelector("a[href]") : node);
+        candidates.push(this.document.querySelector("#jhs-fab, #jhs-page-commandbar button"));
+        const target = candidates.find(node => node?.isConnected && !node.matches(":disabled") && !node.closest("[hidden],[inert]") && node.getClientRects().length && this.window.getComputedStyle(node).visibility !== "hidden");
+        /** @type {HTMLElement | undefined} */ (target)?.focus({ preventScroll: true });
     }
     /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
     async bindClick(scope) {
@@ -214,17 +224,27 @@ export class CoverButtonController {
             try {
                 const button = $(event.currentTarget), card = this.cardForButton(button);
                 const { carNum, url, publishTime, fc2Source } = list.findCarNumAndHref(card);
+                const anchor = this.activeCardPopover?.anchor;
+                this.closeCardMenus(!0);
                 const applyState = async (/** @type {string} */ action) => {
+                    if (scope.disposed) return;
+                    let ownsFocus = !!anchor;
+                    const moved = (/** @type {Event} */ event) => { if (event.target !== anchor) ownsFocus = false; };
+                    const releaseFocus = scope.listen(this.document, "focusin", moved, true), releasePointer = scope.listen(this.document, "pointerdown", moved, true);
                     try {
-                        const names = await list.parseActressName(url);
+                        const names = await list.parseActressName(url, scope);
+                        if (scope.disposed) return;
                         const flag = legacyActionToFlag(action);
                         if (!flag) throw new Error("不支持的状态操作");
                         await this.state.patch(carNum, { [flag]: true }, { type: "list-card-state", record: { carNum, url, names, publishTime, fc2Source } });
-                        this.notifications.ok("已更新影片状态");
-                    } catch (error) { this.recordError("保存操作失败", error); this.notifications.error("状态更新失败，请重试"); }
+                        if (!scope.disposed) this.notifications.ok("已更新影片状态");
+                    } catch (error) { if (!scope.disposed) { this.recordError("保存操作失败", error); this.notifications.error("状态更新失败，请重试"); } }
+                    finally {
+                        releaseFocus(); releasePointer();
+                        if (ownsFocus && (this.document.activeElement === anchor || this.document.activeElement === this.document.body)) this.focusCard(anchor, card[0]);
+                    }
                 };
                 button.hasClass("filterBtn") ? this.ui.confirm(event, `屏蔽「${escapeHtml(carNum)}」？`, () => applyState(d), { confirmText: "屏蔽" }) : button.hasClass("favoriteBtn") ? void applyState(h) : button.hasClass("hasDownBtn") ? void applyState(g) : button.hasClass("hasWatchBtn") && void applyState(p);
-                this.closeCardMenus();
             } catch (error) { this.recordError("按钮点击处理失败", error); }
         }));
         const settings = this.settings.snapshot(), movie = this.movie;
@@ -246,18 +266,18 @@ export class CoverButtonController {
                     : button.hasClass("site-avgle") ? `${avgle}/vod/search.html?wd=${carNum}`
                         : button.hasClass("site-miss-av") ? `${missAv}/search/${carNum}`
                             : `${av123}/cn/search?keyword=${encodeURIComponent(carNum)}`;
+                this.closeCardMenus(!0);
                 this.navigation.open(url, { newTab: true, background: event.ctrlKey || event.metaKey });
-                this.closeCardMenus();
             } catch (error) { this.recordError("站点按钮处理失败", error); }
         }));
         documentRoot.on("click.jhsCoverButton", ".titleSvg, .carNumSvg, .downSvg", ((/** @type {CardActionEvent} */ event) => {
             event.preventDefault(); event.stopPropagation();
             const button = $(event.currentTarget), card = this.cardForButton(button), { carNum, title } = list.findCarNumAndHref(card);
             const cover = card.find(this.isJavBus ? ".photo-frame img" : ".cover img");
+            this.closeCardMenus(!0);
             if (button.hasClass("titleSvg")) void this.clipboard.copyText("标题", title);
             else if (button.hasClass("carNumSvg")) void this.clipboard.copyText("番号", carNum);
             else if (button.hasClass("downSvg")) void this.downloadCover(cover.attr("src"), `${carNum} ${title}.jpg`);
-            this.closeCardMenus();
         }));
     }
     /** @param {JQueryHandle} e @param {JQueryHandle} t @param {string} n */

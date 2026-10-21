@@ -293,7 +293,7 @@ requireMatch(highlightMagnet, /button\?\.removeAttribute\("data-tip"\)/, "disabl
 requireMatch(fc2Workspace, /createFc2DetailContext/, "FC2 detail workspace must own a scoped lifecycle context");
 requireMatch(fc2Workspace, /\[ "summary", "影片概览" \], \[ "gallery", "预览与剧照" \], \[ "resources", "资源" \], \[ "reviews", "评论" \], \[ "related", "相关清单" \]/, "FC2 workspace must place reviews before related lists");
 requireMatch(commandbar, /<button type="button" id="jhs-fab" class="jhs-btn jhs-ui"/, "mobile FAB must be a native owned JHS button");
-requireMatch(commandbar, /role="menuitem" class="jhs-btn jhs-fab-menu-item"/, "mobile FAB items must use native menu buttons");
+requireMatch(commandbar, /role="menuitem" tabindex="-1" class="jhs-btn jhs-fab-menu-item"/, "mobile FAB items must use native menu buttons outside the regular Tab order");
 requireMatch(commandbar, /ArrowDown[\s\S]*ArrowUp[\s\S]*Home[\s\S]*End/, "mobile FAB menu must support keyboard navigation");
 const settingPlugin = await readFile(join(srcRoot, "plugins", "backup", "setting.js"), "utf8");
 requireMatch(settingPlugin, /previousFocus[\s\S]*isConnected[\s\S]*previousFocus\.focus/, "quick settings must restore its opener focus");

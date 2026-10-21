@@ -30,6 +30,8 @@ export class DetailPageActionsController {
         this.featureMagnetHubAdapter = null;
         this.magnetDialog = null;
         this.stateBinding = null;
+        /** @type {WeakMap<LifecycleScope, Map<string, LifecycleScope>>} */
+        this.subtitleOperations = new WeakMap();
     }
 
     getName() { return "DetailPageButtonPlugin"; }
@@ -248,15 +250,8 @@ export class DetailPageActionsController {
                                     if (scope.disposed) return;
                                     const preview = cell.getElement().querySelector(".subtitle-preview-btn");
                                     const download = cell.getElement().querySelector(".subtitle-download-btn");
-                                    if (preview) scope.listen(preview, "click", () => void this.previewSubtitle(item, `${carNum}.${item.extension}`, scope));
-                                    if (download) scope.listen(download, "click", async () => {
-                                        try {
-                                            const data = await this.subtitle.download("xunlei", item, { scope });
-                                            if (!scope.disposed) this.ui.download(data, `${carNum}.${item.extension}`);
-                                        } catch (error) {
-                                            if (!scope.disposed) this.subtitleError("下载", error);
-                                        }
-                                    });
+                                    if (preview) scope.listen(preview, "click", () => void this.runSubtitle(item, `${carNum}.${item.extension}`, scope, preview, true));
+                                    if (download) scope.listen(download, "click", () => void this.runSubtitle(item, `${carNum}.${item.extension}`, scope, download, false));
                                 });
                                 return '<button type="button" class="jhs-btn jhs-btn--secondary subtitle-preview-btn">预览</button> <button type="button" class="jhs-btn jhs-btn--secondary subtitle-download-btn">下载</button>';
                             } },
@@ -280,28 +275,58 @@ export class DetailPageActionsController {
 
     /** @param {SubtitleRecord} subtitle @param {string} filename @param {LifecycleScope} scope */
     async previewSubtitle(subtitle, filename, scope = this.scope) {
-        if (scope.disposed) return;
+        return this.runSubtitle(subtitle, filename, scope, null, true);
+    }
+
+    /** @param {SubtitleRecord} subtitle @param {string} filename @param {LifecycleScope} owner @param {HTMLElement | null} button @param {boolean} preview */
+    async runSubtitle(subtitle, filename, owner, button, preview) {
+        if (owner.disposed) return;
         if (!subtitle?.url) return void this.diagnostics.recordError({ source: "detail-page-actions", message: "字幕预览未提供文件 URL" });
         const extension = String(subtitle.extension || "").toLowerCase();
-        if (!["ass", "srt"].includes(extension)) return void this.notifications.error("仅支持 ASS 和 SRT 字幕");
+        if (preview && !["ass", "srt"].includes(extension)) return void this.notifications.error("仅支持 ASS 和 SRT 字幕");
+        let operations = this.subtitleOperations.get(owner);
+        if (!operations) this.subtitleOperations.set(owner, operations = new Map());
+        const key = JSON.stringify([preview, subtitle.url, extension]);
+        if (operations.has(key)) return;
+        const scope = new LifecycleScope("subtitle-action"), label = button?.textContent;
+        operations.set(key, scope);
+        const resetButton = () => {
+            button?.removeAttribute("aria-busy"); button?.removeAttribute("aria-disabled");
+            if (button) button.textContent = label ?? "";
+        };
+        const releaseParent = owner.addCleanup(() => scope.dispose());
+        scope.addCleanup(releaseParent);
+        /** @type {number | null} */ let index = null;
+        scope.addCleanup(() => {
+            resetButton();
+            if (operations.get(key) === scope) operations.delete(key);
+            if (index !== null) { const id = index; index = null; this.dialog.close(id); }
+        });
+        button?.setAttribute("aria-busy", "true"); button?.setAttribute("aria-disabled", "true");
+        if (button) button.textContent = preview ? "加载中…" : "下载中…";
         try {
             const data = await this.subtitle.download("xunlei", subtitle, { scope });
             if (scope.disposed) return;
+            // Keep the trigger focusable before the dialog captures its return target.
+            resetButton();
+            if (!preview) return void this.ui.download(data, filename);
             const title = `${extension.toUpperCase()} 字幕预览：${filename}`;
             const lines = data.split("\n"), width = String(lines.length).length;
             const escaped = lines.map((/** @type {string} */ line, /** @type {number} */ index) => `<span class="jhs-code-line-number">${String(index + 1).padStart(width, " ")}. </span>${escapeHtml(line)}`).join("\n");
-            let release = () => {}, open = true;
-            const index = this.dialog.open({
+            index = this.dialog.open({
                 type: 1, title, area: this.ui.getResponsiveArea(["80%", "80%"]), scrollbar: false,
                 ui: { body: "scroll" },
                 content: `<div class="jhs-code-viewer">${escaped}</div>`, btn: ["下载", "关闭"],
-                success: (/** @type {any} */ _element, /** @type {number} */ id) => this.ui.setupEscClose(id),
-                end: () => { open = false; release(); },
+                success: (/** @type {any} */ element, /** @type {number} */ id) => {
+                    index = id; this.ui.setupEscClose(id);
+                    const root = element?.nodeType === 1 ? element : element[0];
+                    if (root.parentNode) scope.observe(root.parentNode, () => { if (!root.isConnected) scope.dispose(); }, { childList: true });
+                },
+                end: () => { index = null; scope.dispose(); },
                 btn1: () => { if (!scope.disposed) this.ui.download(data, filename); return false; },
             });
-            release = scope.addCleanup(() => { if (open) this.dialog.close(index); });
         } catch (error) {
-            if (!scope.disposed) this.subtitleError("预览", error);
-        }
+            if (!scope.disposed) this.subtitleError(preview ? "预览" : "下载", error);
+        } finally { if (index === null) scope.dispose(); }
     }
 }

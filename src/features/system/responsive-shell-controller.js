@@ -5,58 +5,9 @@ import { k, m, v, y } from "../../core/constants.js";
 import { normalizeStateFlags } from "../../core/state-model.js";
 import { getIcon } from "../../core/icons.js";
 
-export const RESPONSIVE_SHELL_CAPABILITIES = Object.freeze([
-    "ListPagePlugin", "ListPageButtonPlugin", "NewVideoPlugin", "BlacklistPlugin",
-    "SettingPlugin", "DetailPageButtonPlugin", "HistoryPlugin",
-]);
+const SORT_LABELS = { default: "默认", rateCount: "评价人数", date: "时间" };
 
-export class ResponsiveShellController {
-    /** @param {{jquery: (value: any) => any, window: Window & typeof globalThis, document: Document, profile: any, settings: any, host: any, state: any, logger: any, notifications: any, capabilities?: Record<string, any>, openNewVideo?: () => Promise<unknown>}} dependencies */
-    constructor(dependencies) {
-        if (typeof dependencies.jquery !== "function") throw new TypeError("Responsive shell requires the injected jQuery UI boundary");
-        this.jquery = dependencies.jquery;
-        this.window = dependencies.window;
-        this.document = dependencies.document;
-        this.services = Object.freeze({
-            profile: dependencies.profile,
-            settings: dependencies.settings,
-            host: dependencies.host,
-            state: dependencies.state,
-            logger: dependencies.logger,
-            notifications: dependencies.notifications,
-        });
-        const capabilities = { ...(dependencies.capabilities ?? {}) };
-        for (const name of RESPONSIVE_SHELL_CAPABILITIES) {
-            if (!Object.prototype.hasOwnProperty.call(capabilities, name)) capabilities[name] = null;
-        }
-        this.capabilities = Object.freeze(capabilities);
-        this.openNewVideo = dependencies.openNewVideo ?? null;
-        this._fabGeneration = 0;
-        this._animationTimers = new Set();
-        this._commandBarPopovers = new Set();
-        this._commandBarOrigins = new Map();
-        /** @type {any} */ this.featureMagnetFilterAdapter = null;
-        /** @type {any} */ this.featureMagnetHubAdapter = null;
-        /** @type {Array<{ element: Element, parent: Node | null, next: Node | null, attributes: Record<string, string | null> }>} */
-        this._commandBarSources = [];
-        this._started = false;
-        this._disposed = false;
-    }
-    /** @param {string} name */
-    getCapability(name) {
-        if (!Object.prototype.hasOwnProperty.call(this.capabilities, name)) throw new Error(`Responsive shell 未声明兼容能力 ${name}`);
-        return this.capabilities[name];
-    }
-    /** @param {any} adapter */
-    attachFeatureMagnetFilterAdapter(adapter) { this.featureMagnetFilterAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureMagnetFilterAdapter(adapter) { if (this.featureMagnetFilterAdapter === adapter) this.featureMagnetFilterAdapter = null; }
-    /** @param {any} adapter */
-    attachFeatureMagnetHubAdapter(adapter) { this.featureMagnetHubAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureMagnetHubAdapter(adapter) { if (this.featureMagnetHubAdapter === adapter) this.featureMagnetHubAdapter = null; }
-    async initCss() {
-        return `
+const RESPONSIVE_SHELL_STYLES = `
             /* FAB 浮动操作按钮 */
             #jhs-fab {
                 position: fixed;
@@ -247,7 +198,58 @@ export class ResponsiveShellController {
                 .jhs-page-commandbar { display: none; }
             }
         `;
+
+export const RESPONSIVE_SHELL_CAPABILITIES = Object.freeze([
+    "ListPagePlugin", "ListPageButtonPlugin", "NewVideoPlugin", "BlacklistPlugin",
+    "SettingPlugin", "DetailPageButtonPlugin", "HistoryPlugin",
+]);
+
+export class ResponsiveShellController {
+    /** @param {{jquery: (value: any) => any, window: Window & typeof globalThis, document: Document, profile: any, settings: any, host: any, state: any, logger: any, notifications: any, capabilities?: Record<string, any>, openNewVideo?: () => Promise<unknown>}} dependencies */
+    constructor(dependencies) {
+        if (typeof dependencies.jquery !== "function") throw new TypeError("Responsive shell requires the injected jQuery UI boundary");
+        this.jquery = dependencies.jquery;
+        this.window = dependencies.window;
+        this.document = dependencies.document;
+        this.services = Object.freeze({
+            profile: dependencies.profile,
+            settings: dependencies.settings,
+            host: dependencies.host,
+            state: dependencies.state,
+            logger: dependencies.logger,
+            notifications: dependencies.notifications,
+        });
+        const capabilities = { ...(dependencies.capabilities ?? {}) };
+        for (const name of RESPONSIVE_SHELL_CAPABILITIES) {
+            if (!Object.prototype.hasOwnProperty.call(capabilities, name)) capabilities[name] = null;
+        }
+        this.capabilities = Object.freeze(capabilities);
+        this.openNewVideo = dependencies.openNewVideo ?? null;
+        this._fabGeneration = 0;
+        this._animationTimers = new Set();
+        this._commandBarPopovers = new Set();
+        this._commandBarOrigins = new Map();
+        /** @type {any} */ this.featureMagnetFilterAdapter = null;
+        /** @type {any} */ this.featureMagnetHubAdapter = null;
+        /** @type {Array<{ element: Element, parent: Node | null, next: Node | null, attributes: Record<string, string | null> }>} */
+        this._commandBarSources = [];
+        this._started = false;
+        this._disposed = false;
     }
+    /** @param {string} name */
+    getCapability(name) {
+        if (!Object.prototype.hasOwnProperty.call(this.capabilities, name)) throw new Error(`Responsive shell 未声明兼容能力 ${name}`);
+        return this.capabilities[name];
+    }
+    /** @param {any} adapter */
+    attachFeatureMagnetFilterAdapter(adapter) { this.featureMagnetFilterAdapter = adapter; }
+    /** @param {any} adapter */
+    detachFeatureMagnetFilterAdapter(adapter) { if (this.featureMagnetFilterAdapter === adapter) this.featureMagnetFilterAdapter = null; }
+    /** @param {any} adapter */
+    attachFeatureMagnetHubAdapter(adapter) { this.featureMagnetHubAdapter = adapter; }
+    /** @param {any} adapter */
+    detachFeatureMagnetHubAdapter(adapter) { if (this.featureMagnetHubAdapter === adapter) this.featureMagnetHubAdapter = null; }
+    async initCss() { return RESPONSIVE_SHELL_STYLES; }
     /** @param {{listen: (target: any, event: string, listener: (...args: any[]) => void) => void}} scope */
     start(scope) {
         if (this._started || this._disposed) return;
@@ -469,20 +471,24 @@ export class ResponsiveShellController {
         return null;
     }
     createMenu() {
-        const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
+        const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" tabindex="-1" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
         const listPage = this.getCapability("ListPagePlugin"), quickFilters = listPage?.getQuickFilterCatalog?.();
         const hasListPageButton = !!this.getCapability("ListPageButtonPlugin"), hasListPage = !!listPage && !!quickFilters, hasNewVideo = !!this.getCapability("NewVideoPlugin"), hasBlacklist = !!this.getCapability("BlacklistPlugin"), hasSetting = !!this.getCapability("SettingPlugin"), hasDetailPageButton = !!this.getCapability("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.featureMagnetFilterAdapter, hasMagnetHub = !!this.featureMagnetHubAdapter, hasHistory = !!this.getCapability("HistoryPlugin");
         let items;
         if (this.window.isListPage) {
-            const requestedSortMethod = this.getCapability("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.services.settings.snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = quickFilters?.normalize(listPage.activeQuickFilter) ?? "waitCheck",
+            const sortMethod = this.currentSort(), sortLabel = SORT_LABELS[sortMethod], activeFilter = quickFilters?.normalize(listPage.activeQuickFilter) ?? "waitCheck",
                 filterOptions = quickFilters ? [ ...quickFilters.primary, ...quickFilters.secondary ].map(((filter, index) => `${index === quickFilters.primary.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${quickFilters.labels[filter]}</button>`)).join("") : "",
-                sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
+                sortOptions = Object.entries(SORT_LABELS).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
             items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序：${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${quickFilters.labels[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
         } else if (this.window.isDetailPage) {
             const statusDefs = [ { action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" } ];
             items = group(hasDetailPageButton ? statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("") : "") + divider + group((hasHighlightMagnet ? item("magnetFilter", "磁力过滤") : "") + (hasMagnetHub ? item("magnet", "磁力搜索") : "") + (hasDetailPageButton ? item("subtitle", "字幕") : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
         } else items = group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
-        return this.jquery(`<div id="jhs-fab-menu" class="jhs-fab-menu jhs-ui" role="menu" aria-hidden="true">${items}</div>`);
+        return this.jquery(`<div id="jhs-fab-menu" class="jhs-fab-menu jhs-ui" role="menu" aria-hidden="true" inert>${items}</div>`);
+    }
+    currentSort() {
+        const value = this.getCapability("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.services.settings.snapshot().sortMethod;
+        return /** @type {keyof typeof SORT_LABELS} */ (Object.hasOwn(SORT_LABELS, value) ? value : "default");
     }
     /** 刷新详情页菜单的状态指示 */
     async refreshDetailStatus() {
@@ -511,14 +517,20 @@ export class ResponsiveShellController {
         }, closeSortMenu = (returnFocus = !1) => {
             menu.removeClass("jhs-fab-sort-open"), sortTrigger.attr("aria-expanded", "false"), returnFocus && sortTrigger.trigger("focus");
         };
+        let sortRevision = 0;
+        const syncSort = () => {
+            const value = this.currentSort();
+            menu.find('[data-action="sort"]').text(`排序：${SORT_LABELS[value]}`);
+            sortMenu.find(".jhs-mobile-sort-option").each((/** @type {number} */ _index, /** @type {HTMLElement} */ item) => item.setAttribute("aria-checked", String(item.dataset.jhsSort === value)));
+        };
         const closeMenu = (returnFocus = !1) => {
             this._fabGeneration++;
+            if (returnFocus || menu[0].contains(this.document.activeElement)) fab.trigger("focus");
             closeFilterMenu(), closeSortMenu();
             fab.removeClass("jhs-fab-open").attr("aria-expanded", "false");
-            menu.removeClass("jhs-fab-menu-open").attr("aria-hidden", "true");
+            menu.removeClass("jhs-fab-menu-open").attr({ "aria-hidden": "true", inert: "" });
             backdrop.removeClass("jhs-fab-backdrop-visible");
             menu.find(".jhs-fab-menu-item").removeClass("jhs-fab-item-visible");
-            returnFocus && fab.trigger("focus");
         };
         const toggleMenu = () => {
             const isOpen = fab.hasClass("jhs-fab-open");
@@ -526,13 +538,11 @@ export class ResponsiveShellController {
                 closeMenu();
             } else {
                 fab.addClass("jhs-fab-open").attr("aria-expanded", "true");
-                menu.addClass("jhs-fab-menu-open").attr("aria-hidden", "false");
+                menu.removeAttr("inert").addClass("jhs-fab-menu-open").attr("aria-hidden", "false");
                 backdrop.addClass("jhs-fab-backdrop-visible");
                 // 刷新排序标签
                 if (this.window.isListPage) {
-                    const requestedSortMethod = this.getCapability("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.services.settings.snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
-                    const sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod];
-                    menu.find('[data-action="sort"]').text(`排序：${sortLabel}`);
+                    syncSort();
                     this.getCapability("ListPagePlugin")?.syncQuickFilterUi?.();
                 }
                 // 刷新详情页状态
@@ -554,48 +564,36 @@ export class ResponsiveShellController {
         };
         // FAB 点击切换
         fab.on("click", toggleMenu);
+        menu.on("keydown", (/** @type {any} */ event) => { if (event.key === "Tab") closeMenu(!0); });
         // 遮罩点击关闭
         backdrop.on("click", (() => closeMenu(!0)));
-        menu.on("keydown", ".jhs-fab-menu-item", ((/** @type {any} */ event) => {
-            const items = menu.find(".jhs-fab-menu-item"), index = items.index(event.currentTarget);
-            if ("Escape" === event.key) return event.preventDefault(), closeMenu(!0);
+        const bindKeys = (/** @type {any} */ root, /** @type {string} */ selector, /** @type {(focus: boolean) => void} */ close) => root.on("keydown", selector, (/** @type {any} */ event) => {
+            const items = root.find(selector), index = items.index(event.currentTarget);
+            if ("Escape" === event.key) return event.preventDefault(), close(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
-        }));
-        filterMenu.on("keydown", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
-            const items = filterMenu.find(".jhs-mobile-filter-option"), index = items.index(event.currentTarget);
-            if ("Escape" === event.key) return event.preventDefault(), closeFilterMenu(!0);
-            if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
-            event.preventDefault();
-            const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-            items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
-        })).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
+        });
+        bindKeys(menu, ".jhs-fab-menu-item", closeMenu);
+        bindKeys(filterMenu, ".jhs-mobile-filter-option", closeFilterMenu).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             event.stopPropagation(), this.getCapability("ListPagePlugin")?.setQuickFilter?.(this.jquery(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
-        sortMenu.on("keydown", ".jhs-mobile-sort-option", ((/** @type {any} */ event) => {
-            const items = sortMenu.find(".jhs-mobile-sort-option"), index = items.index(event.currentTarget);
-            if ("Escape" === event.key) return event.preventDefault(), closeSortMenu(!0);
-            if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
-            event.preventDefault();
-            const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-            items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
-        })).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
+        bindKeys(sortMenu, ".jhs-mobile-sort-option", closeSortMenu).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
             event.stopPropagation();
-            const value = this.jquery(event.currentTarget).data("jhs-sort");
-            const previousItem = sortMenu.find('.jhs-mobile-sort-option[aria-checked="true"]').first();
-            sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), this.jquery(event.currentTarget).attr("aria-checked", "true");
+            const value = this.jquery(event.currentTarget).data("jhs-sort"), revision = ++sortRevision;
+            const active = () => !this._disposed && menu[0].isConnected && revision === sortRevision;
+            closeMenu(!0);
             try {
                 // 自有榜单页走页内覆盖（不写全局设置），普通列表页写全局 sortMethod
                 await this.getCapability("ListPageButtonPlugin")?.selectSortMethod?.(value);
             } catch (error) {
-                sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true");
+                if (!active()) return;
+                syncSort();
                 this.services.logger.error("排序设置保存失败，已恢复", error), this.services.notifications.error("排序设置保存失败，已恢复原设置");
                 return;
             }
-            const sortLabels = /** @type {Record<string, string>} */ ({ default: "默认", rateCount: "评价人数", date: "时间" });
-            menu.find('[data-action="sort"]').text(`排序：${sortLabels[String(value)] ?? value}`), closeMenu(!0);
+            if (active()) syncSort();
         }));
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (/** @type {any} */ e) => {

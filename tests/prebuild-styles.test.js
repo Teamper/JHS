@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 import { compactCss, prebuildStyles } from "../scripts/prebuild-styles.mjs";
+
+function staticStyles(source) {
+    const file = ts.createSourceFile("styles.js", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const styles = new Map(), spans = [];
+    for (const statement of file.statements) {
+        if (!ts.isVariableStatement(statement)) continue;
+        for (const declaration of statement.declarationList.declarations) {
+            const value = declaration.initializer;
+            if (value && ts.isIdentifier(declaration.name) && declaration.name.text.endsWith("_STYLES") &&
+                (ts.isNoSubstitutionTemplateLiteral(value) || ts.isStringLiteral(value))) {
+                styles.set(declaration.name.text, value.text);
+                spans.push([value.getStart(file), value.end]);
+            }
+        }
+    }
+    for (const [start, end] of spans.reverse()) source = source.slice(0, start) + "0" + source.slice(end);
+    return { styles, logic: source };
+}
 
 describe("build-time core styles", () => {
     it("preserves CSS strings, descendant selectors, calc spacing and attributed envelopes", async () => {
@@ -39,5 +58,18 @@ describe("build-time core styles", () => {
         const output = await prebuildStyles('src/features/discovery/new-video-styles.js', source);
         expect(output).toContain('STATIC_STYLES = ".parent .child{content:\\"a  b\\"}"');
         expect(output).toContain('DYNAMIC_STYLES = `.item {width:${width}px}`');
+    });
+    it.each([
+        "src/features/system/responsive-shell-controller.js",
+        "src/features/list/cover-button-controller.js",
+        "src/features/detail/javbus-preview-controller.js",
+    ])("prebuilds interaction styles without changing controller logic: %s", async path => {
+        const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
+        const compiled = await prebuildStyles(path, source), original = staticStyles(source), transformed = staticStyles(compiled);
+        expect(original.styles.size).toBeGreaterThan(0);
+        expect(compiled.length).toBeLessThan(source.length);
+        expect(transformed.logic).toBe(original.logic);
+        expect([...transformed.styles.keys()]).toEqual([...original.styles.keys()]);
+        for (const [name, css] of original.styles) expect(transformed.styles.get(name)).toBe(await compactCss(css));
     });
 });

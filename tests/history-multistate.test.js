@@ -34,6 +34,64 @@ async function openAndSubmit(state, next) {
 }
 
 describe("History multi-state editor", () => {
+    it("clears explicit page selection before Tabulator replaces rows", async () => {
+        const { plugin, $, dom } = loadHistory(), handlers = new Map();
+        plugin.tableObj = null;
+        plugin.historyRoot = $('<div><div id="table-container"></div></div>').appendTo("body");
+        dom.window.Tabulator = class {
+            on(name, handler) { handlers.set(name, handler); }
+            deselectRow() {}
+        };
+        await plugin.loadTableData();
+        plugin.historySelectionModel.set({ carNum: "ABC-001" }, true);
+        handlers.get("dataProcessing")();
+        handlers.get("dataProcessed")();
+        expect(plugin.getHistorySelectionSummary().count).toBe(0);
+        expect(plugin.historySelectionSyncing).toBe(false);
+    });
+
+    it.each(["same", "clamped", "newer", "failed", "closed", "clamp-new-sort", "clamp-new-size", "clamp-followed-by-request"])("restores only the refreshed history holder (%s)", async scenario => {
+        const { plugin, $, dom } = loadHistory(), handlers = new Map();
+        plugin.historyRoot = $('<div><select id="dataType"><option value="all">所有</option></select><div id="table-container"><div class="tabulator-tableholder"></div></div></div>').appendTo("body");
+        const holder = plugin.historyRoot.find(".tabulator-tableholder")[0];
+        Object.defineProperties(holder, { scrollHeight: { value: 1000 }, clientHeight: { value: 200 } });
+        holder.scrollTop = 450; holder.scrollLeft = 10;
+        let options, finish;
+        dom.window.Tabulator = class {
+            constructor(_target, config) { options = config; }
+            on(name, handler) { handlers.set(name, handler); }
+            getPage = () => 3;
+            getRows = () => [];
+            deselectRow() {}
+            setPage = vi.fn(page => options.ajaxRequestFunc(null, null, { page, size: 50, sort: [] }));
+        };
+        await plugin.loadTableData();
+        expect(options.paginationOutOfRange).toBe("last");
+        plugin.historyRepository.list.mockImplementationOnce(() => new Promise(resolve => finish = resolve));
+        const pending = plugin.reloadTable(true, { preservePage: true });
+        expect(plugin.tableObj.setPage).toHaveBeenCalledWith(3);
+        const rows = Array.from({ length: scenario.startsWith("clamp-") ? 49 : scenario === "clamped" ? 100 : 120 }, (_, i) => ({ carNum: `ABC-${i}`, stateFlags: {} }));
+        if (scenario === "newer") { plugin.historyRepository.list.mockResolvedValue(rows); await plugin.getDataList(1, 50, []); }
+        if (scenario === "closed") plugin.historyRoot = null;
+        finish(rows); await pending;
+        if (scenario === "clamped") { plugin.historyRepository.list.mockResolvedValue(rows); await plugin.getDataList(2, 50, []); }
+        if (scenario.startsWith("clamp-")) {
+            let finishClamp, clamping;
+            if (scenario === "clamp-followed-by-request") {
+                plugin.historyRepository.list.mockImplementationOnce(() => new Promise(resolve => finishClamp = resolve));
+                clamping = plugin.getDataList(1, 50, []);
+            }
+            plugin.historyRepository.list.mockResolvedValue(rows);
+            await plugin.getDataList(1, scenario === "clamp-new-size" ? 100 : 50, scenario === "clamp-new-sort" ? [{ field: "carNum", dir: "asc" }] : []);
+            if (clamping) { finishClamp(rows); await clamping; }
+        }
+        if (scenario === "failed") handlers.get("dataLoadError")();
+        holder.scrollTop = 0; holder.scrollLeft = 0;
+        handlers.get("renderComplete")();
+        expect(holder.scrollTop).toBe(["same", "clamped"].includes(scenario) ? 450 : 0);
+        expect(holder.scrollLeft).toBe(["same", "clamped"].includes(scenario) ? 10 : 0);
+    });
+
     it("ignores events and queries from a table destroyed by a view switch", async () => {
         const { plugin, $, dom } = loadHistory(), handlers = new Map();
         plugin.tableObj = null;

@@ -77,7 +77,11 @@ export class Utils {
     }
     _handleGlobalEscKey(e) {
         if ("Escape" !== e.key && 27 !== e.keyCode) return;
-        if (e.defaultPrevented || e.isDefaultPrevented?.()) return;
+        if (e.defaultPrevented || e.originalEvent?.defaultPrevented || e.isDefaultPrevented?.()) return;
+        const sourceDocument = e.target?.ownerDocument || (e.target?.nodeType === 9 ? e.target : document);
+        if (sourceDocument.fullscreenElement || document.fullscreenElement) return;
+        // The child runtime owns its overlays, regardless of document listener order.
+        if (sourceDocument !== document && $(sourceDocument).find(".layui-layer:visible, .jhs-popover:visible, .jhs-quick-setting-sheet:visible").length) return;
         if (0 === this.layerIndexStack.length) return;
         /* 先剔除已被 X 按钮/shadeClick 等途径关闭的陈旧索引，避免 Esc 被空操作吞掉 */
         while (this.layerIndexStack.length) {
@@ -101,7 +105,7 @@ export class Utils {
                 clog.warn("无法检查跨域 iframe 内的预览容器");
             }
         }
-        a || (this.layerIndexStack.pop(), layer.close(t));
+        if (!a) { e.preventDefault(); e.stopImmediatePropagation(); this.layerIndexStack.pop(); layer.close(t); }
     }
     setupEscClose(e) {
         this._boundHandler || (this._boundHandler = this._handleGlobalEscKey.bind(this),

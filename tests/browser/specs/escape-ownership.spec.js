@@ -1,6 +1,7 @@
 import {test,expect} from "@playwright/test";
 import {fileURLToPath} from "node:url";
 import {fulfillHostFixtures,injectUserscriptRuntime} from "../harness/runtime.js";
+import {injectRealLayer} from "../harness/real-layer.js";
 test.beforeEach(({},info)=>test.skip(info.project.name!=="desktop-wide","one owner for real Layer keyboard regression"));
 test("settings dropdown consumes first Escape and restores focus before parent closes",async({page,context})=>{
     await fulfillHostFixtures(context);await page.goto("https://javdb.com/");
@@ -35,4 +36,28 @@ test("Escape in a navigated detail iframe closes its owning layer",async({page,c
     await detailFrame.waitForLoadState("domcontentloaded");
     await detailFrame.locator("body").press("Escape");
     await expect(page.locator(".layui-layer")).toHaveCount(0);
+});
+
+test("real Layer runtimes close only the iframe's top subtitle layer per Escape", async ({ page, context }) => {
+    await fulfillHostFixtures(context); await page.goto("https://javdb.com/");
+    await injectUserscriptRuntime(page, { beforeUserscriptInjection: injectRealLayer });
+    const navigation = page.waitForEvent("framenavigated", { predicate: frame => frame.url().includes("jhs-esc-nested=1") });
+    await page.evaluate(() => window.utils.openPage("https://javdb.com/v/test-id?jhs-esc-nested=1", "ABC-123"));
+    const frame = await navigation; await frame.waitForLoadState("domcontentloaded");
+    await injectUserscriptRuntime(frame, { beforeUserscriptInjection: () => injectRealLayer(frame), settingOverrides: { enableLoadPreviewVideo: "no" } });
+    await frame.evaluate(async () => {
+        const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+        owner.subtitle.search = async () => [{ name: "fixture", extension: "srt", url: "https://subtitle.example/test.srt" }];
+        owner.subtitle.download = async () => "subtitle";
+        await owner.searchXunLeiSubtitle("ABC-123");
+    });
+    const trigger = frame.locator(".subtitle-preview-btn").first(); await trigger.click();
+    await expect(frame.locator(".jhs-code-viewer")).toBeVisible();
+    await frame.locator(".jhs-code-viewer").press("Escape");
+    await expect(frame.locator(".jhs-code-viewer")).toHaveCount(0);
+    await expect(frame.locator("#xunlei-table-container")).toBeVisible();
+    await expect(page.locator(".layui-layer")).toHaveCount(1); await expect(trigger).toBeFocused();
+    await trigger.press("Escape"); await expect(frame.locator(".layui-layer")).toHaveCount(0);
+    await expect(page.locator(".layui-layer")).toHaveCount(1);
+    await frame.locator("body").press("Escape"); await expect(page.locator(".layui-layer")).toHaveCount(0);
 });

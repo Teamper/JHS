@@ -2,6 +2,7 @@
 
 import { L } from "../../core/constants.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
+import { waitForPreviewReady } from "../../core/media-preview-session.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { Z, canUseDmmPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 import { getIcon } from "../../core/icons.js";
@@ -32,10 +33,13 @@ export class JavBusPreviewController {
         this.previewIntentConsumed = false;
         this.mounted = false;
         this.generation = 0;
-        /** @type {{scope: LifecycleScope, index: number | null} | null} */ this.session = null;
+        /** @type {{scope: LifecycleScope, index: number | null, qualityScope?: LifecycleScope} | null} */ this.session = null;
         /** @type {any} */ this.player = null;
         /** @type {LifecycleScope | null} */ this.playerScope = null;
         this.legacyPluginsReady = false;
+        this.confirmedSource = "";
+        this.qualityFailed = false;
+        /** @type {number | null} */ this.qualityTime = null;
     }
 
     start() {
@@ -73,7 +77,8 @@ export class JavBusPreviewController {
         if (this.session !== session) return;
         this.session = null;
         this.generation += 1;
-        this.player?.find("video")[0]?.pause();
+        const media = this.player?.find("video")[0];
+        if (media) { media.pause(); this.updateQuality(media); }
         // Keep the paused player (time, quality and mute) without retaining a dialog lock.
         this.player?.removeClass("is-open").detach();
         if (session.index !== null) this.dialog.close(session.index);
@@ -86,6 +91,7 @@ export class JavBusPreviewController {
         this.playerScope = null;
         this.player?.remove();
         this.player = null;
+        this.qualityTime = null;
         this.ui.jquery(this.document).find(".preview-video-container").off(".jhsBusPreview").remove();
     }
 
@@ -124,11 +130,7 @@ export class JavBusPreviewController {
                 if (!this.isActive(session)) return;
                 video = modal.find("video")[0];
             }
-            // A quality change may have replaced the source before its old play promise settled.
-            modal.find(".jhs-video-quality-btn").each((/** @type {number} */ _index, /** @type {Element} */ element) => {
-                const button = this.ui.jquery(element), selected = button.attr("data-video-src") === video.querySelector("source")?.getAttribute("src");
-                button.toggleClass("active", selected).attr("aria-pressed", String(selected));
-            });
+            this.updateQuality(video);
             session.index = this.dialog.open({
                 type: 1, title: "视频预览", content: '<div data-jhs-bus-preview-host></div>', shadeClose: true, scrollbar: false, anim: -1,
                 area: this.ui.getResponsiveArea(["80%", "80%"]), ui: { size: "lg", body: "media", initialFocus: "#preview-video" },
@@ -141,7 +143,13 @@ export class JavBusPreviewController {
                 },
                 end: () => { session.index = null; this.closeVideoModal(session); },
             });
-            await this.playVideo(video, session);
+            if (this.qualityTime !== null) {
+                const revision = session.scope.generation, ready = await waitForPreviewReady(video, session.scope, 5000);
+                if (!this.isActive(session) || !session.scope.canCommit(revision)) return;
+                if (!ready) throw new Error("视频源暂不可用，请重试");
+                this.seekVideo(video, this.qualityTime); this.qualityTime = null;
+            }
+            if (await this.playVideo(video, session)) this.confirmedSource = video.querySelector("source").src;
         } catch (error) {
             if (this.isActive(session)) this.ui.notifications?.error?.(error instanceof Error ? error.message : "视频预览失败，请重试");
             this.closeVideoModal(session);
@@ -153,14 +161,69 @@ export class JavBusPreviewController {
     /** @param {NonNullable<JavBusPreviewController["session"]>} session */
     isActive(session) { return this.session === session && !session.scope.disposed && !this.scope.disposed; }
 
-    /** @param {HTMLVideoElement} media @param {NonNullable<JavBusPreviewController["session"]>} session */
-    async playVideo(media, session) {
+    /** @param {HTMLVideoElement} media @param {NonNullable<JavBusPreviewController["session"]>} session @param {number | null} generation */
+    async playVideo(media, session, generation = null, notify = true) {
         if (!this.isActive(session)) return false;
-        const generation = session.scope.nextGeneration();
+        generation ??= session.scope.nextGeneration();
         const active = () => this.isActive(session) && session.scope.canCommit(generation);
-        const played = await safePlay(media, { context: "JavBus 预览视频", notify: true, notifyUser: message => { if (active()) this.ui.notifications?.error?.(message); } });
+        let blocked = false;
+        const played = await safePlay(media, { context: "JavBus 预览视频", notify, notifyUser: message => { if (active()) this.ui.notifications?.error?.(message); }, warn: (_message, error) => {
+            blocked = error instanceof Error && error.name === "NotAllowedError";
+            if (active() && notify) this.diagnostics.recordError({ source: "javbus-preview", message: _message, error });
+        } });
         if (!this.session || this.player?.find("video")[0] !== media) media.pause();
-        return played && active();
+        return (played || blocked) && active();
+    }
+
+    /** @param {HTMLVideoElement} media @param {boolean} busy */
+    updateQuality(media, busy = false) {
+        this.player.find(".jhs-video-quality-btn").each((/** @type {number} */ _index, /** @type {Element} */ element) => {
+            const button = this.ui.jquery(element), selected = button.attr("data-video-src") === media.querySelector("source")?.getAttribute("src");
+            button.toggleClass("active", selected).attr({ "aria-pressed": String(selected), "aria-busy": String(busy && selected) });
+            button.text(button.data("label") + (busy && selected ? "…" : ""));
+        });
+    }
+
+    /** @param {HTMLVideoElement} media @param {number} time */
+    seekVideo(media, time) {
+        try { media.currentTime = time; } catch { /* Some streams do not support seeking. */ }
+    }
+
+    /** @param {HTMLVideoElement} media @param {string} url @param {NonNullable<JavBusPreviewController["session"]>} session */
+    async changeQuality(media, url, session) {
+        session.qualityScope?.dispose();
+        const scope = session.qualityScope = new LifecycleScope("javbus-quality"), generation = session.scope.nextGeneration();
+        scope.addCleanup(session.scope.addCleanup(() => scope.dispose()));
+        const active = () => this.isActive(session) && session.scope.canCommit(generation);
+        const source = /** @type {HTMLSourceElement} */ (media.querySelector("source")), previous = this.confirmedSource || source.src, time = this.qualityTime ?? media.currentTime;
+        this.qualityTime = time;
+        const attempt = async (/** @type {string} */ target) => {
+            source.src = target; media.load(); this.updateQuality(media, true);
+            const playback = async () => {
+                if (!await waitForPreviewReady(media, scope, 5000) || !active()) return false;
+                this.seekVideo(media, time);
+                return this.playVideo(media, session, generation, false);
+            };
+            return Promise.race([playback(), new Promise(resolve => {
+                const release = scope.addCleanup(() => { clearTimeout(timer); resolve(false); });
+                const timer = setTimeout(release, 5000);
+            })]);
+        };
+        this.qualityFailed = false;
+        try {
+            const accepted = await attempt(url);
+            if (!active()) return;
+            if (accepted) this.confirmedSource = source.src;
+            else {
+                const restored = await attempt(previous);
+                if (!active()) return;
+                this.qualityFailed = !restored;
+                this.ui.notifications?.error?.("画质切换失败，请重试");
+            }
+        } finally {
+            if (active()) { this.qualityTime = null; this.updateQuality(media); }
+            scope.dispose();
+        }
     }
 
     /** @param {Record<string, string>} sources @param {any} target */
@@ -171,6 +234,7 @@ export class JavBusPreviewController {
         const video = $('<video id="preview-video" class="jhs-video-player" controls playsinline tabindex="0" aria-label="影片预览"></video>');
         const source = this.document.createElement("source");
         source.src = sources[quality];
+        this.confirmedSource = source.src;
         video.append(source);
         wrapper.append(video);
         const toolbar = $('<div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质"></div>');
@@ -188,21 +252,14 @@ export class JavBusPreviewController {
             const sourceUrl = sources[item.quality];
             if (!sourceUrl) continue;
             const active = quality === item.quality, button = $('<button type="button" class="jhs-btn jhs-video-quality-btn"></button>');
-            button.attr({ "data-quality": item.quality, "data-video-src": sourceUrl, "aria-pressed": String(active) }).text(item.text).toggleClass("active", active);
+            button.attr({ "data-quality": item.quality, "data-video-src": sourceUrl, "aria-pressed": String(active) }).data("label", item.text).text(item.text).toggleClass("active", active);
             toolbar.append(button);
         }
         scope.listen(toolbar[0], "click", async (event) => {
             const selected = $(/** @type {Element} */ (event.target)).closest(".jhs-video-quality-btn"), session = this.session;
-            if (!selected.length || selected.hasClass("active") || !session || !this.isActive(session)) return;
+            if (!selected.length || !session || !this.isActive(session) || selected.hasClass("active") && !this.qualityFailed) return;
             const nextSource = selected.attr("data-video-src");
-            const currentTime = media.currentTime;
-            source.src = nextSource;
-            media.load();
-            try { media.currentTime = currentTime; } catch { /* Preserve the newly selected source when metadata is not ready. */ }
-            if (await this.playVideo(media, session)) {
-                toolbar.find(".jhs-video-quality-btn").removeClass("active").attr("aria-pressed", "false");
-                selected.addClass("active").attr("aria-pressed", "true");
-            }
+            await this.changeQuality(media, nextSource, session);
         });
     }
 

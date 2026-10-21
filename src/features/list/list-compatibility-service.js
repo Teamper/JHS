@@ -172,7 +172,7 @@ export class ListPageCompatibilityService {
         return Object.freeze({
             getSelector: () => this.getSelector(),
             findCarNumAndHref: (/** @type {any} */ item) => this.findCarNumAndHref(item),
-            parseActressName: (/** @type {string} */ url) => this.parseActressName(url),
+            parseActressName: (/** @type {string} */ url, /** @type {import("../../core/lifecycle-scope.js").LifecycleScope | undefined} */ scope = undefined) => this.parseActressName(url, scope),
         });
     }
     /** @param {any} adapter */
@@ -743,12 +743,13 @@ export class ListPageCompatibilityService {
             void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch((error => this.logger.error("打开影片详情失败", error)));
         }));
     }
-    /** @param {string} e */
-    async parseActressName(e) {
+    /** @param {string} e @param {import("../../core/lifecycle-scope.js").LifecycleScope} [scope] */
+    async parseActressName(e, scope) {
         let t = null;
         if (await this.getRuntimeService("legacyStorage").getSetting("enableSaveActressCarInfo", C) === _) {
             this.logger.debug("鉴定补录演员信息-已启用, 开始解析详情页"), this.logger.debug("开始解析演员详情页", e);
-            const scope = await this.getRuntimeService("scope")();
+            scope ??= await this.getRuntimeService("scope")();
+            scope?.assertActive();
             const n = await requestHostPage(this.getRuntimeService("http"), e, scope), a = utils.htmlTo$dom(n);
             r ? t = a.find(".female").prev().map(((/** @type {number} */ e, /** @type {Element} */ t) => $(t).text())).get().join(" ") : l && (t = a.find('span[onmouseover*="star_"] a').map(((/** @type {number} */ e, /** @type {Element} */ t) => $(t).text())).get().join(" ")),
             this.logger.debug("解析到名称:", t);

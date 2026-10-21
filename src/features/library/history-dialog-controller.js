@@ -119,6 +119,7 @@ export class HistoryDialogController {
         /** @type {HistoryRecord[]} */ this.historySorters = [];
         this.historyFilteredCount = 0;
         this.historySelectionSyncing = !1;
+        /** @type {any} */ this.historyScrollRestore = null;
         this.allCount = 0;
         this.filterCount = 0;
         this.favoriteCount = 0;
@@ -145,12 +146,20 @@ export class HistoryDialogController {
     get historyRepository() {
         return this._historyRepository;
     }
-    refresh() { return this.tableObj?.setData(); }
+    refresh() { return this.reloadTable(!1, { preservePage: !0 }); }
+    captureHistoryRefresh() {
+        const root = this.historyRoot, generation = this.historyViewGeneration, table = this.tableObj;
+        return () => table === this.tableObj && this.isCurrentHistoryView(root, generation) ? this.reloadTable(!0, { preservePage: !0 }) : Promise.resolve();
+    }
     openHistory() {
         if (this.disposed) return undefined;
         if (this.dialogId != null) return this.dialogId;
         const generation = ++this.historyDialogGeneration;
-        let e = `\n            <div class="jhs-history-layout jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source" aria-label="按影片状态筛选记录">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号、标题或演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container"></div>\n            </div>\n        `;
+        const batchActions = [
+            ["delete", "dark", "<span>移除</span>"], ["hasWatch", "watch", "标记观看"],
+            ["hasDown", "down", "标记下载"], ["favorite", "fav", "标记收藏"], ["filter", "filter", "标记屏蔽"]
+        ].map(([action, tone, label]) => `<button type="button" class="jhs-btn jhs-btn--${tone} multiple-history-${action}Btn jhs-layout-${action === "delete" ? "7daea5fa" : "2e003268"}">${label}</button>`).join("");
+        let e = `\n            <div class="jhs-history-layout jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source" aria-label="按影片状态筛选记录">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号、标题或演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    ${batchActions}\n                </div>\n                <div id="table-container"></div>\n            </div>\n        `;
         e = e.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">影片状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
         this.dialogId = this.dialog.open({
             type: 1,
@@ -217,7 +226,7 @@ export class HistoryDialogController {
                 if (generation !== this.historyDialogGeneration) return;
                 this.historyDialogGeneration++, this.historyViewGeneration++;
                 this.dialogId = null;
-                this.resetHistorySelection(), this.historyRoot?.off(".jhsHistory"), this.historyRoot = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null);
+                this.historyScrollRestore = null, this.resetHistorySelection(), this.historyRoot?.off(".jhsHistory"), this.historyRoot = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null);
             }
         });
         return this.dialogId;
@@ -233,6 +242,7 @@ export class HistoryDialogController {
         this.tableObj?.destroy();
         this.tableObj = null;
         this.historySelectionModel.clear();
+        this.historyScrollRestore = null;
     }
     /** @param {string} view */
     async showHistoryView(view) {
@@ -280,8 +290,12 @@ export class HistoryDialogController {
             host.append(this.jquery("<article class=\"jhs-card jhs-record-card\"></article>").append(this.jquery("<strong></strong>").text(`${providerName} · ${status}`), this.jquery("<p></p>").text(`${item.carNum || "未关联番号"} · ${formatUiDateTime(item.createdAt)}${item.retryOf ? " · 重试任务" : ""}`), this.jquery("<p></p>").text(unknown ? "请先打开云盘核实任务，再确认是否重新提交" : item.errorMessage || item.status === "failed" ? "离线提交失败，请检查授权后重试" : item.resource), actions));
         });
     }
-    async reloadTable(resetSelection = !0) {
-        resetSelection && this.resetHistorySelection(), await this.tableObj?.setPage(1);
+    async reloadTable(resetSelection = !0, { preservePage = !1 } = {}) {
+        const table = this.tableObj, holder = preservePage && this.historyRoot?.find(".tabulator-tableholder")[0];
+        const position = this.historyScrollRestore = holder ? { table, holder, top: holder.scrollTop, left: holder.scrollLeft } : null;
+        resetSelection && this.resetHistorySelection();
+        try { await table?.setPage(preservePage ? table.getPage?.() || 1 : 1); }
+        catch (error) { if (this.historyScrollRestore === position) this.historyScrollRestore = null; throw error; }
     }
     /** @param {unknown} carNum */
     normalizeHistoryCarNum(carNum) {
@@ -351,7 +365,7 @@ export class HistoryDialogController {
     }
     /** 解析批量操作实际要处理的当前页或完整筛选结果。 */
     async getHistoryBatchSelection() {
-        if (!this.isHistoryAllFiltered()) return this.historySelectionModel.values(this.tableObj?.getData?.() || []);
+        if (!this.isHistoryAllFiltered()) return this.tableObj?.getSelectedData?.() || [];
         const root = this.historyRoot, generation = this.historyViewGeneration;
         const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map((/** @type {HistoryRecord} */ item) => this.normalizeHistoryCarNum(item.carNum)));
         if (!this.isCurrentHistoryView(root, generation)) return [];
@@ -362,11 +376,11 @@ export class HistoryDialogController {
     /** @param {any} e @param {HistoryRecord | null} [record] */
     handleRowAction(e, record = null) {
             e.preventDefault(), e.stopPropagation();
-            const t = this.jquery(e.currentTarget), n = t.closest(".action-btns"), a = String(record?.carNum || n.attr("data-car-num") || ""), i = String(record?.url || n.attr("data-href") || ""), s = async (/** @type {string} */ actionType) => {
+            const refresh = this.captureHistoryRefresh(), t = this.jquery(e.currentTarget), n = t.closest(".action-btns"), a = String(record?.carNum || n.attr("data-car-num") || ""), i = String(record?.url || n.attr("data-href") || ""), s = async (/** @type {string} */ actionType) => {
                 try {
                     const flag = legacyActionToFlag(actionType);
                     if (!flag) throw new TypeError(`无效历史状态操作: ${actionType}`);
-                    await this.historyRepository.toggle(a, flag, { type: "history-state", record: { carNum: a, url: i } }), await this.reloadTable();
+                    await this.historyRepository.toggle(a, flag, { type: "history-state", record: { carNum: a, url: i } }), await refresh();
                 } catch (s) { this.logger.error("历史记录操作失败:", s), this.notifications.error("状态更新失败，请重试"); }
             };
             if (t.hasClass("history-filterBtn")) {
@@ -381,7 +395,7 @@ export class HistoryDialogController {
     bindHistoryActions(root) {
         root.on("click.jhsHistory", ".history-deleteBtn, .history-filterBtn, .history-favoriteBtn, .history-hasDownBtn, .history-hasWatchBtn, .history-detailBtn", this.handleRowAction.bind(this)), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (async (/** @type {any} */ e) => {
             e.preventDefault(), e.stopPropagation();
-            const t = this.jquery(e.currentTarget);
+            const refresh = this.captureHistoryRefresh(), t = this.jquery(e.currentTarget);
             /** @type {HistoryRecord[]} */
             let n = await this.getHistoryBatchSelection();
             let a = "", i = "";
@@ -402,7 +416,7 @@ export class HistoryDialogController {
                         if (!flag) throw new TypeError(`无效历史批量操作: ${i}`);
                         await this.historyRepository.patch(n.map((item => item.carNum)), { [flag]: !0 }, { type: "history-batch-state", records: n }), this.notifications.ok(`已标记${a}`);
                     }
-                    this.resetHistorySelection(), await this.reloadTable(!1);
+                    await refresh();
                 } catch (t) {
                     this.logger.error(t), this.notifications.error("记录更新失败，请重试");
                 } finally {
@@ -453,11 +467,20 @@ export class HistoryDialogController {
     /** @param {number} e @param {number} t @param {HistoryRecord[]} n */
     async getDataList(e, t, n) {
         const root = this.historyRoot, generation = this.historyViewGeneration;
+        this.isHistoryAllFiltered() || this.resetHistorySelection();
+        const position = this.historyScrollRestore;
+        if (position) {
+            const query = JSON.stringify([t, n]);
+            // Only the immediate automatic clamp may keep the original scroll position.
+            if (position.requests && (position.requests !== 1 || position.lastPage !== e || position.query !== query)) this.historyScrollRestore = null;
+            else position.requests = (position.requests || 0) + 1, position.query = query;
+        }
         this.historySorters = Array.isArray(n) ? n.map((/** @type {HistoryRecord} */ sorter) => ({
             ...sorter
         })) : [];
-        const rows = await this.getFilteredHistoryData(this.historySorters), r = rows.length, l = Math.ceil(r / t), c = (e - 1) * t, m = c + t;
+        const rows = await this.getFilteredHistoryData(this.historySorters), r = rows.length, l = Math.max(1, Math.ceil(r / t)), c = (e - 1) * t, m = c + t;
         if (this.isCurrentHistoryView(root, generation)) this.historyFilteredCount = r;
+        if (position && this.historyScrollRestore === position) e > l ? position.lastPage = l : position.ready = !0;
         return {
             maxPage: l,
             dataList: rows.slice(c, m),
@@ -485,6 +508,7 @@ export class HistoryDialogController {
             virtualDom: !0,
             pagination: !0,
             paginationMode: "remote",
+            paginationOutOfRange: "last",
             sortMode: "remote",
             ajaxURL: "queryRealm",
             dataLoader: !1,
@@ -625,15 +649,23 @@ export class HistoryDialogController {
         });
         this.tableObj = table;
         const isCurrentTable = () => this.tableObj === table && this.isCurrentHistoryView(root, generation);
+        table.on("dataLoadError", () => { if (isCurrentTable()) this.historyScrollRestore = null; });
         table.on("renderComplete", () => {
             if (!isCurrentTable()) return;
             table.getRows("visible").forEach((/** @type {any} */ row) => this.renderHistoryDetails(row));
             root.find("select.tabulator-page-size").addClass("jhs-select-source"); this.domUi.enhanceSelect(root);
+            const position = this.historyScrollRestore;
+            if (position?.ready && position.table === table) {
+                this.historyScrollRestore = null;
+                const holder = position.holder;
+                holder.scrollTop = Math.max(0, Math.min(position.top, holder.scrollHeight - holder.clientHeight)), holder.scrollLeft = position.left;
+            }
         });
         // 数据刷新时 Tabulator 会先取消当前页选择；该阶段不应写入“全选筛选结果”的排除集。
         table.on("dataProcessing", (() => {
             if (!isCurrentTable()) return;
             this.historySelectionSyncing = !0;
+            this.isHistoryAllFiltered() || this.historySelectionModel.clear();
         }));
         table.on("dataProcessed", (() => {
             if (!isCurrentTable()) return;
@@ -655,10 +687,11 @@ export class HistoryDialogController {
     }
     /** @param {any} e @param {string} t */
     handleDelete(e, t) {
+        const refresh = this.captureHistoryRefresh();
         this.domUi.confirm(e, `移除「${escapeHtml(t)}」的记录？`, (async () => {
             try {
                 await this.historyRepository.remove(t), this.resolveLegacy("ListPagePlugin")?.showCarNumBox?.(t),
-                await this.reloadTable();
+                await refresh();
             } catch (error) {
                 this.logger.error("移除历史记录失败:", error), this.notifications.error("记录移除失败，请重试");
             }
@@ -691,7 +724,7 @@ export class HistoryDialogController {
         const carNum = e.carNum, names = e.names || "", url = e.url || "", remark = e.remark || "", flags = normalizeStateFlags(e.stateFlags);
         let editRoot = this.jquery(this.document.createDocumentFragment());
         let saving = false, closed = false;
-        const parentRoot = this.historyRoot, parentGeneration = this.historyDialogGeneration, parentViewGeneration = this.historyViewGeneration, parentTable = this.tableObj;
+        const refresh = this.captureHistoryRefresh();
         const active = () => !closed && !this.disposed && editRoot[0]?.isConnected;
         const c = buildEditRecordForm(flags);
         this.dialog.open({
@@ -732,7 +765,7 @@ export class HistoryDialogController {
                         return;
                     }
                     try {
-                        if (parentRoot === this.historyRoot && parentGeneration === this.historyDialogGeneration && parentViewGeneration === this.historyViewGeneration && parentTable === this.tableObj) await parentTable?.setData();
+                        await refresh();
                     } catch (error) { this.logger.error("记录已保存，列表刷新失败", error); }
                     try { if (active()) this.dialog.close(index); }
                     finally { saving = false; button.removeAttr("aria-disabled aria-busy"); }

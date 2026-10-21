@@ -86,6 +86,104 @@ function createHarness() {
 afterEach(() => vi.useRealTimers());
 
 describe("new video workspace snapshot", () => {
+    it("accepts the initial snapshot after a filter changes while it is loading", async () => {
+        const { plugin, $, dom } = createHarness();
+        const snapshot = await plugin.featureNewVideoWorkspaceController.loadWorkspace();
+        snapshot.items[0].isVr = true;
+        let finish;
+        plugin.featureNewVideoWorkspaceController.loadWorkspace = vi.fn(() => new Promise(resolve => finish = resolve));
+        plugin.utils.debounce = fn => Object.assign(fn, { cancel() {} });
+        plugin.hydrateVisibleCovers = vi.fn();
+        $("#nvCategoryFilter").append('<option value="vr">VR</option>');
+        plugin.bindClick();
+        const pending = plugin.reloadNewVideoWorkspaceData();
+        $("#nvCategoryFilter").val("vr").trigger("change");
+        await Promise.resolve();
+        expect($("#new-video-list-container").text()).toContain("加载中");
+        finish(snapshot); await pending;
+        expect(plugin.nvAllItemsMap.size).toBe(2);
+        expect($("#nv-grid .nv-card")).toHaveLength(1);
+        expect($("#nvCategoryFilter").val()).toBe("vr");
+        dom.window.close();
+    });
+
+    it("keeps current-page selection available to append another page and retains its focus", async () => {
+        const { plugin, $, dom } = createHarness();
+        plugin.nvPageSize = 1; plugin.hydrateVisibleCovers = vi.fn();
+        await plugin.reloadNewVideoWorkspaceData(); plugin.bindBatchActions();
+        $("#nvSelectPage").trigger("focus").trigger("click");
+        expect($("#nvSelectPage")).toHaveLength(1);
+        expect(dom.window.document.activeElement.id).toBe("nvSelectPage");
+        const first = [...plugin.nvSelected];
+        plugin.nvCurrentPage = 2; plugin.nvRenderPage(); plugin.renderBatchBar();
+        $("#nvSelectPage").trigger("click").trigger("click");
+        expect(plugin.nvSelected.size).toBe(2);
+        expect([...plugin.nvSelected]).toEqual(expect.arrayContaining(first));
+        $("#nvClearSelection").trigger("focus").trigger("click");
+        expect(plugin.nvSelected.size).toBe(0);
+        expect($("#nvSelectPage")).toHaveLength(1);
+        expect(dom.window.document.activeElement.id).toBe("nvSelectPage");
+        dom.window.close();
+    });
+
+    it.each(["state", "decision", "search", "sort", "view"])("uses the latest %s after a pending workspace load", async action => {
+        const { plugin, $, dom } = createHarness(), snapshot = await plugin.featureNewVideoWorkspaceController.loadWorkspace();
+        let finish;
+        plugin.featureNewVideoWorkspaceController.loadWorkspace = vi.fn(() => new Promise(resolve => finish = resolve));
+        plugin.utils.debounce = fn => Object.assign(fn, { cancel() {} });
+        plugin.hydrateVisibleCovers = vi.fn(); plugin.bindClick();
+        const pending = plugin.reloadNewVideoWorkspaceData();
+        if (action === "state") { snapshot.items[0].flags.favorite = true; $("#nvStateFilter").append('<option value="favorite">收藏</option>').val("favorite").trigger("change"); }
+        if (action === "decision") { snapshot.items[0].decisionState = "ignored"; $("#nvDecisionFilter").append('<option value="ignored">已忽略</option>').val("ignored").trigger("change"); }
+        if (action === "search") $("#nvSearch").val(snapshot.items[0].carNum).trigger("input");
+        if (action === "sort") $("#nvSortBy").append('<option value="publishTime_asc">发行升序</option>').val("publishTime_asc").trigger("change");
+        if (action === "view") plugin.setViewMode("actress");
+        await Promise.resolve();
+        expect($(action === "view" ? "#actress-card-container" : "#new-video-list-container").text()).toContain("加载中");
+        finish(snapshot); await pending;
+        expect(plugin.nvAllItemsMap.size).toBe(2);
+        if (action === "view") expect($(".actress-card")).toHaveLength(1);
+        else expect($("#nv-grid .nv-card")).toHaveLength(action === "sort" ? 2 : 1);
+        if (action === "sort") expect(plugin.nvSortBy).toBe("publishTime_asc");
+        expect(plugin.nvWorkspaceLoading).toBe(false);
+        dom.window.close();
+    });
+
+    it.each(["older-first", "newer-first", "reopen"])("ignores obsolete workspace loads without clearing a newer loading state (%s)", async order => {
+        const { plugin, $, dom } = createHarness(), snapshot = await plugin.featureNewVideoWorkspaceController.loadWorkspace(), completions = [];
+        plugin.featureNewVideoWorkspaceController.loadWorkspace = vi.fn(() => new Promise(resolve => completions.push(resolve)));
+        plugin.hydrateVisibleCovers = vi.fn();
+        const first = plugin.reloadNewVideoWorkspaceData();
+        if (order === "reopen") { plugin.cleanupNewVideoWorkspace(); plugin.nvWorkspaceMounted = true; }
+        const second = plugin.reloadNewVideoWorkspaceData();
+        if (order === "older-first") {
+            completions[0]({ ...snapshot, items: [] }); await first;
+            expect(plugin.nvWorkspaceLoading).toBe(true);
+            expect($("#new-video-list-container").attr("aria-busy")).toBe("true");
+        }
+        completions[1](snapshot); await second;
+        if (order !== "older-first") { completions[0]({ ...snapshot, items: [] }); await first; }
+        expect(plugin.nvAllItemsMap.size).toBe(2);
+        expect($("#nv-grid .nv-card")).toHaveLength(2);
+        expect(plugin.nvWorkspaceLoading).toBe(false);
+        dom.window.close();
+    });
+
+    it("shows a loading error in the current view and permits a filtered retry", async () => {
+        const { plugin, $, dom } = createHarness(), snapshot = await plugin.featureNewVideoWorkspaceController.loadWorkspace();
+        let reject;
+        plugin.featureNewVideoWorkspaceController.loadWorkspace = vi.fn(() => new Promise((_resolve, fail) => reject = fail));
+        const pending = plugin.reloadNewVideoWorkspaceData();
+        plugin.setViewMode("actress"); reject(new Error("fixture failure")); await pending;
+        expect($("#actress-card-container").text()).toBe("加载失败");
+        expect(plugin.nvWorkspaceLoading).toBe(false);
+        plugin._viewMode = "list"; $("#nvSearch").val(snapshot.items[0].carNum);
+        plugin.featureNewVideoWorkspaceController.loadWorkspace.mockResolvedValueOnce(snapshot); plugin.hydrateVisibleCovers = vi.fn();
+        await plugin.reloadNewVideoWorkspaceData({ preservePage: true });
+        expect($("#nv-grid .nv-card")).toHaveLength(1);
+        dom.window.close();
+    });
+
     it("owns Escape and settings listeners before loading and rejects an old dialog completion", async () => {
         const { plugin, $ } = createHarness(), listeners = new Set(), completions = [];
         plugin.runtimeServices.settings = {

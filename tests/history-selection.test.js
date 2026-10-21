@@ -61,6 +61,7 @@ function loadHistory(records = createRecords()) {
         })),
         getData: vi.fn((() => table.currentData)),
         getSelectedData: vi.fn((() => table.selectedData)),
+        getPage: vi.fn(() => 3),
         setPage: vi.fn().mockResolvedValue()
     };
     return plugin.historyRoot = root, plugin.tableObj = table, {
@@ -139,6 +140,50 @@ describe("History cross-page selection", () => {
         table.selectedData = table.currentData.slice(0, 3);
         table.selectedData.forEach((item => plugin.historySelectionModel.set(item, true)));
         expect(await plugin.getHistoryBatchSelection()).toEqual(table.selectedData);
+    });
+
+    it("never batches an unchecked row retained in the explicit selection model", async () => {
+        const { plugin, table } = loadHistory();
+        plugin.historySelectionModel.set(table.currentData[0], true);
+        expect(await plugin.getHistoryBatchSelection()).toEqual([]);
+    });
+
+    it("clears both explicit selection sources before a delayed page query settles", async () => {
+        const { plugin, table, records } = loadHistory();
+        table.selectedData = [records[0]]; plugin.historySelectionModel.set(records[0], true);
+        let finish;
+        plugin.historyRepository.list = () => new Promise(resolve => finish = resolve);
+        const pending = plugin.getDataList(2, 50, []);
+        expect(plugin.getHistorySelectionSummary().count).toBe(0);
+        expect(table.getSelectedData()).toEqual([]);
+        expect(await plugin.getHistoryBatchSelection()).toEqual([]);
+        finish(records); await pending;
+    });
+
+    it("fetches the current page again after a row mutation", async () => {
+        const { plugin, $, table } = loadHistory();
+        const button = $('<button class="history-favoriteBtn"></button>')[0];
+        plugin.handleRowAction({ currentTarget: button, preventDefault() {}, stopPropagation() {} }, { carNum: "ABC-101" });
+        await vi.waitFor(() => expect(table.setPage).toHaveBeenCalledWith(3));
+    });
+
+    it.each([false, true])("refreshes only the originating view after a pending mutation (replaced=%s)", async replaced => {
+        const { plugin, $, table } = loadHistory();
+        let finish;
+        plugin.historyRepository.toggle = vi.fn(() => new Promise(resolve => finish = resolve));
+        plugin.handleRowAction({ currentTarget: $('<button class="history-favoriteBtn"></button>')[0], preventDefault() {}, stopPropagation() {} }, { carNum: "ABC-101" });
+        table.getPage.mockReturnValue(2);
+        const replacement = { setPage: vi.fn() };
+        if (replaced) plugin.tableObj = replacement;
+        finish(); await new Promise(resolve => setTimeout(resolve, 0));
+        expect(replacement.setPage).not.toHaveBeenCalled();
+        if (replaced) expect(table.setPage).not.toHaveBeenCalled();
+        else expect(table.setPage).toHaveBeenCalledWith(2);
+    });
+
+    it("keeps the empty result on page one with an accurate zero count", async () => {
+        const { plugin } = loadHistory([]);
+        expect(await plugin.getDataList(1, 50, [])).toMatchObject({ maxPage: 1, dataList: [], totalCount: 0 });
     });
 
     it("clears selection for filtering but preserves it while sorting", async () => {

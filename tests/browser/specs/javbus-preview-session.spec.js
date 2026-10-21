@@ -16,6 +16,7 @@ async function boot(page, context, theme = "light") {
     HTMLMediaElement.prototype.play = async function () { this.dataset.playing = "true"; };
     HTMLMediaElement.prototype.pause = function () { window.__mediaPauses++; this.dataset.playing = "false"; };
     HTMLMediaElement.prototype.load = function () {};
+    Object.defineProperty(HTMLMediaElement.prototype, "readyState", { configurable: true, get() { return 2; } });
     Object.defineProperty(HTMLMediaElement.prototype, "currentTime", { configurable: true, get() { return Number(this.dataset.time || 0); }, set(value) { this.dataset.time = String(value); } });
   });
   await injectUserscriptRuntime(page, {
@@ -85,4 +86,47 @@ for (const settle of ["resolve", "reject"]) test(`closing the media dialog ignor
   await expect.poll(() => page.evaluate(() => window.__mediaPauses)).toBeGreaterThan(pauses);
   expect(await page.evaluate(() => window.__mediaErrors)).toEqual([]);
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+});
+
+test("quality choices stay reversible while pending and failed sources remain retryable", async ({ page, context }) => {
+  await boot(page, context);
+  await page.locator(".preview-video-container").click();
+  const modal = page.getByRole("dialog", { name: "视频预览", exact: true });
+  const lower = modal.locator('[data-quality="mhb"]'), original = modal.locator('[data-quality="hhb"]');
+  await page.evaluate(() => {
+    window.__qualityPlays = 0;
+    HTMLMediaElement.prototype.play = function () {
+      if (++window.__qualityPlays === 1) return new Promise((resolve, reject) => { window.__qualityPending = { resolve, reject }; });
+      return Promise.resolve();
+    };
+  });
+  await lower.click(); await expect(lower).toHaveAttribute("aria-busy", "true"); await expect(lower).toBeFocused();
+  await lower.click(); expect(await page.evaluate(() => window.__qualityPlays)).toBe(1);
+  await original.click(); await expect(original).toHaveAttribute("aria-busy", "false");
+  await expect(modal.locator("source")).toHaveAttribute("src", "https://example.test/720.mp4");
+  await page.evaluate(async () => { window.__qualityPending.reject(new DOMException("old source failed", "NotSupportedError")); await Promise.resolve(); });
+  expect(await page.evaluate(() => window.__mediaErrors)).toEqual([]);
+  await page.evaluate(() => {
+    let fail = true;
+    HTMLMediaElement.prototype.play = function () {
+      if (fail) { fail = false; return Promise.reject(new DOMException("bad source", "NotSupportedError")); }
+      return Promise.resolve();
+    };
+  });
+  await lower.click();
+  await expect.poll(() => page.evaluate(() => window.__mediaErrors)).toEqual(["画质切换失败，请重试"]);
+  // A hovered Toastify error pauses its timer and overlaps the mobile quality row.
+  // Dismiss the verified feedback through its real control before the next scenario.
+  const failure = page.getByRole("alert").filter({ hasText: "画质切换失败，请重试" });
+  await failure.getByRole("button", { name: "关闭提示" }).click();
+  await expect(failure).toHaveCount(0);
+  await expect(original).toHaveAttribute("aria-pressed", "true");
+  await expect(modal.locator("source")).toHaveAttribute("src", "https://example.test/720.mp4");
+  await lower.click(); await expect(lower).toHaveAttribute("aria-busy", "false");
+  await expect(modal.locator("source")).toHaveAttribute("src", "https://example.test/480.mp4");
+  await page.evaluate(() => { HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException("gesture needed", "NotAllowedError")); });
+  await original.click(); await expect(original).toHaveAttribute("aria-busy", "false");
+  await expect(original).toHaveAttribute("aria-pressed", "true");
+  await expect(modal.locator("source")).toHaveAttribute("src", "https://example.test/720.mp4");
+  expect(await page.evaluate(() => window.__mediaErrors)).toEqual(["画质切换失败，请重试"]);
 });

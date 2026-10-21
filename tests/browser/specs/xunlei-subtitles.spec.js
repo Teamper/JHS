@@ -138,7 +138,8 @@ for (const action of ["preview", "download"]) test(`closing the subtitle table c
   await page.evaluate(() => {
     const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
     window.__subtitleDownloads = 0; window.__subtitleTableDestroyed = 0;
-    owner.ui.download = () => { window.__subtitleDownloads++; };
+    // DomUiService is frozen; replace this controller's port, not its readonly member.
+    owner.ui = { ...owner.ui, download: () => { window.__subtitleDownloads++; } };
     owner.subtitle.download = (_provider, _item, { scope }) => new Promise(resolve => { window.__subtitlePending = { resolve, scope }; });
     const table = window.Tabulator.findTable("#xunlei-table-container")[0], destroy = table.destroy.bind(table);
     table.destroy = () => { window.__subtitleTableDestroyed++; return destroy(); };
@@ -167,4 +168,41 @@ test("a direct subtitle download failure reports feedback without an unhandled r
   await expect(page.locator("#xunlei-table-container")).toBeVisible();
   expect(await page.evaluate(() => window.__subtitleRejections)).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+for (const action of ["preview", "download"]) test(`subtitle ${action} gives focused waiting feedback and deduplicates repeated activation`, async ({ page, context }) => {
+  const errors = await boot(page, context);
+  await page.locator("#xunLeiSubtitleBtn").click();
+  const button = page.locator(`.subtitle-${action}-btn`).first();
+  await expect(button).toBeVisible();
+  await page.evaluate(() => {
+    const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+    window.__actionRequests = 0; window.__actionDownloads = 0;
+    owner.ui = { ...owner.ui, download: () => { window.__actionDownloads++; } };
+    owner.subtitle.download = () => {
+      window.__actionRequests++;
+      return new Promise(resolve => { window.__actionResolve = resolve; });
+    };
+  });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-busy", "true");
+  await expect(button).toHaveAttribute("aria-disabled", "true"); await expect(button).toBeFocused();
+  // DOM activation also exercises the method guard behind the ARIA event guard.
+  await button.evaluate(element => element.click()); await button.press("Enter");
+  expect(await page.evaluate(() => window.__actionRequests)).toBe(1);
+  await page.evaluate(() => window.__actionResolve("subtitle content"));
+  await expect(button).not.toHaveAttribute("aria-busy", "true");
+  await expect(button).not.toHaveAttribute("aria-disabled", "true");
+  if (action === "preview") {
+    const preview = page.locator(".layui-layer").filter({ has: page.locator(".jhs-code-viewer") });
+    await expect(preview).toHaveCount(1);
+    await button.evaluate(element => element.click());
+    expect(await page.evaluate(() => window.__actionRequests)).toBe(1); await expect(preview).toHaveCount(1);
+    await page.keyboard.press("Escape"); await expect(preview).toHaveCount(0); await expect(button).toBeFocused();
+  } else expect(await page.evaluate(() => window.__actionDownloads)).toBe(1);
+  await button.click(); expect(await page.evaluate(() => window.__actionRequests)).toBe(2);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#xunlei-table-container")).toHaveCount(0);
+  await page.evaluate(() => window.__actionResolve("late subtitle"));
+  expect(await page.evaluate(() => window.__subtitleRejections)).toEqual([]); expect(errors).toEqual([]);
 });

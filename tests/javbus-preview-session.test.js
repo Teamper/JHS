@@ -17,6 +17,7 @@ beforeEach(() => {
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockReturnValue(2);
 });
 afterEach(async () => { scopes.forEach(scope => scope.dispose()); scopes.length = 0; await flush(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.innerHTML = ""; });
 function harness({ pendingSource = null, realLayer = false } = {}) {
@@ -103,6 +104,7 @@ it("does not let a closed quality request alter a newly reopened player's select
     const h = harness(); await h.owner.handleVideo();
     const pending = deferred(); HTMLMediaElement.prototype.play.mockReturnValueOnce(pending.promise);
     const oldChoice = document.querySelector('[data-quality="mhb"]'); oldChoice.click();
+    await vi.waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2));
     h.owner.closeVideoModal(); await h.owner.handleVideo();
     expect(document.querySelector("#preview-video source").src).toBe("https://example.test/480.mp4");
     expect(oldChoice.getAttribute("aria-pressed")).toBe("true");
@@ -148,4 +150,121 @@ it("opens and closes the retained DOM player through the real Layer string-conte
     expect(document.querySelector(".layui-layer-shade")).toBeNull();
     expect(document.querySelector("#bus-preview-modal")).toBeNull();
     expect(document.body.style.overflow).toBe("");
+});
+
+it("allows changing back while quality playback is pending and ignores its late rejection", async () => {
+    const h=harness(); await h.owner.handleVideo();
+    const pending=deferred(); HTMLMediaElement.prototype.play.mockReturnValueOnce(pending.promise);
+    const lower=document.querySelector('[data-quality="mhb"]'), original=document.querySelector('[data-quality="hhb"]');
+    lower.focus(); lower.click(); await flush();
+    expect(lower.getAttribute("aria-busy")).toBe("true"); expect(document.activeElement).toBe(lower);
+    lower.click(); expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+    original.click(); await flush();
+    expect(document.querySelector("source").src).toBe("https://example.test/720.mp4");
+    expect(original.getAttribute("aria-pressed")).toBe("true");
+    pending.reject(Object.assign(new Error("old source failed"),{name:"NotSupportedError"})); await flush();
+    expect(document.querySelector("source").src).toBe("https://example.test/720.mp4");
+    expect(h.notifications.error).not.toHaveBeenCalled();
+});
+
+it("rolls a failed quality back once without losing progress or preventing another try", async () => {
+    const h=harness(); await h.owner.handleVideo(); const media=document.querySelector("video");
+    media.currentTime=17; media.muted=false;
+    HTMLMediaElement.prototype.play.mockRejectedValueOnce(Object.assign(new Error("unsupported"),{name:"NotSupportedError"}));
+    document.querySelector('[data-quality="mhb"]').click(); await flush();
+    expect(media.querySelector("source").src).toBe("https://example.test/720.mp4");
+    expect(media.currentTime).toBe(17); expect(media.muted).toBe(false);
+    expect(document.querySelector('[data-quality="hhb"]').getAttribute("aria-pressed")).toBe("true");
+    expect(h.notifications.error).toHaveBeenCalledOnce();
+    document.querySelector('[data-quality="mhb"]').click(); await flush();
+    expect(document.querySelector('[data-quality="mhb"]').getAttribute("aria-pressed")).toBe("true");
+});
+
+it("retains the selected source for manual playback after an autoplay policy rejection", async () => {
+    const h=harness(); await h.owner.handleVideo();
+    HTMLMediaElement.prototype.play.mockRejectedValueOnce(Object.assign(new Error("gesture required"),{name:"NotAllowedError"}));
+    document.querySelector('[data-quality="mhb"]').click(); await flush();
+    expect(document.querySelector("source").src).toBe("https://example.test/480.mp4");
+    expect(document.querySelector('[data-quality="mhb"]').getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull(); expect(h.notifications.error).not.toHaveBeenCalled();
+});
+
+it("allows retrying the restored quality when both sources fail", async () => {
+    const h = harness(); await h.owner.handleVideo();
+    HTMLMediaElement.prototype.play.mockRejectedValueOnce(new Error("target failed")).mockRejectedValueOnce(new Error("rollback failed"));
+    document.querySelector('[data-quality="mhb"]').click(); await flush();
+    expect(h.notifications.error).toHaveBeenCalledOnce();
+    const original = document.querySelector('[data-quality="hhb"]');
+    expect(original.getAttribute("aria-pressed")).toBe("true");
+    original.click(); await flush();
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(4);
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+});
+
+it("bounds a stalled quality play and clears its session resources on close", async () => {
+    const h = harness(); await h.owner.handleVideo();
+    vi.useFakeTimers();
+    try {
+        const pending = deferred(); HTMLMediaElement.prototype.play.mockReturnValueOnce(pending.promise);
+        document.querySelector('[data-quality="mhb"]').click();
+        await vi.advanceTimersByTimeAsync(5001);
+        expect(document.querySelector("source").src).toBe("https://example.test/720.mp4");
+        expect(h.notifications.error).toHaveBeenCalledOnce();
+        const request = h.owner.session.qualityScope;
+        expect(request.disposed).toBe(true); expect(request.snapshot().listeners).toBe(0);
+        h.owner.closeVideoModal(); pending.reject(new Error("late failure"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.notifications.error).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+});
+
+it("ignores a play request for an already closed session without advancing its generation", async () => {
+    const h = harness(); await h.owner.handleVideo();
+    const session = h.owner.session, media = document.querySelector("video");
+    h.owner.closeVideoModal();
+    await expect(h.owner.playVideo(media, session)).resolves.toBe(false);
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce();
+});
+
+it("does not let a superseded rollback overwrite a newer successful quality", async () => {
+    const h = harness(); await h.owner.handleVideo(); const pending = deferred();
+    HTMLMediaElement.prototype.play.mockRejectedValueOnce(new Error("target failed")).mockReturnValueOnce(pending.promise);
+    document.querySelector('[data-quality="mhb"]').click(); await flush();
+    expect(document.querySelector('[data-quality="hhb"]').getAttribute("aria-busy")).toBe("true");
+    document.querySelector('[data-quality="mhb"]').click(); await flush();
+    pending.reject(new Error("stale rollback failure")); await flush();
+    expect(document.querySelector("source").src).toBe("https://example.test/480.mp4");
+    expect(document.querySelector('[data-quality="mhb"]').getAttribute("aria-pressed")).toBe("true");
+    expect(h.owner.qualityFailed).toBe(false); expect(h.notifications.error).not.toHaveBeenCalled();
+});
+
+it("cancels readiness listeners and waiting feedback when closed before media is ready", async () => {
+    const h = harness(); await h.owner.handleVideo();
+    vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockReturnValue(0);
+    const lower = document.querySelector('[data-quality="mhb"]'); lower.click();
+    const scope = h.owner.session.qualityScope;
+    expect(lower.getAttribute("aria-busy")).toBe("true");
+    h.owner.closeVideoModal(); await flush();
+    expect(scope.disposed).toBe(true); expect(scope.cleanups.size).toBe(0);
+    expect(lower.getAttribute("aria-busy")).toBe("false");
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce(); expect(h.notifications.error).not.toHaveBeenCalled();
+});
+
+it.each(["change", "reopen"])("preserves the seek origin across a pending source load followed by %s", async action => {
+    const h = harness(); await h.owner.handleVideo(); const media = document.querySelector("video");
+    media.currentTime = 17;
+    const ready = vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockReturnValue(0);
+    HTMLMediaElement.prototype.load.mockImplementation(function () { this.currentTime = 0; });
+    document.querySelector('[data-quality="mhb"]').click(); await flush();
+    expect(media.currentTime).toBe(0);
+    if (action === "change") {
+        document.querySelector('[data-quality="hhb"]').click();
+        ready.mockReturnValue(2); media.dispatchEvent(new Event("loadeddata")); await flush();
+    } else {
+        h.owner.closeVideoModal(); const reopened = h.owner.handleVideo(); await flush();
+        ready.mockReturnValue(2); media.dispatchEvent(new Event("loadeddata")); await reopened;
+    }
+    expect(media.currentTime).toBe(17);
+    expect(h.notifications.error).not.toHaveBeenCalled();
 });

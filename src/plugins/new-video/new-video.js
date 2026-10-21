@@ -35,6 +35,8 @@ export class NewVideoWorkspaceService {
         this._tipSettingsChanged = null;
         this.nvDialogId = null;
         this.nvDialogGeneration = 0;
+        this.nvLoadGeneration = 0;
+        this.nvWorkspaceLoading = false;
         this.nvDialogOpenPromise = null;
         this.workspaceLayoutScope = null;
         this.workspaceMorePopover = null;
@@ -304,6 +306,7 @@ export class NewVideoWorkspaceService {
         this.cleanupNewVideoWorkspace();
     }
     cleanupNewVideoWorkspace() {
+        this.nvLoadGeneration++, this.nvWorkspaceLoading = false;
         clearTimeout(this.nvInvalidationTimer), this.nvInvalidationTimer = null, this.nvWorkspaceReloadDirty = !1, this.nvWorkspaceFullReloadRequested = !1, this.nvPendingRemovals.clear();
         this.closeActressEditor();
         this.workspaceLayoutScope?.dispose(); this.workspaceLayoutScope = null;
@@ -379,6 +382,9 @@ export class NewVideoWorkspaceService {
     }
     bindClick() {
         const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        const renderList = () => {
+            this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
+        };
         taskPlugin || this.jquery("#checkFavoriteActress,#checkNewVideo").prop("disabled", !0).attr("title", "后台任务已关闭");
         this.jquery("#reLoad").on("click", (() => {
             void this.reloadNewVideoWorkspaceData(), this.jquery("#checkNewVideoMsg").text("");
@@ -408,17 +414,10 @@ export class NewVideoWorkspaceService {
             }));
         })), this.jquery("#checkNewVideo").on("click", (event => {
             void this.runManualTask(this.jquery(event.currentTarget), "检测中…", (() => taskPlugin?.checkNewVideo?.(!0)));
-        })), this.jquery("#paramActressType").on("change", (e => {
+        })), this.jquery("#paramActressType,#paramSortBy").on("change", (e => {
             this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
-        })), this.jquery("#paramSortBy").on("change", (e => {
-            this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
-        })), this.jquery("#nvSortBy").on("change", (e => {
-            this.nvSortBy = this.jquery("#nvSortBy").val(), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
-        })), this.jquery("#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", (e => {
-            this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
-        })), this.nvSearchDebounced = this.utils.debounce((() => {
-            this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
-        }), 200), this.jquery("#nvSearch").on("input", this.nvSearchDebounced), this.jquery(".jhs-new-video-view").on("click", '[role="tab"]', (event => {
+        })), this.jquery("#nvSortBy,#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", renderList),
+        this.nvSearchDebounced = this.utils.debounce(renderList, 200), this.jquery("#nvSearch").on("input", this.nvSearchDebounced), this.jquery(".jhs-new-video-view").on("click", '[role="tab"]', (event => {
             this.setViewMode(this.jquery(event.currentTarget).data("view"));
         })).on("keydown", '[role="tab"]', (event => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
@@ -468,31 +467,41 @@ export class NewVideoWorkspaceService {
     renderCurrentView() {
         return "list" === this._viewMode ? this.renderNewVideoList() : this.renderActressCards();
     }
+    renderWorkspaceLoading(container) {
+        if (!this.nvWorkspaceLoading) return false;
+        renderStateView(container, { type: "loading", title: "加载中…" }), container.attr("aria-busy", "true");
+        return true;
+    }
     loadData() {
         this.currentPage = 1;
         return this.reloadNewVideoWorkspaceData();
     }
     async reloadNewVideoWorkspaceData({ preservePage = !1 } = {}) {
         if (!this.isWorkspaceMounted()) return;
-        const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? this.jquery("#new-video-list-container") : this.jquery("#actress-card-container");
+        const generation = ++this.nvLoadGeneration, root = this.nvWorkspaceRoot;
+        const current = () => generation === this.nvLoadGeneration && root === this.nvWorkspaceRoot && this.isWorkspaceMounted();
+        this.nvWorkspaceLoading = true, this.nvRenderGeneration++;
+        preservePage || (this.currentPage = 1, this.nvCurrentPage = 1);
         this.jquery("#nv-pagination-bar").remove();
-        renderStateView(container, { type: "loading", title: "加载中…" });
+        this.renderCurrentView();
         try {
             if (!this.featureNewVideoWorkspaceController) throw new Error("Discovery workspace feature is unavailable");
             const workspace = await this.featureNewVideoWorkspaceController.loadWorkspace();
             const { actresses, carMap, decisions, ruleTime, javDbUrl } = workspace;
-            if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration) return;
+            if (!current()) return;
             this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
             if (!Array.isArray(workspace.items)) throw new TypeError("Discovery workspace projection is unavailable");
             const items = workspace.items, nextMap = new Map;
             items.forEach((item => nextMap.set(normalizeCarNum(item.carNum), { ...item, carNum: normalizeCarNum(item.carNum) }))), this.nvAllItemsMap = nextMap;
             this.pruneNewVideoSelection();
-            preservePage || (this.currentPage = 1, this.nvCurrentPage = 1), await this.renderCurrentView(), this.renderTaskStatuses();
+            this.nvWorkspaceLoading = false, this.nvRenderGeneration++, await this.renderCurrentView();
+            current() && this.renderTaskStatuses();
         } catch (error) {
-            if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
+            if (!current()) return;
+            const container = this.jquery("list" === this._viewMode ? "#new-video-list-container" : "#actress-card-container");
             this.logger.error("加载新作品工作区失败", error), renderStateView(container, { type: "error", title: "加载失败", description: "请稍后重试", actionLabel: "重试", onAction: () => this.reloadNewVideoWorkspaceData({ preservePage: !0 }) });
         } finally {
-            if (generation === this.nvRenderGeneration || !container[0]?.isConnected) container.attr("aria-busy", "false");
+            if (current()) this.nvWorkspaceLoading = false, this.jquery("#new-video-list-container,#actress-card-container").attr("aria-busy", "false");
         }
     }
     renderTaskStatuses() {
@@ -511,7 +520,7 @@ export class NewVideoWorkspaceService {
     }
     async renderActressCards() {
         const e = this.jquery("#actress-card-container");
-        if (!e.length) return;
+        if (!e.length || this.renderWorkspaceLoading(e)) return;
         e.attr("aria-busy", "false");
         let t = [ ...this.nvActressesCache ];
         const n = this.jquery("#paramActressType").val();
@@ -642,7 +651,7 @@ export class NewVideoWorkspaceService {
     async renderNewVideoList({ incremental = !1 } = {}) {
         const jquery = this.jquery;
         const container = this.jquery("#new-video-list-container"), generation = this.nvRenderGeneration;
-        if (!container.length) return;
+        if (!container.length || this.renderWorkspaceLoading(container)) return;
         container.attr("aria-busy", "false");
         const items = await this.getNewVideoFlatList();
         if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
@@ -698,20 +707,22 @@ export class NewVideoWorkspaceService {
         if (id === "batchRemoveFromNewVideo" && items.length) this.utils.q(event, `从新作品列表移除 ${items.length} 部影片？<br>保留影片状态记录`, () => void this.runBatchMutation("remove", selected => this.getRuntimeService("state").removeFromNewVideoList(selected.map(item => item.carNum), "manual"), "已移除"), undefined, { confirmText: "移除" });
     }
     renderBatchBar() {
-        const restoreFocus = this.batchPopover?.opened && this.batchPopover.menu.contains(this.document.activeElement);
+        const active = this.document.activeElement, restoreFocus = this.batchPopover?.opened && this.batchPopover.menu.contains(active);
         this.batchPopover?.close(); this.batchPopover = null;
         const footer = this.jquery("#new-video-list-footer");
         if (!footer.length) return;
         const actresses = new Set(this.nvFlatListCache.flatMap(item => item.actresses || [item.actressName]).filter(Boolean)), selected = this.nvSelected.size;
         const visibleSelected = this.nvFlatListCache.filter(item => this.nvSelected.has(normalizeCarNum(item.carNum))).length;
-        if (!selected) return void footer.html(`<div class="jhs-new-video-batch"><span>共 <b>${this.nvFlatListCache.length}</b> 个番号，涉及 <b>${actresses.size}</b> 位演员</span><button type="button" class="jhs-btn jhs-btn--secondary" id="nvSelectPage">全选当前页</button></div>`);
+        const summary = selected ? `<span class="jhs-new-video-selection" title="${visibleSelected !== selected ? `当前结果中 ${visibleSelected} 项` : ''}">已选 <b>${selected}</b> 项</span>` : `<span>共 <b>${this.nvFlatListCache.length}</b> 个番号，涉及 <b>${actresses.size}</b> 位演员</span>`;
         const primary = [["batchMarkFavorite", "收藏"], ["batchMarkWatched", "已观看"], ["batchMarkDownloaded", "已下载"]];
         const secondary = [["batchIgnore", "忽略"], ["batchSnooze", "暂缓 7 天"], ["batchRestore", "恢复"], ["batchRemoveFromNewVideo", "从新作品列表移除"]];
         const action = ([id, label], menu = false) => `<button type="button" id="${id}" data-nv-batch class="jhs-btn ${id === "batchRemoveFromNewVideo" ? "jhs-btn--danger" : menu ? "jhs-btn--ghost" : "jhs-btn--secondary"}"${menu ? ' role="menuitem"' : ''}>${label}</button>`;
         const commands = this.nvCompact ? [...primary, ...secondary] : secondary;
-        footer.html(`<div class="jhs-new-video-batch"><span class="jhs-new-video-selection" title="${visibleSelected !== selected ? `当前结果中 ${visibleSelected} 项` : ''}">已选 <b>${selected}</b> 项</span><div class="jhs-new-video-batch__actions">${this.nvCompact ? "" : primary.map(item => action(item)).join("")}<details class="jhs-new-video-batch__more"><summary class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false">${this.nvCompact ? "批量操作" : "更多"}${getIcon("chevron-down")}</summary><div class="jhs-popover jhs-new-video-batch__menu" role="menu" aria-label="批量操作">${commands.map(item => action(item, true)).join("")}</div></details><button type="button" class="jhs-btn jhs-btn--ghost" id="nvClearSelection">取消选择</button></div></div>`);
+        const controls = selected ? `${this.nvCompact ? "" : primary.map(item => action(item)).join("")}<details class="jhs-new-video-batch__more"><summary class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false">${this.nvCompact ? "批量操作" : "更多"}${getIcon("chevron-down")}</summary><div class="jhs-popover jhs-new-video-batch__menu" role="menu" aria-label="批量操作">${commands.map(item => action(item, true)).join("")}</div></details><button type="button" class="jhs-btn jhs-btn--ghost" id="nvClearSelection">取消选择</button>` : "";
+        footer.html(`<div class="jhs-new-video-batch">${summary}<div class="jhs-new-video-batch__actions"><button type="button" class="jhs-btn jhs-btn--secondary" id="nvSelectPage">全选当前页</button>${controls}</div></div>`);
         this.bindBatchPopover(footer);
-        if (restoreFocus) footer.find(".jhs-new-video-batch__more summary").trigger("focus");
+        const focus = restoreFocus ? ".jhs-new-video-batch__more summary" : ["nvSelectPage", "nvClearSelection"].includes(active?.id) ? selected ? `#${active.id}` : "#nvSelectPage" : null;
+        if (focus) footer.find(focus).trigger("focus");
     }
     bindBatchPopover(footer) {
         const details = footer.find(".jhs-new-video-batch__more"), anchor = details.find("summary"), menu = details.find("[role=menu]");

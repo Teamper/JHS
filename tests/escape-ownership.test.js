@@ -2,7 +2,7 @@
 import {afterEach,it,expect,vi} from "vitest";
 import jquery from "jquery";
 import {Utils} from "../src/core/utils.js";
-afterEach(()=>{jquery(document).off(".globalLayerEsc");document.body.replaceChildren();Utils.instance=null;vi.unstubAllGlobals();});
+afterEach(()=>{jquery(document).off(".globalLayerEsc .afterOwner");document.body.replaceChildren();Utils.instance=null;vi.unstubAllGlobals();});
 function mount() {
     vi.stubGlobal("$",jquery);vi.stubGlobal("clog",{warn:vi.fn()});
     document.body.innerHTML='<div class="layui-layer" id="layui-layer1"><iframe id="layui-layer-iframe1"></iframe></div>';
@@ -54,4 +54,28 @@ it("a preview owned by a lower layer does not block closing the upper layer",()=
     upper.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
     expect(document.querySelector("#layui-layer2")).toBeNull();
     expect(document.querySelector("#layui-layer1")).not.toBeNull();
+});
+
+it("leaves Escape from a visible child Layer to the iframe runtime",()=>{
+    const {frame}=mount();
+    frame.body.innerHTML='<div class="layui-layer"><button>字幕预览</button></div>';
+    frame.querySelector(".layui-layer").getClientRects=()=>[{width:100,height:100}];
+    frame.querySelector("button").dispatchEvent(new frame.defaultView.KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
+    expect(document.querySelector("#layui-layer1")).not.toBeNull();
+    frame.querySelector(".layui-layer").remove();
+    frame.body.dispatchEvent(new frame.defaultView.KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
+    expect(document.querySelector("#layui-layer1")).toBeNull();
+});
+
+it("consumes a local Layer Escape before later document listeners",()=>{
+    mount(); const later=vi.fn(); jquery(document).on("keydown.afterOwner",later);
+    const event=new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}); document.body.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true); expect(later).not.toHaveBeenCalled(); jquery(document).off(".afterOwner");
+});
+
+it("does not close a Layer while the source document has native fullscreen media",()=>{
+    const {frame}=mount(); const video=frame.createElement("video"); frame.body.append(video);
+    Object.defineProperty(frame,"fullscreenElement",{configurable:true,value:video});
+    const event=new frame.defaultView.KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}); video.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false); expect(document.querySelector("#layui-layer1")).not.toBeNull();
 });

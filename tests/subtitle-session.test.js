@@ -96,3 +96,54 @@ it("disposes an externally removed table and leaves a disposed owner inert", asy
     expect(h.subtitle.search).toHaveBeenCalledOnce();
     expect(h.notifications.error).not.toHaveBeenCalled();
 });
+
+it.each(["preview", "download"])("deduplicates a pending subtitle %s and preserves its focused trigger", async action => {
+    const h = harness(), pending = deferred(); h.subtitle.download.mockReturnValue(pending.promise);
+    await h.owner.searchXunLeiSubtitle("ABC-123");
+    const button = h.dialogs.get(1).root.querySelector(`.subtitle-${action}-btn`);
+    button.focus(); button.click(); button.click();
+    expect(h.subtitle.download).toHaveBeenCalledOnce();
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(document.activeElement).toBe(button);
+    pending.resolve("subtitle"); await flush();
+    expect(button.getAttribute("aria-busy")).not.toBe("true");
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    if (action === "preview") {
+        expect(h.dialogs.size).toBe(2);
+        button.click(); await flush();
+        expect(h.dialogs.size).toBe(2); expect(h.subtitle.download).toHaveBeenCalledOnce();
+        h.dialog.close(2); button.click(); await flush();
+        expect(h.subtitle.download).toHaveBeenCalledTimes(2); expect(h.dialogs.size).toBe(2);
+    } else {
+        expect(h.ui.download).toHaveBeenCalledOnce();
+        button.click(); await flush(); expect(h.ui.download).toHaveBeenCalledTimes(2);
+    }
+});
+
+it("keeps subtitle operations independent by table, file and action and retries after failure", async () => {
+    const h = harness(), pending = deferred();
+    const original = await h.subtitle.search();
+    h.subtitle.search.mockResolvedValue([...original, { ...original[0], url: "https://example.test/other.srt" }]);
+    h.subtitle.download.mockReturnValue(pending.promise);
+    await h.owner.searchXunLeiSubtitle("ABC-123"); await h.owner.searchXunLeiSubtitle("DEF-456");
+    const first = h.dialogs.get(1).root, second = h.dialogs.get(2).root;
+    first.querySelector(".subtitle-preview-btn").click();
+    first.querySelector(".subtitle-download-btn").click();
+    first.querySelectorAll(".subtitle-preview-btn")[1].click();
+    second.querySelector(".subtitle-preview-btn").click();
+    expect(h.subtitle.download).toHaveBeenCalledTimes(4);
+    pending.reject(new Error("offline")); await flush();
+    expect(h.notifications.error).toHaveBeenCalledTimes(4);
+    h.subtitle.download.mockResolvedValue("retry"); first.querySelector(".subtitle-preview-btn").click(); await flush();
+    expect(h.subtitle.download).toHaveBeenCalledTimes(5); expect(h.dialogs.size).toBe(3);
+});
+
+it("releases an externally removed subtitle preview so the same file can reopen", async () => {
+    const h = harness(); await h.owner.searchXunLeiSubtitle("ABC-123");
+    const button = h.dialogs.get(1).root.querySelector(".subtitle-preview-btn");
+    button.click(); await flush(); h.dialogs.get(2).root.remove(); await flush();
+    button.click(); await flush();
+    expect(h.subtitle.download).toHaveBeenCalledTimes(2);
+    expect(h.dialogs.get(3)?.root.isConnected).toBe(true);
+});
