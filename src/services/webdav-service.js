@@ -2,6 +2,7 @@
 
 import { JhsError } from "../core/jhs-error.js";
 import { CREDENTIAL_KEYS } from "./credential-service.js";
+import { isManagedBackup } from "../core/auto-backup-policy.js";
 
 const DOWNLOAD_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -12,13 +13,14 @@ function encodeBackupFileName(name) {
 }
 
 export class WebDavClient {
-    /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password */
-    constructor(http, davUrl, username, password) {
+    /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password @param {any} [scope] */
+    constructor(http, davUrl, username, password, scope = undefined) {
         this.http = http;
         this.baseUrl = new URL(davUrl.endsWith("/") ? davUrl : `${davUrl}/`);
         this.username = username;
         this.password = password;
         this.folderName = null;
+        this.scope = scope;
     }
     authHeaders() {
         // TextEncoder 编码后再 btoa，兼容非 Latin1（中文）用户名/密码
@@ -35,11 +37,12 @@ export class WebDavClient {
     }
     /** Return response metadata while isolating anonymous download hops. @param {string} method @param {URL} url @param {Record<string, string>} headers @param {unknown} body @param {Record<string, unknown>} requestOptions @param {boolean} [anonymous] */
     async #requestResponse(method, url, headers, body, requestOptions, anonymous = false) {
-        return this.http.request({
+        const options = {
             providerId: "webdav", method, url: url.href, headers: anonymous ? headers : { ...this.authHeaders(), ...headers }, body,
             responseType: "text", cacheScope: "none", ...requestOptions, timeout: 10_000,
             urlPolicy: { trustClass: anonymous ? "custom-public" : "user-local", expectedOrigin: anonymous ? url.origin : this.baseUrl.origin },
-        });
+        };
+        return this.scope ? this.http.request(options, this.scope) : this.http.request(options);
     }
     /** @param {string} folder */
     async ensureFolder(folder) {
@@ -85,6 +88,39 @@ export class WebDavClient {
     async deleteFile(name) { await this.request("DELETE", `${this.folderName}/${encodeBackupFileName(name)}`, { "Cache-Control": "no-cache" }); }
     /** @param {string} folder */
     async getBackupList(folder) { this.folderName = folder; await this.ensureFolder(folder); return this.getFileList(folder); }
+    /** Strict href-based listing for verification and destructive retention. @param {string} folder @param {string} sourceId */
+    async listManagedBackups(folder, sourceId) {
+        const directory = new URL(`${encodeBackupFileName(folder)}/`, this.baseUrl);
+        const xml = String(await this.request("PROPFIND", encodeBackupFileName(folder), { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>'));
+        const document = new DOMParser().parseFromString(xml, "text/xml");
+        if (document.getElementsByTagName("parsererror").length || document.documentElement?.localName !== "multistatus" || document.documentElement?.namespaceURI !== "DAV:") throw new Error("WebDAV 备份列表格式无效");
+        const files = new Set();
+        for (const response of document.getElementsByTagNameNS("DAV:", "response")) {
+            const href = [...response.children].find(node => node.namespaceURI === "DAV:" && node.localName === "href")?.textContent?.trim();
+            if (!href) continue;
+            let url, name;
+            try {
+                url = new URL(href, directory);
+                if (url.origin !== directory.origin || url.search || url.hash || url.username || url.password || !url.pathname.startsWith(directory.pathname)) continue;
+                const remainder = url.pathname.slice(directory.pathname.length);
+                if (!remainder || remainder.includes("/")) continue;
+                name = decodeURIComponent(remainder);
+                if (name.includes("/") || name.includes("\\") || !isManagedBackup(name, sourceId)) continue;
+            } catch { continue; }
+            const valid = [...response.getElementsByTagNameNS("DAV:", "propstat")].some(propstat => {
+                const status = propstat.getElementsByTagNameNS("DAV:", "status")[0]?.textContent || "";
+                const prop = propstat.getElementsByTagNameNS("DAV:", "prop")[0];
+                return /\s2\d\d(?:\s|$)/.test(status) && prop && prop.getElementsByTagNameNS("DAV:", "resourcetype").length > 0 && !prop.getElementsByTagNameNS("DAV:", "collection").length;
+            });
+            if (valid) files.add(name);
+        }
+        return [...files].sort().reverse();
+    }
+    /** Delete only a strictly identified automatic backup in this directory. @param {string} folder @param {string} name @param {string} sourceId */
+    async deleteManagedBackup(folder, name, sourceId) {
+        if (!isManagedBackup(name, sourceId)) throw new Error("拒绝删除非本来源的自动备份");
+        await this.request("DELETE", `${encodeBackupFileName(folder)}/${encodeBackupFileName(name)}`);
+    }
     /** @param {string} name */
     async getFileContent(name) {
         let url = new URL(`${this.folderName}/${encodeBackupFileName(name)}`.replace(/^\/+/, ""), this.baseUrl), anonymous = false;
@@ -117,8 +153,12 @@ export class WebDavService {
         const origin = pageOrigin ? new URL(pageOrigin).origin : null;
         this.passwordKey = origin && origin !== "null" ? `${CREDENTIAL_KEYS.webDavPassword}:origin:${encodeURIComponent(origin)}` : null;
     }
-    /** @param {{url: string, username: string, password: string}} config */
-    createClient(config) { return new WebDavClient(this.http, config.url, config.username, config.password); }
+    /** @param {{url: string, username: string, password: string}} config @param {{scope?: any}} [options] */
+    createClient(config, options = {}) { return new WebDavClient(this.http, config.url, config.username, config.password, options.scope); }
+    async getProfileSnapshot() {
+        if (!this.settings) return { profile: await this.getProfile(), revision: "" };
+        return this.settings.runExclusive(async () => ({ profile: await this.readProfileWithoutLock(), revision: String(this.settings?.snapshot().webDavProfileRevision || "") }));
+    }
     /** Read the site-local profile in the same queue as profile saves. */
     async getProfile() {
         return this.settings ? this.settings.runExclusive(() => this.readProfileWithoutLock()) : this.readProfileWithoutLock();
@@ -152,7 +192,9 @@ export class WebDavService {
             const password = passwordChanged ? String(patch.password || "") : (await this.readProfileWithoutLock()).password;
             const persist = async () => {
                 await settings.updateWithoutLock((draft) => {
+                    const connectionChanged = passwordChanged || ["url", "username"].some(key => Object.hasOwn(patch, key) && String(patch[key] || "") !== String(draft[key === "url" ? "webDavUrl" : "webDavUsername"] || ""));
                     for (const key of ["url", "username"]) if (Object.prototype.hasOwnProperty.call(patch, key)) draft[key === "url" ? "webDavUrl" : "webDavUsername"] = String(patch[key] || "");
+                    if (connectionChanged || !draft.webDavProfileRevision) draft.webDavProfileRevision = crypto.randomUUID();
                     return updateSettings?.(draft);
                 });
                 const saved = settings.snapshot();

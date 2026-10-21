@@ -9,13 +9,21 @@ export class StorageMutationCoordinator {
         this.lockManager = options.lockManager === undefined ? globalThis.navigator?.locks : options.lockManager;
         this.lockName = options.lockName ?? STORAGE_MUTATION_LOCK;
         this._queue = Promise.resolve();
+        /** @type {any} Optional observer of the completed business mutation. */
+        this.observer = null;
     }
 
     /** @template T @param {() => Promise<T> | T} operation @returns {Promise<T>} */
     runExclusive(operation) {
         if (typeof operation !== "function") throw new TypeError("Storage mutation must be a function");
-        if (this.lockManager?.request) return this.lockManager.request(this.lockName, operation);
-        const next = this._queue.then(operation, operation);
+        const execute = async () => {
+            this.observer?.begin();
+            let succeeded = false;
+            try { const value = await operation(); succeeded = true; return value; }
+            finally { await this.observer?.finish(succeeded); }
+        };
+        if (this.lockManager?.request) return this.lockManager.request(this.lockName, execute);
+        const next = this._queue.then(execute, execute);
         this._queue = next.then(() => undefined, () => undefined);
         return next;
     }

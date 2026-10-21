@@ -1,3 +1,4 @@
+import { AUTO_BACKUP_DEFAULTS, AUTO_BACKUP_KEYS, autoBackupPolicy, backupEnabled, validBackupNumber } from "../src/core/auto-backup-policy.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -70,7 +71,7 @@ describe("settings invalidation ownership", () => {
         const newVideo = { resetBtnTip: () => { throw new Error("new-video unavailable"); } };
         const blacklist = { resetBtnTip: vi.fn(), reloadTable: vi.fn() };
         const logger = { error: vi.fn() };
-        const context = vm.createContext({ window: dom.window, document: dom.window.document, $, C: "no", _: "yes", r: true });
+        const context = vm.createContext({ window: dom.window, document: dom.window.document, $, C: "no", _: "yes", r: true, AUTO_BACKUP_DEFAULTS, AUTO_BACKUP_KEYS, autoBackupPolicy, backupEnabled, validBackupNumber });
         vm.runInContext(`${settingForms}; globalThis.saveSettingFormForTest = saveSettingForm;`, context);
         context.jhsEventBus = bus;
         const settings = { snapshot: () => ({ trustedLocalOrigins: [] }), update: async updater => updater({ trustedLocalOrigins: [] }) };

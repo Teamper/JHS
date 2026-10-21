@@ -260,6 +260,7 @@ export class StateService {
             try { clog.warn("[状态] 已提交，事务日志待清理", error); } catch { /* Keep the durable result. */ }
         }
         try { this.storage._invalidateCache(); } catch { /* Cache cleanup is post-commit. */ }
+        this.storage.backupChanges?.primary(activity.changes.map((/** @type {any} */ change) => change.carNum));
     }
     /** @param {StateRecord} journal */
     async _recoverJournal(journal) {
@@ -469,6 +470,7 @@ export class StateService {
                 await this._recoverWithoutLock();
                 throw error;
             }
+            this.storage.backupChanges?.primary(reverted);
             reverted.length && await this._notifyCommitted("car-state-changed", { carNums: reverted, undoOf: transactionId });
             await this._notifyCommitted("activity-log-changed", { transactionId, undo: !0 });
             return { reverted, conflicts };

@@ -8,7 +8,7 @@ import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./st
 export const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions" ]);
 export const IMPORTABLE_DATA_KEYS = Object.freeze([ ...PORTABLE_DATA_KEYS, "third_party_ttl_cache" ]);
 /** Settings that are bound to this installation's local trust boundary. */
-export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins", "webDavUrl", "webDavUsername", "webDavPassword" ]);
+export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins", "webDavUrl", "webDavUsername", "webDavPassword", "webDavProfileRevision", "webDavAutoBackupEnabled", "webDavAutoBackupOnChanges", "webDavAutoBackupOnInterval", "webDavAutoBackupChangeCount", "webDavAutoBackupMinutes", "webDavAutoBackupKeepCount" ]);
 /** Settings that contain installation-bound credentials and never belong in portable data. */
 export const CREDENTIAL_SETTING_KEYS = Object.freeze([ "webDavPassword" ]);
 const PORTABLE_ARRAY_KEYS = new Set([ "car_list", "filter_keyword_title", "filter_keyword_review", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "offline_history" ]);

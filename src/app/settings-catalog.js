@@ -11,9 +11,15 @@
 import { PRODUCT_NAMES } from "../core/product-names.js";
 import { DEFAULT_QUICK_FILTER_OPTIONS } from "../features/list/list-filters.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
+import { AUTO_BACKUP_DEFAULTS } from "../core/auto-backup-policy.js";
 
 /** @param {import("./settings-registry.js").SettingsRegistry} registry */
 export function registerDefaultSettings(registry) {
+    const backupLabels = ["自动备份", "按更新条数", "按分钟间隔", "累计更新条数", "间隔分钟", "自动备份保留份数"];
+    Object.entries(AUTO_BACKUP_DEFAULTS).forEach(([key, defaultValue], index) => registry.register({
+        key, defaultValue, label: backupLabels[index], owner: "AutoBackupFeature", section: "backup", effect: "manual", surfaces: ["full"],
+        type: typeof defaultValue === "number" ? "number" : "boolean", min: 1, max: 1e6, step: 1,
+    }));
     const boolean = { type: "boolean", effect: "live" };
     const yes = "yes", no = "no";
     /** @type {Record<string, string>} */

@@ -28,6 +28,9 @@ import { AccountService } from "../services/account-service.js";
 import { SettingsService } from "../services/settings-service.js";
 import { StorageService } from "../services/storage-service.js";
 import { WebDavService } from "../services/webdav-service.js";
+import { AutoBackupService } from "../services/auto-backup-service.js";
+import { BackupChangeTracker } from "../core/backup-change-tracker.js";
+import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 import { BusImageLayoutService } from "../services/bus-image-layout-service.js";
 import { CredentialService } from "../services/credential-service.js";
 import { Pan123CredentialService } from "../services/pan123-credential-service.js";
@@ -55,6 +58,11 @@ export function createAppContext(runtime) {
     const navigationPort = new BrowserNavigationAdapter();
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
     const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue, runtime.gmDeleteValue);
+    const mutationCoordinator = runtime.storageMutationCoordinator ?? new StorageMutationCoordinator();
+    const backupChanges = new BackupChangeTracker(runtime.storageForage, mutationCoordinator);
+    mutationCoordinator.observer = backupChanges;
+    if (runtime.legacyStorage) runtime.legacyStorage.backupChanges = backupChanges;
+    storagePort.beforeSet = key => backupChanges.capture(key);
     const dialogPort = new LayerDialogAdapter(runtime.layer);
     const stylePort = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
@@ -103,6 +111,7 @@ export function createAppContext(runtime) {
     const credential = new CredentialService(storage, runtime.localStorage);
     const pan123Credential = new Pan123CredentialService(storage, notifications);
     const webdav = new WebDavService(http, credential, settings);
+    const autoBackup = new AutoBackupService({ webdav, settings, tracker: backupChanges, storage: runtime.legacyStorage, events: runtime.eventBus });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;
@@ -152,6 +161,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage)
         .register(SERVICE.legacyStorage, runtime.legacyStorage).register(SERVICE.legacyUtils, runtime.legacyUtils).register(SERVICE.webdav, webdav)
+        .register(SERVICE.autoBackup, autoBackup)
         .register(SERVICE.credential, credential)
         .register(SERVICE.pan123Credential, pan123Credential)
           .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.resourceSettings, resourceSettings).register(SERVICE.notifications, notifications).register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
@@ -166,5 +176,5 @@ export function createAppContext(runtime) {
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, titleKeywords, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, autoBackup, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, titleKeywords, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

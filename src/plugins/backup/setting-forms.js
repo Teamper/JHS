@@ -6,6 +6,7 @@ import { parseNumberSetting } from "../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
 import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
+import { AUTO_BACKUP_DEFAULTS, AUTO_BACKUP_KEYS, autoBackupPolicy, backupEnabled, validBackupNumber } from "../../core/auto-backup-policy.js";
 
 /** @typedef {Record<string, any>} SettingDependencies */
 
@@ -17,6 +18,7 @@ import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
  * is persisted by its own change handler / binding.
  */
 export const MANUAL_FORM_SETTING_KEYS = Object.freeze([
+    ...AUTO_BACKUP_KEYS,
     "videoQuality",
     "reviewCount",
     "tagPosition",
@@ -58,6 +60,7 @@ export const MANUAL_FORM_SETTING_KEYS = Object.freeze([
 
 /** Selector map used to track dirty manual fields on the full settings form. */
 export const MANUAL_FORM_SELECTORS = Object.freeze({
+    ...Object.fromEntries(AUTO_BACKUP_KEYS.map(key => [key, `#${key}`])),
     videoQuality: "#videoQuality",
     reviewCount: "#reviewCount",
     tagPosition: "#tagPosition",
@@ -167,6 +170,12 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#webDavUrl").val(profile.url || "");
     root.find("#webDavUsername").val(profile.username || "");
     root.find("#webDavPassword").val(profile.password || "");
+    for (const [key, fallback] of Object.entries(AUTO_BACKUP_DEFAULTS)) {
+        const input = root.find(`#${key}`), value = e[key] ?? fallback;
+        if (typeof fallback === "number") input.val(value);
+        else input.prop("checked", backupEnabled(value));
+    }
+    root.trigger("jhsAutoBackupFormLoaded");
     root.find("#enableTitleSelectFilter").prop("checked", !e.enableTitleSelectFilter || e.enableTitleSelectFilter === _);
     root.find("#enableFavoriteActresses").prop("checked", !e.enableFavoriteActresses || e.enableFavoriteActresses === _);
     root.find("#enableSaveActressCarInfo").prop("checked", !!e.enableSaveActressCarInfo && e.enableSaveActressCarInfo === _);
@@ -298,6 +307,27 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         if (currentProfile.webDavPassword !== String(savedProfile.password || "")) dirtyKeys.add("webDavPassword");
     }
     const patch = await collectManualSettingPatch(root, dirtyKeys);
+    // A malformed hidden draft must never prevent explicitly switching backup off.
+    if (patch.webDavAutoBackupEnabled === "no") for (const [key, fallback] of Object.entries(AUTO_BACKUP_DEFAULTS)) {
+        if (typeof fallback === "number" && Object.hasOwn(patch, key) && !validBackupNumber(patch[key])) {
+            delete patch[key];
+            root.find(`#${key}`).val(dependencies.settings.snapshot()[key] ?? fallback);
+        }
+    }
+    const enablingAutoBackup = backupEnabled(patch.webDavAutoBackupEnabled) && !backupEnabled(dependencies.settings.snapshot().webDavAutoBackupEnabled);
+    if (AUTO_BACKUP_KEYS.some(key => Object.hasOwn(patch, key))) {
+        root.find("#jhs-auto-backup-options input").removeAttr("aria-invalid aria-describedby");
+        try { autoBackupPolicy({ ...dependencies.settings.snapshot(), ...patch }); }
+        catch (error) {
+            root.find("#jhs-auto-backup-status").text(/** @type {Error} */ (error).message);
+            for (const [key, fallback] of Object.entries(AUTO_BACKUP_DEFAULTS)) if (typeof fallback === "number" && Object.hasOwn(patch, key) && !validBackupNumber(patch[key])) {
+                root.find(`#${key}`).attr({ "aria-invalid": "true", "aria-describedby": "jhs-auto-backup-status" }).trigger("focus");
+                break;
+            }
+            throw error;
+        }
+    }
+    if (enablingAutoBackup) patch.webDavAutoBackupEnabled = "no";
     /** @type {string | null} */
     let nextWebDavUrl = null;
     /** @type {string | null} */
@@ -378,6 +408,15 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     }
     root.data("jhsDirtyReviewKeywords", false);
     root.data("jhsDirtyTitleKeywords", false);
+    if (enablingAutoBackup) {
+        try {
+            if (!dependencies.autoBackup) throw new Error("自动备份服务未初始化");
+            await dependencies.autoBackup.enable({ scope: dependencies.scope });
+        } finally {
+            root.find("#webDavAutoBackupEnabled").prop("checked", backupEnabled(dependencies.settings.snapshot().webDavAutoBackupEnabled));
+            root.trigger("jhsAutoBackupFormLoaded");
+        }
+    }
 
     // Best-effort UI post-processing; one failed refresh must not skip the rest.
     /** @type {Array<[string, () => unknown | Promise<unknown>]>} */
@@ -456,6 +495,11 @@ async function collectManualSettingPatch(root, dirtyKeys = null) {
         enableTitleSelectFilter: () => root.find("#enableTitleSelectFilter").is(":checked") ? _ : C,
         enableFavoriteActresses: () => root.find("#enableFavoriteActresses").is(":checked") ? _ : C,
         enableSaveActressCarInfo: () => root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C,
+    };
+    for (const [key, fallback] of Object.entries(AUTO_BACKUP_DEFAULTS)) getters[key] = () => {
+        const field = root.find(`#${key}`);
+        if (!field.length) return fallback;
+        return typeof fallback === "number" ? Number(field.val()) : field.is(":checked") ? "yes" : "no";
     };
     const keys = dirtyKeys instanceof Set
         ? MANUAL_FORM_SETTING_KEYS.filter((key) => dirtyKeys.has(key)).filter((key) => !["webDavUrl", "webDavUsername", "webDavPassword"].includes(key))

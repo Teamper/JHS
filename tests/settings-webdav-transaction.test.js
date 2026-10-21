@@ -43,6 +43,47 @@ function editProfileAndOrdinaryField(root) {
 }
 
 describe("full settings WebDAV save transaction", () => {
+    it("saves the policy but enables only after the first verified backup", async () => {
+        const f = await fixture();
+        f.dependencies.autoBackup = { enable: vi.fn(async () => {
+            expect(f.stored.setting.webDavAutoBackupEnabled).toBe("no");
+            expect(f.stored.setting.webDavAutoBackupMinutes).toBe(7);
+            await f.settings.set("webDavAutoBackupEnabled", "yes");
+        }) };
+        f.root.find("#webDavAutoBackupEnabled").prop("checked", true).trigger("change");
+        f.root.find("#webDavAutoBackupMinutes").val("7").trigger("change");
+        await saveSettingForm(f.dependencies, f.root);
+        expect(f.dependencies.autoBackup.enable).toHaveBeenCalledOnce();
+        expect(f.settings.snapshot().webDavAutoBackupEnabled).toBe("yes");
+    });
+    it("keeps the switch off and the saved policy intact after verification fails", async () => {
+        const f = await fixture();
+        f.dependencies.autoBackup = { enable: vi.fn(async () => { throw new Error("verification denied"); }) };
+        f.root.find("#webDavAutoBackupEnabled").prop("checked", true).trigger("change");
+        await expect(saveSettingForm(f.dependencies, f.root)).rejects.toThrow("verification denied");
+        expect(f.settings.snapshot().webDavAutoBackupEnabled).toBe("no");
+        expect(f.root.find("#webDavAutoBackupEnabled").is(":checked")).toBe(false);
+    });
+    it.each(["0", "-1", "1.5", "1000001", "NaN"])("rejects invalid automatic backup interval %s before changing settings", async value => {
+        const f = await fixture();
+        f.root.find("#webDavAutoBackupMinutes").val(value).trigger("change");
+        await expect(saveSettingForm(f.dependencies, f.root)).rejects.toThrow("整数");
+        expect(f.storage.set).not.toHaveBeenCalled();
+    });
+    it("requires at least one trigger when saving the automatic policy", async () => {
+        const f = await fixture();
+        f.root.find("#webDavAutoBackupEnabled").prop("checked", true).trigger("change");
+        f.root.find("#webDavAutoBackupOnChanges, #webDavAutoBackupOnInterval").prop("checked", false).trigger("change");
+        await expect(saveSettingForm(f.dependencies, f.root)).rejects.toThrow("至少选择一种");
+    });
+    it("allows explicitly disabling even when a hidden interval draft is invalid", async () => {
+        const f = await fixture();
+        await f.settings.patch({ webDavAutoBackupEnabled: "yes", webDavAutoBackupMinutes: 30 });
+        f.root.find("#webDavAutoBackupEnabled").prop("checked", false).trigger("change");
+        f.root.find("#webDavAutoBackupMinutes").val("0").trigger("change");
+        await saveSettingForm(f.dependencies, f.root);
+        expect(f.settings.snapshot()).toMatchObject({ webDavAutoBackupEnabled: "no", webDavAutoBackupMinutes: 30 });
+    });
     it("rolls the password back while preserving ordinary fields, URL and authorized origins on a settings write failure", async () => {
         const test = await fixture(), error = new Error("storage unavailable");
         test.storage.set.mockRejectedValueOnce(error);
@@ -100,7 +141,7 @@ describe("full settings WebDAV save transaction", () => {
         const test = await fixture();
         await test.webdav.saveProfile({ username: "updated-user" });
         expect(test.storage.set).toHaveBeenCalledOnce();
-        expect(test.stored.setting).toEqual({ ...test.initial, webDavUsername: "updated-user" });
+        expect(test.stored.setting).toEqual({ ...test.initial, webDavUsername: "updated-user", webDavProfileRevision: expect.any(String) });
         expect(test.credential.set).not.toHaveBeenCalled();
     });
 

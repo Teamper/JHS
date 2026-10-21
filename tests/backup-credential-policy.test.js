@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { mergePortableSettings, selectPortableSettings } from "../src/core/migration.js";
+import { AUTO_BACKUP_DEFAULTS } from "../src/core/auto-backup-policy.js";
 
 describe("portable backup credential policy", () => {
+    it("keeps automatic scheduling and profile verification local to the destination", () => {
+        const source = { ...AUTO_BACKUP_DEFAULTS, webDavAutoBackupEnabled: "yes", webDavProfileRevision: "source-revision", themeMode: "dark" };
+        expect(selectPortableSettings(source)).toEqual({ themeMode: "dark" });
+        expect(mergePortableSettings({}, source)).toEqual({ themeMode: "dark" });
+        const target = { ...AUTO_BACKUP_DEFAULTS, webDavAutoBackupEnabled: "no", webDavAutoBackupMinutes: 90, webDavProfileRevision: "target-revision" };
+        expect(mergePortableSettings(target, source)).toEqual({ ...target, themeMode: "dark" });
+    });
     it("excludes installation-local trust and WebDAV credentials without mutating settings", () => {
         const settings = { themeMode: "dark", webDavUrl: "https://dav.example", webDavPassword: "AES:source", trustedLocalOrigins: ["http://127.0.0.1:5244"] };
         expect(selectPortableSettings(settings)).toEqual({ themeMode: "dark" });

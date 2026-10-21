@@ -93,7 +93,8 @@ describe("v6.5 architecture runtime contracts", () => {
     });
 
     it("registers legacy contributions from manifests without changing site order", async () => {
-        expect(featureManifests).toHaveLength(22);
+        expect(featureManifests).toHaveLength(23);
+        expect(featureManifests.find(item => item.id === "auto-backup")).toMatchObject({ kind: "system", startup: "eager", disableable: false, requires: [SERVICE.autoBackup, PORT.host] });
         expect(featureManifests.find((item) => item.id === "fc2-workspace")).toMatchObject({ startup: "eager", providesCommands: ["detail.fc2.workspace"], contributes: ["detail.fc2-owned"] });
         expect(featureManifests.find((item) => item.id === "settings-effects")).toMatchObject({ kind: "system", startup: "eager", contributes: [], requires: expect.arrayContaining([SERVICE.clog, SERVICE.settings, SERVICE.busImageLayout]) });
         expect(featureManifests.find((item) => item.id === "settings-entry")).toMatchObject({ kind: "system", startup: "eager", contributes: ["settings.core"], requires: expect.arrayContaining([PORT.style]) });

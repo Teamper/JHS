@@ -83,6 +83,7 @@ export class StorageManager {
         (!e || e === this.setting_key) && (this.cacheSettingObj = null);
     }
     async _setItemAndInvalidate(e, t) {
+        await this.backupChanges?.capture(e);
         await this.forage.setItem(e, t);
         this._invalidateCache(e);
     }
@@ -461,7 +462,7 @@ export class StorageManager {
     async getHighlightedTags() {
         return await this.forage.getItem(this.highlighted_tags_key) || [];
     }
-    async setHighlightedTags(e) { return this._withCrossTabLock("jhs_highlighted_tags", () => this.forage.setItem(this.highlighted_tags_key, e)); }
+    async setHighlightedTags(e) { return this._withCrossTabLock("jhs_highlighted_tags", () => this._setItemAndInvalidate(this.highlighted_tags_key, e)); }
     async saveTitleFilterKeyword(n) {
         if (await s(this, e, t).call(this, n, this.filter_keyword_title_key, "标题关键词"), Array.isArray(n)) return null;
         return this.withActressLock(async () => {

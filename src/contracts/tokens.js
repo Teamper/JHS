@@ -26,6 +26,7 @@ export const SERVICE = Object.freeze({
     legacyStorage: createToken("service", "legacy-storage"),
     legacyUtils: createToken("service", "legacy-utils"),
     webdav: createToken("service", "webdav"),
+    autoBackup: createToken("service", "auto-backup"),
     credential: createToken("service", "credential"),
     pan123Credential: createToken("service", "pan123-credential"),
     dialog: createToken("service", "dialog"),
