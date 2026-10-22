@@ -88,6 +88,8 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes);
         expect((await carList(page))[0].carNum).toBe("SYNC-2");
         const stateBefore = await page.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
+        await service(page, "pause", true);
+        const writesBeforeRestore = dav.requests.filter(request => request.method === "PUT").length;
         const recovery = await openSettings(page);
         await recovery.locator("summary").filter({ hasText: "历史恢复" }).click();
         await recovery.locator("#webdavSyncHistoryBtn").click();
@@ -98,6 +100,10 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         await recovery.locator("#webdavSyncRestoreBtn").click();
         await page.locator(".layui-layer-btn").getByRole("button", { name: "恢复", exact: true }).click();
         await expect.poll(async () => (await carList(page)).length).toBe(0);
+        await service(page);
+        expect((await service(page, "getStatus")).paused).toBe(true);
+        expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writesBeforeRestore);
+        await service(page, "pause", false);
         await expect.poll(async () => (await service(page, "getStatus")).pendingChanges, { timeout: 10000 }).toBe(0);
         const stateAfter = await page.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
         expect(stateAfter.replicaId).toBe(stateBefore.replicaId); expect(stateAfter.seq).toBeGreaterThan(stateBefore.seq);

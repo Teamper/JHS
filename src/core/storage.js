@@ -547,8 +547,10 @@ export class StorageManager {
         await this._saveSettingWithoutLock(settings);
     }
     async importData(e) { return this.importDataWithGuard(e); }
+    // prepareData runs after recovery while owning the business lock. It must
+    // return only selected domains and must not acquire the same lock again.
     async importDataWithGuard(e, options = {}) {
-        const { data: imported, warnings } = normalizePortableData(e);
+        let { data: imported, warnings } = normalizePortableData(e);
         let refreshSettings = false;
         // Snapshot, import, and migration must share one write window. A gap between
         // snapshot creation and import could omit a concurrent tab's last mutation.
@@ -557,6 +559,7 @@ export class StorageManager {
             await options.assertActive?.();
             const targetVersion = await assertSupportedDataVersion(this);
             await this.stateService?.recoverPendingTransactionWithoutLock?.();
+            if (options.prepareData) ({ data: imported, warnings } = normalizePortableData(await options.prepareData()));
             if (await hasPortableUserData(this)) {
                 const createSnapshot = () => this._createSnapshotWithoutMutation("导入前自动备份", "auto-import");
                 if (this.mutationCoordinator?.runExclusive) await createSnapshot();

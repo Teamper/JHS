@@ -56,9 +56,15 @@ export class WebDavSyncService extends EventTarget {
     /** @param {boolean} paused */
     async pause(paused) { await this.deps.shared.setPaused(paused); if (!paused) await this.retry(); }
     /** @param {any} scope @param {string} revision */
-    async assertCurrent(scope, revision) {
+    async assertConnectionCurrent(scope, revision) {
         scope.assertActive();
-        if (await this.deps.shared.paused() || (await this.deps.shared.snapshot()).revision !== revision) throw new DOMException("同步连接已变更或暂停", "AbortError");
+        if ((await this.deps.shared.snapshot()).revision !== revision) throw new DOMException("同步连接已变更", "AbortError");
+        scope.assertActive();
+    }
+    /** Automatic work also respects pause; explicit recovery keeps its own lifecycle. @param {any} scope @param {string} revision */
+    async assertCurrent(scope, revision) {
+        await this.assertConnectionCurrent(scope, revision);
+        if (await this.deps.shared.paused()) throw new DOMException("自动同步已暂停", "AbortError");
         scope.assertActive();
     }
     async check() {
@@ -217,7 +223,7 @@ export class WebDavSyncService extends EventTarget {
         const client = this.deps.webdav.createClient(profile, { scope });
         this.deps.urlPolicy?.authorizeLocalOrigin(new URL(profile.url).origin);
         const files = await client.listSyncFiles();
-        if (scope) await this.assertCurrent(scope, revision);
+        if (scope) await this.assertConnectionCurrent(scope, revision);
         return files;
     }
     /** Restore values as a new local mutation, never the old replica/clock/queue. @param {string} name @param {boolean} [layout] @param {any} [scope] @param {{data?: boolean, preferences?: boolean}} [selection] */
@@ -228,12 +234,18 @@ export class WebDavSyncService extends EventTarget {
         this.deps.urlPolicy?.authorizeLocalOrigin(new URL(profile.url).origin);
         const client = this.deps.webdav.createClient(profile, { scope });
         const envelope = await this.readEnvelope(client, file);
-        if (scope) await this.assertCurrent(scope, revision);
-        const local = await this.deps.store.readData(), data = materializeSyncData(envelope.state, local);
-        if (!selection.data) for (const key of Object.keys(data)) if (key !== "setting") data[key] = local[key];
-        if (!selection.preferences) data.setting = { ...local.setting };
-        if (layout) Object.assign(data.setting, syncLayout(envelope.recovery?.layout));
-        await this.deps.storage.importDataWithGuard({ ...data, data_version: CURRENT_DATA_VERSION }, { assertActive: () => this.assertCurrent(scope ?? { assertActive() {} }, revision) });
+        if (scope) await this.assertConnectionCurrent(scope, revision);
+        await this.deps.storage.importDataWithGuard({ data_version: CURRENT_DATA_VERSION }, {
+            assertActive: () => this.assertConnectionCurrent(scope ?? { assertActive() {} }, revision),
+            prepareData: async () => {
+                const local = await this.deps.store.readData(), restored = materializeSyncData(envelope.state, local);
+                /** @type {Record<string, any>} */ const data = { data_version: CURRENT_DATA_VERSION };
+                if (selection.data) for (const key of Object.keys(restored)) if (key !== "setting") data[key] = restored[key];
+                if (selection.preferences || layout) data.setting = selection.preferences ? restored.setting : { ...local.setting };
+                if (layout) Object.assign(data.setting, syncLayout(envelope.recovery?.layout));
+                return data;
+            },
+        });
         if (selection.data) await this.deps.store.update((/** @type {any} */ value) => { value.undoEligible = []; });
         this.schedule(0);
     }

@@ -1,7 +1,7 @@
 // @ts-check
 
 import { assertSupportedDataVersion } from "./migration.js";
-import { SYNC_DOMAINS, emptySyncModel, historyRank, joinSyncModels, materializeSyncData, maximumClock, projectSyncData, pruneSyncHistory, syncClone, syncJson, syncLayout, versionSyncDiff, visibleSyncRecords } from "./webdav-sync-model.js";
+import { SYNC_DOMAINS, emptySyncModel, historyRank, joinSyncModels, materializeSyncData, maximumClock, projectSyncData, pruneSyncHistory, syncClone, syncJson, syncLayout, validateSyncState, versionSyncDiff, visibleSyncRecords } from "./webdav-sync-model.js";
 
 /** @typedef {Record<string, any>} Dict */
 export const SYNC_STATE_KEY = "jhs_webdav_sync_state_v1";
@@ -147,6 +147,7 @@ export class WebDavSyncStore extends EventTarget {
                 state.model = versionSyncDiff(cloud, before, combined, [state.counter, state.replicaId]).model;
                 state.joined = true; state.binding = binding; state.dirty = true; state.localRevision = (state.localRevision || 0) + 1;
             } else state.model = joinSyncModels(state.model, cloud);
+            validateSyncState(state.model);
             state.model = pruneSyncHistory(state.model, local, this.deps.clock?.() ?? Date.now());
             state.counter = Math.max(state.counter, maximumClock(state.model));
             Object.assign(state.confirmed, confirmed);

@@ -3,6 +3,7 @@
 import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
 import { LOCAL_ONLY_SETTING_KEYS } from "./migration.js";
 import { normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
+import { isSyncObject, validateSyncFrontiers, validateSyncRecordFields } from "./webdav-sync-validation.js";
 
 /** @typedef {Record<string, any>} Dict */
 export const SYNC_FOLDER = "JHS-同步";
@@ -175,15 +176,26 @@ export function pruneSyncHistory(model, local, now) {
 /** Validate before merging external state. @param {any} envelope */
 export function validateSyncEnvelope(envelope) {
     if (!envelope || envelope.schema !== 1 || envelope.dataVersion > CURRENT_DATA_VERSION) throw Object.assign(new Error("同步数据来自不支持的版本，请更新 JHS"), { code: "SYNC_FUTURE_VERSION" });
-    if (!Number.isInteger(envelope.dataVersion) || envelope.dataVersion < 0 || !UUID.test(envelope.replicaId) || !Number.isSafeInteger(envelope.seq) || envelope.seq < 1 || !Number.isFinite(Date.parse(envelope.createdAt)) || !envelope.state?.records || !envelope.state.frontiers) throw new Error("同步快照格式无效");
-    const checkVersion = (/** @type {any} */ version) => Array.isArray(version) && version.length === 2 && Number.isSafeInteger(version[0]) && version[0] > 0 && UUID.test(version[1]);
-    for (const [key, record] of Object.entries(/** @type {Dict} */ (envelope.state.records))) {
-        const domain = key.split("/")[0];
-        if (!SYNC_DOMAINS.includes(domain) || !checkVersion(record.birth) || record.death && !checkVersion(record.death) || record.generation && (!checkVersion(record.generation) || compareVersion(record.birth, record.generation) <= 0) || !record.fields || typeof record.fields !== "object") throw new Error("同步字段版本无效");
-        if (domain === "setting" && !isSharedSetting(decodeURIComponent(key.slice(key.indexOf("/") + 1)))) throw new Error("同步快照包含本机专属设置");
-        for (const [name, field] of Object.entries(/** @type {Dict} */ (record.fields))) if (!/^(?:f:.+|flag:(?:favorite|downloaded|watched|blocked)|video:.+|value)$/.test(name) || !checkVersion(field.v) || compareVersion(field.v, record.generation) <= 0 || field.unset !== true && !Object.hasOwn(field, "value")) throw new Error("同步字段内容无效");
-    }
+    if (!isSyncObject(envelope) || !Number.isInteger(envelope.dataVersion) || envelope.dataVersion < 0 || typeof envelope.replicaId !== "string" || !UUID.test(envelope.replicaId) || !Number.isSafeInteger(envelope.seq) || envelope.seq < 1 || typeof envelope.createdAt !== "string" || !Number.isFinite(Date.parse(envelope.createdAt))) throw new Error("同步快照格式无效");
+    validateSyncState(envelope.state);
     return envelope;
+}
+/** Shared by network parsing and the final merged-state persistence boundary. @param {any} model */
+export function validateSyncState(model) {
+    if (!isSyncObject(model) || !isSyncObject(model.records)) throw new Error("同步快照格式无效");
+    validateSyncFrontiers(model.frontiers);
+    const checkVersion = (/** @type {any} */ version) => Array.isArray(version) && version.length === 2 && Number.isSafeInteger(version[0]) && version[0] > 0 && typeof version[1] === "string" && UUID.test(version[1]);
+    for (const [key, record] of Object.entries(/** @type {Dict} */ (model.records))) {
+        const slash = key.indexOf("/"), domain = key.slice(0, slash), encodedId = key.slice(slash + 1);
+        let id;
+        try { id = decodeURIComponent(encodedId); } catch { throw new Error("同步记录标识无效"); }
+        if (slash < 1 || !id || encodeURIComponent(id) !== encodedId || !SYNC_DOMAINS.includes(domain)) throw new Error("同步记录标识无效");
+        if (!isSyncObject(record) || !checkVersion(record.birth) || record.death != null && !checkVersion(record.death) || record.generation != null && (!checkVersion(record.generation) || compareVersion(record.birth, record.generation) <= 0) || !isSyncObject(record.fields)) throw new Error("同步字段版本无效");
+        if (domain === "setting" && !isSharedSetting(id)) throw new Error("同步快照包含本机专属设置");
+        for (const field of Object.values(/** @type {Dict} */ (record.fields))) if (!isSyncObject(field) || !checkVersion(field.v) || compareVersion(field.v, record.generation) <= 0 || Object.hasOwn(field, "unset") && field.unset !== true || (field.unset === true ? Object.hasOwn(field, "value") : !Object.hasOwn(field, "value"))) throw new Error("同步字段内容无效");
+        validateSyncRecordFields(domain, id, record, compareVersion(record.birth, record.death) > 0);
+    }
+    return model;
 }
 /** @param {string} text */
 export async function syncHash(text) { return [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)))].map(byte => byte.toString(16).padStart(2, "0")).join(""); }
