@@ -11,6 +11,8 @@ JHS（JAV Helper Suite）是一款面向 JavDB、JavBus 的 Tampermonkey 用户�
 >
 > [GitHub 项目](https://github.com/Teamper/JHS) · [完整更新记录](https://github.com/Teamper/JHS/blob/main/CHANGELOG.md) · [问题反馈](https://github.com/Teamper/JHS/issues)
 
+本页位于 `develop` 时还包含 7.0 开发能力说明。开发版完整脚本为 [JHS Dev 7.0](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js)，支持自动循环备份、详情鉴定快捷键及持续交互修复；[安装与验证范围](../README.md#安装) 和 [自动备份使用说明](webdav-auto-backup.md) 以 develop 文档为准。商店正式版介绍仍从 main 同步。
+
 ## 6.5.2 更新了什么
 
 - **全部未下载筛选**：“更多筛选”新增“全部未下载”，排除屏蔽项和已下载作品，保留未下载的待鉴定、收藏和已看内容。

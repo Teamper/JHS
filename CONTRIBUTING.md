@@ -20,6 +20,7 @@
 ## 构建与产物
 
 - `develop` 的 `npm run build` / `npm run build:dev` 生成 `dist/dev/JHS-7.0.dev.user.js`；普通开发修改记录到 `Unreleased`，保留稳定版本元数据及正式 `JHS.user.js`。
+- 开发版交付执行 `npm run build:dev:deliver`，同时生成并提交根目录 `JHS-7.0.dev.user.js`，核对它与 dist Dev 文件字节一致。普通测试构建不改写已交付快照；产物必须由构建器生成。
 - `main` 默认构建生成正式产物；`develop` 的 `npm run build:release` 也会显式写入正式产物，仅用于获授权的正式发布准备。
 - 正式版本变更同步 `package.json`、`package-lock.json`、`src/main.js` 和 `CHANGELOG.md`，重新生成根目录及 `dist/` 的 `JHS.user.js` 并确认字节一致。根目录正式产物受版本控制，`dist/` 不提交。
 

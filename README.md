@@ -1,33 +1,36 @@
 <div align="center">
 
-# JHS
+# JHS 7.0 Dev
 
 **JAV Helper Suite**
 
 JAV 浏览、收藏与信息增强脚本
 
-[![Version](https://img.shields.io/github/v/release/Teamper/JHS?label=version)](https://github.com/Teamper/JHS/releases/latest)
-[![Userscript](https://img.shields.io/badge/Tampermonkey-userscript-f59e0b)](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js)
+[![Version](https://img.shields.io/badge/version-7.0_Dev-f59e0b)](https://github.com/Teamper/JHS/tree/develop)
+[![Userscript](https://img.shields.io/badge/Tampermonkey-userscript-f59e0b)](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-43853d)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 
-[安装正式版](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js) · [查看更新记录](CHANGELOG.md) · [反馈问题](https://github.com/Teamper/JHS/issues)
+[安装 7.0 开发版](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js) · [安装正式版](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js) · [查看更新记录](CHANGELOG.md) · [反馈问题](https://github.com/Teamper/JHS/issues)
 
 </div>
 
 JHS 将作品状态、演员收藏、新作追踪、外部检索、媒体预览、字幕搜索、云盘离线和数据备份整合到站点页面中。脚本按站点和页面启用所需功能，并针对桌面端和移动端提供对应交互。
 
+本页对应 **`develop` 分支的 7.0 开发版**。完整安装脚本为根目录的 [JHS-7.0.dev.user.js](JHS-7.0.dev.user.js)，正式版仍为 6.5.2，见 [main 分支](https://github.com/Teamper/JHS/tree/main)。
+
 > 本项目仅提供网页信息整理与效率增强能力。请遵守所在地法律、目标网站条款及第三方服务规则，并仅处理你有权访问的内容。
 
-## 6.5.2 更新
+## 7.0 开发进展
 
-当前正式版为 **6.5.2**（2026-10-16）。这次主要更新：
+开发版已包含正式 6.5.2 的筛选和新作品补位行为，并继续提供：
 
-- **全部未下载筛选**：“更多筛选”可以查看所有未下载且未被屏蔽的作品，包含待鉴定、收藏和已看内容。
-- **默认选项卡更完整**：设置可选择全部筛选，保留“屏蔽项”，加入“全部未下载”等智能筛选，下次进入列表页生效。
-- **新作品保持浏览位置**：打开作品后，已浏览卡片渐隐移除，后续作品自动补位；保留筛选、滚动位置和其他选择项。连续移除、切换筛选和关闭重开弹窗也能正确处理。
+- **WebDAV 自动循环备份**：手动验证开启，按更新条数或分钟间隔触发，默认 100 条、30 分钟、保留本来源最近 10 份；详见 [使用说明](docs/webdav-auto-backup.md)。
+- **详情鉴定快捷键**：普通详情、FC2 页面与弹窗共用四状态快捷键，在“列表与详情”录制、清除并保存，默认留空。
+- **列表与弹窗交互修复**：历史跨页选择与批量目标保持一致；新作品筛选、分页和关闭重开时保留当前条件，处理迟到响应和焦点恢复。
+- **数据与凭证恢复**：WebDAV 连接按站点隔离；备份恢复保留目标设备凭证，导出与状态事务协调；离线结果待确认时先核实再重试。
 
-完整内容见 [6.5.2 更新记录](CHANGELOG.md#652---2026-10-16)。
+完整变化见 [Unreleased](CHANGELOG.md#unreleased)。开发版仍在验证中：最近一次完整检查的脚本体积、启动性能门禁未通过，真实 WebDAV 账号及登录实站验收尚未完成。
 
 ## 功能概览
 
@@ -41,7 +44,7 @@ JHS 将作品状态、演员收藏、新作追踪、外部检索、媒体预览�
 | 磁力辅助 | 多来源搜索、重复结果合并、字幕标识、评分与高亮；选中资源后可提交到已启用且支持该资源的云盘 |
 | 图片与视频 | 多截图源顺序回退、分源缓存、封面查看、悬浮大图和预览视频 |
 | 字幕与翻译 | SubtitleCat 字幕搜索、标题翻译和相关快捷入口 |
-| 数据工具 | 本地/WebDAV 备份与恢复、迁移快照、数据体检、操作撤销和意外中断后的状态恢复；备份不携带安装凭证 |
+| 数据工具 | 本地/WebDAV 备份与恢复、自动循环备份、迁移快照、数据体检、操作撤销和意外中断后的状态恢复；备份不携带安装凭证 |
 | 统计与诊断 | 全库只读概览、当前页屏蔽项入口、6.4.0 起的 7/30 天活动趋势、日志覆盖范围、功能启动和外部请求诊断 |
 
 ## 支持范围
@@ -63,18 +66,19 @@ JHS 将作品状态、演员收藏、新作追踪、外部检索、媒体预览�
 
 在浏览器中安装 Tampermonkey 或兼容的用户脚本管理器，并允许其运行用户脚本。
 
-### 2. 安装 JHS
+### 2. 安装 7.0 开发版
 
-点击 **[安装最新正式版](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js)**，在用户脚本管理器中确认安装。
+点击 **[安装 7.0 开发版完整脚本](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js)**，在用户脚本管理器中确认名称为 `JHS Dev 7.0`、版本为 `7.0.0-dev.<UTC 时间戳>`。
 
-安装后的更新来源：
+只启用一个 JHS 脚本，切换前先导出数据备份。Dev 不配置正式版更新地址，更新时从上述入口重新安装。也可下载仓库根目录的 `JHS-7.0.dev.user.js`，通过管理器导入。
 
-- `@downloadURL`：最新 GitHub Release 中的 `JHS.user.js`
-- `@updateURL`：`main` 分支中的构建产物
+需要正式版时使用 [最新 Release](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js)。根目录 `JHS.user.js` 保留正式 6.5.2 产物。
 
 ### 3. 打开支持的站点
 
 访问 JavDB 或 JavBus。脚本会根据站点和页面类型自动启用所需功能；可从页面中的 JHS 设置入口调整功能、任务间隔、显示方式和外部站点地址。
+
+开发版可在控制台运行 `document.documentElement.getAttribute("data-jhs-dev-build")` 核对版本和源码提交。WebDAV 自动备份入口为“设置 → 备份与数据 → 自动循环备份”，配置步骤见 [使用说明](docs/webdav-auto-backup.md)。
 
 ## 推荐使用流程
 
@@ -110,7 +114,7 @@ JHS 将作品状态、演员收藏、新作追踪、外部检索、媒体预览�
 
 ## 项目结构
 
-以下是 `develop` 的 7.0 源码结构；`main` 的正式 6.5.1 仍保留插件执行兼容路径。
+以下是 `develop` 的 7.0 源码结构；`main` 的正式 6.5.2 仍保留插件执行兼容路径。
 
 ```text
 src/
@@ -148,7 +152,7 @@ src/main.js
 
 仓库使用两个长期分支：
 
-- `main`：正式版本和发布产物，当前为 6.5.1。
+- `main`：正式版本和发布产物，当前为 6.5.2。
 - `develop`：最新 7.0 源码、修复和回归测试，作为开发版本持续验证。
 
 日常开发在 `develop` 上进行，功能分支合入 `develop`；正式发布前完成验证，再通过 PR 合入 `main`。`main` 上的热修复须同步到 `develop`，沿用现有 24 小时同步规则。
@@ -167,6 +171,8 @@ npm run check
 
 `develop` 的默认构建输出为 `dist/dev/JHS-7.0.dev.user.js`，名称为 `JHS Dev 7.0`，版本为带时间戳的 `7.0.0-dev.*`。开发构建保留独立安装身份，不改写正式 `JHS.user.js`，也不配置正式版自动更新地址。安装开发版时只启用一个 JHS 脚本。
 
+交付开发脚本时执行 `npm run build:dev:deliver`，同时生成根目录 `JHS-7.0.dev.user.js` 和 `dist/dev/JHS-7.0.dev.user.js`，两者字节一致。提交根目录 Dev 文件，`dist/` 仍只保留本地构建。普通测试构建不改写已交付的 Dev 文件。
+
 常用命令：
 
 | 命令 | 用途 |
@@ -174,6 +180,7 @@ npm run check
 | `npm run test` | 运行 Vitest 单元测试 |
 | `npm run build` | 在 `develop` 构建 `dist/dev/JHS-7.0.dev.user.js` |
 | `npm run build:dev` | 构建同一 7.0 开发版本 |
+| `npm run build:dev:deliver` | 同时更新仓库根目录的完整 Dev 安装脚本，供 develop 交付 |
 | `npm run build:release` | 显式生成根目录及 `dist/JHS.user.js`，仅用于获授权的正式发布准备 |
 | `npm run check` | 执行单元测试、构建、类型/架构/集成检查、性能预算、发布契约和 UI 审计 |
 | `npm run check:browser` | 运行启动性能与浏览器功能回归 |

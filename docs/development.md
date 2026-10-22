@@ -6,17 +6,31 @@
 
 | 项目 | main | develop |
 | --- | --- | --- |
-| 用途 | 6.5 正式维护与发布，当前稳定版 6.5.1 | 7.0 开发、修复和回归 |
-| 源码稳定元数据 | 6.5.1 | 沿用 6.5.1，Dev 身份由构建时生成 |
+| 用途 | 6.5 正式维护与发布，当前稳定版 6.5.2 | 7.0 开发、修复和回归 |
+| 源码稳定元数据 | 6.5.2 | 沿用 6.5.2，Dev 身份由构建时生成 |
 | 默认 `npm run build` | `scripts/build.mjs`，生成正式双产物 | `scripts/build-dev.mjs`，仅生成 7.0 Dev |
 | 默认产物 | 根目录 `JHS.user.js` 与 `dist/JHS.user.js` | `dist/dev/JHS-7.0.dev.user.js` |
 | `npm run build:dev` | 6.5 调试脚本 `dist/dev/JHS.dev.user.js` | 与默认 build 相同 |
+| `npm run build:dev:deliver` | 不适用 | 同时更新根目录 `JHS-7.0.dev.user.js`，与 dist Dev 文件字节一致 |
 | Dev 名称和版本 | `JHS Dev 6.5` / `6.5.0.dev.<UTC 时间戳>`，这是当前调试构建器的元数据 | `JHS Dev 7.0` / `7.0.0-dev.<UTC 时间戳>` |
 | 正式构建入口 | `npm run build` | `npm run build:release`，仅用于明确的正式发布准备 |
 | CI 分支配置 | main 当前工作流列出 main、refactor/6.5 | develop 当前工作流列出 main、develop |
 | 正式发布 | main push、稳定版本严格递增且依赖门禁通过 | develop push 只检查，不发布 |
 
 `build:dev` 在两条分支都使用独立安装身份，移除正式更新地址并检查正式产物哈希未变。develop 还在页面根元素写入 `data-jhs-dev-build`，包含 Dev 版本、源码提交及 dirty 标识。UTC 时间戳不等于本地时区时间。
+
+## 安装与交付开发版
+
+`develop` 跟踪的完整脚本为 [JHS-7.0.dev.user.js](../JHS-7.0.dev.user.js)。用户可直接 [安装 Raw 脚本](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js)，无需本地构建。安装时核对名称 `JHS Dev 7.0`，只启用一个 JHS；Dev 更新从同一入口重新安装。
+
+准备交付时先完成源码检查，再执行：
+
+```bash
+npm run build:dev:deliver
+node --check JHS-7.0.dev.user.js
+```
+
+该命令由构建器同时输出根目录和 dist 的完整 Dev 脚本，不手工编辑产物。将根目录 Dev 文件与本次改动一起提交；也可在源码提交后生成独立的产物提交，使构建标识指向已提交源码。普通 `npm run build` / `npm run check` 仍只写忽略的 dist，不刷新仓库交付快照。正式 `JHS.user.js` 与 `dist/JHS.user.js` 始终保留。
 
 日常功能分支以 develop 为基础，正式发布准备完成后再按授权合入 main。main 热修复须在 24 小时内同步到 develop；develop 的 `scripts/check-refactor-sync.mjs` 检查 origin/main 的祖先关系和提交年龄。
 
@@ -79,7 +93,7 @@ fixture 自动回归与真实登录站点验收分别记录。实站验收先核
 
 ## 产物、版本与提交
 
-- develop 日常构建保留根目录正式产物和 `dist/JHS.user.js`。Dev 文件位于忽略的 dist 中。
+- develop 日常构建保留根目录正式产物和 `dist/JHS.user.js`。本地 Dev 文件位于忽略的 dist 中；开发版交付须用 `npm run build:dev:deliver` 更新受版本控制的根目录 `JHS-7.0.dev.user.js`，核对两份 Dev 文件字节一致。
 - main 源码变化用正式构建维护跟踪的根目录产物，并核对与 dist 字节一致。纯文档改动不重建。
 - 用户可见变化记录到 CHANGELOG 的 Unreleased；不为修复或文档任务自动升稳定版本。
 - 正式升版同步 package.json、package-lock.json 顶层与根包版本、src/main.js 元数据、CHANGELOG 对应版本段落和根目录产物，由 release-contract 校验。

@@ -19,6 +19,7 @@
   "scripts": {
     "build": "node scripts/build-dev.mjs",
     "build:dev": "node scripts/build-dev.mjs",
+    "build:dev:deliver": "node scripts/build-dev.mjs --deliver",
     "build:release": "node scripts/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

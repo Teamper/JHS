@@ -19,6 +19,8 @@ const dirty = execFileSync("git", ["status", "--porcelain", "--untracked-files=n
 const timestamp = new Date().toISOString().replace(/\D/g, "").slice(0, 12);
 const version = `7.0.0-dev.${timestamp}`;
 const devPath = join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js");
+const deliver = process.argv.includes("--deliver");
+const deliveryPath = join(repoRoot, "JHS-7.0.dev.user.js");
 
 const transformMetadata = (metadata) => metadata
   .replace(/^\/\/ @name\s+.+$/m, "// @name         JHS Dev 7.0")
@@ -28,8 +30,9 @@ const transformMetadata = (metadata) => metadata
   .replace(/^\/\/ @(downloadURL|updateURL).*(?:\r?\n|$)/gm, "");
 
 const transformBundle = (bundle) => `document.documentElement?.setAttribute("data-jhs-dev-build", ${JSON.stringify(`${version}|${commit}${dirty}`)});\n${bundle}`;
-const result = await buildUserscript({ outputPaths: [devPath], transformMetadata, transformBundle });
+const result = await buildUserscript({ outputPaths: deliver ? [devPath, deliveryPath] : [devPath], transformMetadata, transformBundle });
 for (const [path, hash] of before) {
   if (await sha256(path) !== hash) throw new Error(`Dev build modified formal artifact: ${path}`);
 }
 console.log(`Built dist/dev/JHS-7.0.dev.user.js (${result.outputBytes} bytes, ${commit}${dirty})`);
+if (deliver) console.log("Updated JHS-7.0.dev.user.js for development delivery");
