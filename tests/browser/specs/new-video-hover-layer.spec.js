@@ -20,7 +20,7 @@ async function boot(page, context) {
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
     await page.evaluate(()=>{
         const plugin=window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
-        window.localStorage.setItem("jhs_newVideoViewMode","list");
+        window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode","list");
         plugin.reloadNewVideoWorkspaceData=async function(){
             this.nvFlatListCache=[{carNum:"ABC-001",title:"Hover fixture",actressName:"Fixture",coverUrl:"https://images.example.test/cover.svg",flags:{},decisionState:"pending"}];
             this.nvJavDbUrl="https://javdb.com";

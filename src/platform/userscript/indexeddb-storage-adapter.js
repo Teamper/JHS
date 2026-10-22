@@ -21,7 +21,15 @@ export class IndexedDbStorageAdapter {
     /** @param {string} key @param {unknown} [fallback] */
     getValue(key, fallback) { return this.gmGetValue(key, fallback); }
     /** @param {string} key @param {unknown} value */
-    setValue(key, value) { this.gmSetValue(key, value); }
+    setValue(key, value) { return this.gmSetValue(key, value); }
+    /** @type {any} */ gmListValues = null;
+    /** @type {any} */ gmListenValue = null;
+    /** @type {any} */ gmUnlistenValue = null;
+    listValues() { return this.gmListValues?.() ?? []; }
+    /** @param {string} key @param {() => void} callback */
+    listenValue(key, callback) { return this.gmListenValue?.(key, callback); }
+    /** @param {any} listener */
+    unlistenValue(listener) { this.gmUnlistenValue?.(listener); }
     /** @param {string} key */
-    removeValue(key) { this.gmDeleteValue(key); }
+    removeValue(key) { return this.gmDeleteValue(key); }
 }

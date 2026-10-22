@@ -454,7 +454,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     expect(instances).toEqual({ previewCount: 1, hasInstance: true, setting: "yes" });
   });
 
-  test("List Feature restores and persists the actor tag expansion under the legacy local key", async ({ context, page }, testInfo) => {
+  test("List Feature migrates actor tag expansion and persists changes through SettingsService", async ({ context, page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-wide");
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/actors/list-tag-expansion-fixture", { waitUntil: "domcontentloaded" });
@@ -472,7 +472,8 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     expect(await page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.featureListTagExpansionAdapter))).toBe(true);
     await page.locator(".actor-tags .tag-expand").click();
     await expect(page.locator(".actor-tags .content")).toHaveClass(/collapse/);
-    expect(await page.evaluate(() => localStorage.getItem("jhs_tag_expand"))).toBe("false");
+    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").getRuntimeService("settings").snapshot().tagExpanded)).toBe(false);
+    expect(await page.evaluate(() => localStorage.getItem("jhs_tag_expand"))).toBe("true");
   });
 
   test("List Feature routes card modifier clicks and autoplay through the injected navigation capability", async ({ context, page }, testInfo) => {

@@ -80,7 +80,7 @@ test("new-video loading accepts current filters and keeps additive page selectio
         const items = Array.from({ length: 5 }, (_, i) => ({ carNum: `ABC-00${i + 1}`, title: "Fixture", actressName: "Fixture", actresses: ["Fixture"], starId: "fixture", categories: ["censored"], isVr: i < 4, flags: {}, decisionState: "pending", publishTime: "2026-10-20", coverUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" }));
         const snapshot = { items, actresses: [], carMap: new Map(), decisions: {}, ruleTime: 8760, javDbUrl: "https://javdb.com" };
         plugin.featureNewVideoWorkspaceController.loadWorkspace = () => new Promise(resolve => window.finishContinuityLoad = () => resolve(snapshot));
-        plugin.nvPageSize = 2; localStorage.setItem("jhs_newVideoViewMode", "list"); await plugin.openDialog();
+        plugin.nvPageSize = 2; window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode", "list"); await plugin.openDialog();
     });
     await page.waitForFunction(() => typeof window.finishContinuityLoad === "function");
     await page.evaluate(() => window.jQuery("#nvCategoryFilter").val("vr").trigger("change"));

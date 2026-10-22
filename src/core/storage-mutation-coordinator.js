@@ -11,12 +11,14 @@ export class StorageMutationCoordinator {
         this._queue = Promise.resolve();
         /** @type {any} Optional observer of the completed business mutation. */
         this.observer = null;
+        /** @type {(() => Promise<void>) | null} */ this.beforeMutation = null;
     }
 
     /** @template T @param {() => Promise<T> | T} operation @returns {Promise<T>} */
     runExclusive(operation) {
         if (typeof operation !== "function") throw new TypeError("Storage mutation must be a function");
         const execute = async () => {
+            await this.beforeMutation?.();
             this.observer?.begin();
             let succeeded = false;
             try { const value = await operation(); succeeded = true; return value; }

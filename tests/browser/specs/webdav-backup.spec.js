@@ -77,7 +77,7 @@ test("Chrome settings backup keeps WebDAV's 10-second deadline and records safe 
     const originalRequest = webdav.http.port.requestImplementation;
     webdav.http.port.requestImplementation = (options) => {
       if (new URL(options.url).origin !== "https://dav.example.test") return originalRequest(options);
-      window.__webdavRequests.push({ method: options.method, timeoutMs: options.timeout, bytes: typeof options.data === "string" ? options.data.length : 0 });
+      if (decodeURIComponent(new URL(options.url).pathname).split("/").includes("JHS-数据备份")) window.__webdavRequests.push({ method: options.method, timeoutMs: options.timeout, bytes: typeof options.data === "string" ? options.data.length : 0 });
       const timer = setTimeout(() => options.onload({ status: options.method === "MKCOL" ? 405 : 201, responseText: "", finalUrl: options.url }), options.method === "PUT" ? 75 : 10);
       return { abort() { clearTimeout(timer); options.onabort?.(); } };
     };

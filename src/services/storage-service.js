@@ -3,6 +3,7 @@
 import { assertPort, PORT_METHODS } from "../contracts/ports.js";
 
 export class StorageService {
+    /** @type {import("./personal-preferences-service.js").PersonalPreferencesService | null} */ preferences = null;
     /** @param {any} storagePort */
     constructor(storagePort) { this.port = assertPort(storagePort, "StoragePort", PORT_METHODS.storage); }
     /** @param {string} key */
@@ -13,9 +14,9 @@ export class StorageService {
     remove(key) { return this.port.remove(key); }
     keys() { return this.port.keys(); }
     /** @param {string} key */
-    getLocal(key) { return this.port.getLocal(key); }
+    getLocal(key) { return this.preferences?.owns(key) ? this.preferences.get(key) : this.port.getLocal(key); }
     /** @param {string} key @param {string} value */
-    setLocal(key, value) { return this.port.setLocal(key, value); }
+    setLocal(key, value) { if (this.preferences?.owns(key)) this.preferences.set(key, value); else return this.port.setLocal(key, value); }
     /** @param {string} key */
     removeLocal(key) { return this.port.removeLocal(key); }
     /** @param {string} key @param {unknown} [fallback] */
@@ -24,4 +25,9 @@ export class StorageService {
     setValue(key, value) { return this.port.setValue(key, value); }
     /** @param {string} key */
     removeValue(key) { return this.port.removeValue(key); }
+    listValues() { return this.port.listValues?.() ?? []; }
+    /** @param {string} key @param {() => void} callback */
+    listenValue(key, callback) { return this.port.listenValue?.(key, callback); }
+    /** @param {any} listener */
+    unlistenValue(listener) { this.port.unlistenValue?.(listener); }
 }

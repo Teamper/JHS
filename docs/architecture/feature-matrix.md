@@ -8,6 +8,7 @@
 
 | Feature | Kind | Sites | Routes | Startup | Contributions |
 | --- | --- | --- | --- | --- | --- |
+| `webdav-sync` | system | javdb, javbus | all | eager | — |
 | `settings-effects` | system | all | all | eager | — |
 | `settings-entry` | system | javdb, javbus | all | eager | `settings.core` |
 | `settings` | system | all | all | on-command | — |

@@ -19,7 +19,7 @@ const result = spawnSync(npx, [ "playwright", "test", "specs/visual-regression.s
 if (result.status !== 0) process.exit(result.status ?? 1);
 const shortcutResult = spawnSync(npx, [ "playwright", "test", "specs/detail-shortcuts.spec.js", "--grep=鉴定快捷键布局", "--project=desktop-wide", "--project=mobile", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
 if (shortcutResult.status !== 0) process.exit(shortcutResult.status ?? 1);
-const autoBackupResult = spawnSync(npx, [ "playwright", "test", "specs/webdav-auto-backup.spec.js", "--grep=自动备份布局", "--project=desktop-wide", "--project=mobile", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
+const autoBackupResult = spawnSync(npx, [ "playwright", "test", "specs/webdav-auto-backup.spec.js", "--grep=多端同步布局", "--project=desktop-wide", "--project=mobile", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
 if (autoBackupResult.status !== 0) process.exit(autoBackupResult.status ?? 1);
 const detailResult = spawnSync(npx, [ "playwright", "test", "specs/detail-settings-regressions.spec.js", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
 if (detailResult.status !== 0) process.exit(detailResult.status ?? 1);

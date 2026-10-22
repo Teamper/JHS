@@ -84,6 +84,7 @@ export class StorageManager {
     }
     async _setItemAndInvalidate(e, t) {
         await this.backupChanges?.capture(e);
+        await this.syncState?.capture(e);
         await this.forage.setItem(e, t);
         this._invalidateCache(e);
     }
@@ -545,13 +546,15 @@ export class StorageManager {
         mutator(settings);
         await this._saveSettingWithoutLock(settings);
     }
-    async importData(e) {
+    async importData(e) { return this.importDataWithGuard(e); }
+    async importDataWithGuard(e, options = {}) {
         const { data: imported, warnings } = normalizePortableData(e);
         let refreshSettings = false;
         // Snapshot, import, and migration must share one write window. A gap between
         // snapshot creation and import could omit a concurrent tab's last mutation.
         try {
         await this._withCrossTabLock("jhs_state_mutation", async () => {
+            await options.assertActive?.();
             const targetVersion = await assertSupportedDataVersion(this);
             await this.stateService?.recoverPendingTransactionWithoutLock?.();
             if (await hasPortableUserData(this)) {
@@ -575,6 +578,7 @@ export class StorageManager {
                 if (Object.hasOwn(imported, this.setting_key)) {
                     imported.setting = mergePortableSettings(await this.forage.getItem(this.setting_key) || {}, imported.setting);
                 }
+                await options.assertActive?.();
                 for (const key in imported) {
                     await this._setItemAndInvalidate(key, imported[key]);
                 }

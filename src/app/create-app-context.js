@@ -28,8 +28,10 @@ import { AccountService } from "../services/account-service.js";
 import { SettingsService } from "../services/settings-service.js";
 import { StorageService } from "../services/storage-service.js";
 import { WebDavService } from "../services/webdav-service.js";
-import { AutoBackupService } from "../services/auto-backup-service.js";
-import { BackupChangeTracker } from "../core/backup-change-tracker.js";
+import { WebDavSyncService } from "../services/webdav-sync-service.js";
+import { WebDavSharedProfile } from "../services/webdav-shared-profile.js";
+import { WebDavSyncStore } from "../core/webdav-sync-store.js";
+import { PersonalPreferencesService } from "../services/personal-preferences-service.js";
 import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 import { BusImageLayoutService } from "../services/bus-image-layout-service.js";
 import { CredentialService } from "../services/credential-service.js";
@@ -59,10 +61,10 @@ export function createAppContext(runtime) {
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
     const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue, runtime.gmDeleteValue);
     const mutationCoordinator = runtime.storageMutationCoordinator ?? new StorageMutationCoordinator();
-    const backupChanges = new BackupChangeTracker(runtime.storageForage, mutationCoordinator);
-    mutationCoordinator.observer = backupChanges;
-    if (runtime.legacyStorage) runtime.legacyStorage.backupChanges = backupChanges;
-    storagePort.beforeSet = key => backupChanges.capture(key);
+    const gmRuntime = /** @type {any} */ (runtime);
+    storagePort.gmListValues = gmRuntime.gmListValues;
+    storagePort.gmListenValue = gmRuntime.gmListenValue;
+    storagePort.gmUnlistenValue = gmRuntime.gmUnlistenValue;
     const dialogPort = new LayerDialogAdapter(runtime.layer);
     const stylePort = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
@@ -74,7 +76,7 @@ export function createAppContext(runtime) {
     const styles = new StyleRegistry(stylePort);
     const settingsRegistry = new SettingsRegistry();
     registerDefaultSettings(settingsRegistry);
-    const settings = new SettingsService(storage, { mutationCoordinator: runtime.storageMutationCoordinator, afterPersist: async (_snapshot, changedNames) => {
+    const settings = new SettingsService(storage, { mutationCoordinator, afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     }, normalizers: settingsRegistry.normalizers() });
@@ -111,7 +113,16 @@ export function createAppContext(runtime) {
     const credential = new CredentialService(storage, runtime.localStorage);
     const pan123Credential = new Pan123CredentialService(storage, notifications);
     const webdav = new WebDavService(http, credential, settings);
-    const autoBackup = new AutoBackupService({ webdav, settings, tracker: backupChanges, storage: runtime.legacyStorage, events: runtime.eventBus });
+    const syncState = new WebDavSyncStore({ forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus });
+    mutationCoordinator.observer = syncState;
+    mutationCoordinator.beforeMutation = () => syncState.recoverWithoutLock();
+    if (runtime.legacyStorage) runtime.legacyStorage.syncState = syncState;
+    storagePort.beforeSet = key => syncState.capture(key);
+    const sharedProfile = new WebDavSharedProfile({ credential, storage, origin: globalThis.location?.origin || "", readLegacy: () => settings.runExclusive(() => webdav.readProfileWithoutLock()) });
+    webdav.sharedProfile = sharedProfile;
+    const preferences = new PersonalPreferencesService(settings, runtime.localStorage, message => notifications.error(message));
+    storage.preferences = preferences;
+    const autoBackup = new WebDavSyncService({ webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;
@@ -162,6 +173,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage)
         .register(SERVICE.legacyStorage, runtime.legacyStorage).register(SERVICE.legacyUtils, runtime.legacyUtils).register(SERVICE.webdav, webdav)
         .register(SERVICE.autoBackup, autoBackup)
+        .register(SERVICE.webdavSync, autoBackup)
         .register(SERVICE.credential, credential)
         .register(SERVICE.pan123Credential, pan123Credential)
           .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.resourceSettings, resourceSettings).register(SERVICE.notifications, notifications).register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.cache, cache).register(SERVICE.profile, profile)

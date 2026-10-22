@@ -1,4 +1,6 @@
-# WebDAV 自动循环备份（7.0 Dev）
+# WebDAV 自动循环备份（旧说明）
+
+7.0 Dev 已由全自动双向同步接管自动上传循环，当前入口、保留和恢复方式见 [WebDAV 多端自动同步与恢复](webdav-sync.md)。以下为旧功能的历史说明，旧手动备份和自动备份文件仍可使用。
 
 自动备份位于 **设置 → 备份与数据 → 自动循环备份**，默认关闭。先安装 [develop 完整脚本](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js)，核对脚本名称为 `JHS Dev 7.0`，并只启用一个 JHS 脚本。
 

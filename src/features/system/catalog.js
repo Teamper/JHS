@@ -8,10 +8,13 @@ import { SettingsEntryController } from "./settings-entry-controller.js";
 
 export const systemFeatureManifests = Object.freeze([
     defineFeature({
-        id: "auto-backup", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-        requires: [SERVICE.autoBackup, PORT.host], contributes: [], providesCommands: [],
-        activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-            deps[SERVICE.autoBackup].start(runtime.scope, deps[PORT.host].document);
+        id: "webdav-sync", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager",
+        requires: [SERVICE.webdavSync, PORT.host], contributes: [], providesCommands: [],
+        activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
+            const service = deps[SERVICE.webdavSync];
+            await service.deps.preferences.migrate();
+            await service.deps.store.initialize();
+            service.start(runtime.scope, deps[PORT.host].document);
             return { activeContributions: [] };
         },
     }),

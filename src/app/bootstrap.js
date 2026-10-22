@@ -139,6 +139,7 @@ export async function bootstrapJhs() {
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
             gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue, gmDeleteValue: globalThis.GM_deleteValue,
+            gmListValues: globalThis.GM_listValues, gmListenValue: globalThis.GM_addValueChangeListener, gmUnlistenValue: globalThis.GM_removeValueChangeListener,
             legacyHttp: gmHttp, legacyStorage: storageManager, legacyUtils: utils, copyToClipboard: (label, value) => utils.copyToClipboard(label, value), eventBus: jhsEventBus, storageMutationCoordinator, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });

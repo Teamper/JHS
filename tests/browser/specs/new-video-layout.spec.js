@@ -20,7 +20,7 @@ for (const scenario of [
             })),
         }]);
         storage._invalidateCache(storage.favorite_actresses_key);
-        localStorage.setItem("jhs_newVideoViewMode", "list");
+        window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode", "list");
         const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
         plugin.nvPageSize = 3;
         await plugin.openDialog();
@@ -77,7 +77,7 @@ test("browsing new video fades only that card and fills the page without losing 
             }))
         }]);
         storage._invalidateCache(storage.favorite_actresses_key);
-        localStorage.setItem("jhs_newVideoViewMode","list");
+        window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode","list");
         await window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").openDialog();
     });
     await expect(page.locator("#nv-grid .nv-card")).toHaveCount(60);

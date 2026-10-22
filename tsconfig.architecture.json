@@ -49,6 +49,8 @@
     "src/core/settings-migration.js",
     "src/core/storage-queue.js",
     "src/core/storage-mutation-coordinator.js",
+    "src/core/webdav-sync-model.js",
+    "src/core/webdav-sync-store.js",
     "src/core/site-context.js",
     "src/core/state-model.js",
     "src/core/state-domains.js",

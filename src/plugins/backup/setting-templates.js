@@ -76,17 +76,14 @@ const selectRow = (id, label, choices, effect = "manual") => row(id, label, `<se
 const section = (id, title, content, help = "") => `<section id="${id}" class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>${title}</h3>${help ? `<p>${help}</p>` : ""}</header>${content}</section>`;
 
 function autoBackupSettings() {
-    const toggle = (/** @type {string} */ id, /** @type {string} */ label, description = "") => row(id, label, `<input type="checkbox" id="${id}" class="mini-switch" role="switch">`, description);
-    const number = (/** @type {string} */ id, /** @type {string} */ label) => row(id, label, `<input type="number" id="${id}" class="jhs-field" min="1" max="1000000" step="1">`);
-    return section("webdav-auto-backup", "自动循环备份",
-        toggle("webDavAutoBackupEnabled", "启用自动备份", "默认关闭；保存时先完成一次上传并确认可列出，成功后启用") +
-        '<div id="jhs-auto-backup-options" hidden>' +
-        toggle("webDavAutoBackupOnChanges", "按更新条数", "影片、演员等业务记录实际变动后累计；刷新后保留进度") +
-        number("webDavAutoBackupChangeCount", "累计更新条数") +
-        toggle("webDavAutoBackupOnInterval", "按分钟间隔", "两种条件可同时启用，任一先达到就备份") +
-        number("webDavAutoBackupMinutes", "间隔分钟") + number("webDavAutoBackupKeepCount", "保留自动备份份数") + '</div>' +
-        '<p id="jhs-auto-backup-status" class="jhs-setting-help" role="status" aria-live="polite"></p><div class="jhs-toolbar"><button type="button" id="webdavAutoVerifyBtn" class="jhs-btn jhs-btn--secondary">验证并启用</button></div>',
-        "仅在插件页面运行时检查；关闭页面后，下次打开检查到期并补一份。成功上传后只清理本来源的旧自动备份，手动备份保留。");
+    return section("webdav-auto-backup", "多端自动同步",
+        '<p id="jhs-auto-backup-status" class="jhs-setting-help" role="status" aria-live="polite"></p>' +
+        '<div class="jhs-toolbar"><button type="button" id="webdavAutoVerifyBtn" class="jhs-btn jhs-btn--secondary">立即同步</button><button type="button" id="webdavSyncPauseBtn" class="jhs-btn jhs-btn--secondary">暂停本机同步</button><button type="button" id="webdavSyncChooseBtn" class="jhs-btn jhs-btn--secondary" hidden>使用此连接</button></div>' +
+        '<details><summary>版本保留</summary>' +
+        row("webDavSyncKeepCount", "最近版本份数", '<input type="number" id="webDavSyncKeepCount" class="jhs-field" min="3" max="1000000" step="1">', "每个副本至少保留 3 份，默认 10 份") +
+        row("webDavSyncHistoryDays", "每日版本保留天数", '<input type="number" id="webDavSyncHistoryDays" class="jhs-field" min="0" max="365" step="1">', "默认保留过去 30 天每天最后一份；0 表示仅保留最近版本") + '</details>' +
+        '<details><summary>历史恢复</summary><div class="jhs-toolbar"><button type="button" id="webdavSyncHistoryBtn" class="jhs-btn jhs-btn--secondary">查看恢复版本</button></div><label for="webdavSyncRecoveryFile">选择恢复版本</label><select id="webdavSyncRecoveryFile" class="jhs-select-source"><option value="">请先加载版本</option></select><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestoreData" class="jhs-checkbox" checked>业务数据</label><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestorePreferences" class="jhs-checkbox" checked>个性化偏好</label><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestoreLayout" class="jhs-checkbox">同时恢复该端布局</label><button type="button" id="webdavSyncRestoreBtn" class="jhs-btn jhs-btn--secondary">恢复所选版本</button></details>',
+        "保存有效 WebDAV 连接后自动接入，电脑、手机与 JavDB/JavBus 互通。修改后自动上传，打开页面或联网后自动追平；全部页面关闭期间不运行。普通偏好同步，布局留在本机并备份，密码和云盘授权不上传。");
 }
 /** @param {string} name */
 const liveHost = (name) => `<div data-jhs-setting-section="${name}" class="jhs-setting-group"></div>`;

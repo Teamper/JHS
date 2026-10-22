@@ -1,35 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { isolatedDav, sharedUserscriptInstallation } from "../harness/sync-dav.js";
 
-async function installDav(page) {
-    await page.evaluate(() => {
-        const original = window.GM_xmlhttpRequest;
-        window.__autoDavRequests = [];
-        window.GM_xmlhttpRequest = options => {
-            const url = new URL(options.url);
-            if (url.hostname !== "dav.example.test") return original(options);
-            const method = options.method, name = decodeURIComponent(url.pathname.split("/").pop());
-            window.__autoDavRequests.push({ method, name });
-            let aborted = false;
-            queueMicrotask(() => {
-                if (aborted) return;
-                let files = JSON.parse(localStorage.getItem("__auto_dav_files") || '["manual.json","auto_01234567-1234-1234-1234-012345678901_20200101T000000000Z_01234567-1234-1234-1234-012345678901.json"]');
-                if (method === "PUT") files.push(name);
-                if (method === "DELETE") files = files.filter(item => item !== name);
-                localStorage.setItem("__auto_dav_files", JSON.stringify(files));
-                const body = `<d:multistatus xmlns:d="DAV:">${files.map(file => `<d:response><d:href>/dav/JHS-%E6%95%B0%E6%8D%AE%E5%A4%87%E4%BB%BD/${encodeURIComponent(file)}</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>100</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`).join("")}</d:multistatus>`;
-                options.onload({ status: method === "MKCOL" ? 405 : method === "PROPFIND" ? 207 : 201, responseText: method === "PROPFIND" ? body : "", finalUrl: options.url });
-            });
-            return { abort() { aborted = true; } };
-        };
-    });
-}
-
-async function boot(page, context, options = {}) {
-    await fulfillHostFixtures(context);
-    await page.goto("https://javdb.com/");
-    await injectUserscriptRuntime(page, { ...options, beforeUserscriptInjection: installDav });
-}
+const service = (page, method = "check", ...args) => page.evaluate(({ method, args }) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup")[method](...args), { method, args });
 async function openSettings(page) {
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("data-panel"));
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavAutoVerifyBtn") });
@@ -37,101 +10,114 @@ async function openSettings(page) {
     await dialog.locator('.side-menu-item[data-panel="data-panel"]').click();
     return dialog;
 }
-const status = page => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").getStatus());
-const uploads = page => page.evaluate(() => window.__autoDavRequests.filter(request => request.method === "PUT").length);
+async function configure(page, url) {
+    await page.evaluate(url => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav").saveProfile({ url, username: "synthetic", password: "synthetic-password" }), url);
+    await expect.poll(async () => (await service(page, "getStatus")).lastSuccessAt, { timeout: 12000 }).toBeGreaterThan(0);
+}
+const carList = page => page.evaluate(() => window.storageManager.forage.getItem("car_list"));
 
-test.beforeEach(async ({}, info) => { test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop and compact settings coverage"); });
+test.beforeEach(async ({}, info) => { test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop and compact sync coverage"); });
 
-test("automatic WebDAV backup is opt-in, counts actual changes and retains only its own files", async ({ page, context }) => {
-    await boot(page, context);
-    await page.evaluate(async () => {
-        const webdav = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav");
-        await webdav.saveProfile({ url: "https://dav.example.test/dav", username: "synthetic-user", password: "synthetic-password" }, draft => { draft.trustedLocalOrigins = ["https://dav.example.test"]; });
-    });
-    const dialog = await openSettings(page);
-    await expect(dialog.locator("#webDavAutoBackupEnabled")).not.toBeChecked();
-    await expect(dialog.locator("#jhs-auto-backup-options")).toBeHidden();
-    expect(await uploads(page)).toBe(0);
-    await dialog.locator("#webDavAutoBackupEnabled").check();
-    await dialog.locator("#webDavAutoBackupChangeCount").fill("2");
-    await dialog.locator("#webDavAutoBackupMinutes").fill("1");
-    await dialog.locator("#webDavAutoBackupKeepCount").fill("2");
-    await dialog.locator("#saveBtn").click();
-    await expect.poll(async () => (await status(page)).enabled).toBe(true);
-    expect(await uploads(page)).toBe(1);
-    await expect(dialog.locator("#jhs-auto-backup-status")).toContainText("上次成功");
-    await page.keyboard.press("Escape");
-    await expect(dialog).toHaveCount(0);
-    await page.evaluate(() => window.stateService.patch(["AUTO-101", "AUTO-102"], { favorite: true }));
-    await expect.poll(() => uploads(page)).toBe(2);
-    await expect.poll(async () => (await status(page)).pendingChanges).toBe(0);
-    await page.evaluate(() => window.stateService.patch(["AUTO-101", "AUTO-102"], { favorite: true }));
-    expect((await status(page)).pendingChanges).toBe(0);
-    await page.evaluate(() => window.stateService.patch(["AUTO-101", "AUTO-102"], { watched: true }));
-    await expect.poll(() => uploads(page)).toBe(3);
-    await expect.poll(() => page.evaluate(() => window.__autoDavRequests.filter(request => request.method === "DELETE").length)).toBe(1);
-    const files = await page.evaluate(() => JSON.parse(localStorage.getItem("__auto_dav_files")));
-    expect(files).toContain("manual.json");
-    expect(files.some(name => name.startsWith("auto_01234567-1234-1234-1234-012345678901_"))).toBe(true);
-    expect(files).toHaveLength(4);
+test("isolated DAV automatically converges across devices and sites, including preferences and deletions", async ({ page, context, browser }) => {
+    const dav = await isolatedDav(), other = await browser.newContext({ viewport: page.viewportSize() });
+    try {
+        const installA = await sharedUserscriptInstallation(context, dav), installB = await sharedUserscriptInstallation(other, dav);
+        await fulfillHostFixtures(context); await fulfillHostFixtures(other);
+        await page.goto("https://javdb.com/");
+        await injectUserscriptRuntime(page, { beforeUserscriptInjection: installA });
+        await configure(page, dav.url);
+        await page.evaluate(async () => {
+            const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+            await settings.patch({ themeMode: "dark", containerColumns: 7 });
+            await window.stateService.patch(["SYNC-101"], { favorite: true });
+        });
+        // Real 5-second debounce publishes while Settings is closed.
+        await expect.poll(() => dav.requests.filter(request => request.method === "PUT").length, { timeout: 12000 }).toBeGreaterThan(1);
+        const b = await other.newPage(); await b.goto("https://javdb.com/");
+        await injectUserscriptRuntime(b, { settingOverrides: { containerColumns: 2 }, beforeUserscriptInjection: installB });
+        await configure(b, dav.url);
+        await expect.poll(async () => (await carList(b))?.[0]?.stateFlags.favorite).toBe(true);
+        expect(await b.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().containerColumns)).toBe(2);
+        await expect(b.locator("html")).toHaveAttribute("data-jhs-theme", "dark");
+        const dialog = await openSettings(b); await dialog.locator('.side-menu-item[data-panel="browse-panel"]').click(); await dialog.locator("#waitCheckCount").fill("11");
+        await page.evaluate(async () => {
+            await window.stateService.patch(["SYNC-101"], { watched: true });
+            await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("waitCheckCount", "10");
+        });
+        await b.evaluate(() => window.stateService.patch(["SYNC-101"], { downloaded: true }));
+        await Promise.all([service(page), service(b)]); await service(page); await service(b);
+        expect((await carList(page))[0].stateFlags).toMatchObject({ favorite: true, downloaded: true, watched: true });
+        expect((await carList(b))[0].stateFlags).toEqual((await carList(page))[0].stateFlags);
+        await expect(dialog.locator("#waitCheckCount")).toHaveValue("11");
+        await dialog.locator("#saveBtn").click();
+        await service(b); await service(page);
+        expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().waitCheckCount)).toBe("11");
+        const bus = await context.newPage(); await bus.goto("https://www.javbus.com/");
+        await injectUserscriptRuntime(bus, { beforeUserscriptInjection: installA });
+        await expect.poll(async () => (await service(bus, "getStatus")).lastSuccessAt).toBeGreaterThan(0);
+        expect((await carList(bus))[0].carNum).toBe("SYNC-101");
+        await page.evaluate(() => window.stateService.remove(["SYNC-101"])); await service(page); await service(b); await service(bus);
+        expect(await carList(b)).toEqual([]); expect(await carList(bus)).toEqual([]);
+        const writes = dav.requests.filter(request => request.method === "PUT").length;
+        await service(page); await service(b); await service(bus);
+        expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes);
+    } finally { await other.close(); await dav.close(); }
 });
 
-test("minute backup catches up once on reopening and stops after disabling", async ({ page, context }) => {
-    await page.clock.setFixedTime(new Date("2026-10-21T08:00:00Z"));
-    await boot(page, context);
-    await page.evaluate(async () => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), webdav = plugin.getRuntimeService("webdav"), settings = plugin.getRuntimeService("settings");
-        await webdav.saveProfile({ url: "https://dav.example.test/dav", username: "synthetic-user", password: "synthetic-password" }, draft => { draft.trustedLocalOrigins = ["https://dav.example.test"]; });
-        await settings.patch({ webDavAutoBackupOnChanges: "no", webDavAutoBackupMinutes: 1 });
-        await plugin.getRuntimeService("autoBackup").enable();
-    });
-    await page.clock.setFixedTime(new Date("2026-10-21T12:00:00Z"));
-    await page.reload();
-    await injectUserscriptRuntime(page, { preserveStorage: true, beforeUserscriptInjection: installDav });
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").check());
-    await expect.poll(() => uploads(page)).toBe(1);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").check());
-    expect(await uploads(page)).toBe(1);
-    const dialog = await openSettings(page);
-    await dialog.locator("#webDavAutoBackupEnabled").uncheck();
-    await dialog.locator("#saveBtn").click();
-    await expect.poll(async () => (await status(page)).enabled).toBe(false);
-    await page.clock.setFixedTime(new Date("2026-10-21T13:00:00Z"));
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").check());
-    expect(await uploads(page)).toBe(1);
+test("zero requests without credentials, saved connection auto joins, pause and reopen preserve progress", async ({ page, context }) => {
+    const dav = await isolatedDav();
+    try {
+        const install = await sharedUserscriptInstallation(context, dav); await fulfillHostFixtures(context);
+        await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page, { beforeUserscriptInjection: install });
+        await service(page); expect(dav.requests).toHaveLength(0);
+        const dialog = await openSettings(page);
+        await expect(dialog.locator("#webDavAutoBackupEnabled")).toHaveCount(0);
+        await dialog.locator("#webDavUrl").fill(dav.url); await dialog.locator("#webDavUsername").fill("synthetic"); await dialog.locator("#webDavPassword").fill("synthetic-password");
+        await dialog.locator("#saveBtn").click();
+        await page.getByRole("button", { name: "授权", exact: true }).click();
+        await expect.poll(() => page.evaluate(() => !!window.GM_getValue("jhs_webdav_shared_profile_v1", null))).toBe(true);
+        await expect.poll(async () => (await service(page, "getStatus")).lastSuccessAt, { timeout: 12000 }).toBeGreaterThan(0);
+        await service(page, "pause", true); const count = dav.requests.length;
+        await page.evaluate(() => window.stateService.patch(["SYNC-2"], { favorite: true })); await service(page);
+        expect(dav.requests).toHaveLength(count);
+        await service(page, "pause", false); await service(page);
+        await expect.poll(async () => (await service(page, "getStatus")).pendingChanges).toBe(0);
+        const writes = dav.requests.filter(request => request.method === "PUT").length;
+        await page.reload(); await injectUserscriptRuntime(page, { preserveStorage: true, beforeUserscriptInjection: install });
+        await service(page);
+        expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes);
+        expect((await carList(page))[0].carNum).toBe("SYNC-2");
+        const stateBefore = await page.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
+        const recovery = await openSettings(page);
+        await recovery.locator("summary").filter({ hasText: "历史恢复" }).click();
+        await recovery.locator("#webdavSyncHistoryBtn").click();
+        const chooser = recovery.getByRole("combobox", { name: "选择恢复版本" });
+        await expect(chooser).toContainText("版本"); await chooser.click();
+        await page.getByRole("option", { name: /版本 1$/ }).click();
+        await recovery.locator("#webdavSyncRestorePreferences").uncheck();
+        await recovery.locator("#webdavSyncRestoreBtn").click();
+        await page.locator(".layui-layer-btn").getByRole("button", { name: "恢复", exact: true }).click();
+        await expect.poll(async () => (await carList(page)).length).toBe(0);
+        await expect.poll(async () => (await service(page, "getStatus")).pendingChanges, { timeout: 10000 }).toBe(0);
+        const stateAfter = await page.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
+        expect(stateAfter.replicaId).toBe(stateBefore.replicaId); expect(stateAfter.seq).toBeGreaterThan(stateBefore.seq);
+    } finally { await dav.close(); }
 });
 
-test("empty WebDAV configuration sends no automatic requests and a failed first verification stays off", async ({ page, context }) => {
-    await boot(page, context);
+for (const theme of ["light", "dark"]) test(`多端同步布局 ${theme}`, async ({ page, context }, info) => {
+    test.skip(process.env.JHS_VISUAL_REGRESSION !== "1", "visual gate uses pinned Chromium");
+    await page.clock.setFixedTime(new Date("2026-10-22T08:00:00Z"));
+    await fulfillHostFixtures(context); await page.goto("https://javdb.com/");
+    await injectUserscriptRuntime(page, { hostStyles: true, settingOverrides: { themeMode: theme } });
     const dialog = await openSettings(page);
-    await dialog.locator("#webDavAutoBackupEnabled").check();
-    await dialog.locator("#saveBtn").click();
-    await expect(dialog.locator("#webDavAutoBackupEnabled")).not.toBeChecked();
-    await expect(dialog.locator("#jhs-auto-backup-status")).toContainText("失败");
-    expect(await uploads(page)).toBe(0);
-    expect((await status(page)).enabled).toBe(false);
-    expect(await page.evaluate(() => window.__autoDavRequests.length)).toBe(0);
-});
-
-for (const theme of ["light", "dark"]) test(`自动备份布局 ${theme}`, async ({ page, context }, info) => {
-    test.skip(process.env.JHS_VISUAL_REGRESSION !== "1", "visual gate uses the pinned Chromium");
-    await page.clock.setFixedTime(new Date("2026-10-21T08:00:00Z"));
-    await boot(page, context, { hostStyles: true, settingOverrides: { themeMode: theme } });
-    const dialog = await openSettings(page);
-    await dialog.locator("#webDavAutoBackupEnabled").check();
-    for (const id of ["webDavAutoBackupChangeCount", "webDavAutoBackupMinutes", "webDavAutoBackupKeepCount"]) {
-        const field = dialog.locator(`#${id}`);
-        await field.scrollIntoViewIfNeeded();
-        await expect(field).toBeInViewport();
-        const label = await field.evaluate(input => document.querySelector(`label[for="${input.id}"]`)?.textContent);
-        expect(label).toBeTruthy();
-    }
-    const keep = dialog.locator("#webDavAutoBackupKeepCount");
-    await keep.focus(); await page.keyboard.press("ArrowUp");
-    await expect(keep).toHaveValue("11");
-    await page.keyboard.press("Tab");
-    await expect(dialog.locator("#webdavAutoVerifyBtn")).toBeFocused();
+    await service(page); await expect.poll(async () => (await service(page, "getStatus")).busy).toBe(false);
+    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").cancel());
+    await dialog.locator("#webDavSyncKeepCount").evaluate(input => input.closest("details").open = true);
+    const keep = dialog.locator("#webDavSyncKeepCount"); await keep.scrollIntoViewIfNeeded(); await keep.focus();
+    await page.keyboard.press("ArrowUp"); await expect(keep).toHaveValue("11");
+    await page.keyboard.press("Tab"); await expect(dialog.locator("#webDavSyncHistoryDays")).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expect(dialog.locator("#jhs-auto-backup-status")).toContainText("尚未接入同步");
     await dialog.screenshot({ path: info.outputPath(`auto-backup-${theme}.png`), animations: "disabled" });
     await expect(dialog).toHaveScreenshot(`auto-backup-${theme}.png`, { maxDiffPixelRatio: 0.02 });
 });

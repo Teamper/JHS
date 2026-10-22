@@ -98,13 +98,13 @@ function pruneActivityLog(log, now = Date.now()) {
     /** @type {StateRecord[]} */
     const older = [];
     result.entries.forEach((entry => (Date.parse(entry.createdAt) >= cutoff || "pending" === entry.commitState ? recent : older).push(entry)));
-    older.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))), recent.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+    older.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en"))), recent.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en")));
     const olderAllowance = Math.max(0, ACTIVITY_SOFT_LIMIT - recent.length);
-    result.entries = [ ...older.slice(-olderAllowance), ...recent ].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+    result.entries = [ ...older.slice(-olderAllowance), ...recent ].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en")));
     if (result.entries.length > ACTIVITY_HARD_LIMIT) {
         const pending = result.entries.filter((entry => "pending" === entry.commitState)), committed = result.entries.filter((entry => "pending" !== entry.commitState));
         const committedAllowance = Math.max(0, ACTIVITY_HARD_LIMIT - pending.length);
-        result.entries = [ ...(committedAllowance ? committed.slice(-committedAllowance) : []), ...pending ].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+        result.entries = [ ...(committedAllowance ? committed.slice(-committedAllowance) : []), ...pending ].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en")));
         result.truncatedAt = new Date(now).toISOString(), result.coverageStart = result.entries[0]?.createdAt || result.truncatedAt;
     }
     return result;
@@ -136,7 +136,9 @@ export class StateService {
         }
     }
     async getActivityLog() {
-        return pruneActivityLog(await this.domains.activity.read());
+        const log = pruneActivityLog(await this.domains.activity.read());
+        if (this.storage.syncState) log.entries = log.entries.map((/** @type {StateRecord} */ entry) => ({ ...entry, undoAvailable: this.storage.syncState.canUndo(entry.id) }));
+        return log;
     }
     async getOfflineHistory() {
         return await this.domains.offlineHistory.read();
@@ -145,7 +147,9 @@ export class StateService {
     async appendOfflineHistory(record) {
         return this._withLock(async () => {
             const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || new Date().toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
-            history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.domains.offlineHistory.write(history);
+            history.push(item);
+            if (history.length > 1e3) { const removed = history.splice(0, history.length - 1e3); this.storage.syncState?.notePruned("offline_history", removed); }
+            await this.domains.offlineHistory.write(history);
             await this._notifyCommitted("offline-history-changed", { ids: [ item.id ] });
             return item;
         });
@@ -236,10 +240,13 @@ export class StateService {
     }
     /** @param {StateRecord} log */
     async _writeActivity(log) {
-        await this.domains.activity.write(pruneActivityLog(log));
+        const pruned = pruneActivityLog(log), ids = new Set(pruned.entries.map((/** @type {any} */ entry) => entry.id));
+        this.storage.syncState?.notePruned("activity_log", log.entries.filter((/** @type {any} */ entry) => !ids.has(entry.id)));
+        await this.domains.activity.write(pruned);
     }
     /** @param {StateRecord} domains @param {StateRecord} next @param {StateRecord} activity @param {string[]} [touchedDomains] */
     async _commit(domains, next, activity, touchedDomains = ["carList", "activity"]) {
+        if (this.storage.syncState?.replicaId) activity.originReplicaId = this.storage.syncState.replicaId;
         const pendingActivity = cloneStateValue(activity), pendingLog = { ...domains.activity, entries: [ ...domains.activity.entries, pendingActivity ] };
         const touched = [ ...new Set([ ...touchedDomains, "activity" ]) ];
         const select = (/** @type {StateRecord} */ source, includePendingActivity = false) => Object.fromEntries(touched.map((key) => [key, cloneStateValue(key === "activity" && includePendingActivity ? pendingLog : source[key])]));
@@ -425,8 +432,10 @@ export class StateService {
     }
     /** @param {string} transactionId */
     async undoTransaction(transactionId) {
+        if (this.storage.syncState && !this.storage.syncState.canUndo(transactionId)) throw new Error("来自其他设备或恢复文件的操作只供查看，不能在本机撤销");
         return this._withLock(async () => {
             await this._recoverWithoutLock();
+            if (this.storage.syncState && !this.storage.syncState.canUndo(transactionId)) throw new Error("来自其他设备或恢复文件的操作只供查看，不能在本机撤销");
             const before = await this._readDomains(), domains = cloneStateValue(before), transaction = domains.activity.entries.find((/** @param {StateRecord} entry */ entry => entry.id === transactionId && "committed" === entry.commitState));
             if (!transaction) throw new Error("操作记录不存在或尚未提交");
             const carMap = new Map(domains.carList.map((/** @param {StateRecord} record */ record => [ normalizeCarNum(record.carNum), cloneStateValue(record) ]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses);

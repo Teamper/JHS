@@ -146,7 +146,7 @@ test("NewVideo hover preview follows its owning dialog and is destroyed on close
   await injectUserscriptRuntime(page);
   await page.evaluate(() => {
     const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
-    window.localStorage.setItem("jhs_newVideoViewMode", "list");
+    window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode", "list");
     plugin.reloadNewVideoWorkspaceData = async function() {
       this.nvFlatListCache = [{ carNum: "ABC-001", title: "Preview fixture", actressName: "Fixture Actress", publishTime: "2026-09-01", coverUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", flags: {}, decisionState: "pending" }];
       this.nvJavDbUrl = "https://javdb.com";

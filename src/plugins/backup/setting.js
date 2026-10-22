@@ -4,7 +4,7 @@ import { closeOwnedPopover, ownedPopoverRoots } from "../../core/owned-popover.j
 import { acquirePageScrollLock } from "../../core/page-scroll-lock.js";
 import { renderTaskStatus } from "../../core/task-status-view.js";
 import { renderCarImportResult } from "../../ui/settings/car-number-import-view.js";
-import { bindAutoBackupControls } from "../../ui/settings/auto-backup-controls.js";
+import { bindWebDavSyncControls } from "../../ui/settings/webdav-sync-controls.js";
 
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { getIcon } from "../../core/icons.js";
@@ -541,7 +541,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     bindClick(layerRoot = null) {
         const dependencies = this.getFormDependencies(), webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), translation = this.getRuntimeService("translation"), previewDiff = (diff, imported, restored = null) => this._settingPanels.showDiffPreview(diff, imported, restored, dialog, dependencies);
         const root = layerRoot ? this.jquery(layerRoot) : this.jquery(this.document);
-        bindAutoBackupControls(root, dependencies);
+        bindWebDavSyncControls(root, dependencies);
         root.find("#saveBtn").attr("data-jhs-settings-ready", "false").prop("disabled", !0).attr("title", "加载中…");
         root.find(".side-menu-item").off(".jhsSettingNav").on("click.jhsSettingNav", (event) => {
             this.activateSettingPanel(root, this.jquery(event.currentTarget).data("panel"));
