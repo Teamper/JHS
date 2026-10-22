@@ -41,20 +41,18 @@ describe("automatic bidirectional WebDAV sync", () => {
         expect((await a.store.read()).replicaId).toBe(before.replicaId); expect((await a.store.read()).seq).toBe(before.seq);
         expect(a.values.get("setting").webDavPassword).toBe("local-only"); expect(a.values.get(SYNC_JOURNAL_KEY)).toBeUndefined();
     });
-    it("debounces 5 seconds, caps continuous edits at 30 seconds and wakes on visible/online/pageshow", async () => {
-        const a = await syncReplica(memoryDav()); vi.useFakeTimers();
+    it("debounces durable changes and wakes on visible/online/pageshow without reviving a hidden page", async () => {
+        const a = await syncReplica(memoryDav()); await a.service.check(); vi.useFakeTimers();
         const win = Object.assign(new EventTarget(), { setTimeout, clearTimeout }), doc = Object.assign(new EventTarget(), { hidden: false });
         a.service.window = win; const check = vi.spyOn(a.service, "check").mockResolvedValue(); const owner = new LifecycleScope("test");
         a.service.start(owner, doc); await vi.advanceTimersByTimeAsync(1000); expect(check).toHaveBeenCalledOnce();
-        a.store.dispatchEvent(new Event("changes")); await vi.advanceTimersByTimeAsync(4999); expect(check).toHaveBeenCalledOnce();
+        await a.state.patch(["WAKE-1"], { favorite: true }); await a.service.reschedule();
+        await vi.advanceTimersByTimeAsync(4999); expect(check).toHaveBeenCalledOnce();
         await vi.advanceTimersByTimeAsync(1); expect(check).toHaveBeenCalledTimes(2);
-        a.service.firstChangeAt = 0;
-        for (let i = 0; i < 8; i++) { a.store.dispatchEvent(new Event("changes")); a.advance(4000); await vi.advanceTimersByTimeAsync(4000); }
-        expect(check).toHaveBeenCalledTimes(3);
-        win.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(1); expect(check).toHaveBeenCalledTimes(4);
-        win.dispatchEvent(new Event("pagehide")); a.store.dispatchEvent(new Event("changes")); await vi.advanceTimersByTimeAsync(120000); expect(check).toHaveBeenCalledTimes(4);
-        win.dispatchEvent(new Event("pageshow")); await vi.advanceTimersByTimeAsync(1); expect(check).toHaveBeenCalledTimes(5);
-        doc.dispatchEvent(new Event("visibilitychange")); await vi.advanceTimersByTimeAsync(1); expect(check).toHaveBeenCalledTimes(6);
+        win.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(1); expect(check).toHaveBeenCalledTimes(3);
+        win.dispatchEvent(new Event("pagehide")); await a.state.patch(["WAKE-2"], { favorite: true }); await vi.advanceTimersByTimeAsync(120000); expect(check).toHaveBeenCalledTimes(3);
+        win.dispatchEvent(new Event("pageshow")); await vi.advanceTimersByTimeAsync(1); expect(check).toHaveBeenCalledTimes(4);
+        doc.dispatchEvent(new Event("visibilitychange")); await vi.advanceTimersByTimeAsync(1); expect(check).toHaveBeenCalledTimes(5);
         owner.dispose();
     });
     it("does not confirm or delete after a connection changes during upload", async () => {
@@ -72,7 +70,8 @@ describe("automatic bidirectional WebDAV sync", () => {
         dav.client.deleteSyncFile.mockRejectedValueOnce(new Error("cannot delete"));
         await a.state.patch(["SYNC-3"], { favorite: true }); await a.service.check();
         expect((await a.store.read()).cleanupError).toContain("同步已成功"); const writes = dav.client.writeSyncFile.mock.calls.length;
-        await a.service.check(); expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(writes); expect((await a.store.read()).cleanupError).toBe("");
+        await a.service.check(); expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(writes); expect((await a.store.read()).cleanupError).toContain("同步已成功");
+        a.advance(60001); await a.service.check(); expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(writes); expect((await a.store.read()).cleanupError).toBe("");
         expect(dav.files.has(foreign)).toBe(true); expect([...dav.files.keys()].filter(name => parseSyncFileName(name).replicaId === a.store.replicaId)).toHaveLength(3);
     });
     it("pauses future protocols before applying or publishing", async () => {
@@ -172,6 +171,7 @@ describe("automatic bidirectional WebDAV sync", () => {
         const state = await a.store.read(), data = await a.store.readData(); data.setting.themeMode = "dark";
         a.values.set(SYNC_JOURNAL_KEY, { schema: 1, state: "prepared", after: data, afterState: state });
         await a.settings.set("videoMuted", true);
+        await a.store.flushAppliedNotifications();
         expect(a.values.get(SYNC_JOURNAL_KEY)).toBeUndefined(); expect(a.values.get("setting")).toMatchObject({ themeMode: "dark", videoMuted: true });
     });
     it("pauses authorization failures, resets on new profile and never advances success on failure", async () => {

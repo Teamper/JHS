@@ -3,9 +3,14 @@
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { CURRENT_DATA_VERSION } from "../core/constants.js";
 import { encryptPortableBackup, decryptPortableBackup } from "../core/credential-crypto.js";
-import { SYNC_FOLDER, parseSyncFileName, retainedSyncFiles, syncFileName, syncHash, syncJson, validateSyncEnvelope, materializeSyncData, syncLayout, syncRetention } from "../core/webdav-sync-model.js";
+import { SYNC_FOLDER, parseSyncFileName, retainedSyncFiles, syncFileName, syncHash, syncJson, validateSyncEnvelope, materializeSyncData, syncLayout, syncRetention, withSyncRetentionDefaults } from "../core/webdav-sync-model.js";
+import { nextSyncDelay, syncPublishDueAt } from "./webdav-sync-scheduling.js";
 
 const RETRIES = [1, 2, 4, 8, 16, 30];
+/** @param {any} error */
+const requiresPause = error => [401, 403].includes(Number(error?.details?.status)) || ["SYNC_FUTURE_VERSION", "SYNC_PROFILE_CONFLICT"].includes(error?.code);
+/** @param {any} error */
+const isCancelled = error => error?.name === "AbortError" || error?.code === "ABORTED";
 export const SYNC_NETWORK_LOCK = "jhs_webdav_sync_network_v1";
 /** @typedef {import("../contracts/webdav-sync.js").WebDavSync} WebDavSync */
 /** Page-owned transport. Immutable replica snapshots require no cross-device lock or CAS.
@@ -16,7 +21,7 @@ export class WebDavSyncService extends EventTarget {
     constructor(dependencies) {
         super(); this.deps = dependencies; this.window = dependencies.window ?? globalThis.window; this.clock = dependencies.clock ?? (() => Date.now());
         this.locks = dependencies.locks === undefined ? globalThis.navigator?.locks : dependencies.locks;
-        this.running = false; this.suspended = false; this.rerun = false; this.timer = 0; this.firstChangeAt = 0; this.message = ""; this.nextDueAt = 0;
+        this.running = false; this.suspended = false; this.rerun = false; this.timer = 0; this.message = ""; this.nextDueAt = 0; this.scheduleGeneration = 0;
         this.needsReconcile = true;
         /** @type {LifecycleScope | null} */ this.operation = null;
         /** @type {LifecycleScope | null} */ this.owner = null;
@@ -31,11 +36,7 @@ export class WebDavSyncService extends EventTarget {
         this.owner = scope; this.document = document; this.deps.store.enabled = true;
         this.deps.shared.watch(scope);
         scope.listen(this.deps.shared, "changed", () => { this.cancel(); this.rerun = true; this.schedule(0); });
-        scope.listen(this.deps.store, "changes", () => {
-            if (this.timer && this.nextDueAt <= this.clock()) return;
-            const now = this.clock(); this.firstChangeAt ||= now;
-            this.schedule(Math.min(5000, Math.max(0, this.firstChangeAt + 30000 - now)));
-        });
+        scope.listen(this.deps.store, "changes", () => { void this.reschedule(); });
         scope.listen(this.window, "pagehide", () => { this.suspended = true; this.cancel(); });
         scope.listen(this.window, "pageshow", () => { this.suspended = false; this.schedule(0, true); });
         scope.listen(this.window, "online", () => this.schedule(0, true));
@@ -44,23 +45,40 @@ export class WebDavSyncService extends EventTarget {
         this.schedule(1000);
     }
     notify() { this.dispatchEvent(new Event("status")); }
-    cancel() { this.window?.clearTimeout(this.timer); this.timer = 0; this.operation?.dispose(); }
+    cancel() { this.scheduleGeneration++; this.window?.clearTimeout(this.timer); this.timer = 0; this.nextDueAt = 0; this.operation?.dispose(); }
     /** @param {number} delay @param {boolean} [force] */
     schedule(delay, force = false) {
         if (this.suspended || this.owner?.disposed) return;
+        this.scheduleGeneration++;
         this.window?.clearTimeout(this.timer); this.nextDueAt = this.clock() + delay;
         this.timer = this.window?.setTimeout(() => { this.timer = 0; void this.check({ scheduled: !force }); }, delay) ?? 0;
+    }
+    /** Re-read shared deadlines without holding the business lock while waiting for network. @param {boolean} [lockMiss] */
+    async reschedule(lockMiss = false) {
+        const generation = ++this.scheduleGeneration;
+        let delay = this.document?.hidden ? 120000 : 30000;
+        try {
+            const state = await this.deps.store.read(), snapshot = await this.deps.shared.snapshot();
+            const locallyPaused = await this.deps.shared.paused();
+            if (generation !== this.scheduleGeneration || this.suspended || this.owner?.disposed) return;
+            const profile = snapshot.profile;
+            const next = locallyPaused ? null : profile.url && profile.username && profile.password && this.locks?.request
+                ? nextSyncDelay(state, this.clock(), !!this.document?.hidden, snapshot.revision, lockMiss) : delay;
+            if (next == null) { this.window?.clearTimeout(this.timer); this.timer = 0; this.nextDueAt = 0; return; }
+            delay = next;
+        } catch { /* Local storage/profile errors retain a bounded retry without network. */ }
+        if (generation === this.scheduleGeneration) this.schedule(delay);
     }
     async getStatus() {
         const state = await this.deps.store.read();
         let configured = false, profileMessage = "", profileConflict = false;
         try { const { profile } = await this.deps.shared.snapshot(); configured = !!(profile.url && profile.username && profile.password); } catch (error) { profileMessage = /** @type {Error} */ (error).message; profileConflict = /** @type {any} */ (error).code === "SYNC_PROFILE_CONFLICT"; }
         const locallyPaused = await this.deps.shared.paused();
-        return { profileConflict, busy: this.running, enabled: configured && !locallyPaused, paused: locallyPaused || state.paused, lastSuccessAt: state.lastSuccessAt, retryAt: state.retryAt, cleanupError: state.cleanupError, nextDueAt: this.nextDueAt, pendingChanges: Math.max(0, (state.localRevision || 0) - (state.publishedRevision || 0)), message: profileMessage || this.deps.store.error || this.message || state.error || (!configured ? "保存有效 WebDAV 连接后将自动接入同步" : ""), replicas: Object.keys(state.confirmed || {}).length };
+        return { profileConflict, busy: this.running, enabled: configured && !locallyPaused, paused: locallyPaused || state.paused, lastSuccessAt: state.lastSuccessAt, retryAt: state.retryAt, cleanupError: state.cleanupError, nextDueAt: this.nextDueAt, pendingChanges: Math.max(0, (state.localRevision || 0) - (state.publishedRevision || 0)), message: profileMessage || this.deps.store.error || this.deps.store.notificationError || this.message || state.error || (!configured ? "保存有效 WebDAV 连接后将自动接入同步" : ""), replicas: Object.keys(state.confirmed || {}).length };
     }
     /** Explicit retry is not an opt-in upload or a second backup engine. */
     async enable() { return this.retry(); }
-    async retry() { await this.deps.store.update((/** @type {any} */ state) => { state.paused = false; state.retryAt = 0; state.error = ""; }); await this.check(); }
+    async retry() { await this.deps.store.update((/** @type {any} */ state) => { state.paused = false; state.retryAt = 0; state.cleanupRetryAt = 0; state.error = ""; }); await this.check(); }
     /** @param {boolean} paused */
     async pause(paused) { await this.deps.shared.setPaused(paused); if (!paused) await this.retry(); }
     /** @param {any} scope @param {string} revision */
@@ -81,7 +99,7 @@ export class WebDavSyncService extends EventTarget {
         if (this.suspended || this.owner?.disposed) return;
         this.running = true; this.rerun = false; this.message = "";
         const scope = new LifecycleScope("webdav-sync"); this.operation = scope;
-        let revision = "";
+        let revision = "", lockMiss = false;
         this.notify();
         try {
             await this.deps.store.initialize();
@@ -92,7 +110,7 @@ export class WebDavSyncService extends EventTarget {
             const current = await this.deps.store.read();
             if (current.paused && current.errorRevision === revision || current.retryAt > this.clock() && current.errorRevision === revision) return;
             await this.locks.request(SYNC_NETWORK_LOCK, { ifAvailable: true }, async (/** @type {any} */ lock) => {
-                if (!lock) return;
+                if (!lock) { lockMiss = true; return; }
                 await this.assertCurrent(scope, revision);
                 // The same origin shares one poll window even when tabs wake at
                 // different times. Local edits and explicit checks can run sooner.
@@ -105,7 +123,7 @@ export class WebDavSyncService extends EventTarget {
                     latest = await this.deps.store.coordinator.runExclusive(() => this.deps.store.reconcileWithoutLock());
                     this.needsReconcile = false;
                 }
-                if (options.scheduled && latest.checkedRevision === revision && latest.joined && !latest.dirty && !latest.pending && latest.lastCheckAt <= now && now < Math.min(latest.nextCheckAt, latest.lastCheckAt + (this.document?.hidden ? 120000 : 30000))) return;
+                if (options.scheduled && (nextSyncDelay(latest, now, !!this.document?.hidden, revision) ?? Infinity) > 0) return;
                 await this.deps.store.coordinator.runExclusive(() => this.deps.store.reconcileWithoutLock());
                 const origin = new URL(profile.url).origin;
                 this.deps.urlPolicy?.authorizeLocalOrigin(origin);
@@ -115,41 +133,36 @@ export class WebDavSyncService extends EventTarget {
                 const files = await client.listSyncFiles();
                 const remote = await this.pull(client, files, scope, revision, binding);
                 await this.deps.store.merge(remote.models, binding, () => this.assertCurrent(scope, revision), remote.confirmed);
+                if (remote.models.length) await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); value.lastSuccessAt = this.clock(); });
                 let state = await this.deps.store.read();
-                if (state.dirty || state.pending) {
+                let published = false;
+                if ((state.dirty || state.pending) && (!options.scheduled || syncPublishDueAt(state, this.clock()) <= this.clock())) {
                     if (!state.pending) await this.preparePending(scope, revision);
                     await this.publish(client, scope, revision);
+                    published = true;
                     state = await this.deps.store.read();
-                    try { await this.cleanup(client, scope, revision); }
-                    catch (error) {
-                        if (scope.disposed) throw error;
-                        await this.deps.store.update((/** @type {any} */ value) => { value.cleanupError = "同步已成功，历史文件清理未完成，将在后续同步重试"; });
-                        if ([401, 403].includes(Number(/** @type {any} */ (error)?.details?.status))) throw error;
-                    }
-                } else if (state.cleanupError || state.deleting?.length) {
-                    try { await this.cleanup(client, scope, revision); } catch { /* Retry independently of publishing. */ }
                 }
+                if ((published || state.cleanupError || state.deleting?.length) && !(state.cleanupRetryAt > this.clock())) await this.attemptCleanup(client, scope, revision);
                 await this.assertCurrent(scope, revision);
                 await this.deps.store.update(async (/** @type {any} */ value) => {
                     await this.assertCurrent(scope, revision);
-                    value.lastSuccessAt = this.clock(); value.retryAt = 0; value.failures = 0; value.error = ""; value.paused = false;
+                    value.retryAt = 0; value.failures = 0; value.error = ""; value.paused = false;
                     value.checkedRevision = revision; value.lastCheckAt = this.clock(); value.nextCheckAt = value.lastCheckAt + (this.document?.hidden ? 120000 : 30000);
                 });
-                this.firstChangeAt = 0;
             });
         } catch (error) {
             const failure = /** @type {any} */ (error);
-            if (!scope.disposed && failure?.name !== "AbortError") {
-                const status = Number(failure?.details?.status);
-                const paused = [401, 403].includes(status) || ["SYNC_FUTURE_VERSION", "SYNC_PROFILE_CONFLICT"].includes(failure?.code);
+            if (!scope.disposed && !isCancelled(failure)) {
+                const paused = requiresPause(failure);
                 this.message = paused ? `同步已暂停：${failure.message || "请检查连接与权限"}` : `同步未完成，将自动重试：${failure.message || "请检查网络"}`;
-                try { await this.deps.store.update((/** @type {any} */ state) => { state.failures++; state.error = this.message; state.errorRevision = revision; state.paused = paused; state.retryAt = this.clock() + RETRIES[Math.min(state.failures - 1, RETRIES.length - 1)] * 60000; }); }
+                try { await this.deps.store.update(async (/** @type {any} */ state) => { scope.assertActive(); if (revision) await this.assertConnectionCurrent(scope, revision); state.failures++; state.error = this.message; state.errorRevision = revision; state.paused = paused; state.retryAt = this.clock() + RETRIES[Math.min(state.failures - 1, RETRIES.length - 1)] * 60000; }); }
                 catch { this.message = this.deps.store.error || "同步状态无法持久化，已保留业务数据并暂停本轮同步"; }
             }
         } finally {
             scope.dispose(); if (this.operation === scope) this.operation = null; this.running = false;
             this.notify();
-            if (!this.timer) this.schedule(this.rerun ? 0 : this.document?.hidden ? 120000 : 30000);
+            if (this.rerun) this.schedule(0);
+            else await this.reschedule(lockMiss);
         }
     }
     /** @param {any} client @param {any[]} files @param {any} scope @param {string} revision @param {string} binding */
@@ -179,7 +192,7 @@ export class WebDavSyncService extends EventTarget {
         if (file.schema !== 1) throw Object.assign(new Error("同步数据来自不支持的协议，请更新 JHS"), { code: "SYNC_FUTURE_VERSION" });
         const content = await client.readSyncFile(file.name);
         if (await syncHash(content) !== file.hash) throw new Error("同步快照哈希不一致，未应用或清理任何数据");
-        const envelope = validateSyncEnvelope(JSON.parse(await decryptPortableBackup(content)));
+        const envelope = validateSyncEnvelope(JSON.parse(await decryptPortableBackup(content)), this.deps.validateSetting);
         if (envelope.replicaId !== file.replicaId || envelope.seq !== file.seq || envelope.createdAt !== file.createdAt) throw new Error("同步文件名与内容不一致");
         return envelope;
     }
@@ -217,30 +230,65 @@ export class WebDavSyncService extends EventTarget {
             value.confirmed[value.replicaId] = { seq: pending.seq, name: pending.name };
             value.lastSuccessAt = this.clock();
             value.pending = null;
+            if (!value.dirty) { value.dirtySinceAt = 0; value.lastLocalChangeAt = 0; }
         });
+    }
+    /** Ordinary cleanup retries are independent of publishing; fatal errors use the common pause path. @param {any} client @param {any} scope @param {string} revision */
+    async attemptCleanup(client, scope, revision) {
+        try { await this.cleanup(client, scope, revision); return true; }
+        catch (error) {
+            if (scope.disposed || isCancelled(error)) throw error;
+            await this.assertCurrent(scope, revision);
+            await this.deps.store.update(async (/** @type {any} */ value) => {
+                await this.assertCurrent(scope, revision);
+                value.cleanupError = "同步已成功，历史文件清理未完成，将在后续同步重试";
+                if (!requiresPause(error)) {
+                    value.cleanupFailures = (value.cleanupFailures || 0) + 1;
+                    value.cleanupRetryAt = this.clock() + RETRIES[Math.min(value.cleanupFailures - 1, RETRIES.length - 1)] * 60000;
+                }
+            });
+            if (requiresPause(error)) throw error;
+            return false;
+        }
+    }
+    /** @param {any[]} files @param {any} state */
+    assertCleanupListing(files, state) {
+        if (files.some(file => file.schema !== 1)) throw Object.assign(new Error("同步目录含更新协议，请更新 JHS"), { code: "SYNC_FUTURE_VERSION" });
+        for (const [id, confirmed] of Object.entries(/** @type {Record<string, any>} */ (state.confirmed))) if (!files.some(file => file.replicaId === id && (file.seq > confirmed.seq || file.seq === confirmed.seq && file.name === confirmed.name))) throw new Error("目录确认中，暂停清理");
     }
     /** @param {any} client @param {any} scope @param {string} revision */
     async cleanup(client, scope, revision) {
         const files = await client.listSyncFiles(), state = await this.deps.store.read();
-        for (const [id, confirmed] of Object.entries(/** @type {Record<string, any>} */ (state.confirmed))) if (!files.some((/** @type {any} */ file) => file.replicaId === id && file.seq >= confirmed.seq)) throw new Error("目录确认中，暂停清理");
-        const { count, days } = syncRetention(this.deps.settings.snapshot());
+        this.assertCleanupListing(files, state);
+        const { count, days } = syncRetention((await this.deps.store.readData(["setting"])).setting);
         const keep = retainedSyncFiles(files, state.replicaId, count, days, this.clock());
         const remove = new Set([...(state.deleting || []), ...files.filter((/** @type {any} */ file) => file.replicaId === state.replicaId && !keep.has(file.name)).map((/** @type {any} */ file) => file.name)]);
         for (const name of remove) {
             const file = parseSyncFileName(name);
-            if (!file || file.replicaId !== state.replicaId || keep.has(name)) continue;
+            if (!file || file.replicaId !== state.replicaId) continue;
+            if (keep.has(name)) {
+                await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); value.deleting = value.deleting.filter((/** @type {string} */ item) => item !== name); });
+                continue;
+            }
             await this.assertCurrent(scope, revision);
             const content = await client.readSyncFile(name, true);
             if (content != null) {
                 await this.readEnvelope(client, file);
-                await this.deps.store.update((/** @type {any} */ value) => { if (!value.deleting.includes(name)) value.deleting.push(name); });
+                await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); if (!value.deleting.includes(name)) value.deleting.push(name); });
+                const latestFiles = await client.listSyncFiles(), latestState = await this.deps.store.read();
+                this.assertCleanupListing(latestFiles, latestState);
+                const retention = syncRetention((await this.deps.store.readData(["setting"])).setting);
+                if (retainedSyncFiles(latestFiles, state.replicaId, retention.count, retention.days, this.clock()).has(name)) {
+                    await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); value.deleting = value.deleting.filter((/** @type {string} */ item) => item !== name); });
+                    continue;
+                }
                 await this.assertCurrent(scope, revision);
                 await client.deleteSyncFile(name, state.replicaId);
                 if (await client.readSyncFile(name, true) != null) throw new Error("历史文件删除尚未确认");
             }
-            await this.deps.store.update((/** @type {any} */ value) => { value.deleting = value.deleting.filter((/** @type {string} */ item) => item !== name); delete value.known[name]; });
+            await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); value.deleting = value.deleting.filter((/** @type {string} */ item) => item !== name); delete value.known[name]; });
         }
-        await this.deps.store.update((/** @type {any} */ value) => { value.cleanupError = ""; });
+        await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); value.cleanupError = ""; value.cleanupFailures = 0; value.cleanupRetryAt = 0; });
     }
     /** @param {any} [scope] */
     async listRecoveryFiles(scope = this.owner) {
@@ -266,7 +314,7 @@ export class WebDavSyncService extends EventTarget {
                 const local = await this.deps.store.readData(), restored = materializeSyncData(envelope.state, local);
                 /** @type {Record<string, any>} */ const data = { data_version: CURRENT_DATA_VERSION };
                 if (selection.data) for (const key of Object.keys(restored)) if (key !== "setting") data[key] = restored[key];
-                if (selection.preferences || layout) data.setting = selection.preferences ? restored.setting : { ...local.setting };
+                if (selection.preferences || layout) data.setting = selection.preferences ? withSyncRetentionDefaults(restored.setting, true) : { ...local.setting };
                 if (layout) Object.assign(data.setting, syncLayout(envelope.recovery?.layout));
                 return data;
             },

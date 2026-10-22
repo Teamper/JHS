@@ -160,7 +160,7 @@ export class WebDavClient {
     /** @param {string} name @param {boolean} [missingOK] */
     async readSyncFile(name, missingOK = false) {
         if (!parseSyncFileName(name)) throw new Error("同步文件名无效");
-        const response = await this.requestMetadata("GET", `${encodeBackupFileName(SYNC_FOLDER)}/${encodeBackupFileName(name)}`, { "Cache-Control": "no-cache" }, undefined, { acceptableStatuses: missingOK ? [404] : [] });
+        const response = await this.#download(`${encodeBackupFileName(SYNC_FOLDER)}/${encodeBackupFileName(name)}`, { missingOK, noCache: true });
         return Number(response.status) === 404 ? null : String(response.data ?? response.responseText ?? "");
     }
     /** @param {string} name @param {string} content */
@@ -175,17 +175,26 @@ export class WebDavClient {
     }
     /** @param {string} name */
     async getFileContent(name) {
-        let url = new URL(`${this.folderName}/${encodeBackupFileName(name)}`.replace(/^\/+/, ""), this.baseUrl), anonymous = false;
+        const response = await this.#download(`${this.folderName}/${encodeBackupFileName(name)}`);
+        return String(response.data ?? response.responseText ?? "");
+    }
+    /** Follow downloads without forwarding origin credentials after a cross-origin hop. @param {string} path @param {{missingOK?: boolean, noCache?: boolean}} [options] */
+    async #download(path, { missingOK = false, noCache = false } = {}) {
+        let url = new URL(path.replace(/^\/+/, ""), this.baseUrl), anonymous = false;
         const visited = new Set();
         for (let redirects = 0; ; redirects++) {
+            this.scope?.assertActive();
             url.hash = "";
             if (visited.has(url.href)) throw new JhsError("INVALID_URL", "WebDAV 下载跳转形成循环", { source: "WebDavClient" });
             visited.add(url.href);
-            const response = await this.#requestResponse("GET", url, { Accept: "application/octet-stream" }, undefined, {
+            const response = await this.#requestResponse("GET", url, { Accept: "application/octet-stream", ...(noCache ? { "Cache-Control": "no-cache" } : {}) }, undefined, {
                 requestOptions: { redirect: "manual", ...(anonymous ? { anonymous: true } : {}) },
+                // A missing CDN object does not prove the DAV object is absent.
+                acceptableStatuses: missingOK && !anonymous ? [404] : [],
             }, anonymous);
+            this.scope?.assertActive();
             const status = Number(response.status);
-            if (status >= 200 && status < 300) return String(response.data ?? response.responseText ?? "");
+            if ((status >= 200 && status < 300) || (status === 404 && missingOK && !anonymous)) return response;
             if (!DOWNLOAD_REDIRECT_STATUSES.has(status)) throw new JhsError("NETWORK_ERROR", "WebDAV 下载返回无效响应", { source: "WebDavClient", details: { status } });
             if (redirects >= 5) throw new JhsError("INVALID_URL", "WebDAV 下载跳转次数超过限制", { source: "WebDavClient" });
             const location = String(response.responseHeaders ?? "").match(/^location\s*:\s*(.+)$/im)?.[1]?.trim();

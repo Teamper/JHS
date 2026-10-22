@@ -76,6 +76,7 @@ export function createAppContext(runtime) {
     const styles = new StyleRegistry(stylePort);
     const settingsRegistry = new SettingsRegistry();
     registerDefaultSettings(settingsRegistry);
+    const validateSetting = (/** @type {string} */ key, /** @type {any} */ value) => settingsRegistry.validateSync(key, value);
     const settings = new SettingsService(storage, { mutationCoordinator, afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
@@ -113,7 +114,7 @@ export function createAppContext(runtime) {
     const credential = new CredentialService(storage, runtime.localStorage);
     const pan123Credential = new Pan123CredentialService(storage, notifications);
     const webdav = new WebDavService(http, credential, settings);
-    const syncState = new WebDavSyncStore({ forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus });
+    const syncState = new WebDavSyncStore({ forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting });
     mutationCoordinator.observer = syncState;
     mutationCoordinator.beforeMutation = () => syncState.recoverWithoutLock();
     if (runtime.legacyStorage) runtime.legacyStorage.syncState = syncState;
@@ -123,7 +124,7 @@ export function createAppContext(runtime) {
     const preferences = new PersonalPreferencesService(settings, runtime.localStorage, message => notifications.error(message));
     storage.preferences = preferences;
     /** @type {import("../contracts/webdav-sync.js").WebDavSync} */
-    const webdavSync = new WebDavSyncService({ webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences });
+    const webdavSync = new WebDavSyncService({ webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;

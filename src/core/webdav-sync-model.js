@@ -7,7 +7,12 @@ import { isSyncObject, validateSyncFrontiers, validateSyncRecordFields } from ".
 
 /** @typedef {Record<string, any>} Dict */
 export const SYNC_FOLDER = "JHS-同步";
-export const SYNC_DEFAULTS = Object.freeze({ webDavSyncKeepCount: 10, webDavSyncHistoryDays: 30 });
+export const SYNC_DEFAULTS = Object.freeze({ webDavSyncKeepCount: 5, webDavSyncHistoryDays: 7 });
+export const SYNC_LEGACY_DEFAULTS = Object.freeze({ webDavSyncKeepCount: 10, webDavSyncHistoryDays: 30 });
+/** Pin implicit library policy as ordinary settings without replacing explicit values. @param {Dict} values @param {boolean} [existingLibrary] @returns {Dict} */
+export function withSyncRetentionDefaults(values, existingLibrary = true) {
+    return { ...(existingLibrary ? SYNC_LEGACY_DEFAULTS : SYNC_DEFAULTS), ...values };
+}
 /** @param {any} values */
 export function syncRetention(values) {
     const count = Number(values.webDavSyncKeepCount ?? 10), days = Number(values.webDavSyncHistoryDays ?? 30);
@@ -173,15 +178,15 @@ export function pruneSyncHistory(model, local, now) {
     }
     return model;
 }
-/** Validate before merging external state. @param {any} envelope */
-export function validateSyncEnvelope(envelope) {
+/** Validate before merging external state. @param {any} envelope @param {(key: string, value: any) => boolean} [validateSetting] */
+export function validateSyncEnvelope(envelope, validateSetting) {
     if (!envelope || envelope.schema !== 1 || envelope.dataVersion > CURRENT_DATA_VERSION) throw Object.assign(new Error("同步数据来自不支持的版本，请更新 JHS"), { code: "SYNC_FUTURE_VERSION" });
     if (!isSyncObject(envelope) || !Number.isInteger(envelope.dataVersion) || envelope.dataVersion < 0 || typeof envelope.replicaId !== "string" || !UUID.test(envelope.replicaId) || !Number.isSafeInteger(envelope.seq) || envelope.seq < 1 || typeof envelope.createdAt !== "string" || !Number.isFinite(Date.parse(envelope.createdAt))) throw new Error("同步快照格式无效");
-    validateSyncState(envelope.state);
+    validateSyncState(envelope.state, validateSetting);
     return envelope;
 }
-/** Shared by network parsing and the final merged-state persistence boundary. @param {any} model */
-export function validateSyncState(model) {
+/** Shared by network parsing and the final merged-state persistence boundary. @param {any} model @param {(key: string, value: any) => boolean} [validateSetting] */
+export function validateSyncState(model, validateSetting) {
     if (!isSyncObject(model) || !isSyncObject(model.records)) throw new Error("同步快照格式无效");
     validateSyncFrontiers(model.frontiers);
     const checkVersion = (/** @type {any} */ version) => Array.isArray(version) && version.length === 2 && Number.isSafeInteger(version[0]) && version[0] > 0 && typeof version[1] === "string" && UUID.test(version[1]);
@@ -194,6 +199,7 @@ export function validateSyncState(model) {
         if (domain === "setting" && !isSharedSetting(id)) throw new Error("同步快照包含本机专属设置");
         for (const field of Object.values(/** @type {Dict} */ (record.fields))) if (!isSyncObject(field) || !checkVersion(field.v) || compareVersion(field.v, record.generation) <= 0 || Object.hasOwn(field, "unset") && field.unset !== true || (field.unset === true ? Object.hasOwn(field, "value") : !Object.hasOwn(field, "value"))) throw new Error("同步字段内容无效");
         validateSyncRecordFields(domain, id, record, compareVersion(record.birth, record.death) > 0);
+        if (domain === "setting" && compareVersion(record.birth, record.death) > 0 && !record.fields.value?.unset && validateSetting?.(id, record.fields.value?.value) === false) throw new Error(`同步设置无效：${id}`);
     }
     return model;
 }

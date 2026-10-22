@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
+import { nextSyncDelay, syncPublishDueAt } from "../src/services/webdav-sync-scheduling.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -25,6 +26,7 @@ describe("same-origin sync polling", () => {
         const dav = memoryDav(), a = await syncReplica(dav); await a.service.check({ scheduled: true });
         const b = await syncReplica(dav, { values: a.values, locks: a.locks });
         await a.state.patch(["POLL-1"], { favorite: true });
+        b.advance(5000);
         await b.service.check({ scheduled: true });
         expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(2);
         await a.service.retry(); expect(dav.client.ensureFolder).toHaveBeenCalledTimes(3);
@@ -59,5 +61,80 @@ describe("same-origin sync polling", () => {
         const b = await syncReplica(dav, { values: a.values, locks: a.locks }); b.shared.revision = "updated";
         await b.service.check({ scheduled: true }); expect(dav.client.ensureFolder).toHaveBeenCalledTimes(2);
         b.advance(60001); await b.service.check({ scheduled: true }); expect(dav.client.ensureFolder).toHaveBeenCalledTimes(3);
+    });
+});
+
+const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+function recordTimers(service) {
+    const timers = [];
+    service.window = { setTimeout: (_callback, delay) => { timers.push(delay); return timers.length; }, clearTimeout: () => {} };
+    return timers;
+}
+
+describe("durable publication deadlines", () => {
+    it("retains the first unpublished change across tabs and refresh, while debouncing later edits", async () => {
+        const dav = memoryDav(), a = await syncReplica(dav); await a.service.check();
+        await a.state.patch(["POLL-1"], { favorite: true }); const first = (await a.store.read()).dirtySinceAt;
+        a.advance(4000); await a.state.patch(["POLL-2"], { favorite: true });
+        expect((await a.store.read()).dirtySinceAt).toBe(first);
+        const b = await syncReplica(dav, { values: a.values, locks: a.locks }); b.advance(4000); b.service.document = { hidden: true };
+        const timers = recordTimers(b.service); await b.service.reschedule(); expect(timers.at(-1)).toBe(5000);
+        await b.service.check({ scheduled: true }); expect(dav.client.writeSyncFile).toHaveBeenCalledOnce();
+        b.advance(5000); await b.service.check({ scheduled: true }); expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(2);
+        expect(await b.store.read()).toMatchObject({ dirty: false, dirtySinceAt: 0, lastLocalChangeAt: 0 });
+    });
+
+    it("caps continuous edits at the persisted 30-second deadline", async () => {
+        const a = await syncReplica(memoryDav()); await a.service.check();
+        await a.state.patch(["POLL-1"], { favorite: true }); const first = (await a.store.read()).dirtySinceAt;
+        for (let i = 0; i < 7; i++) { a.advance(4000); await a.state.patch([`POLL-${i + 2}`], { favorite: true }); }
+        expect(syncPublishDueAt(await a.store.read(), first + 28000)).toBe(first + 30000);
+        const timers = recordTimers(a.service); await a.service.reschedule(); expect(timers.at(-1)).toBe(2000);
+    });
+
+    it("retries lock contention promptly and retains changes made during another tab's upload", async () => {
+        const dav = memoryDav(), a = await syncReplica(dav); await a.service.check();
+        const b = await syncReplica(dav, { values: a.values, locks: a.locks });
+        a.service.document = b.service.document = { hidden: true };
+        const aTimers = recordTimers(a.service), bTimers = recordTimers(b.service), entered = deferred(), gate = deferred();
+        const original = dav.client.writeSyncFile.getMockImplementation();
+        dav.client.writeSyncFile.mockImplementationOnce(async (...args) => { entered.resolve(); await gate.promise; return original(...args); });
+        await a.state.patch(["POLL-1"], { favorite: true });
+        const upload = a.service.check(); await entered.promise;
+        await b.state.patch(["POLL-2"], { favorite: true }); a.advance(5000); b.advance(5000);
+        await b.service.check({ scheduled: true }); expect(bTimers.at(-1)).toBe(1000);
+        gate.resolve(); await upload;
+        expect((await a.store.read()).dirty).toBe(true); expect(aTimers.at(-1)).toBeLessThanOrEqual(1000);
+        b.advance(1000); await b.service.check({ scheduled: true });
+        expect((await b.store.read()).dirty).toBe(false); expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(3);
+    });
+
+    it("repairs missing/future deadlines immediately and lets network backoff outrank publication", async () => {
+        const now = Date.UTC(2026, 9, 22);
+        expect(syncPublishDueAt({ dirty: true }, now)).toBe(now);
+        expect(syncPublishDueAt({ dirty: true, dirtySinceAt: now + 1, lastLocalChangeAt: now + 1 }, now)).toBe(now);
+        expect(nextSyncDelay({ dirty: true, pending: {}, errorRevision: "one", retryAt: now + 60000 }, now, true, "one", true)).toBe(60000);
+        const dav = memoryDav(), a = await syncReplica(dav); a.service.document = { hidden: true };
+        const timers = recordTimers(a.service); dav.client.ensureFolder.mockRejectedValueOnce(new Error("offline"));
+        await a.service.check(); expect(timers.at(-1)).toBe(60000);
+        a.shared.isPaused = true; await a.service.reschedule(); expect(a.service.nextDueAt).toBe(0);
+    });
+
+    it("keeps an old dirty state without deadlines overdue when another edit arrives before the next check", async () => {
+        const a = await syncReplica(memoryDav()); await a.service.check();
+        await a.state.patch(["POLL-1"], { favorite: true });
+        await a.store.update(state => { delete state.dirtySinceAt; delete state.lastLocalChangeAt; });
+        a.advance(60000); await a.state.patch(["POLL-2"], { favorite: true });
+        const state = await a.store.read();
+        expect(syncPublishDueAt(state, state.lastLocalChangeAt)).toBeLessThanOrEqual(state.lastLocalChangeAt);
+        const timers = recordTimers(a.service); await a.service.reschedule(); expect(timers.at(-1)).toBe(0);
+    });
+
+    it("does not recreate a timer after cancellation while a scheduling read is pending", async () => {
+        const a = await syncReplica(memoryDav()), gate = deferred(), entered = deferred();
+        const timers = recordTimers(a.service), original = a.store.read.bind(a.store);
+        vi.spyOn(a.store, "read").mockImplementationOnce(async () => { entered.resolve(); await gate.promise; return original(); });
+        const scheduling = a.service.reschedule(); await entered.promise; a.service.cancel(); gate.resolve(); await scheduling;
+        expect(timers).toEqual([]); expect(a.service.nextDueAt).toBe(0);
     });
 });

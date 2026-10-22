@@ -72,6 +72,8 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         await service(page); expect(dav.requests).toHaveLength(0);
         const dialog = await openSettings(page);
         await expect(dialog.locator("#webDavAutoBackupEnabled")).toHaveCount(0);
+        await expect(dialog.locator("#webDavSyncKeepCount")).toHaveValue("5");
+        await expect(dialog.locator("#webDavSyncHistoryDays")).toHaveValue("7");
         await dialog.locator("#webDavUrl").fill(dav.url); await dialog.locator("#webDavUsername").fill("synthetic"); await dialog.locator("#webDavPassword").fill("synthetic-password");
         await dialog.locator("#saveBtn").click();
         await page.getByRole("button", { name: "授权", exact: true }).click();
@@ -81,7 +83,7 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         await page.evaluate(() => window.stateService.patch(["SYNC-2"], { favorite: true })); await service(page);
         expect(dav.requests).toHaveLength(count);
         await service(page, "pause", false); await service(page);
-        await expect.poll(async () => (await service(page, "getStatus")).pendingChanges).toBe(0);
+        await expect.poll(async () => (await service(page, "getStatus")).pendingChanges, { timeout: 12000 }).toBe(0);
         const writes = dav.requests.filter(request => request.method === "PUT").length;
         await page.reload(); await injectUserscriptRuntime(page, { preserveStorage: true, beforeUserscriptInjection: install });
         await service(page);
@@ -124,11 +126,57 @@ test("same-origin tabs share scheduled polling while another tab can publish loc
         expect(dav.requests).toHaveLength(requests);
         await page.evaluate(() => window.stateService.patch(["MULTITAB-1"], { favorite: true }));
         await service(other, "check", { scheduled: true });
-        expect(dav.requests.filter(request => request.method === "PUT").length).toBeGreaterThan(1);
+        await expect.poll(() => dav.requests.filter(request => request.method === "PUT").length, { timeout: 12000 }).toBeGreaterThan(1);
+        await expect.poll(async () => (await Promise.all([service(page, "getStatus"), service(other, "getStatus")])).every(status => !status.busy)).toBe(true);
         expect((await carList(other))[0].stateFlags.favorite).toBe(true);
         const after = dav.requests.length;
         await service(page, "check", { scheduled: true }); expect(dav.requests).toHaveLength(after);
     } finally { await dav.close(); }
+});
+
+test("an upload keeps newer changes pending after another tab misses the network lock", async ({ page, context, browser }) => {
+    test.setTimeout(45000);
+    const dav = await isolatedDav(), device = await browser.newContext({ viewport: page.viewportSize() });
+    let held, uploading;
+    try {
+        const install = await sharedUserscriptInstallation(context, dav); await fulfillHostFixtures(context);
+        await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page, { beforeUserscriptInjection: install });
+        await configure(page, dav.url);
+        const other = await context.newPage(); await other.goto("https://javdb.com/");
+        await injectUserscriptRuntime(other, { preserveStorage: true, beforeUserscriptInjection: install });
+        await service(other);
+        await expect.poll(async () => (await service(page, "getStatus")).busy).toBe(false);
+        const writes = dav.requests.filter(request => request.method === "PUT").length;
+        held = dav.holdNextPut();
+        await page.bringToFront();
+        await page.evaluate(() => window.stateService.patch(["SYNC-103"], { favorite: true }));
+        uploading = service(page);
+        // The unconfirmed snapshot is already fixed before the next local edit.
+        await expect.poll(async () => ({ puts: dav.requests.filter(request => request.method === "PUT").length, status: await service(page, "getStatus") }), { timeout: 12000 }).toMatchObject({ puts: writes + 1 });
+        await held.received;
+        await other.bringToFront();
+        const changedAt = await other.evaluate(async () => {
+            await window.stateService.patch(["SYNC-103"], { watched: true });
+            return Date.now();
+        });
+        await expect.poll(() => other.evaluate(async changedAt => {
+            const status = await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").getStatus();
+            const now = Date.now();
+            return { retryScheduled: now >= changedAt + 5000 && !status.busy && status.nextDueAt > now && status.nextDueAt <= now + 1500, status };
+        }, changedAt), { timeout: 8500 }).toMatchObject({ retryScheduled: true });
+        expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes + 1);
+        const pending = await other.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
+        expect(pending.localRevision).toBeGreaterThan(pending.pending.coveredRevision);
+        held.release();
+        await uploading;
+        await expect.poll(async () => (await service(other, "getStatus")).pendingChanges, { timeout: 12000 }).toBe(0);
+        expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes + 2);
+
+        const installDevice = await sharedUserscriptInstallation(device, dav); await fulfillHostFixtures(device);
+        const reader = await device.newPage(); await reader.goto("https://javdb.com/");
+        await injectUserscriptRuntime(reader, { beforeUserscriptInjection: installDevice }); await configure(reader, dav.url);
+        expect((await carList(reader))[0].stateFlags).toMatchObject({ favorite: true, watched: true });
+    } finally { held?.release(); await uploading?.catch(() => {}); await device.close(); await dav.close(); }
 });
 
 for (const theme of ["light", "dark"]) test(`多端同步布局 ${theme}`, async ({ page, context }, info) => {
@@ -141,7 +189,7 @@ for (const theme of ["light", "dark"]) test(`多端同步布局 ${theme}`, async
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").cancel());
     await dialog.locator("#webDavSyncKeepCount").evaluate(input => input.closest("details").open = true);
     const keep = dialog.locator("#webDavSyncKeepCount"); await keep.scrollIntoViewIfNeeded(); await keep.focus();
-    await page.keyboard.press("ArrowUp"); await expect(keep).toHaveValue("11");
+    await page.keyboard.press("ArrowUp"); await expect(keep).toHaveValue("6");
     await page.keyboard.press("Tab"); await expect(dialog.locator("#webDavSyncHistoryDays")).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await expect(dialog.locator("#jhs-auto-backup-status")).toContainText("尚未接入同步");

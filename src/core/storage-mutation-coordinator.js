@@ -11,7 +11,8 @@ export class StorageMutationCoordinator {
         this._queue = Promise.resolve();
         /** @type {any} Optional observer of the completed business mutation. */
         this.observer = null;
-        /** @type {(() => Promise<void>) | null} */ this.beforeMutation = null;
+        /** @type {(() => Promise<unknown>) | null} */ this.beforeMutation = null;
+        /** Schedules post-commit work without extending the caller's lock or queue. @type {(() => void) | null} */ this.afterRelease = null;
     }
 
     /** @template T @param {() => Promise<T> | T} operation @returns {Promise<T>} */
@@ -24,9 +25,12 @@ export class StorageMutationCoordinator {
             try { const value = await operation(); succeeded = true; return value; }
             finally { await this.observer?.finish(succeeded); }
         };
-        if (this.lockManager?.request) return this.lockManager.request(this.lockName, execute);
-        const next = this._queue.then(execute, execute);
-        this._queue = next.then(() => undefined, () => undefined);
+        const next = this.lockManager?.request ? this.lockManager.request(this.lockName, execute) : this._queue.then(execute, execute);
+        if (!this.lockManager?.request) this._queue = next.then(() => undefined, () => undefined);
+        // Never await work scheduled here. SettingsService may own a queue that
+        // is itself awaiting this operation; awaiting its refresh would deadlock.
+        const released = () => { try { this.afterRelease?.(); } catch { /* A committed mutation keeps its original result. */ } };
+        void next.then(released, released);
         return next;
     }
 }

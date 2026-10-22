@@ -47,7 +47,7 @@ describe("full settings WebDAV save transaction", () => {
         const f = await fixture();
         f.dependencies.autoBackup = { enable: vi.fn() };
         expect(f.root.find("#webDavAutoBackupEnabled")).toHaveLength(0);
-        expect(f.root.find("#webDavSyncKeepCount").val()).toBe("10");
+        expect(f.root.find("#webDavSyncKeepCount").val()).toBe("5");
         f.root.find("#webDavSyncKeepCount").val("7").trigger("change");
         f.root.find("#webDavSyncHistoryDays").val("14").trigger("change");
         await saveSettingForm(f.dependencies, f.root);

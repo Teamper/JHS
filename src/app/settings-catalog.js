@@ -12,6 +12,7 @@ import { PRODUCT_NAMES } from "../core/product-names.js";
 import { DEFAULT_QUICK_FILTER_OPTIONS } from "../features/list/list-filters.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
 import { SYNC_DEFAULTS } from "../core/webdav-sync-model.js";
+import { stringList, booleanMap, resourceValidators } from "./settings-sync-validation.js";
 
 /** @param {import("./settings-registry.js").SettingsRegistry} registry */
 export function registerDefaultSettings(registry) {
@@ -23,7 +24,10 @@ export function registerDefaultSettings(registry) {
         ["enabledExternalSites", "外部站点选择", "json", []], ["imageSearchSelections", "图片搜索站点", "json", {}],
         ["magnetHubSelectedEngine", "磁力来源选择", "text", ""], ["newVideoViewMode", "新作品视图", "text", ""],
         ["tagExpanded", "标签展开", "boolean", false], ["actressAvatarSourceIndex", "头像来源", "number", 0],
-    ])) registry.register({ key, label, type, defaultValue, owner: "PersonalPreferencesFeature", effect: "live", surfaces: [] });
+    ])) registry.register({ key, label, type, defaultValue, owner: "PersonalPreferencesFeature", effect: "live", surfaces: [],
+        ...(key === "enabledExternalSites" ? { validateSync: stringList } : key === "imageSearchSelections" ? { validateSync: booleanMap } : key === "tagExpanded" ? { validateSync: (/** @type {any} */ value) => typeof value === "boolean" } : key === "actressAvatarSourceIndex" ? { validateSync: (/** @type {any} */ value) => Number.isSafeInteger(value) && value >= 0 } : {}),
+    });
+    for (const [key, validateSync] of Object.entries(resourceValidators)) registry.register({ key, label: ({ customMagnetSources: "自定义磁力源", magnetTagRules: "磁力标签规则", magnetFilterRules: "磁力过滤规则", magnetBuiltInSources: "内置磁力源", detailShortcuts: "详情快捷键" })[key], type: "json", owner: key === "detailShortcuts" ? "DetailShortcutFeature" : "MagnetFeature", effect: "manual", surfaces: [], validateSync });
     const boolean = { type: "boolean", effect: "live" };
     const yes = "yes", no = "no";
     /** @type {Record<string, string>} */

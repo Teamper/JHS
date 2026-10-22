@@ -1,5 +1,7 @@
 // @ts-check
 
+import { validateDescriptorSync } from "./settings-sync-validation.js";
+
 const VALID_EFFECTS = new Set(["live", "nextNavigation", "manual"]);
 const VALID_TYPES = new Set(["boolean", "select", "number", "text", "password", "json"]);
 const VALID_SURFACES = new Set(["full", "quick"]);
@@ -30,6 +32,7 @@ export function normalizeSettingDescriptor(descriptor) {
         effect,
         surfaces: Object.freeze(surfaces),
         validate: typeof descriptor.validate === "function" ? descriptor.validate : null,
+        validateSync: typeof descriptor.validateSync === "function" ? descriptor.validateSync : null,
         normalize: typeof descriptor.normalize === "function" ? descriptor.normalize : null,
         contribution: descriptor.contribution == null ? undefined : String(descriptor.contribution),
     });
@@ -67,6 +70,18 @@ export class SettingsRegistry {
         const descriptor = this.descriptors.get(key);
         if (!descriptor) return true;
         if (typeof descriptor.validate === "function") return descriptor.validate(value) === true;
+        return true;
+    }
+
+    /** Validate without normalizing the value or changing its sync version. @param {string} key @param {unknown} value */
+    validateSync(key, value) {
+        const descriptor = this.descriptors.get(key);
+        if (!descriptor) return true;
+        try {
+            if (!validateDescriptorSync(descriptor, value)) throw new Error("类型、可选值或取值范围不符合要求");
+        } catch (error) {
+            throw new Error(`同步设置“${descriptor.label}”(${key})无效：${error instanceof Error ? error.message : "配置格式不正确"}`);
+        }
         return true;
     }
 

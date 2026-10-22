@@ -6,6 +6,8 @@ import { WebDavSyncStore } from "../../src/core/webdav-sync-store.js";
 import { WebDavSyncService } from "../../src/services/webdav-sync-service.js";
 import { SettingsService } from "../../src/services/settings-service.js";
 import { parseSyncFileName } from "../../src/core/webdav-sync-model.js";
+import { SettingsRegistry } from "../../src/app/settings-registry.js";
+import { registerDefaultSettings } from "../../src/app/settings-catalog.js";
 
 export function memoryDav() {
     const files = new Map();
@@ -24,6 +26,8 @@ export function memoryDav() {
 }
 
 export async function syncReplica(remote, options = {}) {
+    const registry = new SettingsRegistry(); registerDefaultSettings(registry);
+    const validateSetting = (key, value) => registry.validateSync(key, value);
     let now = Date.UTC(2026, 9, 22, 8);
     const values = options.values ?? new Map(Object.entries({ data_version: 3, car_list: [], favorite_actresses: [], setting: {}, ...options.data }));
     const forage = { getItem: vi.fn(async key => structuredClone(values.get(key) ?? null)), setItem: vi.fn(async (key, value) => { values.set(key, structuredClone(value)); }), removeItem: vi.fn(async key => { values.delete(key); }), keys: async () => [...values.keys()] };
@@ -41,7 +45,7 @@ export async function syncReplica(remote, options = {}) {
     let store;
     const settings = new SettingsService({ get: key => forage.getItem(key), set: async (key, value) => { await store?.capture(key); await forage.setItem(key, value); } }, { mutationCoordinator: coordinator });
     await settings.load();
-    store = new WebDavSyncStore({ forage, coordinator, storage, settings, events, clock: () => now });
+    store = new WebDavSyncStore({ forage, coordinator, storage, settings, events, clock: () => now, validateSetting });
     storage.syncState = store; store.enabled = true;
     coordinator.observer = store; coordinator.beforeMutation = () => store.recoverWithoutLock();
     const shared = Object.assign(new EventTarget(), {
@@ -52,7 +56,7 @@ export async function syncReplica(remote, options = {}) {
     let held = false;
     const locks = { request: vi.fn(async (_name, _options, callback) => { if (held) return callback(null); held = true; try { return await callback({}); } finally { held = false; } }) };
     const webdav = { createClient: vi.fn(() => remote.client) };
-    const service = new WebDavSyncService({ store, shared, webdav, settings, storage, events, clock: () => now, locks: options.locks === undefined ? locks : options.locks, window: { setTimeout: () => 0, clearTimeout: () => {} } });
+    const service = new WebDavSyncService({ store, shared, webdav, settings, storage, events, clock: () => now, locks: options.locks === undefined ? locks : options.locks, window: { setTimeout: () => 0, clearTimeout: () => {} }, validateSetting });
     await store.initialize();
     return { values, forage, coordinator, storage, state, settings, store, shared, webdav, service, locks, advance: ms => { now += ms; }, restart: () => syncReplica(remote, { ...options, values }) };
 }

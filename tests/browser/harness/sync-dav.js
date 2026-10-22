@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 // A real isolated HTTP DAV store; GM bindings model one userscript installation
 // shared across origins, while separate BrowserContexts have independent GM data.
 export async function isolatedDav() {
-    const files = new Map(), requests = [];
+    const files = new Map(), requests = [], queuedUploads = [], heldUploads = new Set();
     const folder = "/dav/" + encodeURIComponent("JHS-同步");
     const server = createServer(async (req, res) => {
         const pathname = new URL(req.url, "http://localhost").pathname;
@@ -18,6 +18,8 @@ export async function isolatedDav() {
         if (!pathname.startsWith(folder + "/")) { res.writeHead(404).end(); return; }
         if (req.method === "PUT") {
             let body = ""; for await (const chunk of req) body += chunk;
+            const held = queuedUploads.shift();
+            if (held) { held.received({ name, body }); await held.wait; }
             if (files.has(name) && files.get(name) !== body) { res.writeHead(409).end(); return; }
             files.set(name, body); res.writeHead(201).end(); return;
         }
@@ -27,7 +29,17 @@ export async function isolatedDav() {
     });
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
     const url = `http://127.0.0.1:${server.address().port}/dav`;
-    return { files, requests, url, close: () => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }) };
+    const holdNextPut = () => {
+        let release, received;
+        const wait = new Promise(resolve => { release = resolve; }), arrival = new Promise(resolve => { received = resolve; });
+        const held = { wait, received, release() { release(); heldUploads.delete(held); } };
+        queuedUploads.push(held); heldUploads.add(held);
+        return { received: arrival, release: held.release };
+    };
+    return { files, requests, url, holdNextPut, close: () => new Promise(resolve => {
+        for (const held of heldUploads) held.release();
+        server.closeAllConnections(); server.close(resolve);
+    }) };
 }
 
 export async function sharedUserscriptInstallation(context, dav) {
