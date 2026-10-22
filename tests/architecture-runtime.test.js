@@ -18,6 +18,18 @@ import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { createIntegrationRequestFacade } from "../src/app/integration-registry.js";
 
 describe("v6.5 architecture runtime contracts", () => {
+    it("activates sync through its public API and stops if initialization fails", async () => {
+        const feature = featureManifests.find(item => item.id === "webdav-sync");
+        const scope = new LifecycleScope("sync-contract"), service = { initialize: vi.fn(async () => {}), start: vi.fn() };
+        const dependencies = { [SERVICE.webdavSync]: service, [PORT.host]: { document } };
+        await feature.activate(dependencies, { scope });
+        expect(service.start).toHaveBeenCalledWith(scope, document);
+        service.initialize.mockRejectedValueOnce(new Error("unavailable storage"));
+        await expect(feature.activate(dependencies, { scope })).rejects.toThrow("unavailable storage");
+        expect(service.start).toHaveBeenCalledTimes(1);
+        scope.dispose();
+    });
+
     it("keeps the FC2 catalog out of first-ready and activates its compatibility service on demand", async () => {
         document.body.innerHTML = '<nav id="navbar-menu-hero"><a href="/tags/fc2">FC2</a></nav>';
         window.history.replaceState({}, "", "/v/movie-123");

@@ -5,7 +5,8 @@ import { JhsSelect } from "../../core/ui-primitives.js";
 
 /** @param {any} root @param {any} dependencies */
 export function bindWebDavSyncControls(root, dependencies) {
-    const service = dependencies.autoBackup;
+    /** @type {import("../../contracts/webdav-sync.js").WebDavSync | undefined} */
+    const service = dependencies.webdavSync;
     if (!service) return;
     let generation = 0;
     const active = () => !dependencies.scope?.disposed && dependencies.isActive?.() !== false;
@@ -47,7 +48,7 @@ export function bindWebDavSyncControls(root, dependencies) {
         const files = await service.listRecoveryFiles(dependencies.scope);
         if (!active()) return;
         const select = root.find("#webdavSyncRecoveryFile").empty();
-        for (const file of files.sort((/** @type {any} */ a, /** @type {any} */ b) => b.createdAt.localeCompare(a.createdAt))) select.append(dependencies.jquery("<option></option>").val(file.name).text(`${formatUiDateTime(file.createdAt)} · 设备 ${file.replicaId.slice(0, 8)} · 版本 ${file.seq}`));
+        for (const file of files.sort((a, b) => b.createdAt.localeCompare(a.createdAt))) select.append(dependencies.jquery("<option></option>").val(file.name).text(`${formatUiDateTime(file.createdAt)} · 设备 ${file.replicaId.slice(0, 8)} · 版本 ${file.seq}`));
         if (!files.length) select.append(dependencies.jquery("<option></option>").val("").text("暂无恢复版本"));
         JhsSelect.refreshAll(root);
         select.trigger("change");

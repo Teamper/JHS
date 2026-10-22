@@ -7,16 +7,24 @@ import { SYNC_FOLDER, parseSyncFileName, retainedSyncFiles, syncFileName, syncHa
 
 const RETRIES = [1, 2, 4, 8, 16, 30];
 export const SYNC_NETWORK_LOCK = "jhs_webdav_sync_network_v1";
-/** Page-owned transport. Immutable replica snapshots require no cross-device lock or CAS. */
+/** @typedef {import("../contracts/webdav-sync.js").WebDavSync} WebDavSync */
+/** Page-owned transport. Immutable replica snapshots require no cross-device lock or CAS.
+ * @implements {WebDavSync}
+ */
 export class WebDavSyncService extends EventTarget {
     /** @param {any} dependencies */
     constructor(dependencies) {
         super(); this.deps = dependencies; this.window = dependencies.window ?? globalThis.window; this.clock = dependencies.clock ?? (() => Date.now());
         this.locks = dependencies.locks === undefined ? globalThis.navigator?.locks : dependencies.locks;
         this.running = false; this.suspended = false; this.rerun = false; this.timer = 0; this.firstChangeAt = 0; this.message = ""; this.nextDueAt = 0;
+        this.needsReconcile = true;
         /** @type {LifecycleScope | null} */ this.operation = null;
         /** @type {LifecycleScope | null} */ this.owner = null;
         /** @type {Document | null} */ this.document = null;
+    }
+    async initialize() {
+        await this.deps.preferences?.migrate();
+        await this.deps.store.initialize();
     }
     /** @param {LifecycleScope} scope @param {Document} document */
     start(scope, document) {
@@ -29,19 +37,19 @@ export class WebDavSyncService extends EventTarget {
             this.schedule(Math.min(5000, Math.max(0, this.firstChangeAt + 30000 - now)));
         });
         scope.listen(this.window, "pagehide", () => { this.suspended = true; this.cancel(); });
-        scope.listen(this.window, "pageshow", () => { this.suspended = false; this.schedule(0); });
-        scope.listen(this.window, "online", () => this.schedule(0));
-        scope.listen(document, "visibilitychange", () => { if (!document.hidden) this.schedule(0); });
+        scope.listen(this.window, "pageshow", () => { this.suspended = false; this.schedule(0, true); });
+        scope.listen(this.window, "online", () => this.schedule(0, true));
+        scope.listen(document, "visibilitychange", () => { if (!document.hidden) this.schedule(0, true); });
         scope.addCleanup(() => { this.suspended = true; this.cancel(); this.deps.store.enabled = false; });
         this.schedule(1000);
     }
     notify() { this.dispatchEvent(new Event("status")); }
     cancel() { this.window?.clearTimeout(this.timer); this.timer = 0; this.operation?.dispose(); }
-    /** @param {number} delay */
-    schedule(delay) {
+    /** @param {number} delay @param {boolean} [force] */
+    schedule(delay, force = false) {
         if (this.suspended || this.owner?.disposed) return;
         this.window?.clearTimeout(this.timer); this.nextDueAt = this.clock() + delay;
-        this.timer = this.window?.setTimeout(() => { this.timer = 0; void this.check(); }, delay) ?? 0;
+        this.timer = this.window?.setTimeout(() => { this.timer = 0; void this.check({ scheduled: !force }); }, delay) ?? 0;
     }
     async getStatus() {
         const state = await this.deps.store.read();
@@ -67,7 +75,8 @@ export class WebDavSyncService extends EventTarget {
         if (await this.deps.shared.paused()) throw new DOMException("自动同步已暂停", "AbortError");
         scope.assertActive();
     }
-    async check() {
+    /** @param {import("../contracts/webdav-sync.js").SyncCheckOptions} [options] */
+    async check(options = {}) {
         if (this.running) { this.rerun = true; return; }
         if (this.suspended || this.owner?.disposed) return;
         this.running = true; this.rerun = false; this.message = "";
@@ -85,6 +94,18 @@ export class WebDavSyncService extends EventTarget {
             await this.locks.request(SYNC_NETWORK_LOCK, { ifAvailable: true }, async (/** @type {any} */ lock) => {
                 if (!lock) return;
                 await this.assertCurrent(scope, revision);
+                // The same origin shares one poll window even when tabs wake at
+                // different times. Local edits and explicit checks can run sooner.
+                let latest = await this.deps.store.read();
+                const now = this.clock();
+                if (latest.errorRevision === revision && (latest.paused || latest.retryAt > now)) return;
+                // A reopened page repairs the previous page's metadata crash gap
+                // before deciding whether another tab already polled recently.
+                if (this.needsReconcile || this.deps.store.error) {
+                    latest = await this.deps.store.coordinator.runExclusive(() => this.deps.store.reconcileWithoutLock());
+                    this.needsReconcile = false;
+                }
+                if (options.scheduled && latest.checkedRevision === revision && latest.joined && !latest.dirty && !latest.pending && latest.lastCheckAt <= now && now < Math.min(latest.nextCheckAt, latest.lastCheckAt + (this.document?.hidden ? 120000 : 30000))) return;
                 await this.deps.store.coordinator.runExclusive(() => this.deps.store.reconcileWithoutLock());
                 const origin = new URL(profile.url).origin;
                 this.deps.urlPolicy?.authorizeLocalOrigin(origin);
@@ -109,7 +130,11 @@ export class WebDavSyncService extends EventTarget {
                     try { await this.cleanup(client, scope, revision); } catch { /* Retry independently of publishing. */ }
                 }
                 await this.assertCurrent(scope, revision);
-                await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); value.lastSuccessAt = this.clock(); value.retryAt = 0; value.failures = 0; value.error = ""; value.paused = false; });
+                await this.deps.store.update(async (/** @type {any} */ value) => {
+                    await this.assertCurrent(scope, revision);
+                    value.lastSuccessAt = this.clock(); value.retryAt = 0; value.failures = 0; value.error = ""; value.paused = false;
+                    value.checkedRevision = revision; value.lastCheckAt = this.clock(); value.nextCheckAt = value.lastCheckAt + (this.document?.hidden ? 120000 : 30000);
+                });
                 this.firstChangeAt = 0;
             });
         } catch (error) {
@@ -142,10 +167,10 @@ export class WebDavSyncService extends EventTarget {
         for (const id of new Set([...Object.keys(confirmed), ...newest.keys()])) {
             const cached = confirmed[id], file = newest.get(id);
             if (cached && (!file || file.seq < cached.seq || file.seq === cached.seq && file.name !== cached.name)) throw new Error("同步目录暂未列出已确认版本，保留当前数据并稍后重试");
-            if (cached && file.seq === cached.seq) { models.push(cached.model); continue; }
+            if (cached && file.seq === cached.seq) continue;
             const envelope = await this.readEnvelope(client, file);
             await this.assertCurrent(scope, revision);
-            models.push(envelope.state); updates[id] = { seq: file.seq, name: file.name, model: envelope.state };
+            models.push(envelope.state); updates[id] = { seq: file.seq, name: file.name };
         }
         return { models, confirmed: { ...confirmed, ...updates } };
     }
@@ -165,7 +190,7 @@ export class WebDavSyncService extends EventTarget {
         const seq = state.seq + 1, createdAt = new Date(this.clock()).toISOString();
         const envelope = { schema: 1, dataVersion: CURRENT_DATA_VERSION, replicaId: state.replicaId, seq, createdAt, state: state.model, recovery: { layout: state.layout } };
         const content = await encryptPortableBackup(JSON.stringify(envelope)), hash = await syncHash(content);
-        const pending = { name: syncFileName(state.replicaId, seq, createdAt, hash), content, hash, seq, coveredRevision: state.localRevision || 0, model: state.model, createdAt };
+        const pending = { name: syncFileName(state.replicaId, seq, createdAt, hash), content, hash, seq, coveredRevision: state.localRevision || 0, createdAt };
         await this.assertCurrent(scope, revision);
         await this.deps.store.update(async (/** @type {any} */ value) => {
             await this.assertCurrent(scope, revision); if (value.pending || value.replicaId !== state.replicaId || value.binding !== state.binding) throw new DOMException("同步快照已失效", "AbortError");
@@ -189,7 +214,7 @@ export class WebDavSyncService extends EventTarget {
             value.publishedRevision = Math.max(value.publishedRevision || 0, pending.coveredRevision);
             value.dirty = (value.localRevision || 0) > value.publishedRevision;
             value.known[pending.name] = pending.hash;
-            value.confirmed[value.replicaId] = { seq: pending.seq, name: pending.name, model: pending.model };
+            value.confirmed[value.replicaId] = { seq: pending.seq, name: pending.name };
             value.lastSuccessAt = this.clock();
             value.pending = null;
         });

@@ -11,9 +11,9 @@ export const systemFeatureManifests = Object.freeze([
         id: "webdav-sync", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager",
         requires: [SERVICE.webdavSync, PORT.host], contributes: [], providesCommands: [],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
+            /** @type {import("../../contracts/webdav-sync.js").WebDavSync} */
             const service = deps[SERVICE.webdavSync];
-            await service.deps.preferences.migrate();
-            await service.deps.store.initialize();
+            await service.initialize();
             service.start(runtime.scope, deps[PORT.host].document);
             return { activeContributions: [] };
         },
@@ -31,7 +31,7 @@ export const systemFeatureManifests = Object.freeze([
         },
     }),
     defineFeature({
-        id: "settings-entry", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager", optionalRequires: [SERVICE.autoBackup],
+        id: "settings-entry", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager", optionalRequires: [SERVICE.webdavSync],
         requires: [PORT.style, PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.cache, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, SERVICE.busImageLayout, REGISTRY.settings, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.events, SERVICE.domUi, SERVICE.clog, SERVICE.notifications], contributes: ["settings.core"], providesCommands: [],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const pageDocument = deps[PORT.host].document;
@@ -41,7 +41,7 @@ export const systemFeatureManifests = Object.freeze([
             if (compatibilityBean?.createFeatureService && compatibilityBean?.connect) {
                 adapter = compatibilityBean.createFeatureService({
                     runtimeServices: {
-                        host: deps[PORT.host], diagnostics: deps[SERVICE.diagnostics], profile: deps[SERVICE.profile], webdav: deps[SERVICE.webdav], autoBackup: deps[SERVICE.autoBackup],
+                        host: deps[PORT.host], diagnostics: deps[SERVICE.diagnostics], profile: deps[SERVICE.profile], webdav: deps[SERVICE.webdav], webdavSync: deps[SERVICE.webdavSync], autoBackup: deps[SERVICE.webdavSync],
                         dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], cache: deps[SERVICE.cache],
                         http: deps[SERVICE.http], offline: deps[SERVICE.offline], magnet: deps[SERVICE.magnet], movie: deps[SERVICE.movie],
                         state: deps[SERVICE.state], translation: deps[SERVICE.translation], busImageLayout: deps[SERVICE.busImageLayout],

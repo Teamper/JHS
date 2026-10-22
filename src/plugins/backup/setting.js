@@ -118,7 +118,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             imageLayout: this.getRuntimeService("busImageLayout"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
             settingsRegistry: this.getRuntimeService("settingsRegistry"),
             webdav: this.getRuntimeService("webdav"),
-            autoBackup: this.getRuntimeService("autoBackup"),
+            webdavSync: this.getRuntimeService("webdavSync"),
             jquery: this.jquery, document: this.document, legacyStorage: this.legacyStorage,
             utilities: this.utils, events: this.events, notifications: this.notifications, logger: this.logger, domUi: this.domUi, window: this.window,
             root: instance?.root,

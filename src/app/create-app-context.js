@@ -122,7 +122,8 @@ export function createAppContext(runtime) {
     webdav.sharedProfile = sharedProfile;
     const preferences = new PersonalPreferencesService(settings, runtime.localStorage, message => notifications.error(message));
     storage.preferences = preferences;
-    const autoBackup = new WebDavSyncService({ webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences });
+    /** @type {import("../contracts/webdav-sync.js").WebDavSync} */
+    const webdavSync = new WebDavSyncService({ webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;
@@ -172,8 +173,8 @@ export function createAppContext(runtime) {
         .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage)
         .register(SERVICE.legacyStorage, runtime.legacyStorage).register(SERVICE.legacyUtils, runtime.legacyUtils).register(SERVICE.webdav, webdav)
-        .register(SERVICE.autoBackup, autoBackup)
-        .register(SERVICE.webdavSync, autoBackup)
+        .register(SERVICE.autoBackup, webdavSync)
+        .register(SERVICE.webdavSync, webdavSync)
         .register(SERVICE.credential, credential)
         .register(SERVICE.pan123Credential, pan123Credential)
           .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.resourceSettings, resourceSettings).register(SERVICE.notifications, notifications).register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
@@ -188,5 +189,5 @@ export function createAppContext(runtime) {
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, autoBackup, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, titleKeywords, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, webdavSync, autoBackup: webdavSync, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, titleKeywords, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

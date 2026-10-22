@@ -110,6 +110,27 @@ test("zero requests without credentials, saved connection auto joins, pause and 
     } finally { await dav.close(); }
 });
 
+test("same-origin tabs share scheduled polling while another tab can publish local changes", async ({ page, context }) => {
+    const dav = await isolatedDav();
+    try {
+        const install = await sharedUserscriptInstallation(context, dav); await fulfillHostFixtures(context);
+        await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page, { beforeUserscriptInjection: install });
+        await configure(page, dav.url); await service(page, "cancel");
+        const other = await context.newPage(); await other.goto("https://javdb.com/");
+        await injectUserscriptRuntime(other, { preserveStorage: true, beforeUserscriptInjection: install });
+        await service(other, "cancel");
+        const requests = dav.requests.length;
+        for (const tab of [page, other, page, other]) await service(tab, "check", { scheduled: true });
+        expect(dav.requests).toHaveLength(requests);
+        await page.evaluate(() => window.stateService.patch(["MULTITAB-1"], { favorite: true }));
+        await service(other, "check", { scheduled: true });
+        expect(dav.requests.filter(request => request.method === "PUT").length).toBeGreaterThan(1);
+        expect((await carList(other))[0].stateFlags.favorite).toBe(true);
+        const after = dav.requests.length;
+        await service(page, "check", { scheduled: true }); expect(dav.requests).toHaveLength(after);
+    } finally { await dav.close(); }
+});
+
 for (const theme of ["light", "dark"]) test(`多端同步布局 ${theme}`, async ({ page, context }, info) => {
     test.skip(process.env.JHS_VISUAL_REGRESSION !== "1", "visual gate uses pinned Chromium");
     await page.clock.setFixedTime(new Date("2026-10-22T08:00:00Z"));

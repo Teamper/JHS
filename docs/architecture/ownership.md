@@ -21,7 +21,8 @@ Ownership 描述的是唯一职责归属，不是人员归属。本表对应 `de
 | 请求合并、缓存与取消 | HttpService / CacheService / LifecycleScope |
 | 设置 snapshot 与本 runtime 事件 | SettingsService |
 | 双向同步与不可变快照传输、保留和恢复 | WebDavSyncService / WebDAV Sync System Feature |
-| 字段版本、删除代、影子和远端应用恢复日志 | WebDavSyncStore / `core/webdav-sync-model.js`；业务锁内落地 |
+| 字段版本、删除代、影子和远端应用恢复日志 | WebDavSyncStore / `core/webdav-sync-model.js`；业务锁内落地，成功写入按触及领域补账，完整核对修复遗漏 |
+| 同步公共接口、外部快照校验与多页轮询 | `contracts/webdav-sync.d.ts` / `core/webdav-sync-validation.js` / WebDavSyncService；Feature 不访问服务内部依赖，同源共享检查窗口 |
 | 跨站加密连接与旧连接候选仲裁 | WebDavSharedProfile / CredentialService / GM 存储 |
 | 旧页面偏好的 SettingsService 桥接 | PersonalPreferencesService |
 | 响应式 profile 与设置副作用 | ProfileService / Settings Effects Feature |

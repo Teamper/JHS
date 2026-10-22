@@ -7,6 +7,13 @@ import { SYNC_DOMAINS, emptySyncModel, historyRank, joinSyncModels, materializeS
 export const SYNC_STATE_KEY = "jhs_webdav_sync_state_v1";
 export const SYNC_JOURNAL_KEY = "jhs_webdav_sync_journal_v1";
 
+/** Confirmed remote models are already durably joined into state.model. @param {Dict} state */
+function compactSyncMetadata(state) {
+    for (const item of Object.values(state.confirmed || {})) delete item.model;
+    if (state.pending) delete state.pending.model;
+    return state;
+}
+
 /** Durable local sidecar. All *WithoutLock methods require the business lock. */
 export class WebDavSyncStore extends EventTarget {
     /** @param {any} dependencies */
@@ -25,7 +32,7 @@ export class WebDavSyncStore extends EventTarget {
     async read() {
         const state = await this.forage.getItem(SYNC_STATE_KEY);
         if (state && (state.schema !== 1 || !state.model?.records || !state.shadow || !Array.isArray(state.undoEligible))) throw new Error("同步状态损坏或版本不受支持，请保留数据并使用恢复入口");
-        if (state) { this.replicaId = state.replicaId; this.eligible = new Set(state.undoEligible); return state; }
+        if (state) { this.replicaId = state.replicaId; this.eligible = new Set(state.undoEligible); return compactSyncMetadata(state); }
         return { schema: 1, replicaId: "", counter: 0, seq: 0, localRevision: 0, publishedRevision: 0, joined: false, binding: "", model: emptySyncModel(), shadow: {}, layout: {}, dirty: false, pending: null, confirmed: {}, known: {}, deleting: [], lastSuccessAt: 0, retryAt: 0, failures: 0, error: "", cleanupError: "", paused: false, undoEligible: [] };
     }
     async initialize() {
@@ -42,7 +49,7 @@ export class WebDavSyncStore extends EventTarget {
         });
     }
     /** @param {Dict} state */
-    async writeWithoutLock(state) { await this.forage.setItem(SYNC_STATE_KEY, state); this.replicaId = state.replicaId; this.eligible = new Set(state.undoEligible); }
+    async writeWithoutLock(state) { await this.forage.setItem(SYNC_STATE_KEY, compactSyncMetadata(state)); this.replicaId = state.replicaId; this.eligible = new Set(state.undoEligible); }
     /** @param {(state: Dict) => void | Promise<void>} change */
     update(change) { return this.coordinator.runExclusive(async () => { const state = await this.read(); await change(state); await this.writeWithoutLock(state); return state; }); }
     begin() { this.current = this.enabled ? { touched: new Set(), pruned: {} } : null; }
@@ -55,16 +62,16 @@ export class WebDavSyncStore extends EventTarget {
         const current = this.current; this.current = null;
         if (!current?.touched.size) return;
         try {
-            if (succeeded) await this.reconcileWithoutLock(current.pruned);
+            if (succeeded) await this.reconcileWithoutLock(current.pruned, current.touched);
             this.error = "";
         } catch { this.error = "业务数据已保存，同步进度待修复；稍后将重新核对完整数据"; }
         this.dispatchEvent(new Event("changes"));
     }
     /** @param {string} id */
     canUndo(id) { return this.eligible.has(id); }
-    /** @returns {Promise<Dict>} */
-    async readData() {
-        const values = await Promise.all(SYNC_DOMAINS.map(async key => [key, await this.forage.getItem(key)]));
+    /** @param {readonly string[]} [domains] @returns {Promise<Dict>} */
+    async readData(domains = SYNC_DOMAINS) {
+        const values = await Promise.all(domains.map(async key => [key, await this.forage.getItem(key)]));
         return Object.fromEntries(values.map(([key, value]) => [key, value ?? (["setting", "new_video_decisions"].includes(key) ? {} : key === "activity_log" ? { entries: [] } : [])]));
     }
     /** Must run before every subsequent writer, even after a page crash. */
@@ -82,8 +89,8 @@ export class WebDavSyncStore extends EventTarget {
         this.deps.storage?._invalidateCache?.();
         this.deps.storage?.invalidateSettingCache?.();
     }
-    /** Bind final durable business values to versions; never infer from notification counts. @param {Dict} [pruned] */
-    async reconcileWithoutLock(pruned = {}) {
+    /** Full checks repair missed writes; successful mutations reconcile only their captured domains. @param {Dict} [pruned] @param {Set<string> | null} [touched] */
+    async reconcileWithoutLock(pruned = {}, touched = null) {
         await assertSupportedDataVersion(this.deps.storage);
         await this.deps.storage?.stateService?.recoverPendingTransactionWithoutLock?.();
         const state = await this.read();
@@ -93,26 +100,39 @@ export class WebDavSyncStore extends EventTarget {
             if (syncJson(ids) !== syncJson(state.undoEligible)) { state.undoEligible = ids; await this.writeWithoutLock(state); }
             return state;
         }
-        const data = await this.readData();
-        const beforeModel = syncJson(state.model);
-        for (const [domain, frontier] of Object.entries(pruned)) state.model.frontiers[domain] = [state.model.frontiers[domain] || "", frontier].sort().at(-1);
-        const next = projectSyncData(data, state.model.frontiers);
-        const before = Object.fromEntries(Object.entries(state.shadow).filter(([key, fields]) => !["activity_log", "offline_history"].includes(key.split("/")[0]) || historyRank(/** @type {Dict} */ (fields).value) > (state.model.frontiers[key.split("/")[0]] || "")));
-        const clock = Math.max(state.counter, maximumClock(state.model)) + 1;
+        const domains = new Set(touched ? [...touched, ...Object.keys(pruned)].filter(key => SYNC_DOMAINS.includes(key)) : SYNC_DOMAINS);
+        const selected = (/** @type {string} */ key) => domains.has(key.split("/")[0]);
+        const data = await this.readData([...domains]);
+        const model = touched ? { records: Object.fromEntries(Object.entries(state.model.records).filter(([key]) => selected(key))), frontiers: { ...state.model.frontiers } } : state.model;
+        const beforeModel = syncJson(model);
+        for (const [domain, frontier] of Object.entries(pruned)) model.frontiers[domain] = [model.frontiers[domain] || "", frontier].sort().at(-1);
+        const next = projectSyncData(data, model.frontiers);
+        const before = Object.fromEntries(Object.entries(state.shadow).filter(([key, fields]) => {
+            const domain = key.split("/")[0];
+            return selected(key) && (!["activity_log", "offline_history"].includes(domain) || historyRank(/** @type {Dict} */ (fields).value) > (model.frontiers[domain] || ""));
+        }));
+        const clock = Math.max(state.counter, maximumClock(model)) + 1;
         if (!Number.isSafeInteger(clock)) throw new Error("同步逻辑版本已超出安全范围");
-        const difference = versionSyncDiff(state.model, before, next, [clock, state.replicaId]);
-        state.model = pruneSyncHistory(difference.model, data, this.deps.clock?.() ?? Date.now());
-        const layout = syncLayout(data.setting);
-        const changed = difference.changed || syncJson(layout) !== syncJson(state.layout) || beforeModel !== syncJson(state.model);
+        const difference = versionSyncDiff(model, before, next, [clock, state.replicaId]);
+        const result = domains.has("activity_log") || domains.has("offline_history") ? pruneSyncHistory(difference.model, data, this.deps.clock?.() ?? Date.now()) : difference.model;
+        const layout = domains.has("setting") ? syncLayout(data.setting) : state.layout;
+        const changed = difference.changed || syncJson(layout) !== syncJson(state.layout) || beforeModel !== syncJson(result);
         if (changed) {
             state.counter = difference.changed ? clock : state.counter;
-            state.shadow = projectSyncData(data, state.model.frontiers);
+            if (touched) {
+                for (const key of Object.keys(state.model.records)) if (selected(key)) delete state.model.records[key];
+                Object.assign(state.model.records, result.records); state.model.frontiers = result.frontiers;
+                for (const key of Object.keys(state.shadow)) if (selected(key)) delete state.shadow[key];
+                Object.assign(state.shadow, projectSyncData(data, state.model.frontiers));
+            } else { state.model = result; state.shadow = projectSyncData(data, state.model.frontiers); }
             state.layout = layout;
             state.dirty = true;
             state.localRevision = (state.localRevision || 0) + 1;
-            const eligible = new Set(state.undoEligible);
-            for (const entry of data.activity_log.entries || []) if (entry.originReplicaId === state.replicaId && entry.commitState === "committed") eligible.add(entry.id);
-            state.undoEligible = [...eligible].filter(id => data.activity_log.entries.some((/** @type {any} */ entry) => entry.id === id));
+            if (domains.has("activity_log")) {
+                const eligible = new Set(state.undoEligible);
+                for (const entry of data.activity_log.entries || []) if (entry.originReplicaId === state.replicaId && entry.commitState === "committed") eligible.add(entry.id);
+                state.undoEligible = [...eligible].filter(id => data.activity_log.entries.some((/** @type {any} */ entry) => entry.id === id));
+            }
             await this.writeWithoutLock(state);
         }
         this.error = "";
