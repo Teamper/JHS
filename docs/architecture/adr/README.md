@@ -1,6 +1,6 @@
-# JHS 6.5 Architecture Decision Records
+# JHS Architecture Decision Records
 
-本目录保留 v6.5 已冻结的架构决策历史，7.0 `develop` 沿用这些边界与兼容约束。实施中只允许补充已定义决策的实现细节；改变决策须新增 superseding ADR，并明确替代的旧决策，不覆盖历史结论。
+ADR-001 至 ADR-012 保留 v6.5 已冻结的架构决策历史，7.0 `develop` 沿用其中未被替代的边界与兼容约束。改变决策须新增 superseding ADR，明确版本、适用路径及被替代的范围，不覆盖历史结论。ADR-013 记录已实现的 7.0 WebDAV 同步与恢复决策。
 
 当前 7.0 能力与路由见 [Feature Matrix](../feature-matrix.md)，代码职责边界见 [Ownership](../ownership.md)。main / develop 的构建与验证差异见 [开发与发布说明](../../development.md)。
 
@@ -16,3 +16,4 @@
 10. [外部 URL 信任](010-url-trust.md)
 11. [Vendor Bridge](011-vendor-bridge.md)
 12. [Browser 与发布门禁](012-browser-release-gate.md)
+13. [WebDAV 多端同步与恢复](013-webdav-sync-recovery.md)

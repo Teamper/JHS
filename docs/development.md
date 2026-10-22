@@ -44,6 +44,8 @@ git worktree list
 
 当前检出可能是历史 refactor 分支。对已有未提交内容使用隔离工作树，不用切换、重置或清理命令覆盖它。不要因为两条分支版本元数据相同而互换构建命令。
 
+检查工作区时分别核对各工作树的 `git status --short`。本地 `main`、`develop` 与 `origin/main`、`origin/develop` 可能指向不同提交；远端跟踪引用也只是最近一次获取的记录，查看本地状态不等于已核对服务器。文档同步不隐含合并、重置、清理或提交其他工作树的改动。
+
 ## 架构与修改归属
 
 两条分支均从 `src/main.js` 进入 `bootstrapJhs`，使用 app/contracts/platform/services/integrations/features/ui 分层。main 仍保留 PluginManager/BasePlugin 执行业务；develop 由 FeatureRuntime 激活 manifest 和 Contribution，CompatibilityBeanRegistry 提供旧 `getBean()` 等兼容入口。
@@ -51,6 +53,8 @@ git worktree list
 新增行为进入对应 Feature/Service/View，通过 contracts 和 HostAdapter 访问下层或宿主页面；旧兼容入口不作为 develop 新功能的归属。功能范围查 manifest catalog，职责查 [Ownership](architecture/ownership.md)，路由与能力查 [Feature Matrix](architecture/feature-matrix.md)，设计约束查 [ADR](architecture/adr/README.md)。
 
 保持 UserScript 正式身份、`JAV-JHS` / `appData`、设置键、备份格式与业务公共接口兼容。状态写入经 StateService；设置写入经 SettingsService；云盘提交保留 Provider capability filtering。第三方解析变化补固定 HTML fixture，持久化变化补迁移、未来版本拒绝、恢复与导入兼容测试。
+
+7.0 WebDAV 多端同步的锁、提交日志、设置校验及快照策略以 [ADR-013](architecture/adr/013-webdav-sync-recovery.md) 为准。远端应用在业务锁内落地，设置刷新和界面广播在锁释放后安排；新设置描述符须声明兼容其实际消费者的同步校验。面向用户的操作与当前验证边界见 [同步与恢复说明](webdav-sync.md)。
 
 ## 验证与证据
 

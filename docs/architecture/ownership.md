@@ -20,9 +20,13 @@ Ownership 描述的是唯一职责归属，不是人员归属。本表对应 `de
 | 外部 URL 信任与 redirect 复验 | ExternalUrlPolicy |
 | 请求合并、缓存与取消 | HttpService / CacheService / LifecycleScope |
 | 设置 snapshot 与本 runtime 事件 | SettingsService |
+| 设置同步语义校验与依赖注入 | SettingsRegistry / `app/settings-catalog.js` / `app/settings-sync-validation.js`；下载及最终合并复用描述符校验，核心模型不依赖设置界面 |
 | 双向同步与不可变快照传输、保留和恢复 | WebDavSyncService / WebDAV Sync System Feature |
 | 字段版本、删除代、影子和远端应用恢复日志 | WebDavSyncStore / `core/webdav-sync-model.js`；业务锁内落地，成功写入按触及领域补账，完整核对修复遗漏 |
+| 已提交远端应用的设置刷新与界面通知 | WebDavSyncStore；StorageMutationCoordinator 的 `afterRelease` 只安排锁外任务，通知成功后按日志标识确认，禁止在业务锁或设置写入队列内等待刷新 |
+| 持久化发布期限、清理退避和生命周期 | WebDavSyncStore 保存期限与进度；`services/webdav-sync-scheduling.js` 计算调度；WebDavSyncService 负责网络锁、请求取消及独立清理重试 |
 | 同步公共接口、外部快照校验与多页轮询 | `contracts/webdav-sync.d.ts` / `core/webdav-sync-validation.js` / WebDavSyncService；Feature 不访问服务内部依赖，同源共享检查窗口 |
+| 手动备份与同步的安全下载 | WebDavClient；逐跳检查目标，跨域后持续匿名，只有全程同源的 404 可判定文件缺失，其他方法继续限制在原目标范围 |
 | 跨站加密连接与旧连接候选仲裁 | WebDavSharedProfile / CredentialService / GM 存储 |
 | 旧页面偏好的 SettingsService 桥接 | PersonalPreferencesService |
 | 响应式 profile 与设置副作用 | ProfileService / Settings Effects Feature |
@@ -32,3 +36,5 @@ Ownership 描述的是唯一职责归属，不是人员归属。本表对应 `de
 | 诊断数据和脱敏导出 | DiagnosticsService |
 
 判断缺陷归属时先确定表中 Owner，再由 Owner 调用下层契约；不得把行为放入“当前碰巧能拿到数据”的 Feature。
+
+多端同步的合并、锁、恢复与保留约束见 [ADR-013](adr/013-webdav-sync-recovery.md)。
