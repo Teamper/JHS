@@ -77,7 +77,7 @@ describe("settings backup post-commit boundary", () => {
 
         expect(storage.deleteSnapshot).toHaveBeenCalledExactlyOnceWith("synthetic-snapshot");
         expect(deps.notifications.error).not.toHaveBeenCalled();
-        expect(jquery("#snapshot-list").text()).toContain("暂无快照");
+        expect(jquery("#snapshot-list").text()).toContain("暂无恢复点");
     });
 
     it("reports a real import persistence failure and does not schedule a reload", async () => {

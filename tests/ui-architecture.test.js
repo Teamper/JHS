@@ -137,10 +137,10 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
         expect(settingPlugin).toContain('normalizeQuickFilterKey(root.find("#defaultQuickFilterTab").val())');
     });
 
-    it("renders product labels while retaining internal plugin names as a tooltip", () => {
+    it("renders product labels without exposing internal plugin names as a tooltip", () => {
         expect(settings).toContain('DetailPagePlugin:[`${PRODUCT_NAMES.javdb} 详情页`,"detail"]');
         expect(pluginPanels).toContain("jhs-plugin-copy");
-        expect(pluginPanels).toContain("内部插件名：");
+        expect(pluginPanels).not.toContain("内部插件名：");
         expect(pluginPanels).not.toContain("<small title=\"内部插件名\"");
         expect(pluginPanels).toContain("jhs-badge--neutral");
         expect(pluginPanels).not.toContain("checked disabled");

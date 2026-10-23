@@ -80,10 +80,10 @@ function autoBackupSettings() {
         '<p id="jhs-auto-backup-status" class="jhs-setting-help" role="status" aria-live="polite"></p>' +
         '<div class="jhs-toolbar"><button type="button" id="webdavAutoVerifyBtn" class="jhs-btn jhs-btn--secondary">立即同步</button><button type="button" id="webdavSyncPauseBtn" class="jhs-btn jhs-btn--secondary">暂停本机同步</button><button type="button" id="webdavSyncChooseBtn" class="jhs-btn jhs-btn--secondary" hidden>使用此连接</button></div>' +
         '<details><summary>版本保留</summary>' +
-        row("webDavSyncKeepCount", "最近版本份数", '<input type="number" id="webDavSyncKeepCount" class="jhs-field" min="3" max="1000000" step="1">', "每个副本至少保留 3 份；新库默认 5 份，旧库沿用原策略") +
-        row("webDavSyncHistoryDays", "每日版本保留天数", '<input type="number" id="webDavSyncHistoryDays" class="jhs-field" min="0" max="365" step="1">', "新库默认 7 天内每天最后一份；旧库沿用原策略，0 仅保留最近版本") + '</details>' +
-        '<details><summary>历史恢复</summary><div class="jhs-toolbar"><button type="button" id="webdavSyncHistoryBtn" class="jhs-btn jhs-btn--secondary">查看恢复版本</button></div><label for="webdavSyncRecoveryFile">选择恢复版本</label><select id="webdavSyncRecoveryFile" class="jhs-select-source"><option value="">请先加载版本</option></select><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestoreData" class="jhs-checkbox" checked>业务数据</label><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestorePreferences" class="jhs-checkbox" checked>个性化偏好</label><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestoreLayout" class="jhs-checkbox">同时恢复该端布局</label><button type="button" id="webdavSyncRestoreBtn" class="jhs-btn jhs-btn--secondary">恢复所选版本</button></details>',
-        "保存有效 WebDAV 连接后自动接入，电脑、手机与 JavDB/JavBus 互通。修改后自动上传，打开页面或联网后自动追平；全部页面关闭期间不运行。普通偏好同步，布局留在本机并备份，密码和云盘授权不上传。");
+        row("webDavSyncKeepCount", "最近版本份数", '<input type="number" id="webDavSyncKeepCount" class="jhs-field" min="3" max="1000000" step="1">', "每端至少保留 3 份") +
+        row("webDavSyncHistoryDays", "每日版本保留天数", '<input type="number" id="webDavSyncHistoryDays" class="jhs-field" min="0" max="365" step="1">', "每天保留最后一份；设为 0 时仅保留最近版本") + '</details>' +
+        '<details><summary>历史恢复</summary><div class="jhs-toolbar"><button type="button" id="webdavSyncHistoryBtn" class="jhs-btn jhs-btn--secondary">查看恢复版本</button></div><label for="webdavSyncRecoveryFile">选择恢复版本</label><select id="webdavSyncRecoveryFile" class="jhs-select-source"><option value="">请先加载版本</option></select><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestoreData" class="jhs-checkbox" checked>影片、演员与记录</label><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestorePreferences" class="jhs-checkbox" checked>个性化偏好</label><label class="jhs-option-row"><input type="checkbox" id="webdavSyncRestoreLayout" class="jhs-checkbox">同时恢复本机布局</label><button type="button" id="webdavSyncRestoreBtn" class="jhs-btn jhs-btn--secondary">恢复所选版本</button></details>',
+        "保存有效连接后，数据和偏好自动同步。关闭所有相关页面后暂停，重新打开后继续。布局仅备份，密码和云盘授权不上传。");
 }
 /** @param {string} name */
 const liveHost = (name) => `<div data-jhs-setting-section="${name}" class="jhs-setting-group"></div>`;
@@ -134,7 +134,7 @@ export function injectPluginMgmtPanel(jquery, root) {
 }
 /** @param {(value:any)=>any} jquery @param {any} [root] */
 export function injectSnapshotPanel(jquery, root) {
-    fillSection(jquery, root, "snapshot-panel", '<header class="jhs-setting-section__header"><h3>恢复点</h3><p>最多保留 10 个快照，超出后移除最早的快照</p></header><div class="jhs-toolbar"><button type="button" id="createSnapshotBtn" class="jhs-btn">创建快照</button></div><div id="snapshot-list"></div>');
+    fillSection(jquery, root, "snapshot-panel", '<header class="jhs-setting-section__header"><h3>本地恢复点</h3><p>保留最近 10 个，可恢复或下载</p></header><div class="jhs-toolbar"><button type="button" id="createSnapshotBtn" class="jhs-btn">创建恢复点</button></div><div id="snapshot-list"></div>');
 }
 /** @param {(value:any)=>any} jquery @param {any} [root] */
 export function injectNetworkPanel(jquery, root) {

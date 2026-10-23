@@ -592,14 +592,14 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         root.find("#createSnapshotBtn").on("click", (async () => {
             const loadingHandle = this.domUi.loading();
             try {
-                await this.legacyStorage.createSnapshot("手动快照", "manual");
+                await this.legacyStorage.createSnapshot("手动恢复点", "manual");
             } catch (error) {
-                this.logger.error("快照创建失败", error), this.notifications.error("快照创建失败，请重试");
+                this.logger.error("快照创建失败", error), this.notifications.error("恢复点创建失败，请重试");
                 return;
             } finally { try { loadingHandle.close(); } catch (error) { this.logger.warn?.("快照加载提示关闭失败", error); } }
-            try { this.notifications.ok("已创建快照"); } catch (error) { this.logger.warn?.("快照已创建，提示显示失败", error); }
+            try { this.notifications.ok("已创建恢复点"); } catch (error) { this.logger.warn?.("快照已创建，提示显示失败", error); }
             try { await this._settingPanels.renderSnapshotPanel(this.getFormDependencies()); }
-            catch (error) { this.logger.error("快照已创建，列表刷新失败", error), this.notifications.info("已创建快照，请重新打开设置"); }
+            catch (error) { this.logger.error("快照已创建，列表刷新失败", error), this.notifications.info("已创建恢复点，请重新打开设置"); }
         }));
         root.find(".clean-btn").on("click", (async e => {
             const key = this.jquery(e.currentTarget).data("key"), cacheItem = this.cacheItems.find((item => item.key === key));

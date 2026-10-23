@@ -100,11 +100,14 @@ export async function renderSnapshotPanel(dependencies) {
         "manual": "手动创建",
         "auto-import": "导入前自动",
         "auto-repair": "修复前自动",
-        "auto-restore": "恢复前自动"
+        "auto-restore": "恢复前自动",
+        "migration": "升级前自动",
+        "sync-join": "同步接入前",
+        "sync-repair": "同步整理前"
     };
     if (dependencies.isActive?.() === false || !host.isConnected || state.generation !== generation) return;
     state.table?.destroy?.(); state.table = null;
-    if (0 === e.length) return void $("#snapshot-list").html(`<div class="jhs-empty-note">${getIcon("inbox")}<span>暂无快照</span></div>`);
+    if (0 === e.length) return void $("#snapshot-list").html(`<div class="jhs-empty-note">${getIcon("inbox")}<span>暂无恢复点</span></div>`);
     $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
     const n = createJhsTable(domUi.tableConstructor, host, {
         pagination: !1,
@@ -123,7 +126,7 @@ export async function renderSnapshotPanel(dependencies) {
                     return a((() => {
                         const t = e.getElement().querySelector(".snap-restore"), a = e.getElement().querySelector(".snap-download"), s = e.getElement().querySelector(".snap-delete");
                         t && t.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
-                            utils.q(e, `恢复快照“${escapeHtml(i.name)}”？当前数据将自动备份`, (async () => {
+                            utils.q(e, `恢复“${escapeHtml(i.name)}”？当前数据将自动备份`, (async () => {
                                 if (!active()) return;
                                 let e = loading();
                                 try {
@@ -131,7 +134,7 @@ export async function renderSnapshotPanel(dependencies) {
                                 } catch (t) {
                                     if (!active()) return;
                                     try { clog.error(t); } catch { /* preserve the restore error */ }
-                                    try { show.error("快照恢复失败，请重试"); } catch { /* preserve the restore error */ }
+                                    try { show.error("恢复失败，请重试"); } catch { /* preserve the restore error */ }
                                     return;
                                 } finally { try { e.close(); } catch (t) { try { clog.warn("恢复操作加载层关闭失败", t); } catch { /* committed data wins */ } } }
                                 if (active()) finishCommittedDataChange(dependencies, "已恢复，页面即将刷新");
@@ -142,25 +145,25 @@ export async function renderSnapshotPanel(dependencies) {
                             try {
                                 const e = await storageManager.getSnapshot(i.id);
                                 if (!active()) return;
-                                if (!e) throw new Error("快照不存在");
-                                utils.download(JSON.stringify(e.data), `snapshot_${String(i.name || "snapshot").replace(/[\\/:*?"<>|]/g, "_")}.json`), show.ok("已下载快照");
-                            } catch (n) { clog.error("快照下载失败", n), show.error("快照下载失败，请重试"); } finally { t.close(); }
+                                if (!e) throw new Error("恢复点不存在");
+                                utils.download(JSON.stringify(e.data), `snapshot_${String(i.name || "snapshot").replace(/[\\/:*?"<>|]/g, "_")}.json`), show.ok("已下载恢复点");
+                            } catch (n) { clog.error("快照下载失败", n), show.error("恢复点下载失败，请重试"); } finally { t.close(); }
                         })), s && s.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
-                            utils.q(e, `删除快照“${escapeHtml(i.name)}”？此操作无法撤销`, (async () => {
+                            utils.q(e, `删除恢复点“${escapeHtml(i.name)}”？此操作无法撤销`, (async () => {
                                 if (!active()) return;
                                 try { await storageManager.deleteSnapshot(i.id); }
                                 catch (t) {
                                     try { clog.error(t); } catch { /* preserve the deletion error */ }
-                                    try { show.error("快照删除失败，请重试"); } catch { /* preserve the deletion error */ }
+                                    try { show.error("恢复点删除失败，请重试"); } catch { /* preserve the deletion error */ }
                                     return;
                                 }
                                 if (!active()) return;
-                                try { show.ok("已删除快照"); }
+                                try { show.ok("已删除恢复点"); }
                                 catch (t) { try { clog.warn("快照已删除，但完成提示失败", t); } catch { /* committed deletion wins */ } }
                                 try { await renderSnapshotPanel(dependencies); }
                                 catch (t) {
                                     try { clog.error("快照已删除，但列表刷新失败", t); } catch { /* committed deletion wins */ }
-                                    try { show.error("已删除快照，请重新打开设置"); } catch { /* committed deletion wins */ }
+                                    try { show.error("已删除恢复点，请重新打开设置"); } catch { /* committed deletion wins */ }
                                 }
                             }), null, { confirmText: "删除", cancelText: "取消" });
                         }));
@@ -201,7 +204,7 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
     } else {
         s += '<div class="jhs-empty-note">数据完全一致，无需导入</div>';
     }
-    s += '<div class="jhs-warning-note">导入将覆盖当前数据，建议先创建快照备份</div>';
+    s += '<div class="jhs-warning-note">导入将覆盖当前数据，建议先创建恢复点</div>';
     s += '</div>';
     const hasChanges = i.length > 0;
     const scope = new LifecycleScope("backup-diff-preview");
@@ -268,7 +271,7 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
             const isDisabled = disabled.includes(pName) || disabled.includes(disabledIdForPlugin(pName));
             const productName = pluginMeta[pName]?.[0] || pName;
             html += '<div class="jhs-plugin-row">';
-            html += `<span class="jhs-plugin-copy" title="内部插件名：${escapeHtml(pName)}"><strong>${escapeHtml(productName)}</strong></span>`;
+            html += `<span class="jhs-plugin-copy"><strong>${escapeHtml(productName)}</strong></span>`;
             if (isCore) {
                 html += '<span class="jhs-badge jhs-badge--neutral">核心</span>';
             } else {

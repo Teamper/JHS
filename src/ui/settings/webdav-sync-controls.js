@@ -15,10 +15,10 @@ export function bindWebDavSyncControls(root, dependencies) {
         try {
             const status = await service.getStatus();
             if (!active() || token !== generation) return;
-            const parts = [status.busy ? "正在同步…" : status.paused ? "同步已暂停" : status.enabled ? "自动同步已接入" : "尚未接入同步", `待发布 ${status.pendingChanges} 批修改`];
-            if (status.lastSuccessAt) parts.push(`上次成功：${formatUiDateTime(status.lastSuccessAt)}`);
+            const parts = [status.busy ? "正在同步…" : status.paused ? "同步已暂停" : status.enabled ? "自动同步已接入" : "尚未接入同步"];
+            if (status.pendingChanges) parts.push("有修改待同步");
+            if (status.lastSuccessAt) parts.push(`上次同步：${formatUiDateTime(status.lastSuccessAt)}`);
             if (status.retryAt && status.message) parts.push(`下次重试：${formatUiDateTime(status.retryAt)}`);
-            else if (status.enabled && status.nextDueAt) parts.push(`下次检查：${formatUiDateTime(status.nextDueAt)}`);
             if (status.message) parts.push(status.message);
             if (status.cleanupError) parts.push(status.cleanupError);
             root.find("#jhs-auto-backup-status").text(parts.join("；"));
