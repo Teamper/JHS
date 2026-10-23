@@ -64,6 +64,30 @@ test("isolated DAV automatically converges across devices and sites, including p
     } finally { await other.close(); await dav.close(); }
 });
 
+test("legacy blocked movies with equivalent numbers sync without losing their restore point", async ({ page, context, browser }) => {
+    const dav = await isolatedDav(), other = await browser.newContext({ viewport: page.viewportSize() });
+    try {
+        const install = await sharedUserscriptInstallation(context, dav); await fulfillHostFixtures(context);
+        await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page, { beforeUserscriptInjection: install });
+        const original = [
+            { carNum: "ABC123", starId: "legacy-actor", names: "Old", remark: "preserve note", updateDate: "2026-10-20" },
+            { carNum: "ABC-123", starId: "legacy-actor", names: "Latest", updateDate: "2026-10-22" },
+        ];
+        await page.evaluate(rows => window.storageManager.forage.setItem("blacklist_car_list", rows), original);
+        await configure(page, dav.url);
+        await expect.poll(async () => (await service(page, "getStatus")).busy, { timeout: 12000 }).toBe(false);
+        const local = await page.evaluate(() => window.storageManager.forage.getItem("blacklist_car_list"));
+        expect(local).toHaveLength(1); expect(local[0]).toMatchObject({ carNum: "ABC-123", names: "Latest", remark: "preserve note" });
+        const snapshots = await page.evaluate(() => window.storageManager.forage.getItem("snapshots"));
+        expect(snapshots.some(snapshot => JSON.stringify(snapshot.data.blacklist_car_list) === JSON.stringify(original))).toBe(true);
+        expect((await service(page, "getStatus")).message).toBe("");
+        const installOther = await sharedUserscriptInstallation(other, dav); await fulfillHostFixtures(other);
+        const reader = await other.newPage(); await reader.goto("https://javdb.com/");
+        await injectUserscriptRuntime(reader, { beforeUserscriptInjection: installOther }); await configure(reader, dav.url);
+        expect(await reader.evaluate(() => window.storageManager.forage.getItem("blacklist_car_list"))).toEqual(local);
+    } finally { await other.close(); await dav.close(); }
+});
+
 test("zero requests without credentials, saved connection auto joins, pause and reopen preserve progress", async ({ page, context }) => {
     const dav = await isolatedDav();
     try {

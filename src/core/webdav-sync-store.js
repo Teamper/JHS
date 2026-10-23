@@ -1,6 +1,7 @@
 // @ts-check
 
 import { assertSupportedDataVersion } from "./migration.js";
+import { normalizeCarNum } from "./constants.js";
 import { SYNC_DOMAINS, SYNC_LEGACY_DEFAULTS, emptySyncModel, historyRank, joinSyncModels, materializeSyncData, maximumClock, projectSyncData, pruneSyncHistory, syncClone, syncJson, syncLayout, validateSyncState, versionSyncDiff, visibleSyncRecords, withSyncRetentionDefaults } from "./webdav-sync-model.js";
 
 /** @typedef {Record<string, any>} Dict */
@@ -257,6 +258,7 @@ export class WebDavSyncStore extends EventTarget {
             // Even an unchanged materialization may advance deletion/field versions.
             const previous = await this.read();
             if (changed) {
+                if (!first && new Set(local.blacklist_car_list.map((/** @type {any} */ item) => normalizeCarNum(item.carNum))).size < local.blacklist_car_list.length) await this.deps.storage?._createSnapshotWithoutMutation?.("同步屏蔽影片整理前", "sync-repair");
                 const pending = await this.forage.getItem(SYNC_JOURNAL_KEY);
                 const journal = { schema: 1, state: "prepared", after, afterState: state, binding, notificationId: crypto.randomUUID(), carNums: [...new Set([...(pending?.carNums || []), ...carNums])] };
                 await assertCurrent();

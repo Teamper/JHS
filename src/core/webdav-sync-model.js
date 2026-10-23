@@ -2,7 +2,7 @@
 
 import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
 import { LOCAL_ONLY_SETTING_KEYS } from "./migration.js";
-import { normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
+import { mergeCanonicalCarRecords, normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
 import { isSyncObject, validateSyncFrontiers, validateSyncRecordFields } from "./webdav-sync-validation.js";
 
 /** @typedef {Record<string, any>} Dict */
@@ -72,7 +72,20 @@ function fields(domain, item) {
 export function projectSyncData(data, frontiers = {}) {
     /** @type {Dict} */ const result = {};
     for (const domain of SYNC_DOMAINS) {
-        const raw = data[domain], entries = domain === "setting" || domain === "new_video_decisions" ? Object.entries(raw || {}) : (domain === "activity_log" ? raw?.entries || [] : raw || []).map((/** @type {any} */ item) => [identity(domain, item), item]);
+        let raw = data[domain];
+        if (domain === "blacklist_car_list" && raw?.length) {
+            /** @type {Map<string, Dict[]>} */ const groups = new Map();
+            for (const item of raw) {
+                const id = normalizeCarNum(item?.carNum);
+                if (!id) throw new Error(`同步记录缺少稳定标识：${domain}`);
+                if (!groups.has(id)) groups.set(id, []);
+                groups.get(id)?.push(item);
+            }
+            // Historical blocked cards were keyed by their original spelling.
+            // Only merge collisions; retain explicit null/unset values otherwise.
+            raw = [...groups.values()].map(group => group.length > 1 ? mergeCanonicalCarRecords(group).list[0] : group[0]);
+        }
+        const entries = domain === "setting" || domain === "new_video_decisions" ? Object.entries(raw || {}) : (domain === "activity_log" ? raw?.entries || [] : raw || []).map((/** @type {any} */ item) => [identity(domain, item), item]);
         for (const [id, item] of entries) {
             if (domain === "setting" && !isSharedSetting(id)) continue;
             if (HISTORY.has(domain) && (domain === "activity_log" && item.commitState !== "committed" || historyRank(item) <= (frontiers[domain] || ""))) continue;

@@ -315,9 +315,14 @@ export class StorageManager {
     async batchSaveBlacklistCarList(e) {
         return this._withCrossTabLock("jhs_blacklist_lock", async () => {
             const beforeBlacklistCars = await this.getBlacklistCarList(), nextBlacklistCars = JSON.parse(JSON.stringify(beforeBlacklistCars)), addedItems = [], changed = [];
-            for (const item of e) {
-                if (nextBlacklistCars.find((entry => entry.carNum === item.carNum))) continue;
+            const known = new Set(nextBlacklistCars.map((entry => normalizeCarNum(entry.carNum))).filter(Boolean));
+            for (const input of e) {
+                const carNum = normalizeCarNum(input.carNum);
+                if (!carNum) throw new Error("番号无效");
+                if (known.has(carNum)) continue;
+                const item = { ...input, carNum };
                 this._saveSingleCar(item, nextBlacklistCars), addedItems.push(item), changed.push(item.carNum);
+                known.add(carNum);
             }
             if (!changed.length) return { changed: [] };
             const beforeActresses = await this.getFavoriteActressList(), targets = new Set(changed.map(normalizeCarNum).filter(Boolean));
