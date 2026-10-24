@@ -11,7 +11,9 @@ JHS（JAV Helper Suite）是一款面向 JavDB、JavBus 的 Tampermonkey 用户�
 >
 > [GitHub 项目](https://github.com/Teamper/JHS) · [完整更新记录](https://github.com/Teamper/JHS/blob/main/CHANGELOG.md) · [问题反馈](https://github.com/Teamper/JHS/issues)
 
-本页位于 `develop` 时还包含 7.0 开发能力说明。开发版完整脚本为 [JHS Dev 7.0](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js)，支持自动循环备份、详情鉴定快捷键及持续交互修复；[安装与验证范围](../README.md#安装) 和 [自动备份使用说明](webdav-auto-backup.md) 以 develop 文档为准。商店正式版介绍仍从 main 同步。
+本页位于 `develop` 时还包含 7.0 开发能力说明。开发版完整脚本为 [JHS Dev 7.0](https://raw.githubusercontent.com/Teamper/JHS/develop/JHS-7.0.dev.user.js)，支持 WebDAV 自动多端同步、详情鉴定快捷键及持续交互修复；[安装与验证范围](../README.md#安装) 和 [同步与恢复说明](webdav-sync.md) 以 develop 文档为准。商店正式版介绍仍从 main 同步。
+
+7.0 Dev 兼容 JavDB 新旧演员结构、JavBus 旧 Prestige 图库地址和 JavStore 新网格。缺号、片商名、仅编号前缀或信息冲突的影片暂不开放状态操作，批量处理会报告跳过项；浏览与资源入口保留。旧模糊记录不自动改号或删除，仍可查看历史、导出、恢复和同步。
 
 ## 6.5.2 更新了什么
 

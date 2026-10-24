@@ -103,3 +103,37 @@ fixture 自动回归与真实登录站点验收分别记录。实站验收先核
 - 正式升版同步 package.json、package-lock.json 顶层与根包版本、src/main.js 元数据、CHANGELOG 对应版本段落和根目录产物，由 release-contract 校验。
 - main 版本递增后推送会触发 CI 正式发布流程；develop 和 workflow_dispatch 不创建正式 Release。
 - 提交、推送、PR、合并和发布按各自授权执行。暂存前查看实际 diff，仅选择本任务文件，保留用户未提交内容。
+
+
+### 持续浏览性能验证
+
+`tests/browser/specs/continuous-browsing-performance.spec.js` 使用拦截网络的 JavDB 夹具，覆盖 40/200/1000 张卡片、1000/10000 条本地记录，以及两个前台同步周期。同步客户端是内存实现，不连接真实 WebDAV。报告包含原生滚动采样、单影片刷新耗时、处理卡片数、布局/脚本耗时和堆大小；合成结果不能代替安装后的实站验收。
+
+```powershell
+npm run build:dev
+npm --prefix tests/browser run test:functional -- specs/continuous-browsing-performance.spec.js --project=desktop-wide
+```
+
+对照旧产物时设置 `JHS_TEST_BUNDLE_PATH` 和 `JHS_PERF_BASELINE=1`；只在对照运行中关闭新增的增量工作量断言，当前实现仍需完整断言。通过 `JHS_BROWSER_OUTPUT_DIR` / `JHS_BROWSER_REPORT_DIR` 隔离报告，避免覆盖其他验证结果。启动门禁和包体预算继续独立执行。
+
+实站诊断可在浏览器控制台显式启动现有诊断服务，采集默认关闭，只保存有限数量的数值统计，不记录页面正文或凭证。完成采样后断开观察器：
+
+```javascript
+const diagnostics = window.pluginManager.diagnostics;
+diagnostics.startPerformanceCapture();
+// 滚动、收藏、筛选，并观察至少两个同步周期。
+diagnostics.stopPerformanceCapture();
+console.log(diagnostics.performanceSnapshot());
+```
+
+`longTasks` 和 `longFrames` 是整页观测，不能直接归因于 JHS；`interactionP95` 只基于浏览器 Event Timing 提供的有限样本，不是正式 INP。需要归因时结合浏览器 Performance 录制中的调用栈、布局和垃圾回收信息。`work` 保存列表处理量、同步核对领域数、投影记录数、规范化序列化字符数与元数据写入次数。`computations` 保存有界的数值阶段统计，包括累计计算时间、最长协作时间片、处理步数、让出次数，以及存储锁等待/持有时间；它不包括所有浏览器原生克隆和布局成本。
+
+自动重任务在首屏就绪至少 2 秒、连续 500 ms 无输入后领取下一批。等待使用单调时钟，系统界面控件仍按原有空闲回调挂载，不受持续输入阻塞。恢复日志、迁移及撤销资格仍属于必要的业务读取；持有业务锁期间只做 CPU 让出，不等待用户空闲。连续计算优先通过 MessageChannel 回到普通任务队列，避免 scheduler.yield 的优先续跑持续压住宿主定时器；仅在无 MessageChannel 时使用原生 yield 或计时器回退。显式同步请求可提升等待中的任务，自动在线/可见性唤醒仍经过安静门槛。
+
+混合资料库的悬浮与落库对照可运行：
+
+```powershell
+npm --prefix tests/browser run test:functional -- specs/responsive-sync-performance.spec.js --project=desktop-wide
+```
+
+该夹具拦截全部网络，包含 40/200/1000 张卡片、1000/10000 条影片、大量演员新作品及历史记录；分别记录同步刚启动时和已持有同步计算锁时发起的状态提交。悬浮到下一帧、请求等待、真实落库和同步完成时间分开报告。默认关闭 JHS 的可选诊断，避免诊断自身改变前后比较；需要阶段归因时单独设置 `JHS_PERF_DIAGNOSTICS=1`。
