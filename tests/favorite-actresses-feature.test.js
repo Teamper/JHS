@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import jquery from "jquery";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { FavoriteActressesController } from "../src/features/library/favorite-actresses-controller.js";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -21,13 +22,23 @@ function createController({ html, url, actresses = [], add = vi.fn(async () => 1
     };
     const $ = jquery;
     const controller = new FavoriteActressesController({
-        document, location: new URL(url), jquery: $, state, settings, scope,
+        document, location: new URL(url), hostAdapter: new JavDbHostAdapter(document, new URL(url)), jquery: $, state, settings, scope,
         diagnostics: { recordError: vi.fn() }, isDetailPage: detail,
     });
     return { controller, scope, settings, state, add, remove, $ };
 }
 
 describe("Library Feature favorite actresses", () => {
+    it("highlights canonical modern actresses only and restores their original title", async () => {
+        const loaded = createController({
+            html: '<div class="panel-block"><strong>演员:</strong><a id="female" class="actor-female" title="Original" href="/actors/a/?locale=zh">演员甲</a><a id="male" class="actor-male" href="/actors/a">演员乙</a><a id="unknown" href="/actors/a">未知</a></div>',
+            url: "https://javdb.com/v/test", actresses: [{ starId: "a" }], detail: true,
+        });
+        await loaded.controller.highlightActress();
+        expect([...document.querySelectorAll(".highlighted")].map((node) => node.id)).toEqual(["female"]);
+        loaded.controller.dispose();
+        expect(document.querySelector("#female").getAttribute("title")).toBe("Original");
+    });
     it("highlights saved actors and immediately clears its decoration when the setting changes", async () => {
         vi.stubGlobal("requestIdleCallback", vi.fn(() => 1));
         vi.stubGlobal("cancelIdleCallback", vi.fn());

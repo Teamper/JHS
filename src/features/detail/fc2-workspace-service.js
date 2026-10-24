@@ -298,7 +298,7 @@ export class Fc2WorkspaceService {
         const generation = (context.screenshotGeneration || 0) + 1;
         context.screenshotGeneration = generation;
         void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
-            target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: screenshotService,
+            target: screenshot, carNum: context.carNum, screenshot: screenshotService,
             settings: settings.snapshot(), scope,
             isActive: () => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no" && generation === context.screenshotGeneration,
             isDuplicate: url => Boolean(context.galleryUrls?.has(url)),

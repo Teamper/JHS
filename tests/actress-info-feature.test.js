@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ActressInfoController } from "../src/features/identity/actress-info-controller.js";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -16,7 +17,7 @@ function createController({ html, url, setting = "yes", lookup = vi.fn(async () 
     const scope = new LifecycleScope("identity.actress-info");
     const service = { lookup, profileUrl };
     const diagnostics = { recordError: vi.fn() };
-    const controller = new ActressInfoController({ document, location: new URL(url), service, settings, scope, diagnostics });
+    const controller = new ActressInfoController({ document, location: new URL(url), hostAdapter: new JavDbHostAdapter(document, new URL(url)), service, settings, scope, diagnostics });
     return { controller, scope, settings, service, diagnostics, lookup, profileUrl };
 }
 
@@ -26,6 +27,16 @@ function changeSetting(settings, value) {
 }
 
 describe("Actress info Feature", () => {
+    it("renders modern actress links once and excludes male and unknown performers", async () => {
+        const loaded = createController({
+            html: '<div id="cast" class="panel-block"><strong>演員：</strong><a class="actor-female" href="/actors/a">演员甲</a><a class="actor-female" href="/actors/a">演员甲</a><a class="actor-male" href="/actors/b">演员乙</a><a href="/actors/c">未知</a></div>',
+            url: "https://javdb.com/v/test",
+        });
+        await loaded.controller.mount();
+        expect(document.querySelectorAll("#cast + .actress-info")).toHaveLength(1);
+        expect(document.querySelector(".actress-info")?.textContent).toBe("演员甲：");
+        loaded.controller.dispose();
+    });
     it("renders detail tags as text and uses the existing actress panel position", async () => {
         const lookup = vi.fn(async () => ({
             url: "https://profiles.example/actor", birthday: "<img src=x>", age: "30", height: "160", weight: "45", threeSizeText: "B", braSize: "B70",

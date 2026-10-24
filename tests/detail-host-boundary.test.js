@@ -76,20 +76,22 @@ const javdbFixture = `
 </div>`;
 
 describe("host movie identity reads", () => {
-    it("preserves JavDB iframe, clipboard, labeled-panel, and title fallback priority", () => {
+    it("prefers native JavDB identity and marks contradictory iframe or DOM evidence ineligible", () => {
         const iframe = new JSDOM('<div class="video-detail"><div class="panel-block"><strong>番号:</strong><span class="value">PANEL-1</span></div><div class="video-title"><strong>TITLE-1</strong></div></div>', { url: "https://javdb.com/v/movie?hideNav=1&jhsCarNum=IPX001" });
         const iframeAdapter = new JavDbHostAdapter(iframe.window.document, iframe.window.location);
-        expect(iframeAdapter.readMovieRef()?.carNum).toBe("IPX-001");
+        expect(iframeAdapter.readMovieRef()).toMatchObject({carNum: "PANEL-1", stateEligibility: {eligible: false, reason: "conflicting"}});
         iframe.window.close();
 
         const clipboard = new JSDOM('<div class="video-detail"><div class="panel-block"><strong>番号:</strong><span class="value">PANEL-1</span></div><a title="複製番号" data-clipboard-text="ABF-142"></a></div>', { url: "https://javdb.com/v/movie" });
         const clipboardAdapter = new JavDbHostAdapter(clipboard.window.document, clipboard.window.location);
         expect(clipboardAdapter.readMovieRef()?.carNum).toBe("ABF-142");
+        expect(clipboardAdapter.readMovieRef()?.stateEligibility.eligible).toBe(false);
         clipboard.window.close();
 
         const panel = new JSDOM('<div class="video-detail"><div class="panel-block"><strong>番号:</strong><span class="value">PANEL-1</span></div><div class="video-title"><strong>TITLE-1</strong></div></div>', { url: "https://javdb.com/v/movie" });
         const panelAdapter = new JavDbHostAdapter(panel.window.document, panel.window.location);
         expect(panelAdapter.readMovieRef()?.carNum).toBe("PANEL-1");
+        expect(panelAdapter.readMovieRef()?.stateEligibility.eligible).toBe(false);
         panel.window.close();
 
         const fallback = new JSDOM('<div class="video-detail"><div class="video-title"><strong>TITLE-1</strong></div></div>', { url: "https://javdb.com/v/movie" });

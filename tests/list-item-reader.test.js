@@ -35,5 +35,5 @@ describe("list item reader", () => {
         dom.window.close();
     });
 
-    it("rejects cards without an identity", () => expect(() => readListItem(card("<div></div>"))).toThrow("提取番号信息失败"));
+    it("preserves cards without an identity as ineligible references", () => expect(readListItem(card("<div></div>"))).toMatchObject({carNum:"",stateEligibility:{eligible:false,reason:"missing"}}));
 });

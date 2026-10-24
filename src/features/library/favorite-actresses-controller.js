@@ -8,10 +8,11 @@ const HIGHLIGHT_TITLE = "已收藏演员，前往设置调整高亮";
 
 /** Own JavDB actress decoration and collection events while preserving the 6.5.1 storage contract. */
 export class FavoriteActressesController {
-    /** @param {{document: Document, location: {href: string, pathname: string}, jquery: any, state: any, settings: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, isDetailPage: boolean}} options */
+    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, jquery: any, state: any, settings: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, isDetailPage: boolean}} options */
     constructor(options) {
         this.document = options.document;
         this.location = options.location;
+        this.hostAdapter = options.hostAdapter;
         this.$ = options.jquery;
         this.state = options.state;
         this.settings = options.settings;
@@ -83,11 +84,11 @@ export class FavoriteActressesController {
         const starIds = new Set(actresses.map((/** @type {{starId?: unknown}} */ actress) => String(actress.starId || "").trim()).filter(Boolean));
         const view = this.document.defaultView;
         if (!view) return;
-        for (const icon of this.document.querySelectorAll(".female")) {
-            const anchor = icon.previousElementSibling;
+        for (const actor of this.hostAdapter.readMovieActors().actors) {
+            if (actor.role !== "actress") continue;
+            const anchor = actor.link;
             if (!(anchor instanceof view.HTMLAnchorElement)) continue;
-            const parts = (anchor.getAttribute("href") || "").replace(/\/$/u, "").split("/");
-            const starId = parts.at(-1)?.trim();
+            const starId = actor.starId;
             if (!starId || !starIds.has(starId)) continue;
             if (!this.highlightedAnchors.has(anchor)) this.highlightedAnchors.set(anchor, anchor.getAttribute("title"));
             anchor.classList.add("highlighted");

@@ -33,6 +33,21 @@ describe('native media boundaries',()=>{
   const host=new JavBusHostAdapter(dom.window.document,dom.window.location);
   expect(host.getDetailImageSequence().map(entry=>entry.url)).toEqual(['https://www.javbus.com/full.jpg']);dom.window.close();
  });
+ it('passes mapped JavBus URLs only to the Viewer and retains host image links, modified clicks and contact sheets',()=>{
+  const original='https://www.prestige-av.com/images/corner/goods/ABC/1.jpg?large=1#image';
+  const dom=new JSDOM(`<div class="container"><div class="row movie"></div><div id="sample-waterfall"><a class="sample-box" href="${original}"><img src="/thumb.jpg"></a><a class="sample-box screen-container" href="${original}"><img src="/sheet.jpg"></a></div></div>`,{url:'https://www.javbus.com/ABC-123'});
+  const scope=new LifecycleScope('javbus-media'),host=new JavBusHostAdapter(dom.window.document,dom.window.location),openImageViewer=vi.fn();
+  new NativeDetailMediaController({hostAdapter:host,scope,ui:{openImageViewer}}).start();
+  const anchor=dom.window.document.querySelector('a'),image=anchor.querySelector('img'),hostClick=vi.fn();anchor.addEventListener('click',hostClick);
+  image.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,cancelable:true,button:0}));
+  expect(openImageViewer.mock.calls[0][1].images).toEqual([{url:'https://image.mgstage.com/images/ABC/1.jpg?large=1#image',alt:''}]);
+  expect(anchor.getAttribute('href')).toBe(original);expect(image.getAttribute('src')).toBe('/thumb.jpg');expect(hostClick).not.toHaveBeenCalled();
+  for(const options of [{ctrlKey:true},{metaKey:true},{shiftKey:true},{altKey:true},{button:1}]) image.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,cancelable:true,...options}));
+  expect(hostClick).toHaveBeenCalledTimes(5);
+  const sheet=dom.window.document.querySelector('.screen-container'),sheetClick=vi.fn();sheet.addEventListener('click',sheetClick);sheet.querySelector('img').dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,cancelable:true}));
+  expect(sheetClick).toHaveBeenCalledOnce();expect(openImageViewer).toHaveBeenCalledOnce();expect(host.getDetailImageSequence()).toHaveLength(1);
+  scope.dispose();dom.window.close();
+ });
  it('takes over unmodified image clicks using full URLs while retaining host links and modified clicks',()=>{
   const openImageViewer=vi.fn();const {doc,dom,scope}=setup(gallery.replace('</div></div></div>','<a class="preview-video-container" href="#preview-video"><img src="/video.jpg"></a><a href="/v/metadata-not-yet-loaded"><img src="/movie.jpg"></a></div></div></div>'),{openImageViewer});
   const image=doc.querySelector('.tile-item img'),anchor=image.parentElement,hostClick=vi.fn();anchor.addEventListener('click',hostClick);

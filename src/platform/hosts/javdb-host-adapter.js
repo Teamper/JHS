@@ -1,7 +1,65 @@
 // @ts-check
 
-import { normalizeMovieCarNum } from "../../core/movie-identity.js";
+import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
+
+
+
+
+/** @typedef {{name: string, starId: string | null, role: "actress" | "actor" | "unknown", url: string | null, link: Element | null}} MovieActor */
+
+/** Resolve actor identities only from a canonical, same-host actor detail link. @param {Element | null} link @param {string} baseUrl */
+function readActorIdentity(link, baseUrl) {
+    try {
+        const href = link?.getAttribute("href");
+        if (!href) return null;
+        const base = new URL(baseUrl), url = new URL(href, base);
+        const match = url.pathname.match(/^\/actors\/([\w-]+)\/?$/u);
+        if (!match || !["http:", "https:"].includes(url.protocol) || url.origin !== base.origin) return null;
+        return { starId: match[1], url: `${url.origin}/actors/${match[1]}` };
+    } catch { return null; }
+}
+
+/** Read transient cast DOM references without inferring a role from an unmarked actor link.
+ * @param {Document | Element} root @param {string} baseUrl
+ * @returns {{actors: MovieActor[], panel: Element | null}}
+ */
+function parseJavDbMovieActors(root, baseUrl) {
+    const heading = [...root.querySelectorAll("strong, .label")].find((element) => /^(?:演员|演員)\s*[:：]?$/u.test(element.textContent?.trim() || ""));
+    const firstMarker = root.querySelector(".actor-female, .actor-male, .female, .male");
+    const panel = heading?.closest(".panel-block") ?? heading?.parentElement ?? firstMarker?.closest(".panel-block") ?? null;
+    const castRoot = panel?.querySelector("a[href], .female, .male") ? panel : root;
+    /** @type {MovieActor[]} */ const actors = [];
+    const seen = new Set();
+    for (const element of castRoot.querySelectorAll("a[href], .female, .male")) {
+        let source = element;
+        /** @type {MovieActor["role"]} */ let role = "unknown";
+        if (element.matches(".female, .male")) {
+            role = element.matches(".female") ? "actress" : "actor";
+            let previous = element.previousSibling;
+            while (previous && !previous.textContent?.trim()) previous = previous.previousSibling;
+            if (!previous) continue;
+            if (previous.nodeType !== 1) {
+                const name = previous.textContent?.trim() || "", key = `${role}:name:${name}`;
+                if (name && !seen.has(key)) { seen.add(key); actors.push({ name, role, starId: null, url: null, link: null }); }
+                continue;
+            }
+            source = /** @type {Element} */ (previous);
+        } else {
+            const marker = element.nextElementSibling;
+            if (element.matches(".actor-female") || marker?.matches(".female")) role = "actress";
+            else if (element.matches(".actor-male") || marker?.matches(".male")) role = "actor";
+        }
+        const link = source.matches("a[href]") ? source : null;
+        const identity = readActorIdentity(link, baseUrl), name = source.textContent?.trim() || "";
+        if (!name || role === "unknown" && !identity) continue;
+        const key = `${role}:${identity ? `id:${identity.starId}` : `name:${name}`}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        actors.push({ name, role, starId: identity?.starId ?? null, url: identity?.url ?? null, link });
+    }
+    return { actors, panel };
+}
 
 export class JavDbHostAdapter {
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
@@ -103,18 +161,29 @@ export class JavDbHostAdapter {
             panelCarNum = panel.querySelector("[data-clipboard-text]")?.getAttribute("data-clipboard-text") || panel.querySelector(".value")?.textContent;
             if (normalizeMovieCarNum(panelCarNum)) break;
         }
-        const fallbackCarNum = this.document.querySelector("#video_id, .video-id, .video-title strong")?.textContent;
-        const carNum = [location.searchParams.get("jhsCarNum"), copiedCarNum, copiedTitleCarNum, panelCarNum, fallbackCarNum]
-            .map(normalizeMovieCarNum).find(Boolean) ?? null;
-        return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javdb" }) : null;
+        const fallbackCarNum = [...this.document.querySelectorAll("#video_id, .video-id, .video-title strong")]
+            .find(element => !element.closest(".movie-list, .masonry, .item"))?.textContent;
+        const native = [copiedCarNum, copiedTitleCarNum, panelCarNum, fallbackCarNum].map(normalizeMovieCarNum).filter(Boolean);
+        const hint = normalizeMovieCarNum(location.searchParams.get("jhsCarNum"));
+        const carNum = native[0] ?? hint ?? null;
+        const stateEligibility = getMovieStateEligibility(carNum);
+        if (stateEligibility.eligible && (!native.length || native.some(value => value !== carNum) || hint && hint !== carNum)) {
+            stateEligibility.eligible = false;
+            stateEligibility.reason = native.length ? "conflicting" : "missing";
+        }
+        return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javdb", stateEligibility }) : null;
+    }
+    /** @param {Document | Element} [root] @param {string} [baseUrl] */
+    readMovieActors(root = this.document, baseUrl = this.location.href) {
+        return parseJavDbMovieActors(root, baseUrl);
     }
     readMovieInfo() {
         const ref = this.readMovieRef();
         if (!ref) return null;
-        const namesBefore = (/** @type {string} */ selector) => [...this.document.querySelectorAll(selector)].map((element) => element.previousElementSibling?.textContent?.trim()).filter(Boolean).join(" ");
+        const { actors } = this.readMovieActors();
         const dateLabel = [...this.document.querySelectorAll("strong")].find((element) => element.textContent?.includes("日期:"));
         const publishTime = dateLabel?.parentElement?.querySelector(".value")?.textContent?.trim() ?? "";
-        return Object.freeze({ ...ref, actress: namesBefore(".female"), actors: namesBefore(".male"), publishTime });
+        return Object.freeze({ ...ref, actress: actors.filter(actor => actor.role === "actress").map(actor => actor.name).join(" "), actors: actors.filter(actor => actor.role === "actor").map(actor => actor.name).join(" "), publishTime });
     }
     locateListRoot() {
         if (/^\/v\//.test(this.location.pathname)) return null;
@@ -257,11 +326,12 @@ export class JavDbHostAdapter {
         const items = [...document.querySelectorAll(".movie-list .item")];
         return Object.freeze(items.flatMap((item) => {
             const titleNode = item.querySelector(".video-title"), rawCarNum = titleNode?.querySelector("strong")?.textContent?.trim() ?? "", carNum = normalizeMovieCarNum(rawCarNum);
-            if (!carNum) return [];
+            const numbers = [...(titleNode?.querySelectorAll("strong") ?? [])].map(element => normalizeMovieCarNum(element.textContent)).filter(Boolean);
+            const stateEligibility = numbers.some(value => value !== carNum) ? {eligible:false,reason: /** @type {const} */ ("conflicting")} : getMovieStateEligibility(carNum);
             const rawCover = item.querySelector("img")?.getAttribute("src") ?? "", href = item.querySelector("a[href]")?.getAttribute("href") ?? "";
             const scoreText = item.querySelector(".score .value, .score")?.textContent?.trim() ?? "", countText = item.querySelector(".score .count, .meta .count")?.textContent?.trim() ?? "";
             return [Object.freeze({
-                carNum, title: (titleNode?.textContent ?? "").replace(rawCarNum, "").trim(),
+                carNum, stateEligibility, title: (titleNode?.textContent ?? "").replace(rawCarNum, "").trim(),
                 coverUrl: rawCover ? new URL(rawCover, baseUrl).href.replace("thumbs", "covers") : null,
                 url: href ? new URL(href, baseUrl).href : null, publishTime: item.querySelector(".meta")?.textContent?.trim() || null,
                 score: Number.parseFloat(scoreText) || 0, voteCount: Number.parseInt(countText.replace(/[^\d]/g, "")) || 0,

@@ -131,7 +131,7 @@ describe("detail car number propagation", () => {
         const iframe = getPageInfo({
             url: "https://javdb.example/v/abc?hideNav=1&jhsCarNum=IPX-001", javdb: true, copyCarNum: "ABF-142"
         });
-        expect(iframe.carNum).toBe("IPX-001");
+        expect(iframe.carNum).toBe("ABF-142");
         expect(typeof iframe).toBe("object");
     });
 

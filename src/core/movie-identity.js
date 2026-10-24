@@ -12,6 +12,28 @@ export function normalizeMovieCarNum(value) {
     return match && SIMPLE_CAR_PREFIXES.has(match[1]) ? `${match[1]}-${match[2]}` : carNum || null;
 }
 
+/** @typedef {{eligible: boolean, reason: null | "missing" | "label-only" | "prefix-only" | "conflicting"}} MovieStateEligibility */
+
+/** Runtime evidence only; this does not change legacy normalization or stored identities. @param {any} value @returns {MovieStateEligibility} */
+export function getMovieStateEligibility(value) {
+    const carNum = normalizeMovieCarNum(typeof value === "string" ? value : value?.carNum);
+    if (!carNum || /^(?:N\/?A|NONE|UNKNOWN|UNDEFINED|NULL|未知|暂无|无|[-?]+)$/i.test(carNum)) return { eligible: false, reason: "missing" };
+    if (SIMPLE_CAR_PREFIXES.has(carNum) || /^FC2(?:-?PPV)?$/.test(carNum)) return { eligible: false, reason: "prefix-only" };
+    if (!/\d/.test(carNum)) return { eligible: false, reason: "label-only" };
+    if (value?.stateEligibility?.eligible === false) {
+        const reason = value.stateEligibility.reason;
+        return { eligible: false, reason: ["missing", "label-only", "prefix-only", "conflicting"].includes(reason) ? reason : "conflicting" };
+    }
+    return { eligible: true, reason: null };
+}
+
+/** @param {any} value @returns {MovieStateEligibility} */
+export function assertMovieStateEligible(value) {
+    const eligibility = getMovieStateEligibility(value);
+    if (!eligibility.eligible) throw Object.assign(new Error(eligibility.reason === "conflicting" ? "影片番号信息存在冲突，暂不能更改状态" : "影片番号不完整，暂不能更改状态"), { code: "UNRELIABLE_MOVIE_IDENTITY" });
+    return eligibility;
+}
+
 /** Extracts an id only from an explicit JavDB-style detail path. */
 export function extractJavDbMovieId(/** @type {unknown} */ value, /** @type {string} */ baseUrl = "https://javdb.com") {
     try { return new URL(String(value || ""), baseUrl).pathname.match(/^\/v\/([^/]+)\/?$/)?.[1] || null; } catch { return null; }

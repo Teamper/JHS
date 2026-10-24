@@ -1,6 +1,7 @@
 // @ts-check
 
 import { escapeHtml, normalizeCarNum } from "./constants.js";
+import { getMovieStateEligibility } from "./movie-identity.js";
 
 /** @template T,R @param {T[]} items @param {number} concurrency @param {(item: T, index: number) => Promise<R> | R} mapper @returns {Promise<R[]>} */
 export async function mapLimit(items, concurrency = 4, mapper) {
@@ -96,16 +97,9 @@ export function normalizeBtihHash(/** @type {unknown} */ value) {
     return /^(?:[a-f\d]{40}|[a-z2-7]{32})$/i.test(hash) ? hash.toUpperCase() : null;
 }
 
-function resolveHighResCover(/** @type {string | URL | null | undefined} */ value) {
-    if (!value) return null;
-    const url = new URL(value, window.location.href);
-    url.pathname = url.pathname.replace("/thumbs/", "/covers/").replace(/\/ps\.(jpg|jpeg|png)$/i, "/pl.$1").replace("https://www.prestige-av.com/images/corner/goods", "https://image.mgstage.com/images");
-    return url.href;
-}
-
 export function parseCarNumberText(/** @type {unknown} */ text) {
     const tokens = String(text || "").split(/[\s,，;；]+/).map((item => normalizeCarNum(item))).filter((item => "string" == typeof item));
-    const valid = tokens.filter((item => /^(?:FC2-)?[A-Z\d]+(?:-[A-Z\d]+)+$/i.test(item)));
+    const valid = tokens.filter((item => /^[A-Z\d]+(?:-[A-Z\d]+)*$/i.test(item) && getMovieStateEligibility(item).eligible));
     return { recognized: tokens.length, values: [...new Set(valid.map((item => item.toUpperCase())))], invalid: tokens.filter((item => !valid.includes(item))) };
 }
 

@@ -23,7 +23,7 @@ export function createJavStoreAdapter(http) {
             for (const candidate of candidates) {
                 try {
                     const detail = await request(candidate, options.scope);
-                    const imageUrl = parseJavStorePreview(detail.data, detail.finalUrl || candidate);
+                    const imageUrl = parseJavStorePreview(detail.data, detail.finalUrl || candidate, movieRef.carNum);
                     if (imageUrl) return [Object.freeze({ url: imageUrl, providerId: "javstore" })];
                 } catch (error) {
                     if (!(error && typeof error === "object" && "code" in error && error.code === "NOT_FOUND")) throw error;

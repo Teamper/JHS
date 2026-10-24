@@ -106,7 +106,7 @@ export default defineFeature({
         }
         if (runtime.enabledContributions.includes("library.favorite-actresses")) {
             const controller = new FavoriteActressesController({
-                document, location, jquery: /** @type {any} */ (globalThis).$,
+                document, location, hostAdapter: deps[PORT.host], jquery: /** @type {any} */ (globalThis).$,
                 state: deps[SERVICE.state], settings: deps[SERVICE.settings],
                 scope: runtime.scope, diagnostics: runtime.diagnostics, isDetailPage: runtime.route === "detail",
             });

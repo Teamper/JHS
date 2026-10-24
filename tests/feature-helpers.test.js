@@ -3,12 +3,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
+import { getMovieStateEligibility, normalizeMovieCarNum } from "../src/core/movie-identity.js";
 
 const warnings = [], notices = [];
 const context = vm.createContext({ URL, window: { location: { href: "https://javdb.com/" } }, encodeURIComponent, normalizeCarNum: value => typeof value === "string" && value.trim() && !["null", "undefined"].includes(value.trim().toLowerCase()) ? value.trim() : null, escapeHtml: value => value, clog: { warn: (...args) => warnings.push(args), debug: () => {} }, show: { error: message => notices.push(message) } });
 const source = readTestFile(join(import.meta.dirname, "../src/core/feature-helpers.js"), "utf8");
-vm.runInContext(`${source};globalThis.api={mapLimit,parseNumberSetting,parseTaskTimestamp,shouldSkipStopped,selectLatestPublishTime,normalizeDmmCid,normalizeHttpUrl,normalizeJavdbMediaUrl,normalizeBtihHash,resolveHighResCover,parseCarNumberText,buildFallbackCarUrl,linkCommentImageReferences,safePlay}`, context);
+vm.runInContext(`${source};globalThis.api={mapLimit,parseNumberSetting,parseTaskTimestamp,shouldSkipStopped,selectLatestPublishTime,normalizeDmmCid,normalizeHttpUrl,normalizeJavdbMediaUrl,normalizeBtihHash,parseCarNumberText,buildFallbackCarUrl,linkCommentImageReferences,safePlay}`, context);
 const api = context.api;
+context.getMovieStateEligibility = getMovieStateEligibility;
+context.normalizeCarNum = normalizeMovieCarNum;
 
 describe("feature helpers", () => {
     it("parses task settings and timestamps without losing zero or downgrade compatibility", () => {
@@ -40,11 +43,15 @@ describe("feature helpers", () => {
         expect(api.normalizeBtihHash("b".repeat(32))).toBe("B".repeat(32));
         expect(api.normalizeBtihHash("<script>")).toBeNull();
     });
-    it("resolves common high resolution cover paths", () => expect(api.resolveHighResCover("https://img.test/thumbs/a/ps.jpg")).toBe("https://img.test/covers/a/pl.jpg"));
     it("parses newline, comma and space number lists with deduplication", () => {
         const result = api.parseCarNumberText("ABC-001\nABC-002，FC2-1234567 ABC-001 invalid");
-        expect(Array.from(result.values)).toEqual(["ABC-001", "ABC-002", "FC2-1234567"]); expect(result.invalid).toContain("invalid");
+        expect(Array.from(result.values)).toEqual(["ABC-001", "ABC-002", "FC2-1234567"]); expect(result.invalid).toContain("INVALID");
         expect(api.buildFallbackCarUrl("ABC-001")).toContain("search?q=ABC-001");
+    });
+    it("rejects label-only and prefix-only imports while retaining full nonhyphenated identities", () => {
+        const parsed = api.parseCarNumberText("STUDIO-NAME FC2 FC2-PPV IPZZ HEYZO1234 1234567 ABC1234 ＡＢＣ＿１２３ FC2-PPV-1234567");
+        expect(Array.from(parsed.values)).toEqual(["HEYZO-1234", "1234567", "ABC-1234", "ABC-123", "FC2-PPV-1234567"]);
+        expect(Array.from(parsed.invalid)).toEqual(["STUDIO-NAME", "FC2", "FC2-PPV", "IPZZ"]);
     });
     it("links valid comment image references only", () => {
         expect(api.linkCommentImageReferences("图1 图二 图 9", 2)).toContain('data-image-index="0"');

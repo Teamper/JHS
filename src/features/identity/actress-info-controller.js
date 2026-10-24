@@ -6,10 +6,11 @@ export const INFO_TAG_CSS = ".info-tag{background-color:var(--jhs-status-fav-tin
 
 /** Manage optional actress information and cancel lookups when the setting or feature turns off. */
 export class ActressInfoController {
-    /** @param {{document: Document, location: {href: string, pathname: string}, service: any, settings: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any}} options */
+    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, service: any, settings: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any}} options */
     constructor(options) {
         this.document = options.document;
         this.location = options.location;
+        this.hostAdapter = options.hostAdapter;
         this.service = options.service;
         this.settings = options.settings;
         this.scope = options.scope;
@@ -58,8 +59,8 @@ export class ActressInfoController {
 
     /** @param {number} generation @param {import("../../core/lifecycle-scope.js").LifecycleScope} requestScope */
     async mountDetailPage(generation, requestScope) {
-        const actressLinks = [...this.document.querySelectorAll(".female")];
-        const names = actressLinks.map((link) => link.previousElementSibling?.textContent?.trim() || "").filter(Boolean);
+        const { actors, panel } = this.hostAdapter.readMovieActors();
+        const names = actors.filter((/** @type {{role: string}} */ actor) => actor.role === "actress").map((/** @type {{name: string}} */ actor) => actor.name);
         if (!names.length) return;
         /** @type {HTMLElement[]} */
         const blocks = [];
@@ -71,8 +72,7 @@ export class ActressInfoController {
             blocks.push(this.createDetailBlock(name, info));
         }
         if (!this.isStillActive(generation, requestScope)) return;
-        const heading = [...this.document.querySelectorAll("strong")].find((element) => /^(?:演員|演员)\s*:?$/u.test((element.textContent || "").trim()));
-        const anchor = heading?.parentElement || actressLinks[0]?.closest(".panel-block");
+        const anchor = panel;
         if (!anchor) return;
         anchor.after(...blocks);
         blocks.forEach((block) => this.ownedNodes.add(block));

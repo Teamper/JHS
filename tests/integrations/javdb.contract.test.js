@@ -62,7 +62,7 @@ it("normalizes JavDB host actor movies and uncollect mutations", async () => {
     const hostAdapter = new JavDbHostAdapter();
     expect(hostAdapter.parseActorMovies(html, "https://javdb.com")).toEqual([{
         carNum: "ABC-123", title: "Sample title", coverUrl: "https://javdb.com/covers/a.jpg", url: "https://javdb.com/v/a", publishTime: "2026-08-24",
-        score: 0, voteCount: 0,
+        score: 0, voteCount: 0, stateEligibility: {eligible:true,reason:null},
     }]);
     const request = vi.fn()
         .mockResolvedValueOnce({ data: html, finalUrl: "https://javdb.com/actors/a?t=d" })
