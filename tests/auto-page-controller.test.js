@@ -83,7 +83,7 @@ describe("List Feature auto-page controller", () => {
         await vi.waitFor(() => expect(controller.loader).toBeInstanceOf(HTMLDivElement));
         const liveScope = controller.liveScope;
         const pages = controller.pageItems, nextUrl = controller.nextUrl;
-        expect(liveScope?.snapshot().listeners).toBe(1);
+        expect(liveScope?.snapshot().listeners).toBe(3);
         settings.update("no");
         await vi.waitFor(() => expect(controller.loader).toBeUndefined());
         expect(liveScope?.snapshot()).toMatchObject({ disposed: true, listeners: 0 });
@@ -227,7 +227,7 @@ describe("List Feature auto-page controller", () => {
         expect(fixture.controller.loadedPage).toBe(3);
         expect(fixture.controller.nextUrl).toBe("/page/4");
         expect(document.querySelectorAll(".jhs-scroll")).toHaveLength(1);
-        expect(fixture.controller.liveScope.snapshot().listeners).toBe(1);
+        expect(fixture.controller.liveScope.snapshot().listeners).toBe(3);
         await fixture.controller.start();
         expect(document.querySelectorAll(".jhs-scroll")).toHaveLength(1);
 
@@ -236,6 +236,7 @@ describe("List Feature auto-page controller", () => {
         expect(fixture.controller.currentPage).toBe(3);
         expect(window.location.pathname).toBe("/page/3");
         pages[2].items[0].getClientRects = () => [];
+        fixture.controller.invalidatePagePositions();
         fixture.controller.checkScrollPosition();
         expect(fixture.controller.currentPage).toBe(2);
         expect(window.location.pathname).toBe("/page/2");

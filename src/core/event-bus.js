@@ -6,6 +6,8 @@ export class JhsEventBus {
         this.originId = globalThis.crypto?.randomUUID?.() || `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         this.listeners = new Map, this.seen = new Set, this.channel = new BroadcastChannel(channelName);
         this.errorReporter = options.errorReporter ?? null;
+        /** @type {any[]} */ this.committed = [];
+        this.committedScheduled = false;
         this.channel.addEventListener("message", (event => this._receive(event.data)));
     }
     /** @param {unknown} error */
@@ -29,13 +31,36 @@ export class JhsEventBus {
     _remember(eventId) {
         this.seen.add(eventId), this.seen.size > 256 && this.seen.delete(this.seen.values().next().value);
     }
-    /** @param {string} type @param {any} [payload] @param {{broadcast?: boolean}} [options] */
+    /** @param {string} type @param {any} [payload] @param {{broadcast?: boolean, broadcastFirst?: boolean}} [options] */
     async emit(type, payload = {}, options = {}) {
         const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random().toString(36).slice(2)}`, originId: this.originId, type, payload, timestamp: Date.now() };
         this._remember(event.eventId);
-        try { await this._dispatch(event); }
-        finally { !1 !== options.broadcast && this.channel.postMessage(event); }
+        const broadcast = () => { if (options.broadcast !== false) this.channel.postMessage(event); };
+        if (options.broadcastFirst) {
+            try { broadcast(); } catch (error) { this._reportHandlerError(error); }
+            await this._dispatch(event);
+        } else {
+            try { await this._dispatch(event); }
+            finally { broadcast(); }
+        }
         return event;
+    }
+    /** Broadcast durable changes before deferred, ordered local UI work. Existing emit callers still await their handlers.
+     * @param {Array<{type: string, payload: any}>} notices */
+    publishCommitted(notices) {
+        for (const { type, payload } of notices) {
+            const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random()}`, originId: this.originId, type, payload, timestamp: Date.now() };
+            this._remember(event.eventId);
+            try { this.channel.postMessage(event); } catch (error) { this._reportHandlerError(error); }
+            this.committed.push(event);
+        }
+        if (!this.committed.length || this.committedScheduled) return;
+        this.committedScheduled = true;
+        setTimeout(() => { void this._drainCommitted(); }, 0);
+    }
+    async _drainCommitted() {
+        try { while (this.committed.length) await this._dispatch(this.committed.shift()); }
+        finally { this.committedScheduled = false; }
     }
     /** @param {any} event */
     async _receive(event) {

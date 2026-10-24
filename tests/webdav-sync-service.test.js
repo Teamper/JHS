@@ -161,7 +161,9 @@ describe("automatic bidirectional WebDAV sync", () => {
         const save = a.forage.setItem.getMockImplementation();
         a.forage.setItem.mockImplementation(async (key, value) => { if (key === SYNC_STATE_KEY) throw new Error("quota"); return save(key, value); });
         await expect(a.state.remove(["SYNC-1"])).resolves.toMatchObject({ changed: ["SYNC-1"] });
-        expect(a.values.get("car_list")).toEqual([]); expect(a.store.error).toContain("已保存");
+        expect(a.values.get("car_list")).toEqual([]);
+        await expect(a.store.flushPending()).rejects.toThrow();
+        expect(a.store.error).toContain("已保存");
         a.forage.setItem.mockImplementation(save);
         const restarted = await a.restart(); await restarted.service.check(); await b.service.check();
         expect(b.values.get("car_list")).toEqual([]);

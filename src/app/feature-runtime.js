@@ -7,8 +7,9 @@ import { defineFeature } from "../contracts/manifests.js";
 export { LEGACY_PLUGIN_CONTRIBUTION_MAP, migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 
 export class FeatureRuntime {
-    /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, disabled?: string[], site?: string, route?: string}} options */
+    /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, backgroundWork?: any, disabled?: string[], site?: string, route?: string}} options */
     constructor(options) {
+        this.backgroundWork = options.backgroundWork;
         this.container = options.container;
         this.commands = options.commands;
         this.diagnostics = options.diagnostics;
@@ -228,12 +229,14 @@ export class FeatureRuntime {
         this.idleFeaturesScheduled = true;
         const features = this.pendingIdleFeatures.splice(0);
         for (const manifest of features) {
-            const activate = () => {
+            const activate = async () => {
+                // System controls mount promptly; only optional automatic work waits for quiet.
+                if (manifest.kind !== "system" && this.backgroundWork) await this.backgroundWork.waitForTurn();
                 if (!this.isEligible(manifest)) return;
                 void this.activate(manifest.id).catch(() => undefined);
             };
-            if (typeof globalThis.requestIdleCallback === "function") globalThis.requestIdleCallback(activate, { timeout: 1500 });
-            else setTimeout(activate, 100);
+            if (typeof globalThis.requestIdleCallback === "function") globalThis.requestIdleCallback(() => { void activate().catch(() => undefined); }, { timeout: 1500 });
+            else setTimeout(() => { void activate().catch(() => undefined); }, 100);
         }
     }
 

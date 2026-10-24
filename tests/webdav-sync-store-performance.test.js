@@ -11,6 +11,7 @@ async function writeDomain(replica, domain, value, pruned = []) {
         replica.store.notePruned(domain, pruned);
         await replica.forage.setItem(domain, value);
     });
+    await replica.store.flushPending();
 }
 
 describe("incremental WebDAV sync bookkeeping", () => {
@@ -24,7 +25,8 @@ describe("incremental WebDAV sync bookkeeping", () => {
         await writeDomain(a, "filter_keyword_title", ["new"]);
         const reads = a.forage.getItem.mock.calls.map(([key]) => key);
         expect(reads.filter(key => SYNC_DOMAINS.includes(key))).toEqual(["filter_keyword_title"]);
-        expect(reads.length).toBeLessThanOrEqual(6);
+        // The durable small ledger replaces the previous synchronous sidecar write.
+        expect(reads.filter(key => key === SYNC_STATE_KEY)).toHaveLength(1);
         const after = await a.store.read();
         expect(after.model.records["car_list/SYNC-1"]).toEqual(before.model.records["car_list/SYNC-1"]);
         expect(after.shadow["car_list/SYNC-1"]).toEqual(before.shadow["car_list/SYNC-1"]);

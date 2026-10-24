@@ -3,6 +3,29 @@ import { LEGACY_DATA_ALIASES, assertSupportedDataVersion, getPortableDataKeys, h
 import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 import { readReviewKeywords } from "./review-keywords.js";
+import { assertMovieStateEligible, getMovieStateEligibility } from "./movie-identity.js";
+
+/** Compare legacy entries structurally so a metadata-only actor update can carry them unchanged. */
+function movieRecordSignature(value) {
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(movieRecordSignature).join(",")}]`;
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${movieRecordSignature(value[key])}`).join(",")}}`;
+}
+
+/** Runtime eligibility evidence must never become part of a saved new-video record. */
+function prepareNewVideoRecords(records, previous = []) {
+    const unchanged = previous.map(movieRecordSignature);
+    return records.map(record => {
+        if (!getMovieStateEligibility(record).eligible) {
+            const index = unchanged.indexOf(movieRecordSignature(record));
+            if (index < 0) assertMovieStateEligible(record);
+            unchanged.splice(index, 1);
+        }
+        if (!record || typeof record !== "object") return record;
+        const { stateEligibility, ...saved } = record;
+        return saved;
+    });
+}
 
 /** Report a post-commit failure without reclassifying the persisted mutation. */
 function warnAfterCommittedStorageMutation(message, error) {
@@ -91,7 +114,9 @@ export class StorageManager {
     /** 跨标签页互斥；Web Locks 不可用时退化为直接执行（仍保留页内互斥） */
     async _withCrossTabLock(e, t) {
         if (this.mutationCoordinator?.runExclusive) return this.mutationCoordinator.runExclusive(async () => {
-            this._invalidateCache();
+            // Actress writes reread their own domain under the lock. Other domains
+            // retain their caches; cross-tab state/rule events invalidate them separately.
+            this._invalidateCache(e === "jhs_actress_lock" ? this.favorite_actresses_key : null);
             return t();
         });
         const n = globalThis.navigator?.locks;
@@ -113,9 +138,11 @@ export class StorageManager {
         if (!n) throw new Error("缺失starId");
         const existing = t.find((e => e.starId === n));
         if (!existing) return clog.error("未找到演员信息", n, a), !1;
+        if (r != null && !Array.isArray(r)) throw new TypeError("新作品列表必须为数组");
+        const newVideoList = Array.isArray(r) ? prepareNewVideoRecords(r, Array.isArray(existing.newVideoList) ? existing.newVideoList : []) : r;
         const h = { ...existing };
         a && (h.name = a), i && (h.allName = i), s && (h.avatar = s), null != c && (h.actressType = c),
-        o && (h.lastCheckTime = o), r && (h.newVideoList = r), l && (h.lastPublishTime = l),
+        o && (h.lastCheckTime = o), r && (h.newVideoList = newVideoList), l && (h.lastPublishTime = l),
         d && (h.remark = d), h.updateDate = utils.getNowStr(), await this._setItemAndInvalidate(this.favorite_actresses_key, t.map((item => item === existing ? h : item)));
         return true;
     }
@@ -123,18 +150,17 @@ export class StorageManager {
         return this._readCached("cacheCarList", this.car_list_key, []);
     }
     async getCarMap() {
-        if (null === this.cacheCarMap) {
-            const e = await this.getCarList();
-            this.cacheCarMap = createIndexedMap(e, "carNum");
-        }
-        return this.cacheCarMap;
+        return this._readDerived("cacheCarMap", this.car_list_key, () => this.getCarList(), values => createIndexedMap(values, "carNum"));
     }
     async getStatusMap() {
-        if (null === this.cacheStatusMap) {
-            const e = await this.getCarList();
-            this.cacheStatusMap = createStatusMap(e);
-        }
-        return this.cacheStatusMap;
+        return this._readDerived("cacheStatusMap", this.car_list_key, () => this.getCarList(), createStatusMap);
+    }
+    /** A read invalidated while awaiting its source may return its snapshot, but cannot refill a newer cache. */
+    async _readDerived(property, key, read, build) {
+        if (this[property] !== null) return this[property];
+        const generation = this._getCacheGeneration(key), value = build(await read());
+        if (generation === this._getCacheGeneration(key) && this[property] === null) this[property] = value;
+        return value;
     }
     async getCar(e) {
         return (await this.getCarMap()).get(normalizeCarNum(e));
@@ -214,10 +240,12 @@ export class StorageManager {
         }
         const flag = legacyActionToFlag(i);
         if (!flag) { const e = "actionType错误, 请联系作者更正: " + i; throw show.error("操作无法完成，请反馈给作者"), new Error(e); }
-        return this.stateService.patch(t, { [flag]: !0 }, { type: "legacy-update", record: { carNum: t, names: a, url: n, remark: o, publishTime: s } });
+        return this.stateService.patch(t, { [flag]: !0 }, { type: "legacy-update", record: { carNum: t, names: a, url: n, remark: o, publishTime: s, stateEligibility: e.stateEligibility } });
     }
     async saveCarList(e) {
         if (!e || !Array.isArray(e) || 0 === e.length) throw show.error("请选择记录"), new Error("记录列表为空!");
+        e = JSON.parse(JSON.stringify(e));
+        e.forEach(assertMovieStateEligible);
         const existing = await this.getCarMap(), seen = new Set, groups = new Map;
         for (const item of e) {
             const carNum = normalizeCarNum(item.carNum), flag = legacyActionToFlag(item.actionType);
@@ -236,6 +264,7 @@ export class StorageManager {
         return this.withActressLock(() => this._removeNewVideoListWithoutLock(e));
     }
     async _removeNewVideoListWithoutLock(e) {
+            (Array.isArray(e) ? e : [ e ]).forEach(assertMovieStateEligible);
             const targets = new Set((Array.isArray(e) ? e : [ e ]).map(normalizeCarNum).filter(Boolean));
             const t = await this.getFavoriteActressList(), changed = new Set;
             const a = t.map((t => {
@@ -261,11 +290,7 @@ export class StorageManager {
         return this._readCached("cacheBlacklist", this.blacklist_key, []);
     }
     async getBlacklistMap() {
-        if (null === this.cacheBlacklistMap) {
-            const e = await this.getBlacklist();
-            this.cacheBlacklistMap = createIndexedMap(e, "starId");
-        }
-        return this.cacheBlacklistMap;
+        return this._readDerived("cacheBlacklistMap", this.blacklist_key, () => this.getBlacklist(), values => createIndexedMap(values, "starId"));
     }
     async addBlacklistItem(e) {
         return this._withCrossTabLock("jhs_blacklist_lock", () => this._addBlacklistItemWithoutLock(e));
@@ -314,6 +339,7 @@ export class StorageManager {
     }
     async batchSaveBlacklistCarList(e) {
         return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+            e.forEach(assertMovieStateEligible);
             const beforeBlacklistCars = await this.getBlacklistCarList(), nextBlacklistCars = JSON.parse(JSON.stringify(beforeBlacklistCars)), addedItems = [], changed = [];
             const known = new Set(nextBlacklistCars.map((entry => normalizeCarNum(entry.carNum))).filter(Boolean));
             for (const input of e) {
@@ -587,6 +613,7 @@ export class StorageManager {
                     imported.setting = mergePortableSettings(await this.forage.getItem(this.setting_key) || {}, imported.setting);
                 }
                 await options.assertActive?.();
+                if (Object.hasOwn(imported, "activity_log")) await this.syncState?.resetUndoWithoutLock?.();
                 for (const key in imported) {
                     await this._setItemAndInvalidate(key, imported[key]);
                 }

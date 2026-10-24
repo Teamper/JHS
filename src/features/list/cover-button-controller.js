@@ -9,6 +9,7 @@ import { _, d, g, h, k, m, p, v, y, escapeHtml } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { FEATURE_ICONS } from "../../core/feature-icons.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
+import { assertMovieStateEligible, getMovieStateEligibility } from "../../core/movie-identity.js";
 import { Z, canUseCardPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 /** @typedef {any} JQueryHandle */
@@ -145,6 +146,22 @@ export class CoverButtonController {
         [ { selector: ".screenSvg", enabled: t === _ && screenshotAvailable ? _ : "no" }, { selector: ".videoSvg", enabled: n === _ && canUseCardPreview(e) ? _ : "no" }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
             scope.find(e).toggle(t === _);
         }));
+        const cards = items ? $(items) : $(this.list.getSelector().itemSelector);
+        cards.each((/** @type {number} */ _index, /** @type {Element} */ element) => {
+            const card = $(element);
+            let eligible = false;
+            try { eligible = getMovieStateEligibility(this.list.findCarNumAndHref(card)).eligible; } catch { /* Resource and browsing actions remain available when identity is missing. */ }
+            card.find(".jhs-card-status-item").prop("disabled", !eligible).attr("aria-disabled", String(!eligible));
+        });
+    }
+    /** @param {JQueryHandle} card @param {string} [expectedCarNum] */
+    readEligibleCard(card, expectedCarNum) {
+        let record;
+        try { record = this.list.findCarNumAndHref(card); } catch (error) { assertMovieStateEligible(null); throw error; }
+        const stateEligibility = expectedCarNum && record.carNum !== expectedCarNum
+            ? { eligible: false, reason: "conflicting" } : getMovieStateEligibility(record);
+        assertMovieStateEligible({ ...record, stateEligibility });
+        return { ...record, stateEligibility };
     }
     /** @param {JQueryHandle} button */
     cardForButton(button) {
@@ -182,7 +199,7 @@ export class CoverButtonController {
                 this.activeCardPopover = new OwnedPopover(trigger[0],menu[0]); this.activeCardPopover.open();
             }
         })).on("keydown.jhsCoverButton", ".jhs-card-menu [role='menuitem']", ((/** @type {KeyboardEvent} */ event) => {
-            const menu = $(event.currentTarget).closest(".jhs-card-menu"), items = menu.find("[role='menuitem']"), index = items.index(event.currentTarget);
+            const menu = $(event.currentTarget).closest(".jhs-card-menu"), items = menu.find("[role='menuitem']:not(:disabled)"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), this.closeCardMenus(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
@@ -208,7 +225,7 @@ export class CoverButtonController {
             try {
                 const card = $(event.currentTarget).closest(".item");
                 const { carNum } = list.findCarNumAndHref(card), settings = this.settings.snapshot();
-                const result = await this.screenshot.resolve({ carNum: carNum.replace("FC2-", "") }, { allowWhenDisabled: true, scope, settings });
+                const result = await this.screenshot.resolve({ carNum }, { allowWhenDisabled: true, scope, settings });
                 if (scope.disposed) return;
                 const image = Array.isArray(result) ? result[0] : result;
                 if (image?.url) {
@@ -223,7 +240,7 @@ export class CoverButtonController {
             event.preventDefault(); event.stopPropagation();
             try {
                 const button = $(event.currentTarget), card = this.cardForButton(button);
-                const { carNum, url, publishTime, fc2Source } = list.findCarNumAndHref(card);
+                const { carNum } = this.readEligibleCard(card);
                 const anchor = this.activeCardPopover?.anchor;
                 this.closeCardMenus(!0);
                 const applyState = async (/** @type {string} */ action) => {
@@ -232,27 +249,33 @@ export class CoverButtonController {
                     const moved = (/** @type {Event} */ event) => { if (event.target !== anchor) ownsFocus = false; };
                     const releaseFocus = scope.listen(this.document, "focusin", moved, true), releasePointer = scope.listen(this.document, "pointerdown", moved, true);
                     try {
-                        const names = await list.parseActressName(url, scope);
+                        const source = this.readEligibleCard(card, carNum);
+                        const names = await list.parseActressName(source.url, scope);
                         if (scope.disposed) return;
+                        const { url, publishTime, fc2Source, stateEligibility } = this.readEligibleCard(card, carNum);
                         const flag = legacyActionToFlag(action);
                         if (!flag) throw new Error("不支持的状态操作");
-                        await this.state.patch(carNum, { [flag]: true }, { type: "list-card-state", record: { carNum, url, names, publishTime, fc2Source } });
+                        await this.state.patch(carNum, { [flag]: true }, { type: "list-card-state", record: { carNum, url, names, publishTime, fc2Source, stateEligibility } });
                         if (!scope.disposed) this.notifications.ok("已更新影片状态");
-                    } catch (error) { if (!scope.disposed) { this.recordError("保存操作失败", error); this.notifications.error("状态更新失败，请重试"); } }
+                    } catch (error) { if (!scope.disposed) { this.recordError("保存操作失败", error); this.notifications.error(/** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY" ? `已跳过 1 项：${/** @type {Error} */ (error).message}` : "状态更新失败，请重试"); } }
                     finally {
                         releaseFocus(); releasePointer();
                         if (ownsFocus && (this.document.activeElement === anchor || this.document.activeElement === this.document.body)) this.focusCard(anchor, card[0]);
                     }
                 };
                 button.hasClass("filterBtn") ? this.ui.confirm(event, `屏蔽「${escapeHtml(carNum)}」？`, () => applyState(d), { confirmText: "屏蔽" }) : button.hasClass("favoriteBtn") ? void applyState(h) : button.hasClass("hasDownBtn") ? void applyState(g) : button.hasClass("hasWatchBtn") && void applyState(p);
-            } catch (error) { this.recordError("按钮点击处理失败", error); }
+            } catch (error) {
+                this.recordError("按钮点击处理失败", error);
+                if (!scope.disposed && /** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY") this.notifications.error(`已跳过 1 项：${/** @type {Error} */ (error).message}`);
+            }
         }));
         const settings = this.settings.snapshot(), movie = this.movie;
         const missAv = movie.externalSiteOrigin("missAvBtn", settings), jable = movie.externalSiteOrigin("jableBtn", settings), avgle = movie.externalSiteOrigin("avgleBtn", settings), av123 = movie.providerOrigin("av123") || "";
         $(this.list.getSelector().itemSelector).each(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
             const card = $(element);
             if (this.isJavBus && card.find(".avatar-box").length) return;
-            const { carNum } = list.findCarNumAndHref(card);
+            let carNum;
+            try { ({ carNum } = list.findCarNumAndHref(card)); } catch { return; }
             card.find(".site-jable").attr({ href: `${jable}/search/${carNum}/`, target: "_blank", rel: "noopener noreferrer" });
             card.find(".site-avgle").attr({ href: `${avgle}/vod/search.html?wd=${carNum}`, target: "_blank", rel: "noopener noreferrer" });
             card.find(".site-miss-av").attr({ href: `${missAv}/search/${carNum}`, target: "_blank", rel: "noopener noreferrer" });

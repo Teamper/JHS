@@ -10,6 +10,10 @@ async function bootDetail(page, context, { enabled = true } = {}) {
     disabledPlugins: enabled ? [] : ["DetailPageButtonPlugin"],
     settingOverrides: { autoRemoveNewVideoMarkAfterBrowse: "yes", enableLoadPreviewVideo: "no", enableLoadReview: "no" },
     beforeUserscriptInjection: hostPage => hostPage.evaluate(async () => {
+      const number = document.createElement("a");
+      number.title = "複製番號";
+      number.setAttribute("data-clipboard-text", "ABC-123");
+      document.querySelector(".column-video-info").append(number);
       const storage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
       await storage.setItem("favorite_actresses", [{ starId: "fixture-star", name: "测试演员", newVideoList: ["ABC-123"] }]);
     }),

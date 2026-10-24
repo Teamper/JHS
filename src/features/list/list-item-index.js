@@ -4,8 +4,9 @@ import { normalizeCarNum } from "../../core/constants.js";
 
 /** Index rendered list cards by the release car-number identity. */
 export class ListItemIndex {
-    /** @param {{readCarNum: (item: Element) => unknown, onReadError?: (error: unknown, item: Element) => void}} options */
+    /** @param {{root?: Element | null, readCarNum: (item: Element) => unknown, onReadError?: (error: unknown, item: Element) => void}} options */
     constructor(options) {
+        this.root = options.root ?? null;
         this.readCarNum = options.readCarNum;
         this.onReadError = options.onReadError ?? (() => {});
         /** @type {Map<string, Set<Element>>} */ this.itemsByCarNum = new Map();
@@ -46,7 +47,7 @@ export class ListItemIndex {
             element.matches(itemSelector) && removed.add(element);
             element.querySelectorAll(itemSelector).forEach((/** @type {Element} */ item) => removed.add(item));
         }
-        for (const item of removed) this.remove(item);
+        for (const item of removed) if (this.root ? !this.root.contains(item) : !item.isConnected) this.remove(item);
     }
 
     /** @param {unknown[]} carNums @returns {Element[]} */

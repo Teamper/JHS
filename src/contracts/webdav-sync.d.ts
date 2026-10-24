@@ -36,6 +36,8 @@ export interface SyncRestoreSelection {
 
 export interface SyncCheckOptions {
     scheduled?: boolean;
+    /** Automatic wake may bypass deadlines, but still respects the interaction gate. */
+    force?: boolean;
 }
 
 /** Feature and settings surfaces depend on this API, not storage or transport internals. */

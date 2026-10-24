@@ -5,6 +5,18 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("selected WebDAV recovery", () => {
+    it("preserves a new local operation committed after the import releases its lock", async () => {
+        const dav = memoryDav(), a = await syncReplica(dav); await a.service.check();
+        const file = [...dav.files.keys()][0], importData = a.storage.importDataWithGuard.bind(a.storage);
+        let fresh;
+        vi.spyOn(a.storage, "importDataWithGuard").mockImplementationOnce(async (...args) => {
+            await importData(...args);
+            fresh = await a.state.patch("AFTER-201", { downloaded: true });
+        });
+        await a.service.restore(file, false, undefined, { data: true, preferences: false });
+        expect(a.store.canUndo(fresh.transactionId)).toBe(true);
+        await expect(a.state.undoTransaction(fresh.transactionId)).resolves.toBeTruthy();
+    });
     it.each([
         ["preferences", { preferences: true, data: false }, false],
         ["data", { preferences: false, data: true }, false],

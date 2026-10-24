@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import jquery from "jquery";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { requestHostPage } from "../src/core/host-page-request.js";
 import { WantWatchImportController } from "../src/features/library/want-watch-import-controller.js";
@@ -20,7 +21,7 @@ function createHarness(html = '<h3>我的影片</h3><div class="movie-list"><div
     const controller = new WantWatchImportController({
         document, window, href: window.location.href,
         hostAdapter: { getListSelectors: () => ({ itemSelector: ".movie-list .item" }) },
-        http: {}, state: { patch }, ui: { confirm, loading: vi.fn(() => loadingHandle) }, notifications: settings,
+        http: {}, state: { patch }, ui: { jquery, confirm, loading: vi.fn(() => loadingHandle) }, notifications: settings,
         diagnostics, scope, sleep: vi.fn().mockResolvedValue(undefined),
     });
     return { controller, scope, patch, request, settings, confirm, loadingHandle, diagnostics };
@@ -47,7 +48,7 @@ describe("JavDB status imports", () => {
         await vi.waitFor(() => expect(settings.ok).toHaveBeenCalledOnce());
 
         expect(patch).toHaveBeenCalledWith("ABC-1", expectedPatch, {
-            type: "javdb-list-import", record: { carNum: "ABC-1", url: "/v/abc-1", names: "", publishTime: "2026" },
+            type: "javdb-list-import", record: { carNum: "ABC-1", stateEligibility: {eligible:true,reason:null}, url: "/v/abc-1", names: "", publishTime: "2026" },
         });
         expect(loadingHandle.close).toHaveBeenCalledOnce();
         scope.dispose();
@@ -61,7 +62,7 @@ describe("JavDB status imports", () => {
         request.mockResolvedValueOnce(page("ABC-2", "/p3")).mockResolvedValueOnce(page("ABC-3"));
         const result = await controller.readAndImport("watched");
 
-        expect(result).toEqual({ imported: 2, failed: 1, pages: 3 });
+        expect(result).toEqual({ imported: 2, failed: 1, skipped: 0, pages: 3 });
         expect(patch).toHaveBeenCalledTimes(3);
         expect(request).toHaveBeenNthCalledWith(1, {}, new URL("/p2", window.location.href).href, expect.any(LifecycleScope));
         expect(request).toHaveBeenNthCalledWith(2, {}, new URL("/p3", window.location.href).href, expect.any(LifecycleScope));

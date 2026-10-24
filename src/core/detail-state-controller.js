@@ -2,6 +2,7 @@
 
 import { b, k, m, normalizeCarNum, u, v, y } from "./constants.js";
 import { normalizeStateFlags } from "./state-model.js";
+import { assertMovieStateEligible, getMovieStateEligibility } from "./movie-identity.js";
 
 const DETAIL_STATE_BUTTONS = {
     blocked: { selector: "#filterBtn", inactive: () => m, active: () => u },
@@ -55,51 +56,68 @@ export class DetailStateController {
         const root = config.root?.jquery ? config.root[0] : config.root;
         return !config.scope?.disposed && config.isActive?.() !== false && root?.isConnected !== false;
     }
+    /** Re-read source evidence after async work; the URL hint alone cannot enable a state action. @param {{carNum: unknown, getRecord?: any}} config */
+    async resolveRecord(config) {
+        const hasSource = typeof config.getRecord === "function" || config.getRecord != null;
+        const record = typeof config.getRecord === "function" ? await config.getRecord() : config.getRecord;
+        return { ...(record ?? {}), carNum: normalizeCarNum(hasSource ? record?.carNum : config.carNum) };
+    }
     /** @param {DetailStateConfig} config @param {DetailStateFlag} flag @param {MouseEvent | null} [event] */
     async requestToggle(config, flag, event = null) {
-        if (!config.carNum) return void this.ui.reportError("番号不可用，无法更新状态");
         if (!this.isActive(config) || config.reading?.has(flag)) return;
         config.reading?.add(flag);
         try {
-            const current = await this.ui.readState(config.carNum), flags = normalizeStateFlags(current?.stateFlags);
+            const record = await this.resolveRecord(config);
             if (!this.isActive(config)) return;
-            if ("blocked" === flag && !flags.blocked) return void this.ui.confirm(event, `屏蔽「${escapeConfirmationLabel(config.carNum)}」？`, (() => this.isActive(config) && this.toggle(config, flag, event)), { confirmText: "屏蔽" });
-            return await this.toggle(config, flag, event);
+            assertMovieStateEligible(record);
+            const current = await this.ui.readState(record.carNum), flags = normalizeStateFlags(current?.stateFlags);
+            if (!this.isActive(config)) return;
+            if ("blocked" === flag && !flags.blocked) return this.ui.confirm(event, `屏蔽「${escapeConfirmationLabel(record.carNum)}」？`, (() => this.isActive(config) && this.toggle(config, flag, event, record.carNum)), { confirmText: "屏蔽" });
+            return await this.toggle(config, flag, event, record.carNum);
         } catch (error) {
-            if (this.isActive(config)) { this.ui.logError("详情状态读取失败", error); this.ui.reportError("状态读取失败，请重试"); }
+            if (this.isActive(config)) { this.ui.logError("详情状态读取失败", error); this.ui.reportError(/** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY" && error instanceof Error ? error.message : "状态读取失败，请重试"); }
         } finally { config.reading?.delete(flag); }
     }
-    /** @param {DetailStateConfig} config @param {DetailStateFlag} flag @param {MouseEvent | null} [event] */
-    async toggle(config, flag, event = null) {
-        if (!config.carNum) return void this.ui.reportError("番号不可用，无法更新状态");
+    /** @param {DetailStateConfig} config @param {DetailStateFlag} flag @param {MouseEvent | null} [event] @param {string | null} [expectedCarNum] */
+    async toggle(config, flag, event = null, expectedCarNum = null) {
         if (!this.isActive(config)) return;
         const $ = this.ui.jquery;
         const selector = config.selectors[flag] || DETAIL_STATE_BUTTONS[flag].selector, button = event?.currentTarget ? $(event.currentTarget) : $(config.root).find(selector);
-        if (button.prop("disabled")) return;
+        if (button.prop("disabled") && button.attr("data-jhs-identity-unavailable") !== "true") return;
         button.prop("disabled", !0).attr("aria-busy", "true");
         let committed = false;
         try {
-            const record = "function" == typeof config.getRecord ? await config.getRecord() : config.getRecord || { carNum: config.carNum };
+            const record = await this.resolveRecord(config);
             if (!this.isActive(config)) return;
-            await this.stateService.toggle(config.carNum, flag, { type: config.activityType, record });
+            assertMovieStateEligible(record);
+            if (expectedCarNum && record.carNum !== expectedCarNum) throw Object.assign(new Error("影片信息已变化，请重新操作"), {code:"UNRELIABLE_MOVIE_IDENTITY"});
+            await this.stateService.toggle(record.carNum, flag, { type: config.activityType, record });
             committed = true;
             if (!this.isActive(config)) return;
             await this.render(config);
             if (this.isActive(config)) await this.ui.closePage({ layerIndex: config.layerIndex, root: config.closeRoot || config.root });
         } catch (error) {
             this.ui.logError(committed ? "详情状态已保存，界面更新失败" : "详情状态更新失败", error);
-            if (this.isActive(config)) this.ui.reportError(committed ? "状态已保存，请重新打开详情" : "状态更新失败，请重试");
+            if (this.isActive(config)) this.ui.reportError(committed ? "状态已保存，请重新打开详情" : /** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY" && error instanceof Error ? error.message : "状态更新失败，请重试");
         } finally {
-            button[0]?.isConnected && button.prop("disabled", !1).removeAttr("aria-busy");
+            if (button[0]?.isConnected) {
+                button.removeAttr("aria-busy");
+                if (this.isActive(config)) await this.render(config).catch(error => this.ui.logError("详情状态读取失败", error));
+            }
         }
     }
-    /** @param {{root?: any, carNum: unknown, selectors?: Partial<Record<DetailStateFlag, string>>, isActive?: () => boolean, scope?: {disposed: boolean}}} options */
-    async render({ root = document, carNum, selectors = {}, isActive, scope }) {
+    /** @param {{root?: any, carNum: unknown, getRecord?: any, selectors?: Partial<Record<DetailStateFlag, string>>, isActive?: () => boolean, scope?: {disposed: boolean}}} options */
+    async render({ root = document, carNum, getRecord, selectors = {}, isActive, scope }) {
         const $ = this.ui.jquery;
-        const record = await this.ui.readState(/** @type {string} */ (normalizeCarNum(carNum))), flags = normalizeStateFlags(record?.stateFlags);
+        const target = await this.resolveRecord({carNum, getRecord}), eligible = getMovieStateEligibility(target).eligible;
+        if (!this.isActive({root, isActive, scope})) return normalizeStateFlags(null);
+        const record = eligible ? await this.ui.readState(target.carNum) : null, flags = normalizeStateFlags(record?.stateFlags);
         if (!this.isActive({root, isActive, scope})) return flags;
         for (const [flag, definition] of stateButtonEntries()) {
             const button = $(root).find(selectors[flag] || definition.selector), active = !!flags[flag];
+            button.prop("disabled", !eligible || button.attr("aria-busy") === "true");
+            if (eligible) button.removeAttr("data-jhs-identity-unavailable").removeAttr("title");
+            else button.attr("data-jhs-identity-unavailable", "true").attr("title", "影片番号无法确认，暂不能更改状态");
             button.attr("aria-pressed", String(active)).each((/** @type {number} */ _, /** @type {HTMLElement} */ element) => $(element).find("span").first().text(active ? definition.active() : definition.inactive()));
         }
         return flags;

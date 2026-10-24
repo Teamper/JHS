@@ -59,7 +59,7 @@ export class Utils {
             insert: 0
         });
         destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
-        let owningLayerIndex = null;
+        let owningLayerIndex = null, ended = false;
         layer.open(prepareDialogOptions({
             type: 2,
             zIndex: JHS_Z_INDEX.layer,
@@ -72,7 +72,12 @@ export class Utils {
             isOutAnim: !1,
             anim: -1,
             success: (e, t) => { owningLayerIndex = t; this.setupEscClose(t); },
-            end: () => { if (owningLayerIndex != null) this.releaseEscClose(owningLayerIndex); }
+            end: () => {
+                if (ended) return;
+                ended = true;
+                if (owningLayerIndex != null) this.releaseEscClose(owningLayerIndex);
+                if (navigation.onClose) void Promise.resolve().then(() => navigation.onClose()).catch(error => clog.error("详情关闭后列表刷新失败", error));
+            }
         }, this));
     }
     _handleGlobalEscKey(e) {

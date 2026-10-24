@@ -1,6 +1,7 @@
 // @ts-check
 
 import { escapeHtml } from "../../core/constants.js";
+import { assertMovieStateEligible, getMovieStateEligibility } from "../../core/movie-identity.js";
 
 /** Keep the list-card block action inside the List Feature lifecycle. */
 export class ListContextMenuController {
@@ -38,17 +39,17 @@ export class ListContextMenuController {
         if (!card) return;
         event.preventDefault();
         try {
-            const { carNum, url, publishTime, fc2Source } = this.list.findCarNumAndHref(this.ui.jquery(card));
-            let actorName = this.getActorName();
+            const record = this.readEligibleCard(card);
+            const actorName = this.getActorName();
             this.ui.confirm(
                 { clientX: /** @type {MouseEvent} */ (event).clientX, clientY: /** @type {MouseEvent} */ (event).clientY },
-                `屏蔽「${escapeHtml(carNum)}」？`,
-                () => this.blockMovie({ carNum, url, publishTime, fc2Source, actorName }),
+                `屏蔽「${escapeHtml(record.carNum)}」？`,
+                () => this.blockMovie({ ...record, actorName }, card),
                 { confirmText: "屏蔽" },
             );
         } catch (error) {
             this.recordError("右键屏蔽菜单处理失败", error);
-            if (!this.scope.disposed) this.notifications.error("屏蔽失败，请重试");
+            if (!this.scope.disposed) this.notifyFailure(error);
         }
     }
 
@@ -57,22 +58,41 @@ export class ListContextMenuController {
         return this.hostAdapter.document?.querySelector?.(selector)?.textContent?.trim()?.split(",")[0]?.replace("(無碼)", "") ?? "";
     }
 
-    /** @param {{carNum: string, url: string, publishTime?: string, fc2Source?: string, actorName: string}} record */
-    async blockMovie(record) {
+    /** @param {Element} card @param {string} [expectedCarNum] */
+    readEligibleCard(card, expectedCarNum) {
+        let record;
+        try { record = this.list.findCarNumAndHref(this.ui.jquery(card)); } catch (error) { assertMovieStateEligible(null); throw error; }
+        const stateEligibility = expectedCarNum && record.carNum !== expectedCarNum
+            ? { eligible: false, reason: "conflicting" } : getMovieStateEligibility(record);
+        assertMovieStateEligible({ ...record, stateEligibility });
+        return { ...record, stateEligibility };
+    }
+
+    /** @param {{carNum: string, url: string, publishTime?: string, fc2Source?: string, actorName: string, stateEligibility?: any}} record @param {Element} [card] */
+    async blockMovie(record, card) {
         if (this.disposed || this.scope.disposed) return;
         try {
-            const names = record.actorName || await this.list.parseActressName?.(record.url);
+            let source = card ? this.readEligibleCard(card, record.carNum) : record;
+            assertMovieStateEligible(source);
+            const names = record.actorName || await this.list.parseActressName?.(source.url, this.scope);
             if (this.disposed || this.scope.disposed) return;
-            await this.state.patch(record.carNum, { blocked: true }, {
-                record: { carNum: record.carNum, url: record.url, names, publishTime: record.publishTime, fc2Source: record.fc2Source },
+            source = card ? this.readEligibleCard(card, record.carNum) : record;
+            const stateEligibility = assertMovieStateEligible(source);
+            await this.state.patch(source.carNum, { blocked: true }, {
+                record: { carNum: source.carNum, url: source.url, names, publishTime: source.publishTime, fc2Source: source.fc2Source, stateEligibility },
             });
             if (this.disposed || this.scope.disposed) return;
             this.notifications.ok("已屏蔽");
         } catch (error) {
             if (this.disposed || this.scope.disposed) return;
             this.recordError("列表屏蔽操作失败", error);
-            this.notifications.error("屏蔽失败，请重试");
+            this.notifyFailure(error);
         }
+    }
+
+    /** @param {unknown} error */
+    notifyFailure(error) {
+        this.notifications.error(/** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY" ? `已跳过 1 项：${/** @type {Error} */ (error).message}` : "屏蔽失败，请重试");
     }
 
     /** @param {string} message @param {unknown} error */

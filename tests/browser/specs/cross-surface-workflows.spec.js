@@ -144,6 +144,11 @@ test("NewVideo hover preview follows its owning dialog and is destroyed on close
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
+  // Activate the deferred Feature through its real entry before customizing it.
+  await page.locator("#newVideoBtn").click();
+  await expect(page.locator(".newVideoToolBox")).toBeVisible();
+  await page.evaluate(() => window.layer.closeAll());
+  await expect(page.locator(".layui-layer")).toHaveCount(0);
   await page.evaluate(() => {
     const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
     window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode", "list");

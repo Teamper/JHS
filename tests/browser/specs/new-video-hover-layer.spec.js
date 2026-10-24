@@ -18,6 +18,11 @@ async function boot(page, context) {
     await injectUserscriptRuntime(page,{settingOverrides:{enableLoadReview:"no"}});
     await page.addStyleTag({path:fileURLToPath(new URL("../fixtures/viewer-runtime/viewer-1.11.1.min.css",import.meta.url))});
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
+    // Explicit UI entry activates the deferred Feature before fixture customization.
+    await page.locator("#newVideoBtn").click();
+    await expect(page.locator(".newVideoToolBox")).toBeVisible();
+    await page.locator(".layui-layer-close").click();
+    await expect(page.locator(".layui-layer")).toHaveCount(0);
     await page.evaluate(()=>{
         const plugin=window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
         window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode","list");

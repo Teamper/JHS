@@ -2,6 +2,7 @@
 
 import { normalizeCarNum } from "./constants.js";
 import { hasAnyState, normalizeStateFlags } from "./state-model.js";
+import { getMovieStateEligibility } from "./movie-identity.js";
 
 /** @param {any} decision @param {number} [now] */
 export function isNewVideoDecisionHidden(decision, now = Date.now()) {
@@ -15,6 +16,7 @@ export function getPendingNewVideoCarNumbers(actress, carMap, decisions, now = D
     const pending = new Set();
     if (!Array.isArray(actress?.newVideoList)) return pending;
     for (const record of actress.newVideoList) {
+        if (!getMovieStateEligibility(record).eligible) continue;
         const carNum = normalizeCarNum(typeof record === "string" ? record : record?.carNum);
         if (!carNum || hasAnyState(normalizeStateFlags(carMap.get(carNum)?.stateFlags))) continue;
         if (isNewVideoDecisionHidden(decisions[carNum], now)) continue;

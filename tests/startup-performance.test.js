@@ -4,6 +4,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { CompatibilityBeanRegistry } from "../src/core/compatibility-bean-registry.js";
+import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -38,7 +39,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     _: "yes",
     l: false,
     escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] || character)),
-    normalizeCarNum: value => String(value || "").toUpperCase(),
+    normalizeCarNum: value => String(value || "").toUpperCase(), getMovieStateEligibility,
     readListItem: () => ({}),
     StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },

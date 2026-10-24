@@ -15,11 +15,14 @@ export class ListNavigationController {
         if (this.disposed || !this.ui?.openPage || !this.list?.findCarNumAndHref) return;
         const card = item?.jquery ? item : this.ui.jquery(item);
         const { carNum, aHref } = this.list.findCarNumAndHref(card);
-        if (!carNum || !aHref || carNum.includes("FC2-")) return;
+        if (!aHref || carNum.includes("FC2-")) return;
         const shouldOpenTab = newTab || Boolean(event && (event.ctrlKey || event.metaKey || event.button === 1));
         const destination = new URL(aHref, this.hostAdapter.location.origin);
         if (autoplay) destination.searchParams.set("autoPlay", "1");
-        return this.ui.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab });
+        const navigation = { event, newTab: shouldOpenTab, ...(this.list.refreshCarNums ? {
+            onClose: () => !this.disposed && this.list.refreshCarNums([carNum]),
+        } : {}) };
+        return this.ui.openPage(destination.href, carNum, true, navigation);
     }
 
     dispose() { this.disposed = true; }

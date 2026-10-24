@@ -58,6 +58,31 @@ afterEach(() => {
 });
 
 describe("ListBatchController", () => {
+    it("counts missing native numbers alongside prefix-only rows exactly once before writing", async () => {
+        const { state, ui } = setup('<div class="item"><a href="/v/good"><div class="video-title"><strong>ABC-123</strong> Good</div></a></div><div class="item"><a href="/v/missing"><div class="video-title">Title without native number</div></a></div><div class="item"><a href="/v/prefix"><div class="video-title"><strong>FC2</strong> Prefix only</div></a></div>');
+        expect(await controller.run({ kind: "search" }, "favorite", { confirm: false, filter: "all" })).toEqual({ matched: 1, updated: 1, skipped: 2 });
+        expect(state.patch.mock.calls.flatMap(([keys]) => keys)).toEqual(["ABC-123"]);
+        expect(ui.setProgress).toHaveBeenLastCalledWith(expect.anything(), expect.stringContaining("跳过 2 项"));
+    });
+    it("filters unreliable identities before any batch write and reports skipped rows", async () => {
+        const rows = Array.from({ length: 76 }, (_, index) => `<div class="item"><a href="/v/${index}"><div class="video-title"><strong>ABC-${100 + index}</strong> Good</div></a></div>`).join("");
+        const { state, ui } = setup(rows + '<div class="item"><a href="/v/unknown"><div class="video-title"><strong>FC2</strong> Unknown</div></a></div>');
+        const result = await controller.run({ kind: "search" }, "favorite", { confirm: false, filter: "all" });
+        expect(result).toEqual({ matched: 76, updated: 76, skipped: 1 });
+        expect(state.patch.mock.calls.flatMap(([keys]) => keys)).toEqual(Array.from({ length: 76 }, (_, index) => `ABC-${100 + index}`));
+        expect(state.patch.mock.calls.flatMap(([, , options]) => options.records).every((record) => record.stateEligibility?.eligible === true)).toBe(true);
+        expect(ui.setProgress).toHaveBeenLastCalledWith(expect.anything(), expect.stringContaining("跳过 1 项"));
+    });
+
+    it("rechecks every scanned source before the first write when scanning another page changes a card", async () => {
+        const { state } = setup('<div class="item"><a href="/v/a"><div class="video-title"><strong>ABC-123</strong> Good</div></a></div><a class="pagination-next" href="https://javdb.com/search?q=synthetic&page=2">Next</a>');
+        controller.http.request.mockImplementation(async () => {
+            dom.window.document.querySelector(".video-title strong").textContent = "FC2";
+            return { data: '<div class="item"><a href="/v/b"><div class="video-title"><strong>ABC-124</strong> Good</div></a></div>' };
+        });
+        expect(await controller.run({ kind: "search" }, "favorite", { confirm: false, filter: "all" })).toEqual({ matched: 1, updated: 1, skipped: 1 });
+        expect(state.patch.mock.calls.flatMap(([keys]) => keys)).toEqual(["ABC-124"]);
+    });
     it("takes the default batch filter from the injected List Feature capability", async () => {
         const { state, setActiveFilter, createEvaluationContext } = setup();
         setActiveFilter("favorite");
@@ -75,7 +100,7 @@ describe("ListBatchController", () => {
 
         expect(state.patch).toHaveBeenCalledWith(["ABC-123"], { favorite: true }, {
             type: "actor-page-batch-state",
-            records: [{ carNum: "ABC-123", url: "/v/ABC-123", names: "", publishTime: "2026-01-01", fc2Source: "fc2" }],
+            records: [{ carNum: "ABC-123", url: "/v/ABC-123", names: "", publishTime: "2026-01-01", fc2Source: "fc2", stateEligibility: { eligible: true, reason: null } }],
         });
         expect(ui.setButtonsDisabled.mock.calls).toEqual([[true], [false]]);
         expect(ui.markWriting).toHaveBeenCalledOnce();
@@ -90,7 +115,7 @@ describe("ListBatchController", () => {
 
         expect(state.patch).toHaveBeenCalledWith(["ABC-123"], { blocked: true }, {
             type: "actor-page-block",
-            records: [{ carNum: "ABC-123", url: "/v/ABC-123", names: "Actor", publishTime: "2026-01-01", fc2Source: "fc2" }],
+            records: [{ carNum: "ABC-123", url: "/v/ABC-123", names: "Actor", publishTime: "2026-01-01", fc2Source: "fc2", stateEligibility: { eligible: true, reason: null } }],
         });
     });
 

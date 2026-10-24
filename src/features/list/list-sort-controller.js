@@ -83,6 +83,7 @@ export class ListSortController {
             ? left.key - right.key
             : right.key - left.key || left.originalIndex - right.originalIndex || left.index - right.index);
         const sorted = items.map((item) => item.element);
+        if (sorted.every((element, index) => element === elements[index])) return;
         if (method === "default") sorted.forEach((element) => container.append(element));
         else container.replaceChildren(...sorted);
     }

@@ -29,6 +29,8 @@ export class AutoPageController {
         this.window = options.window ?? options.hostAdapter?.location?.window ?? globalThis.window;
         this.logger = options.logger ?? /** @type {any} */ (globalThis).clog ?? console;
         this.preloadDistance = 500;
+        this.pagePositionsDirty = true;
+        /** @type {Set<object>} */ this.hiddenPages = new Set();
         this.currentPage = this.getInitialPageNumber();
         this.loadedPage = this.currentPage;
         /** @type {Array<{page: number, top: number, url: string, items: Element[]}>} */ this.pageItems = [];
@@ -110,6 +112,7 @@ export class AutoPageController {
         this.stop();
         this.container = undefined;
         this.pageItems = [];
+        this.hiddenPages.clear();
         this.nextUrl = null;
         this.hasMore = false;
     }
@@ -141,6 +144,19 @@ export class AutoPageController {
             this.hasMore = Boolean(this.nextUrl);
         }
         this.container = container;
+        this.invalidatePagePositions();
+        scope.listen(this.window, "resize", () => this.invalidatePagePositions());
+        scope.listen(container, "load", () => this.invalidatePagePositions(), true);
+        if (this.window.MutationObserver) {
+            const observer = new this.window.MutationObserver(() => this.invalidatePagePositions());
+            observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
+            scope.ownObserver(observer);
+        }
+        if (this.window.ResizeObserver) {
+            const observer = new this.window.ResizeObserver(() => this.invalidatePagePositions());
+            observer.observe(container);
+            scope.ownObserver(observer);
+        }
         const loader = this.document.createElement("div");
         this.loader = loader;
         loader.className = "jhs-scroll";
@@ -164,6 +180,7 @@ export class AutoPageController {
     /** @param {any} snapshot */
     onVisibilityChanged(snapshot) {
         if (!snapshot || !Number.isFinite(snapshot.visible) || !Number.isFinite(snapshot.total)) return;
+        this.invalidatePagePositions();
         const previousFilter = this.visibilitySnapshot?.filter;
         this.visibilitySnapshot = snapshot;
         const filter = String(snapshot.filter || "waitCheck");
@@ -237,6 +254,7 @@ export class AutoPageController {
             this.ui.jquery(container).append(cards);
             this.loadedPage++;
             this.pageItems.push({ page: this.loadedPage, top: pageTop, url: pageUrl, items: cards.toArray() });
+            this.invalidatePagePositions();
             this.nextUrl = page.find(selectors.nextPageSelector).first().attr("href") ?? null;
             this.hasMore = Boolean(this.nextUrl);
             this.ui.jquery(".pagination").replaceWith(page.find(".pagination"));
@@ -290,15 +308,28 @@ export class AutoPageController {
         return false;
     }
 
+    invalidatePagePositions() { this.pagePositionsDirty = true; }
+
+    /** Batch geometry reads only after layout/visibility changes; scrolling consumes numbers. */
+    refreshPagePositions() {
+        if (!this.pagePositionsDirty) return;
+        this.pagePositionsDirty = false;
+        this.hiddenPages.clear();
+        const scrollY = this.window.scrollY;
+        for (const [index, page] of this.pageItems.entries()) {
+            if (!index) continue;
+            const item = page.items.find(item => item.isConnected && item.getClientRects().length > 0);
+            if (item) page.top = item.getBoundingClientRect().top + scrollY;
+            else this.hiddenPages.add(page);
+        }
+    }
+
     checkScrollPosition() {
+        this.refreshPagePositions();
         const scrollY = this.window.scrollY;
         for (let index = this.pageItems.length - 1; index >= 0; index--) {
             const page = this.pageItems[index];
-            if (index > 0) {
-                const visibleItem = page.items.find(item => item.isConnected && item.getClientRects().length > 0);
-                if (!visibleItem) continue;
-                page.top = visibleItem.getBoundingClientRect().top + scrollY;
-            }
+            if (this.hiddenPages.has(page)) continue;
             if (scrollY >= page.top) {
                 if (this.currentPage !== page.page) {
                     this.currentPage = page.page;

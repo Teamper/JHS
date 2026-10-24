@@ -9,21 +9,33 @@ export class StorageMutationCoordinator {
         this.lockManager = options.lockManager === undefined ? globalThis.navigator?.locks : options.lockManager;
         this.lockName = options.lockName ?? STORAGE_MUTATION_LOCK;
         this._queue = Promise.resolve();
+        /** @type {any} */ this.diagnostics = null;
         /** @type {any} Optional observer of the completed business mutation. */
         this.observer = null;
         /** @type {(() => Promise<unknown>) | null} */ this.beforeMutation = null;
         /** Schedules post-commit work without extending the caller's lock or queue. @type {(() => void) | null} */ this.afterRelease = null;
     }
 
+    /** A CPU continuation crosses this barrier outside its transaction; queued writers keep priority across frames/tabs. */
+    async waitForIdle() {
+        if (this.lockManager?.request) await this.lockManager.request(this.lockName, () => undefined);
+        else await this._queue;
+    }
+
     /** @template T @param {() => Promise<T> | T} operation @returns {Promise<T>} */
     runExclusive(operation) {
         if (typeof operation !== "function") throw new TypeError("Storage mutation must be a function");
+        const requestedAt = this.diagnostics?.performanceRecording ? performance.now() : null;
         const execute = async () => {
+            const acquiredAt = requestedAt === null ? null : performance.now();
             await this.beforeMutation?.();
             this.observer?.begin();
             let succeeded = false;
             try { const value = await operation(); succeeded = true; return value; }
-            finally { await this.observer?.finish(succeeded); }
+            finally {
+                try { await this.observer?.finish(succeeded); }
+                finally { if (acquiredAt !== null) this.diagnostics?.recordComputation("storage.lock", { waitMs: acquiredAt - (requestedAt ?? acquiredAt), holdMs: performance.now() - acquiredAt }); }
+            }
         };
         const next = this.lockManager?.request ? this.lockManager.request(this.lockName, execute) : this._queue.then(execute, execute);
         if (!this.lockManager?.request) this._queue = next.then(() => undefined, () => undefined);

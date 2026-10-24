@@ -5,6 +5,7 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { assertMovieStateEligible, getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -15,7 +16,7 @@ function loadController() {
         records.get(carNum).stateFlags[flag] = !records.get(carNum).stateFlags[flag];
     });
     const context = vm.createContext({
-        document: dom.window.document, $, m: "屏蔽", u: "取消屏蔽", v: "收藏", b: "取消收藏", y: "标记下载", k: "标记观看",
+        document: dom.window.document, $, assertMovieStateEligible, getMovieStateEligibility, m: "屏蔽", u: "取消屏蔽", v: "收藏", b: "取消收藏", y: "标记下载", k: "标记观看",
         normalizeCarNum: value => String(value).trim().toUpperCase(),
         escapeHtml: value => String(value).replaceAll("<", "&lt;"),
         normalizeStateFlags: flags => ({ blocked: false, favorite: false, downloaded: false, watched: false, ...flags }),

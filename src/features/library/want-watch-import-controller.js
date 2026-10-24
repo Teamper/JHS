@@ -1,6 +1,8 @@
 // @ts-check
 
 import { requestHostPage } from "../../core/host-page-request.js";
+import { readListItem } from "../../core/list-item-reader.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 
 const PAGE_DELAY_MS = 1000;
 
@@ -64,7 +66,7 @@ export class WantWatchImportController {
         try {
             loadingHandle = this.ui.loading();
             const result = await this.readAndImport(flag);
-            if (!this.scope.disposed) this.notifications.ok(`导入完成：成功 ${result.imported}，失败 ${result.failed}，共 ${result.pages} 页`);
+            if (!this.scope.disposed) this.notifications.ok(`导入完成：成功 ${result.imported}，跳过 ${result.skipped}，失败 ${result.failed}，共 ${result.pages} 页`);
         } catch (error) {
             if (!this.scope.disposed && !isAbortError(error)) {
                 this.report(error);
@@ -80,12 +82,12 @@ export class WantWatchImportController {
         }
     }
 
-    /** @param {"favorite" | "watched"} flag @returns {Promise<{imported: number, failed: number, pages: number}>} */
+    /** @param {"favorite" | "watched"} flag @returns {Promise<{imported: number, failed: number, skipped: number, pages: number}>} */
     async readAndImport(flag) {
         const selectors = this.hostAdapter.getListSelectors();
         if (!selectors?.itemSelector) throw new Error("无法读取 JavDB 影片列表结构");
         const parser = new DOMParser();
-        const result = { imported: 0, failed: 0, pages: 0 };
+        const result = { imported: 0, failed: 0, skipped: 0, pages: 0 };
         const visited = new Set();
         let pageRoot = this.document;
         let pageUrl = this.window.location.href;
@@ -98,24 +100,25 @@ export class WantWatchImportController {
             const items = [...pageRoot.querySelectorAll(selectors.itemSelector)];
             for (const item of items) {
                 if (this.scope.disposed) break;
-                const anchor = item.querySelector("a");
-                const carNum = item.querySelector(".video-title strong")?.textContent?.trim() ?? "";
-                if (!anchor?.getAttribute("href") || !carNum) continue;
                 try {
+                    const movie = readListItem(item, this.ui.jquery);
+                    if (!getMovieStateEligibility(movie).eligible || !movie.url) { result.skipped++; continue; }
+                    const carNum = movie.carNum;
                     await this.state.patch(carNum, { [flag]: true }, {
                         type: "javdb-list-import",
                         record: {
-                            carNum,
-                            url: anchor.getAttribute("href") ?? "",
+                            carNum, stateEligibility: movie.stateEligibility,
+                            url: movie.url,
                             names: "",
-                            publishTime: item.querySelector(".meta")?.textContent?.trim() ?? "",
+                            publishTime: movie.publishTime ?? "",
                         },
                     });
                     result.imported += 1;
                 } catch (error) {
                     if (this.scope.disposed || isAbortError(error)) break;
+                    if (/** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY") { result.skipped++; continue; }
                     result.failed += 1;
-                    this.report(error, `保存失败 [${carNum}]`);
+                    this.report(error, "影片保存失败");
                 }
             }
             if (this.scope.disposed) break;

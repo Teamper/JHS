@@ -121,7 +121,10 @@ export async function bootstrapJhs() {
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
         // 黑名单/关键词规则可被其他标签页修改：内存派生缓存不随事件自动失效，必须在此主动清空
         [ "blacklist-rules-changed", "filter-rules-changed", "legacy-refresh" ].forEach((type => jhsEventBus.on(type, (() => storageManager._invalidateCache()))));
-        jhsEventBus.on("car-state-changed", () => storageManager._invalidateCache(storageManager.car_list_key));
+        jhsEventBus.on("car-state-changed", (payload, event) => {
+            if (event.originId !== jhsEventBus.originId || !stateService.getCommittedListSnapshot(payload.transactionId)) storageManager._invalidateCache(storageManager.car_list_key);
+        });
+        jhsEventBus.on("actress-changed", () => storageManager._invalidateCache(storageManager.favorite_actresses_key));
         patchLayerRuntime(vendors.layer, utils);
         // 先退出整包 IIFE 调用栈，避免首个资源请求为整包同步生成调试源位置。
         await Promise.resolve();
@@ -209,6 +212,7 @@ export async function bootstrapJhs() {
         await jhsEventBus.emit("jhs-features-ready", {}, { broadcast: false });
         markPhase("feature-ready-signal");
         markPhase("first-ready");
+        context.services.backgroundWork.markReady();
         context.registries.features.scheduleIdle();
         markPhase("total");
         return context;

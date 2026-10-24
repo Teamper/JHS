@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { assertMovieStateEligible } from "../src/core/movie-identity.js";
 
 function createAdapter(existing = null) {
     const source = readTestFile(join(import.meta.dirname, "../src/core/storage.js"), "utf8"), show = { error: vi.fn() }, patch = vi.fn(async () => ({ changed: [ "ABC-1" ], transactionId: "tx" })), context = vm.createContext({
-        WeakSet, WeakMap, Map, Set, Promise, Date, JSON, Object, Array, Math,
+        WeakSet, WeakMap, Map, Set, Promise, Date, JSON, Object, Array, Math, assertMovieStateEligible,
         a: message => { throw new TypeError(message); },
         i: (target, key, value) => (target[key] = value),
         localforage: { INDEXEDDB: "indexeddb", createInstance: () => ({}) },

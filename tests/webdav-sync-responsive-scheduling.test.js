@@ -1,0 +1,30 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+it("a manual request promotes the waiting automatic check and its publish semantics", async () => {
+  const remote = memoryDav(), a = await syncReplica(remote); await a.service.check();
+  await a.state.patch("MANUAL-1", { favorite: true });
+  let release, rerun;
+  a.service.window.setTimeout = callback => { rerun = callback; return 1; };
+  a.service.deps.backgroundWork = { waitForTurn: () => new Promise(resolve => { release = resolve; }), expedite: () => release() };
+  const queued = a.service.check({ scheduled: true });
+  await a.service.check(); await queued;
+  const state = await a.store.read();
+  expect(state.publishedRevision).toBe(state.localRevision);
+  expect(state.dirty).toBe(false);
+  const requests = remote.client.ensureFolder.mock.calls.length;
+  rerun();
+  await vi.waitFor(() => expect(remote.client.ensureFolder).toHaveBeenCalledTimes(requests + 1));
+  await vi.waitFor(() => expect(a.service.running).toBe(false));
+});
+it("a forced automatic wake still waits for the interaction gate", async () => {
+  const remote = memoryDav(), a = await syncReplica(remote); let callback, release;
+  a.service.window.setTimeout = fn => { callback = fn; return 1; };
+  const waitForTurn = vi.fn(() => new Promise(resolve => { release = resolve; }));
+  a.service.deps.backgroundWork = { waitForTurn };
+  a.service.schedule(0, true); callback();
+  await vi.waitFor(() => expect(waitForTurn).toHaveBeenCalledOnce());
+  expect(remote.client.ensureFolder).not.toHaveBeenCalled();
+  release(); await vi.waitFor(() => expect(a.service.running).toBe(false));
+  expect(remote.client.ensureFolder).toHaveBeenCalledOnce();
+});

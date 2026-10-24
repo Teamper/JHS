@@ -50,9 +50,10 @@ function loadListObserver() {
 
 function initializeAccessibilityDom(html) {
     const dom = new JSDOM(html), source = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
-        document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask
+        document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask, performance, setTimeout, clearTimeout
     });
     context.lifecycleScope = {
+        addCleanup() {},
         observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); return observer.observe(target, options), observer; },
         listen(target, type, handler, options) { target.addEventListener(type, handler, options); return () => target.removeEventListener(type, handler, options); }
     };

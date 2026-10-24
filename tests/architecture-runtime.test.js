@@ -522,6 +522,22 @@ describe("v6.5 architecture runtime contracts", () => {
         vi.unstubAllGlobals();
     });
 
+    it("keeps system UI mounting available while automatic library work awaits quiet", async () => {
+        const callbacks = [], started = [];
+        vi.stubGlobal("requestIdleCallback", callback => { callbacks.push(callback); return callbacks.length; });
+        let release;
+        const backgroundWork = { waitForTurn: vi.fn(() => new Promise(resolve => { release = resolve; })) };
+        const runtime = new FeatureRuntime({ backgroundWork, container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), site: "javdb", route: "list" });
+        for (const [id, kind] of [["responsive-shell", "system"], ["library-work", "feature"]]) runtime.register(defineFeature({ id, kind, disableable: kind !== "system", sites: ["javdb"], routes: [], startup: "idle", requires: [], contributes: [], providesCommands: [], activate: () => { started.push(id); return {}; } }));
+        try {
+            await runtime.start(); runtime.scheduleIdle(); callbacks.forEach(callback => callback());
+            await Promise.resolve(); await Promise.resolve();
+            expect(started).toEqual(["responsive-shell"]);
+            expect(backgroundWork.waitForTurn).toHaveBeenCalledOnce();
+        } finally { release?.(); vi.unstubAllGlobals(); }
+        await vi.waitFor(() => expect(started).toEqual(["responsive-shell", "library-work"]));
+    });
+
     it("disposes successful eager Features when a system Feature fails", async () => {
         const runtime = new FeatureRuntime({ container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), site: "javdb", route: "detail" });
         let releaseFirst;

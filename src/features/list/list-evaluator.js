@@ -1,6 +1,7 @@
 // @ts-check
 
 import { normalizeStateFlags } from "../../core/state-model.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 import { isHardHidden, matchesQuickFilter } from "./list-filters.js";
 
 /** @typedef {import("../../core/state-model.js").StateFlags} StateFlags */
@@ -30,22 +31,23 @@ export function createListEvaluationContext(options = {}) {
 }
 
 /**
- * @param {{ carNum?: string | null, title?: string }} record
+ * @param {{ carNum?: string | null, title?: string, stateEligibility?: import("../../core/movie-identity.js").MovieStateEligibility }} record
  * @param {ReturnType<typeof createListEvaluationContext>} context
  * @param {{ filter?: unknown }} [options]
  * @returns {{ flags: StateFlags, visibilityReasons: VisibilityReasons, recent: boolean, hardHidden: boolean, matchesCurrentFilter: boolean }}
  */
 export function evaluateListItem(record, context, { filter = "waitCheck" } = {}) {
     const carNum = record?.carNum;
-    const state = carNum ? context.carMap.get(carNum) : null;
+    const reliable = getMovieStateEligibility(record).eligible;
+    const state = carNum && reliable ? context.carMap.get(carNum) : null;
     const flags = normalizeStateFlags(state?.stateFlags);
     const keyword = context.titleKeywords.length && carNum ? findMatchedTitleKeyword(context.titleKeywords, record.title || "", carNum) : null;
     const visibilityReasons = {
         keyword: !!keyword,
-        actorBlacklist: carNum ? context.actorCarNumToNameMap.has(carNum) : false,
-        actressBlacklist: carNum ? context.actressCarNumToNameMap.has(carNum) : false,
+        actorBlacklist: carNum && reliable ? context.actorCarNumToNameMap.has(carNum) : false,
+        actressBlacklist: carNum && reliable ? context.actressCarNumToNameMap.has(carNum) : false,
     };
-    const recent = carNum ? context.recentCarNums.has(carNum) : false;
+    const recent = carNum && reliable ? context.recentCarNums.has(carNum) : false;
     const hardHidden = isHardHidden(flags, visibilityReasons);
     return {
         flags,

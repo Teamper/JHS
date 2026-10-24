@@ -34,6 +34,33 @@ describe("List Feature context-menu action", () => {
         return { confirm, state, notifications, diagnostics, list };
     }
 
+    it("skips conflicting source metadata before confirmation or actor resolution", () => {
+        const { confirm, list, state, notifications } = mount({ actorName: "" });
+        list.findCarNumAndHref.mockReturnValue({ carNum: "ABC-123", url: "/v/a", stateEligibility: { eligible: false, reason: "conflicting" } });
+        dom.window.document.querySelector("#cover").dispatchEvent(new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+        expect(confirm).not.toHaveBeenCalled();
+        expect(list.parseActressName).not.toHaveBeenCalled();
+        expect(state.patch).not.toHaveBeenCalled();
+        expect(notifications.error).toHaveBeenCalledWith(expect.stringContaining("跳过 1 项"));
+    });
+
+    it("reports an unreadable source as one skipped item without opening confirmation", () => {
+        const { confirm, list, notifications } = mount();
+        list.findCarNumAndHref.mockImplementation(() => { throw new TypeError("missing identity"); });
+        dom.window.document.querySelector("#cover").dispatchEvent(new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+        expect(confirm).not.toHaveBeenCalled();
+        expect(notifications.error).toHaveBeenCalledWith(expect.stringContaining("跳过 1 项"));
+    });
+
+    it("rereads the card when confirmation returns before fetching actor details", async () => {
+        const { confirm, list, state } = mount({ actorName: "" });
+        dom.window.document.querySelector("#cover").dispatchEvent(new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+        list.findCarNumAndHref.mockReturnValue({ carNum: "FC2", url: "/v/a" });
+        await confirm.mock.calls[0][2]();
+        expect(list.parseActressName).not.toHaveBeenCalled();
+        expect(state.patch).not.toHaveBeenCalled();
+    });
+
     it("renders the escaped confirmation safely and writes the original block record", async () => {
         const { confirm, state, notifications, list } = mount();
         const image = dom.window.document.querySelector("#cover");
@@ -52,7 +79,7 @@ describe("List Feature context-menu action", () => {
         await confirm.mock.calls[0][2]();
         expect(state.patch).toHaveBeenCalledWith('<img src=x onerror="alert(1)">', { blocked: true }, {
             record: {
-                carNum: '<img src=x onerror="alert(1)">', url: "/v/abc-123", names: "Actress", publishTime: "2026-08-25", fc2Source: "fc2",
+                carNum: '<img src=x onerror="alert(1)">', url: "/v/abc-123", names: "Actress", publishTime: "2026-08-25", fc2Source: "fc2", stateEligibility: { eligible: true, reason: null },
             },
         });
         expect(notifications.ok).toHaveBeenCalledWith("已屏蔽");

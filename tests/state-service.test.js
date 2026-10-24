@@ -4,13 +4,14 @@ import { webcrypto } from "node:crypto";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { assertMovieStateEligible } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadStateService(diagnosticConsole = console, uiDiagnostics = {}) {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
     const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), domains = readTestFile(join(repoRoot, "src/core/state-domains.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
-    const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, console: diagnosticConsole, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: uiDiagnostics.clog ?? { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: uiDiagnostics.show ?? { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
+    const context = vm.createContext({ assertMovieStateEligible, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, console: diagnosticConsole, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: uiDiagnostics.clog ?? { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: uiDiagnostics.show ?? { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
     vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${domains}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
     return context.StateServiceClass;
 }
@@ -35,6 +36,16 @@ function createHarness(initial = {}, mutationCoordinator = null, diagnosticConso
 }
 
 describe("StateService durable transactions", () => {
+    it("does not rewrite unrelated new-work domains for a movie absent from those domains", async () => {
+        const f = createHarness({ car_list: [], favorite_actresses: [{ starId: "actor-1", newVideoList: [{ carNum: "OTHER-1" }] }], new_video_decisions: { "OTHER-1": { action: "dismissed" } }, activity_log: { entries: [] } });
+        await f.service.patch("ABC-123", { favorite: true });
+        const writes = f.storage._setItemAndInvalidate.mock.calls.map(([key]) => key);
+        expect(writes).toContain("car_list");
+        expect(writes).not.toContain("favorite_actresses");
+        expect(writes).not.toContain("new_video_decisions");
+        expect(f.data.get("favorite_actresses")).toEqual([{ starId: "actor-1", newVideoList: [{ carNum: "OTHER-1" }] }]);
+    });
+
     it("exposes established actress and movie-map reads through its domain boundary", async () => {
         const { service, storage } = createHarness();
         storage.getFavoriteActressList = vi.fn(async () => [{ starId: "actor-1" }]);
@@ -92,8 +103,8 @@ describe("StateService durable transactions", () => {
         expect(coordinator.runExclusive).toHaveBeenCalledOnce();
         expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
         const journal = storage.forage.setItem.mock.calls.find(([ key ]) => key === "mutation_journal")?.[1];
-        expect(journal).toMatchObject({ schema: 2, state: "prepared", touchedDomains: [ "carList", "actresses", "decisions", "activity" ] });
-        expect(Object.keys(journal.before)).toEqual([ "carList", "actresses", "decisions", "activity" ]);
+        expect(journal).toMatchObject({ schema: 2, state: "prepared", touchedDomains: [ "carList", "activity" ] });
+        expect(Object.keys(journal.before)).toEqual([ "carList", "activity" ]);
     });
     it.each(["mutation_journal", "car_list", "favorite_actresses", "new_video_decisions", "activity_log", "journal-clear"])("recovers an undo failure at %s without losing retry eligibility", async stage => {
         const { service, storage, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }], new_video_decisions: { "ABC-1": { action: "snoozed" } } });
@@ -137,7 +148,7 @@ describe("StateService durable transactions", () => {
         expect(data.has("mutation_journal")).toBe(false);
         await service.patch("ABC-123", { favorite: true });
         expect(data.get("activity_log").entries).toHaveLength(1);
-        expect(eventBus.emit).toHaveBeenCalledWith("car-state-changed", expect.anything());
+        expect(eventBus.emit).toHaveBeenCalledWith("car-state-changed", expect.anything(), { broadcastFirst: true });
     });
 
     it("rolls back every touched domain when actresses fail after pending activity", async () => {

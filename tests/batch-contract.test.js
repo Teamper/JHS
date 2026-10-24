@@ -19,7 +19,7 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listBatch).toContain('maxPages: isPageScopedList ? 1 : 200');
         expect(listBatch).toContain('this.hostAdapter?.resolveFirstPageUrl?.(pageUrl) ?? pageUrl');
         expect(listBatch).toContain("itemSelector: selectors.requestDomItemSelector");
-        expect(listBatch).toContain('evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized })');
+        expect(listBatch).toContain('evaluateListItem(item, context, { filter: normalized })');
     });
 
     it("confirms with filter-aware copy for all and other filters", () => {

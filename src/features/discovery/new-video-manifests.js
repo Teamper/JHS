@@ -11,6 +11,7 @@ async function registerNewVideoStyles(styles) {
 }
 
 export const newVideoFeature = defineFeature({
+    optionalRequires: [SERVICE.backgroundWork],
     id: "new-video", kind: "feature", disableable: true, sites: ["javdb"], routes: [], startup: "idle",
     requires: [PORT.style, SERVICE.dialog, SERVICE.events, SERVICE.state, SERVICE.settings, SERVICE.profile, SERVICE.storage, SERVICE.movie, SERVICE.actressInfo, SERVICE.titleKeywords, SERVICE.legacyUtils, SERVICE.legacyStorage, SERVICE.domUi, SERVICE.notifications, SERVICE.clog], contributes: ["discovery.new-video"], providesCommands: ["new-video.open"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -53,6 +54,7 @@ export const newVideoFeature = defineFeature({
         });
         const taskPlugin = runtime.resolveCompatibilityBean("TaskPlugin");
         const scanController = new NewVideoScanController({
+            backgroundWork: deps[SERVICE.backgroundWork],
             state: deps[SERVICE.state],
             titleKeywords: deps[SERVICE.titleKeywords],
             actressInfo: deps[SERVICE.actressInfo],
@@ -102,6 +104,7 @@ export const newVideoFeature = defineFeature({
 });
 
 export const schedulerFeature = defineFeature({
+    optionalRequires: [SERVICE.backgroundWork],
     id: "scheduler", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "idle",
     requires: [PORT.javdbHost, PORT.javbusHost, SERVICE.events, SERVICE.storage, SERVICE.settings, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, SERVICE.state, SERVICE.domUi, SERVICE.hostListParser, SERVICE.clog, SERVICE.notifications],
     contributes: ["discovery.scheduler"], providesCommands: [],
@@ -130,6 +133,7 @@ export const schedulerFeature = defineFeature({
             taskService.dispose();
         });
         const controller = new TaskSchedulerController({
+            backgroundWork: deps[SERVICE.backgroundWork],
             window,
             document,
             events: deps[SERVICE.events],

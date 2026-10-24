@@ -3,6 +3,7 @@
 import { normalizeCarNum } from "../../core/constants.js";
 import { countPendingNewVideos, getPendingNewVideoCarNumbers, isNewVideoDecisionHidden } from "../../core/new-video-model.js";
 import { normalizeStateFlags } from "../../core/state-model.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 
 /** Combine actress-owned legacy entries into the workspace's canonical movie rows. */
 /** @param {any[]} actresses @param {Map<string, any>} carMap @param {Record<string, any>} decisions @param {number} [now] */
@@ -12,7 +13,7 @@ export function aggregateNewVideoRecords(actresses, carMap, decisions, now = Dat
         if (!Array.isArray(actress.newVideoList)) continue;
         for (const raw of actress.newVideoList) {
             const item = "object" == typeof raw ? raw : {}, carNum = normalizeCarNum("string" == typeof raw ? raw : raw.carNum);
-            if (!carNum) continue;
+            if (!carNum || !getMovieStateEligibility({ ...item, carNum }).eligible) continue;
             const existing = grouped.get(carNum) || { carNum, coverUrl: "", title: "", publishTime: "", actresses: [], starIds: [], categories: new Set(), score: 0, voteCount: 0, url: "", isVr: false };
             existing.coverUrl ||= item.coverUrl || "", existing.title ||= item.title || "", existing.publishTime = [existing.publishTime, item.publishTime || ""].sort().at(-1), existing.score = Math.max(existing.score, Number(item.score) || 0), existing.voteCount = Math.max(existing.voteCount, Number(item.voteCount) || 0), existing.url ||= item.url || "";
             existing.isVr ||= true === item.isVr || /(^|[^A-Z])VR([^A-Z]|$)/i.test(`${item.title || ""} ${(item.tags || []).join?.(" ") || ""} ${(item.categories || []).join?.(" ") || ""}`);

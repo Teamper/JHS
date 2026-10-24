@@ -2,7 +2,7 @@
 
 /** Owns the list-page lifecycle for delayed background task batches. */
 export class TaskSchedulerController {
-    /** @param {{window: Window & typeof globalThis, document: Document, events: any, storage: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, isListPage: () => boolean, runTask: () => Promise<unknown>, refreshConfiguration: () => Promise<unknown>, onError: (error: unknown) => void}} options */
+    /** @param {{window: Window & typeof globalThis, document: Document, events: any, storage: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, isListPage: () => boolean, runTask: () => Promise<unknown>, refreshConfiguration: () => Promise<unknown>, backgroundWork?: any, onError: (error: unknown) => void}} options */
     constructor(options) {
         this.window = options.window;
         this.document = options.document;
@@ -13,6 +13,7 @@ export class TaskSchedulerController {
         this.runTask = options.runTask;
         this.refreshConfiguration = options.refreshConfiguration;
         this.onError = options.onError;
+        this.backgroundWork = options.backgroundWork;
         /** @type {ReturnType<typeof setTimeout> | null} */
         this.timer = null;
         this.running = false;
@@ -69,6 +70,8 @@ export class TaskSchedulerController {
         if (this.disposed || this.scope.disposed || this.running || !this.isListPage() || this.document.hidden) return;
         this.running = true;
         try {
+            await this.backgroundWork?.waitForTurn({ signal: this.scope.signal });
+            if (this.disposed || this.scope.disposed || this.document.hidden) return;
             await this.runTask();
         } catch (error) {
             this.onError(error);

@@ -71,6 +71,7 @@ describe("ListCardStatePresenter", () => {
     });
 
     it("does not mutate cards after a generation becomes stale during a frame yield", async () => {
+        vi.spyOn(performance, "now").mockReturnValue(0);
         let current = true;
         const yieldFrame = vi.fn(async () => { current = false; });
         const { dom, presenter } = createHarness("javdb", `<div class="movie-list">${Array.from({ length: 13 }, (_, index) => `<article id="card-${index}" class="item"><div class="tags"></div></article>`).join("")}</div>`,
@@ -97,6 +98,21 @@ describe("ListCardStatePresenter", () => {
         expect(visible).toEqual([items[1]]);
         expect(items[0].hasAttribute("data-jhs-flags")).toBe(false);
         expect(items[1].hasAttribute("data-jhs-flags")).toBe(true);
+    });
+
+    it("keeps exact summary deltas for a single changed card and a later removal", async () => {
+        const { dom, presenter } = createHarness("javdb", '<div class="movie-list"><article id="A-1" class="item"><div class="tags"></div></article><article id="A-2" class="item"><div class="tags"></div></article></div>', item => ({ carNum: item.id, title: item.id }));
+        const items = [...dom.window.document.querySelectorAll(".item")];
+        await presenter.processItems(items, { context: createListEvaluationContext(), filter: "all", isCurrent: () => true });
+        expect(presenter.getSummary()).toMatchObject({ total: 2, pending: 2, favorite: 0 });
+        const context = createListEvaluationContext({ carMap: new Map([["A-1", { stateFlags: { favorite: true } }]]) });
+        const collect = vi.spyOn(presenter, "collectSummary");
+        await presenter.processItems([items[0]], { context, filter: "all", isCurrent: () => true });
+        expect(presenter.getSummary()).toMatchObject({ total: 2, pending: 1, favorite: 1 });
+        expect(collect).toHaveBeenCalledOnce(); expect(collect).toHaveBeenCalledWith([items[0]]);
+        items[1].remove(); presenter.removeDetachedSummaries();
+        expect(presenter.getSummary()).toMatchObject({ total: 1, pending: 0, favorite: 1 });
+        presenter.resetSummary(); expect(presenter.summaryItems.size).toBe(0);
     });
 
     it("collects the existing summary contract and skips JavBus actor-list cards", () => {

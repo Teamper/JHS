@@ -118,7 +118,7 @@ export class DetailPageActionsController {
     getPageInfo() {
         const info = this.hostAdapter.readMovieInfo?.() ?? this.hostAdapter.readMovieRef?.() ?? {};
         return {
-            carNum: normalizeCarNum(info.carNum), url: info.url ?? this.hostAdapter.location?.href ?? "",
+            carNum: normalizeCarNum(info.carNum), stateEligibility: info.stateEligibility, url: info.url ?? this.hostAdapter.location?.href ?? "",
             actress: info.actress ?? "", actors: info.actors ?? "", publishTime: info.publishTime ?? "",
         };
     }

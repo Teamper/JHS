@@ -67,6 +67,49 @@ describe("native list card actions Feature", () => {
         vi.restoreAllMocks();
     });
 
+    it("disables state actions on an unreliable card while retaining resource and browsing entries", async () => {
+        current = createController();
+        const read = current.list.findCarNumAndHref;
+        current.list.findCarNumAndHref = (item) => ({ ...read(item), stateEligibility: { eligible: false, reason: "conflicting" } });
+        await current.controller.start();
+        expect([...current.document.querySelectorAll(".jhs-card-status-item")].every((button) => button.disabled)).toBe(true);
+        expect(current.document.querySelector(".screenSvg").disabled).toBe(false);
+        current.document.querySelector(".site-jable").click();
+        expect(current.navigation.open).toHaveBeenCalledOnce();
+        expect(current.state.patch).not.toHaveBeenCalled();
+    });
+
+    it("keeps card resources mounted when the source reader cannot extract an identity", async () => {
+        current = createController();
+        current.list.findCarNumAndHref = () => { throw new TypeError("missing identity"); };
+        await expect(current.controller.start()).resolves.toBeUndefined();
+        expect([...current.document.querySelectorAll(".jhs-card-status-item")].every((button) => button.disabled)).toBe(true);
+        expect(current.document.querySelector(".screenSvg")).not.toBeNull();
+        expect(current.document.querySelector(".item a[href='/v/abc-123']")).not.toBeNull();
+    });
+
+    it("rechecks the source after confirmation before requesting actor names", async () => {
+        current = createController(); await current.controller.start();
+        current.document.querySelector(".filterBtn").click();
+        current.document.querySelector(".video-title strong").textContent = "FC2";
+        await current.ui.confirm.mock.calls[0][2]();
+        expect(current.list.parseActressName).not.toHaveBeenCalled();
+        expect(current.state.patch).not.toHaveBeenCalled();
+    });
+
+    it("does not write stale identity after actor lookup and carries eligibility to valid state writes", async () => {
+        current = createController(); let finish;
+        current.list.parseActressName.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+        await current.controller.start(); current.document.querySelector(".favoriteBtn").click();
+        current.document.querySelector(".video-title strong").textContent = "FC2";
+        finish("Actress"); await new Promise(resolve => setTimeout(resolve, 0));
+        expect(current.state.patch).not.toHaveBeenCalled();
+        current.document.querySelector(".video-title strong").textContent = "ABC-123";
+        current.document.querySelector(".favoriteBtn").click();
+        await vi.waitFor(() => expect(current.state.patch).toHaveBeenCalledOnce());
+        expect(current.state.patch.mock.calls[0][2].record.stateEligibility).toEqual({ eligible: true, reason: null });
+    });
+
     it("gates screenshot and DMM controls while applying card settings live", async () => {
         current = createController({ screenshotAvailable: false });
         await current.controller.start();
@@ -171,7 +214,7 @@ describe("native list card actions Feature", () => {
         await vi.waitFor(() => expect(current.state.patch).toHaveBeenCalledOnce());
         expect(current.state.patch).toHaveBeenCalledWith("ABC-123", { favorite: true }, {
             type: "list-card-state",
-            record: { carNum: "ABC-123", url: "/v/abc-123", names: "测试演员", publishTime: "2026-08-25", fc2Source: null },
+            record: { carNum: "ABC-123", url: "/v/abc-123", names: "测试演员", publishTime: "2026-08-25", fc2Source: null, stateEligibility: { eligible: true, reason: null } },
         });
         expect(current.notifications.ok).toHaveBeenCalledWith("已更新影片状态");
     });

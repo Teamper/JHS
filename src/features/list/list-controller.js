@@ -19,7 +19,7 @@ import { ListRefreshCoordinator } from "./list-refresh-coordinator.js";
 
 /** Own ListPagePlugin startup while its implementation migrates into FeatureRuntime. */
 export class ListController {
-    /** @param {{legacyPlugin: any, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, legacyStorage?: any, readFilterSources?: () => Promise<any>, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug">, window?: any}} options */
+    /** @param {{legacyPlugin: any, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, legacyStorage?: any, readFilterSources?: (options?: {stateOnly?: boolean}) => Promise<any>, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug">, window?: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin;
         this.hostAdapter = options.hostAdapter;
@@ -175,10 +175,12 @@ export class ListController {
         const readFilterSources = this.readFilterSources;
         if (typeof readFilterSources === "function") {
             this.filterContextProvider = new ListFilterContextProvider({
-                readSources: () => readFilterSources(),
+                readSources: (options) => readFilterSources(options),
                 onMissingBlacklistRole: (item) => this.logger.error("黑名单数据源丢失演员信息", item),
             });
             const contextProvider = this.filterContextProvider;
+            const detachContext = this.legacyPlugin.attachFilterContextProvider?.(contextProvider);
+            if (detachContext) this.scope.addCleanup(detachContext);
             this.scope.addCleanup(() => {
                 contextProvider.dispose();
                 if (this.filterContextProvider === contextProvider) this.filterContextProvider = null;
@@ -200,6 +202,7 @@ export class ListController {
         view.bindMovieDetailNavigation(selectors.boxSelector);
         view.bindCardVideoPlayback(selectors.boxSelector);
         const itemIndex = new ListItemIndex({
+            root: this.hostAdapter?.locateListRoot?.() ?? this.hostAdapter?.document?.querySelector(selectors.boxSelector) ?? null,
             readCarNum: (item) => {
                 const identity = this.readCardIdentity(item);
                 if (!identity) throw new Error("List Feature requires card identity parsing");
@@ -213,7 +216,14 @@ export class ListController {
             scope: this.scope,
             getRevision: () => this.legacyPlugin.captureListRevision?.() ?? "0",
             isProcessed: (item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed === "true",
-            onRemoved: (nodes) => this.legacyPlugin.removeIndexedItems?.(nodes),
+            onRetained: (items) => itemIndex.add(items),
+            onRemoved: (nodes) => {
+                this.legacyPlugin.removeIndexedItems?.(nodes);
+                if ([...nodes].some(node => !node.isConnected)) {
+                    this.cardStatePresenter?.removeDetachedSummaries();
+                    this.scheduleRecount();
+                }
+            },
             onAddedNodes: (count) => {
                 this.legacyPlugin.advanceListGeneration?.();
                 this.legacyPlugin.recordListPhase?.("dom-added", count);
@@ -236,7 +246,7 @@ export class ListController {
             getActiveFilter: () => this.view?.getActiveFilter?.() ?? this.activeFilter,
         });
         const batchController = this.batchController;
-        this.scope.addCleanup(() => { this.view?.dispose(); this.itemIndex?.clear(); this.domObserver?.dispose(); batchController.dispose(); });
+        this.scope.addCleanup(() => { this.view?.dispose(); this.cardStatePresenter?.resetSummary(); this.itemIndex?.clear(); this.domObserver?.dispose(); batchController.dispose(); });
         return Promise.resolve()
             .then(() => {
                 if (!this.hoverPreviewController.start()) return;
@@ -255,7 +265,7 @@ export class ListController {
             .then(() => this.contextMenuController.start())
             .then(() => this.paginationController.start())
             .then(() => this.registerStyles())
-            .then(() => this.legacyPlugin.handle({ scope: this.scope, view, itemIndex, observer: domObserver, batchController, featureOwnsStartup: true }))
+            .then(() => { this.legacyPlugin.stateRefreshReady = false; return this.legacyPlugin.handle({ scope: this.scope, view, itemIndex, observer: domObserver, batchController, featureOwnsStartup: true }); })
             .then(() => this.initializeListRuntime())
             .catch((error) => {
                 this.dispose();
@@ -270,6 +280,7 @@ export class ListController {
         const selectors = this.view?.selectors ?? this.hostAdapter?.getListSelectors?.();
         if (!document || !selectors) return false;
         const cards = items ? items.filter((item) => item.isConnected) : [ ...document.querySelectorAll(selectors.itemSelector) ];
+        if (!items) this.cardStatePresenter?.resetSummary();
         if (!cards.length) return true;
         this.legacyPlugin.recordListPhase?.("doFilter-start", cards.length);
         const isCurrent = () => !this.listRefreshController.disposed && (this.legacyPlugin.isCurrentListGeneration?.(revision) ?? revision === (this.legacyPlugin.captureListRevision?.() ?? "0"));
@@ -302,12 +313,17 @@ export class ListController {
         const document = this.hostAdapter?.document;
         const selectors = this.view?.selectors;
         if (!document || !selectors || !document.querySelector(selectors.boxSelector)) return false;
-        const revision = this.legacyPlugin.advanceListGeneration?.() ?? this.legacyPlugin.captureListRevision?.() ?? "0";
-        const filtered = await this.filterListItems(null, revision);
-        if (!filtered || this.listRefreshController.disposed) return false;
-        this.view?.createQuickFilter(this.activeFilter);
-        if (this.legacyPlugin.isCurrentListGeneration?.(revision) === false) return false;
-        this.reconcileListItems(null, revision);
+        for (;;) {
+            const revision = this.legacyPlugin.advanceListGeneration?.() ?? this.legacyPlugin.captureListRevision?.() ?? "0";
+            const filtered = await this.filterListItems(null, revision);
+            if (this.listRefreshController.disposed) return false;
+            if (this.legacyPlugin.isCurrentListGeneration?.(revision) === false) continue;
+            if (!filtered) return false;
+            this.view?.createQuickFilter(this.activeFilter);
+            if (this.legacyPlugin.isCurrentListGeneration?.(revision) === false) continue;
+            this.reconcileListItems(null, revision);
+            break;
+        }
         const items = [ ...document.querySelectorAll(selectors.itemSelector) ];
         items.forEach((item) => { /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"; });
         this.itemIndex?.rebuild(items);
@@ -315,6 +331,8 @@ export class ListController {
         await this.events?.emit?.("list-items-added", { items }, { broadcast: false });
         if (this.listRefreshController.disposed) return false;
         this.domObserver?.start();
+        this.legacyPlugin.stateRefreshReady = true;
+        void this.legacyPlugin.refreshCarNums?.([])?.catch?.((/** @type {unknown} */ error) => this.logger.error("列表初始化后状态刷新失败", error));
         return true;
     }
 
@@ -364,7 +382,7 @@ export class ListController {
     publishCurrentPageSummary() {
         this.recountFrame = null;
         if (this.listRefreshController.disposed || this.scope.disposed) return;
-        const summary = this.cardStatePresenter?.collectSummary();
+        const summary = this.cardStatePresenter?.getSummary?.() ?? this.cardStatePresenter?.collectSummary();
         if (summary) this.legacyPlugin.publishListSummary?.(summary);
     }
 

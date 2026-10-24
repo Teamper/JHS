@@ -1,6 +1,7 @@
 // @ts-check
 
 import { C, _ } from "../../core/constants.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 
 export class DetailBrowseLifecycleController {
     /** @param {{settings: {snapshot: () => Record<string, unknown>}, state: {removeFromNewVideoList: (carNums: string[], reason: string) => Promise<unknown>}, scope: import("../../core/lifecycle-scope.js").LifecycleScope, onError?: (error: unknown) => void}} options */
@@ -18,7 +19,7 @@ export class DetailBrowseLifecycleController {
             const enabled = this.settings.snapshot().autoRemoveNewVideoMarkAfterBrowse ?? C;
             if (enabled !== _) return false;
             const carNum = movieRef?.carNum;
-            if (!carNum) return false;
+            if (!carNum || !getMovieStateEligibility(movieRef).eligible) return false;
             await this.state.removeFromNewVideoList([carNum], "browse");
             return true;
         } catch (error) {

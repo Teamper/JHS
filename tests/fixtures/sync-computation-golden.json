@@ -1,0 +1,720 @@
+{
+  "data": {
+    "car_list": [
+      {
+        "carNum": "ABC-1",
+        "names": "A",
+        "stateFlags": {
+          "favorite": true
+        },
+        "checkTime": "local-only"
+      },
+      {
+        "carNum": "ABC-2",
+        "names": "B",
+        "stateFlags": {
+          "watched": true
+        }
+      }
+    ],
+    "favorite_actresses": [
+      {
+        "starId": "actor-1",
+        "name": "Actor",
+        "newVideoList": [
+          {
+            "carNum": "ABC-3",
+            "names": "New"
+          }
+        ]
+      }
+    ],
+    "blacklist": [],
+    "blacklist_car_list": [],
+    "filter_keyword_title": [],
+    "filter_keyword_review": [],
+    "highlighted_tags": [],
+    "new_video_decisions": {},
+    "activity_log": {
+      "entries": [
+        {
+          "id": "a1",
+          "type": "mark",
+          "createdAt": "2026-10-20T00:00:00.000Z",
+          "commitState": "committed",
+          "originReplicaId": "11111111-1111-4111-8111-111111111111",
+          "changes": []
+        }
+      ]
+    },
+    "offline_history": [],
+    "setting": {
+      "hoverBigImg": "yes",
+      "containerWidth": 80,
+      "webDavPassword": "private"
+    }
+  },
+  "changed": {
+    "car_list": [
+      {
+        "carNum": "ABC-1",
+        "names": "A",
+        "stateFlags": {
+          "favorite": false,
+          "downloaded": true
+        },
+        "checkTime": "local-only"
+      }
+    ],
+    "favorite_actresses": [
+      {
+        "starId": "actor-1",
+        "name": "Actor",
+        "newVideoList": [
+          {
+            "carNum": "ABC-3",
+            "names": "New"
+          },
+          {
+            "carNum": "ABC-4",
+            "names": "More"
+          }
+        ]
+      }
+    ],
+    "blacklist": [],
+    "blacklist_car_list": [],
+    "filter_keyword_title": [],
+    "filter_keyword_review": [],
+    "highlighted_tags": [],
+    "new_video_decisions": {},
+    "activity_log": {
+      "entries": [
+        {
+          "id": "a1",
+          "type": "mark",
+          "createdAt": "2026-10-20T00:00:00.000Z",
+          "commitState": "committed",
+          "originReplicaId": "11111111-1111-4111-8111-111111111111",
+          "changes": []
+        }
+      ]
+    },
+    "offline_history": [],
+    "setting": {
+      "hoverBigImg": "yes",
+      "containerWidth": 80,
+      "webDavPassword": "private"
+    }
+  },
+  "version": [
+    1,
+    "11111111-1111-4111-8111-111111111111"
+  ],
+  "projection": {
+    "car_list/ABC-1": {
+      "f:carNum": "ABC-1",
+      "f:names": "A",
+      "flag:favorite": true,
+      "flag:downloaded": false,
+      "flag:watched": false,
+      "flag:blocked": false
+    },
+    "car_list/ABC-2": {
+      "f:carNum": "ABC-2",
+      "f:names": "B",
+      "flag:favorite": false,
+      "flag:downloaded": false,
+      "flag:watched": true,
+      "flag:blocked": false
+    },
+    "favorite_actresses/actor-1": {
+      "f:starId": "actor-1",
+      "f:name": "Actor",
+      "video:ABC-3": {
+        "carNum": "ABC-3",
+        "names": "New"
+      }
+    },
+    "activity_log/a1": {
+      "value": {
+        "id": "a1",
+        "type": "mark",
+        "createdAt": "2026-10-20T00:00:00.000Z",
+        "commitState": "committed",
+        "originReplicaId": "11111111-1111-4111-8111-111111111111",
+        "undoAttemptedAt": null,
+        "changes": []
+      }
+    },
+    "setting/hoverBigImg": {
+      "value": "yes"
+    }
+  },
+  "model": {
+    "records": {
+      "car_list/ABC-1": {
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "generation": null,
+        "death": null,
+        "fields": {
+          "f:carNum": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "ABC-1"
+          },
+          "f:names": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "A"
+          },
+          "flag:favorite": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": true
+          }
+        }
+      },
+      "car_list/ABC-2": {
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "generation": null,
+        "death": null,
+        "fields": {
+          "f:carNum": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "ABC-2"
+          },
+          "f:names": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "B"
+          },
+          "flag:watched": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": true
+          }
+        }
+      },
+      "favorite_actresses/actor-1": {
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "generation": null,
+        "death": null,
+        "fields": {
+          "f:starId": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "actor-1"
+          },
+          "f:name": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "Actor"
+          },
+          "video:ABC-3": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": {
+              "carNum": "ABC-3",
+              "names": "New"
+            }
+          }
+        }
+      },
+      "activity_log/a1": {
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "generation": null,
+        "death": null,
+        "fields": {
+          "value": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": {
+              "id": "a1",
+              "type": "mark",
+              "createdAt": "2026-10-20T00:00:00.000Z",
+              "commitState": "committed",
+              "originReplicaId": "11111111-1111-4111-8111-111111111111",
+              "undoAttemptedAt": null,
+              "changes": []
+            }
+          }
+        }
+      },
+      "setting/hoverBigImg": {
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "generation": null,
+        "death": null,
+        "fields": {
+          "value": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "yes"
+          }
+        }
+      }
+    },
+    "frontiers": {}
+  },
+  "difference": {
+    "model": {
+      "records": {
+        "car_list/ABC-1": {
+          "birth": [
+            1,
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "generation": null,
+          "death": null,
+          "fields": {
+            "f:carNum": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": "ABC-1"
+            },
+            "f:names": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": "A"
+            },
+            "flag:favorite": {
+              "v": [
+                2,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": false
+            },
+            "flag:downloaded": {
+              "v": [
+                2,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": true
+            }
+          }
+        },
+        "car_list/ABC-2": {
+          "birth": [
+            1,
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "generation": null,
+          "death": [
+            2,
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "fields": {
+            "f:carNum": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": "ABC-2"
+            },
+            "f:names": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": "B"
+            },
+            "flag:watched": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": true
+            }
+          }
+        },
+        "favorite_actresses/actor-1": {
+          "birth": [
+            1,
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "generation": null,
+          "death": null,
+          "fields": {
+            "f:starId": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": "actor-1"
+            },
+            "f:name": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": "Actor"
+            },
+            "video:ABC-3": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": {
+                "carNum": "ABC-3",
+                "names": "New"
+              }
+            },
+            "video:ABC-4": {
+              "v": [
+                2,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": {
+                "carNum": "ABC-4",
+                "names": "More"
+              }
+            }
+          }
+        },
+        "activity_log/a1": {
+          "birth": [
+            1,
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "generation": null,
+          "death": null,
+          "fields": {
+            "value": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": {
+                "id": "a1",
+                "type": "mark",
+                "createdAt": "2026-10-20T00:00:00.000Z",
+                "commitState": "committed",
+                "originReplicaId": "11111111-1111-4111-8111-111111111111",
+                "undoAttemptedAt": null,
+                "changes": []
+              }
+            }
+          }
+        },
+        "setting/hoverBigImg": {
+          "birth": [
+            1,
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "generation": null,
+          "death": null,
+          "fields": {
+            "value": {
+              "v": [
+                1,
+                "11111111-1111-4111-8111-111111111111"
+              ],
+              "value": "yes"
+            }
+          }
+        }
+      },
+      "frontiers": {}
+    },
+    "changed": true
+  },
+  "joined": {
+    "records": {
+      "car_list/ABC-1": {
+        "generation": null,
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "death": null,
+        "fields": {
+          "f:carNum": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "ABC-1"
+          },
+          "f:names": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "A"
+          },
+          "flag:favorite": {
+            "v": [
+              2,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": false
+          },
+          "flag:downloaded": {
+            "v": [
+              2,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": true
+          }
+        }
+      },
+      "car_list/ABC-2": {
+        "generation": null,
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "death": [
+          2,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "fields": {
+          "f:carNum": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "ABC-2"
+          },
+          "f:names": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "B"
+          },
+          "flag:watched": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": true
+          }
+        }
+      },
+      "favorite_actresses/actor-1": {
+        "generation": null,
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "death": null,
+        "fields": {
+          "f:starId": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "actor-1"
+          },
+          "f:name": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "Actor"
+          },
+          "video:ABC-3": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": {
+              "carNum": "ABC-3",
+              "names": "New"
+            }
+          },
+          "video:ABC-4": {
+            "v": [
+              2,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": {
+              "carNum": "ABC-4",
+              "names": "More"
+            }
+          }
+        }
+      },
+      "activity_log/a1": {
+        "generation": null,
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "death": null,
+        "fields": {
+          "value": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": {
+              "id": "a1",
+              "type": "mark",
+              "createdAt": "2026-10-20T00:00:00.000Z",
+              "commitState": "committed",
+              "originReplicaId": "11111111-1111-4111-8111-111111111111",
+              "undoAttemptedAt": null,
+              "changes": []
+            }
+          }
+        }
+      },
+      "setting/hoverBigImg": {
+        "generation": null,
+        "birth": [
+          1,
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "death": null,
+        "fields": {
+          "value": {
+            "v": [
+              1,
+              "11111111-1111-4111-8111-111111111111"
+            ],
+            "value": "yes"
+          }
+        }
+      }
+    },
+    "frontiers": {
+      "activity_log": "",
+      "offline_history": ""
+    }
+  },
+  "visible": {
+    "car_list/ABC-1": {
+      "f:carNum": "ABC-1",
+      "f:names": "A",
+      "flag:favorite": false,
+      "flag:downloaded": true
+    },
+    "favorite_actresses/actor-1": {
+      "f:starId": "actor-1",
+      "f:name": "Actor",
+      "video:ABC-3": {
+        "carNum": "ABC-3",
+        "names": "New"
+      },
+      "video:ABC-4": {
+        "carNum": "ABC-4",
+        "names": "More"
+      }
+    },
+    "activity_log/a1": {
+      "value": {
+        "id": "a1",
+        "type": "mark",
+        "createdAt": "2026-10-20T00:00:00.000Z",
+        "commitState": "committed",
+        "originReplicaId": "11111111-1111-4111-8111-111111111111",
+        "undoAttemptedAt": null,
+        "changes": []
+      }
+    },
+    "setting/hoverBigImg": {
+      "value": "yes"
+    }
+  },
+  "materialized": {
+    "car_list": [
+      {
+        "carNum": "ABC-1",
+        "names": "A",
+        "checkTime": "local-only",
+        "stateFlags": {
+          "favorite": false,
+          "downloaded": true,
+          "watched": false,
+          "blocked": false
+        },
+        "status": "hasDown"
+      }
+    ],
+    "favorite_actresses": [
+      {
+        "starId": "actor-1",
+        "name": "Actor",
+        "newVideoList": [
+          {
+            "carNum": "ABC-3",
+            "names": "New"
+          },
+          {
+            "carNum": "ABC-4",
+            "names": "More"
+          }
+        ]
+      }
+    ],
+    "blacklist": [],
+    "blacklist_car_list": [],
+    "filter_keyword_title": [],
+    "filter_keyword_review": [],
+    "highlighted_tags": [],
+    "new_video_decisions": {},
+    "activity_log": {
+      "entries": [
+        {
+          "id": "a1",
+          "type": "mark",
+          "createdAt": "2026-10-20T00:00:00.000Z",
+          "commitState": "committed",
+          "originReplicaId": "11111111-1111-4111-8111-111111111111",
+          "changes": []
+        }
+      ]
+    },
+    "offline_history": [],
+    "setting": {
+      "containerWidth": 80,
+      "webDavPassword": "private",
+      "hoverBigImg": "yes"
+    }
+  },
+  "canonical": "{\"frontiers\":{\"activity_log\":\"\",\"offline_history\":\"\"},\"records\":{\"activity_log/a1\":{\"birth\":[1,\"11111111-1111-4111-8111-111111111111\"],\"death\":null,\"fields\":{\"value\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":{\"changes\":[],\"commitState\":\"committed\",\"createdAt\":\"2026-10-20T00:00:00.000Z\",\"id\":\"a1\",\"originReplicaId\":\"11111111-1111-4111-8111-111111111111\",\"type\":\"mark\",\"undoAttemptedAt\":null}}},\"generation\":null},\"car_list/ABC-1\":{\"birth\":[1,\"11111111-1111-4111-8111-111111111111\"],\"death\":null,\"fields\":{\"f:carNum\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":\"ABC-1\"},\"f:names\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":\"A\"},\"flag:downloaded\":{\"v\":[2,\"11111111-1111-4111-8111-111111111111\"],\"value\":true},\"flag:favorite\":{\"v\":[2,\"11111111-1111-4111-8111-111111111111\"],\"value\":false}},\"generation\":null},\"car_list/ABC-2\":{\"birth\":[1,\"11111111-1111-4111-8111-111111111111\"],\"death\":[2,\"11111111-1111-4111-8111-111111111111\"],\"fields\":{\"f:carNum\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":\"ABC-2\"},\"f:names\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":\"B\"},\"flag:watched\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":true}},\"generation\":null},\"favorite_actresses/actor-1\":{\"birth\":[1,\"11111111-1111-4111-8111-111111111111\"],\"death\":null,\"fields\":{\"f:name\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":\"Actor\"},\"f:starId\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":\"actor-1\"},\"video:ABC-3\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":{\"carNum\":\"ABC-3\",\"names\":\"New\"}},\"video:ABC-4\":{\"v\":[2,\"11111111-1111-4111-8111-111111111111\"],\"value\":{\"carNum\":\"ABC-4\",\"names\":\"More\"}}},\"generation\":null},\"setting/hoverBigImg\":{\"birth\":[1,\"11111111-1111-4111-8111-111111111111\"],\"death\":null,\"fields\":{\"value\":{\"v\":[1,\"11111111-1111-4111-8111-111111111111\"],\"value\":\"yes\"}},\"generation\":null}}}"
+}

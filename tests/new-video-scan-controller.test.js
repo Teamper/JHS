@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 
 describe("NewVideoScanController", () => {
+    it("does not wait for another background permit after its final actor completed", async () => {
+        const state = { getFavoriteActressList: async () => [{ starId: "a1", name: "Actor" }], getBlacklistCarList: async () => [], updateFavoriteActress: async () => true };
+        let permits = 0;
+        const controller = new NewVideoScanController({ state, titleKeywords: { getAll: async () => [] }, actressInfo: { movies: async () => [] }, scope: {}, getTimestamp: () => "2026-10-24", onNewItems() {}, backgroundWork: { waitForTurn: async () => { if (++permits > 1) throw new Error("empty batch requested a permit"); } } });
+        await expect(controller.scanActresses({ baseUrl: "https://javdb.com", concurrency: 1, sleepMs: 0, intervalHours: 12, ruleHours: 8760, force: false, isUnnecessaryCheck: () => false, isNetworkBlocked: () => false, sleep: async () => {} })).resolves.toMatchObject({ success: 1 });
+        expect(permits).toBe(1);
+    });
+
     it("filters persisted candidates and reports only undiscovered, non-dismissed works", async () => {
         const carMap = new Map([["SEEN-004", { carNum: "SEEN-004" }]]);
         const state = {

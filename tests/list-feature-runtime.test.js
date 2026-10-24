@@ -9,13 +9,32 @@ const HOST_SELECTORS = { boxSelector: ".movie-list", itemSelector: ".movie-list 
 const hostAdapter = { getListSelectors: () => HOST_SELECTORS };
 
 beforeEach(() => {
-    const root = { length: 0, first: vi.fn(() => root), off: vi.fn(() => root), on: vi.fn(() => root), each: vi.fn(() => root) };
+    const root = { length: 0, toArray: () => [], first: vi.fn(() => root), off: vi.fn(() => root), on: vi.fn(() => root), each: vi.fn(() => root) };
     vi.stubGlobal("$", () => root);
 });
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("List FeatureRuntime ownership", () => {
+    it("still arms indexes and observers when a global refresh invalidates the initial filter pass", async () => {
+        let generation = 0;
+        const card = { dataset: {} }, legacyPlugin = {
+            handle: async () => {}, advanceListGeneration: () => String(++generation),
+            isCurrentListGeneration: revision => revision === String(generation), recordListPhase() {},
+        };
+        const controller = new ListController({ legacyPlugin, hostAdapter, scope: new LifecycleScope("feature:list") });
+        await controller.start();
+        controller.hostAdapter = { ...hostAdapter, document: { querySelector: () => ({}), querySelectorAll: () => [card] } };
+        controller.filterListItems = vi.fn().mockImplementationOnce(async () => { generation++; return false; }).mockResolvedValue(true);
+        controller.view.createQuickFilter = vi.fn(); controller.view.applyVisibility = vi.fn();
+        vi.spyOn(controller.itemIndex, "rebuild").mockImplementation(() => {});
+        controller.domObserver.start = vi.fn();
+        await expect(controller.initializeListRuntime()).resolves.toBe(true);
+        expect(controller.itemIndex.rebuild).toHaveBeenCalledWith([card]);
+        expect(controller.domObserver.start).toHaveBeenCalledOnce();
+        expect(legacyPlugin.stateRefreshReady).toBe(true);
+        controller.dispose();
+    });
     it("reports list observer failures through the injected logger without a global logger", async () => {
         vi.stubGlobal("clog", undefined);
         const logger = { error: vi.fn(), debug: vi.fn() };

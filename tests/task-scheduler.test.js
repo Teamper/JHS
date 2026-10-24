@@ -6,6 +6,7 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -68,6 +69,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     };
     const context = vm.createContext({
+        getMovieStateEligibility,
         console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
         window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, StorageQueue,
         T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
@@ -106,6 +108,35 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
 }
 
 describe("task scheduler state machine", () => {
+    it("preflights every page movie before filters or favorite actress replacement", async () => {
+        const harness = createHarness();
+        harness.plugin.javDbUrl = "https://javdb.com";
+        const page = harness.htmlToPage('<div class="movie-list"><div class="item" data-car="ABC-123" data-date="2026-08-01"></div><div class="item" data-car="STUDIO-NAME" data-title="filtered" data-date="2026-09-01"></div></div>');
+        await expect(harness.plugin.parsePage(page, "javdb", "actor", "Actor", ["filtered"], new Set(["STUDIO-NAME"]))).rejects.toMatchObject({ code: "INCOMPLETE_MOVIE_IDENTITY" });
+        expect(harness.storageManager.updateFavoriteActress).not.toHaveBeenCalled();
+        expect(harness.storageManager.getCarMap).not.toHaveBeenCalled();
+    });
+
+    it("preserves fallback actor results and dates when any item has an unreliable identity", async () => {
+        const harness = createHarness();
+        await expect(harness.plugin.parseActorMovies([{ carNum: "HEYZO1234" }, { carNum: "FC2", title: "filtered" }], "actor", "Actor", ["filtered"], new Set(["FC2"]))).rejects.toMatchObject({ code: "INCOMPLETE_MOVIE_IDENTITY" });
+        expect(harness.storageManager.updateFavoriteActress).not.toHaveBeenCalled();
+        expect(harness.storageManager.getCarMap).not.toHaveBeenCalled();
+    });
+
+    it("preflights a compatibility blacklist page before any legacy save or success timestamp", async () => {
+        const harness = createHarness();
+        harness.blacklistItems.push({ starId: "a", name: "A", url: "https://javdb.com/actors/a", createTime: "1", checkTime: "2020-01-01" });
+        harness.plugin.taskConfig = { checkConcurrencyCount: 1, checkRequestSleep: 0, checkBlacklist_intervalTime: 12, checkBlacklist_ruleTime: 0 };
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.gmHttp.get.mockResolvedValue('<div class="movie-list"><div class="item" data-car="ABC-123"></div><div class="item" data-car="STUDIO-NAME"></div></div>');
+        harness.beans.BlacklistPlugin.parseAndSaveFilterInfo = vi.fn(async () => ({ lastPublishTime: "2026-09-01" }));
+        await expect(harness.plugin.checkBlacklist(true)).resolves.toMatchObject({ completed: false, parseFailed: 1, success: 0 });
+        expect(harness.beans.BlacklistPlugin.parseAndSaveFilterInfo).not.toHaveBeenCalled();
+        expect(harness.storageManager.updateBlacklistItem).not.toHaveBeenCalled();
+        expect(harness.blacklistItems[0].checkTime).toBe("2020-01-01");
+        expect(harness.values.has("jhs_time_checkBlacklist")).toBe(false);
+    });
     it("preserves supported zero settings while rejecting zero task intervals and concurrency", async () => {
         const harness = createHarness();
         Object.assign(harness.settings, { checkConcurrencyCount: "0", checkRequestSleep: "0", checkBlacklist_intervalTime: "0", checkBlacklist_ruleTime: "0", checkNewVideo_ruleTime: 0 });

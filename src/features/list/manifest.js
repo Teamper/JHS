@@ -47,7 +47,7 @@ export default defineFeature({
         if (runtime.enabledContributions.includes("list.core") && listCompatibilityAdapter) {
             listCompatibilityService = new ListPageCompatibilityService({
                 runtimeServices: {
-                    host: deps[PORT.host], translation: deps[SERVICE.translation], http: deps[SERVICE.http],
+                    host: deps[PORT.host], translation: deps[SERVICE.translation], http: deps[SERVICE.http], diagnostics: runtime.diagnostics,
                     storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage],
                     titleKeywords: deps[SERVICE.titleKeywords], state: deps[SERVICE.state], settings: deps[SERVICE.settings],
                     busImageLayout: deps[SERVICE.busImageLayout], events: deps[SERVICE.events], scope: () => Promise.resolve(runtime.scope),
@@ -109,10 +109,14 @@ export default defineFeature({
             const batchUi = new ListBatchUi({ dialog: deps[SERVICE.dialog], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics });
             const releaseBatchStyles = deps[PORT.style].register("jhs-list-batch-feature", LIST_BATCH_UI_STYLES);
             runtime.scope.addCleanup(() => { batchUi.dispose(); releaseBatchStyles(); });
-            const readFilterSources = async () => {
+            const readFilterSources = async ({ stateOnly = false } = {}) => {
+                if (stateOnly) {
+                    const [carMap, activity] = await Promise.all([deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getListActivity()]);
+                    return { carMap, activity };
+                }
                 const [titleKeywords, blacklistMap, blacklistCars, carMap, activity] = await Promise.all([
                     deps[SERVICE.titleKeywords].getAll(), deps[SERVICE.legacyStorage].getBlacklistMap(),
-                    deps[SERVICE.state].getBlacklistCarList(), deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getActivityLog(),
+                    deps[SERVICE.state].getBlacklistCarList(), deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getListActivity(),
                 ]);
                 return { titleKeywords, blacklistMap, blacklistCars, settings: deps[SERVICE.settings].snapshot(), carMap, activity };
             };

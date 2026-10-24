@@ -18,7 +18,7 @@ export class DetailStateActionsController {
 
     getStateRecord() {
         const info = this.page.readPageInfo();
-        return { carNum: info.carNum, url: info.url, names: info.actress, publishTime: info.publishTime };
+        return { carNum: info.carNum, stateEligibility: info.stateEligibility, url: info.url, names: info.actress, publishTime: info.publishTime };
     }
 
     getStateBinding(root = this.page.ui.document) {
@@ -36,7 +36,7 @@ export class DetailStateActionsController {
     }
 
     /** @param {unknown} carNum */
-    showStatus(carNum) { return this.stateController.render({ root: this.page.ui.document, carNum, scope: this.scope }); }
+    showStatus(carNum) { return this.stateController.render({ root: this.page.ui.document, carNum, getRecord: () => this.getStateRecord(), scope: this.scope }); }
     /** @param {MouseEvent} event */
     favoriteOne(event) { return this.stateController.requestToggle(this.getStateBinding(), "favorite", event); }
     /** @param {MouseEvent} event */

@@ -233,7 +233,12 @@ window.loading = function() {
         target && (!event.relatedTarget || !target.contains(event.relatedTarget)) && this.handleMouseLeave();
     }
     handleDocumentMove(event) {
+        const resumeAfterScroll = this.suppressUntilMouseMove;
         this.suppressUntilMouseMove = !1;
+        if (resumeAfterScroll) {
+            const target = this.findTarget(event);
+            if (target) return this.handleMouseEnter(event, target);
+        }
         if (!this.currentTarget) return;
         (event.target === this.currentTarget || this.currentTarget.contains(event.target)) && this.handleMouseMove(event);
     }

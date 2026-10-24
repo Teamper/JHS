@@ -10,6 +10,7 @@ import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { getIcon } from "../../core/icons.js";
 import { i, l, normalizeCarNum, r, escapeHtml } from "../../core/constants.js";
 import { buildFallbackCarUrl, parseCarNumberText } from "../../core/feature-helpers.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
@@ -957,12 +958,18 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 if (this.pendingCarImport === pending && root[0]?.isConnected) root.find("#confirm-car-number-import").prop("disabled", false);
                 return this.notifications.error("读取现有记录失败，请重试");
             }
-            const summary = { added: 0, updated: 0, failed: 0 }, flag = legacyActionToFlag(pending.actionType);
+            const summary = { added: 0, updated: 0, failed: 0, skipped: pending.invalid.length }, flag = legacyActionToFlag(pending.actionType);
             const state = this.getRuntimeService("state");
             const records = pending.values.map((rawCarNum) => {
                 const carNum = normalizeCarNum(rawCarNum), current = existing.get(carNum);
-                return carNum ? { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } : null;
+                if (!getMovieStateEligibility(carNum).eligible) {
+                    summary.skipped++;
+                    pending.invalid.push(String(rawCarNum));
+                    return null;
+                }
+                return { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" };
             }).filter(Boolean);
+            pending.values = records.map(record => record.carNum);
             // 分块批量 patch：逐条 patch 会放大为 O(n) 次全库事务
             const CHUNK = 75;
             for (let index = 0; index < records.length; index += CHUNK) {
@@ -976,7 +983,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 }
             }
             if (this.pendingCarImport === pending) this.pendingCarImport = null;
-            const message = `已导入 ${summary.added + summary.updated} 条${summary.failed ? `，失败 ${summary.failed} 条，请核对后重试` : ""}`;
+            const message = `已导入 ${summary.added + summary.updated} 条${summary.skipped ? `，跳过 ${summary.skipped} 条无效番号` : ""}${summary.failed ? `，失败 ${summary.failed} 条，请核对后重试` : ""}`;
             if (pending.revision === this._carImportRevision && root[0]?.isConnected) {
                 root.find("#confirm-car-number-import").prop("disabled", true).text("导入记录");
                 renderCarImportResult(this.jquery, root.find("#car-number-import-preview"), pending, "", message, summary);

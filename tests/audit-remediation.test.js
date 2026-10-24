@@ -53,7 +53,7 @@ describe("6.2.0 audit remediation", () => {
         controller.shouldDisablePaging = vi.fn().mockResolvedValue(false);
         await controller.mount();
         const live = controller.liveScope;
-        expect(live.snapshot().listeners).toBe(1);
+        expect(live.snapshot().listeners).toBe(3);
         expect(add).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
         expect(timeout).toHaveBeenCalledWith(expect.any(Function), 1000);
         controller.stop();

@@ -18,6 +18,7 @@ export const PORT = Object.freeze({
 
 export const SERVICE = Object.freeze({
     diagnostics: createToken("service", "diagnostics"),
+    backgroundWork: createToken("service", "background-work"),
     clog: createToken("service", "clog"),
     urlPolicy: createToken("service", "url-policy"),
     navigation: createToken("service", "navigation"),

@@ -55,7 +55,7 @@ function fixture(version = 3) {
         removeValue: async (key) => gm.delete(key),
     }, localStorage);
     const features = { register() {}, start: vi.fn(async () => {}), scheduleIdle: vi.fn() };
-    seam.context = { services: { settings, credential, profile: { start: vi.fn() }, styles: {}, diagnostics: new DiagnosticsService() }, rootScope: {}, container: { register() {} }, registries: { integrations: { register() {} }, features } };
+    seam.context = { services: { backgroundWork: { markReady: vi.fn() }, settings, credential, profile: { start: vi.fn() }, styles: {}, diagnostics: new DiagnosticsService() }, rootScope: {}, container: { register() {} }, registries: { integrations: { register() {} }, features } };
     seam.legacy = { utils: { importResource() {} }, gmHttp: {}, storageManager: storage, stateService: state, storageMutationCoordinator: coordinator };
     seam.contextCreated.mockClear();
     return { data, writes, gmWrites, settings, credential, features, context: seam.context };
@@ -106,5 +106,7 @@ describe("bootstrap future-version write protection", () => {
         expect([...f.writes, ...f.gmWrites].every((write) => write.version === 3 && write.depth === 1)).toBe(true);
         expect(f.context.services.profile.start).toHaveBeenCalledOnce();
         expect(f.features.start).toHaveBeenCalledOnce();
+        expect(f.context.services.backgroundWork.markReady).toHaveBeenCalledOnce();
+        expect(f.context.services.backgroundWork.markReady.mock.invocationCallOrder[0]).toBeGreaterThan(f.features.start.mock.invocationCallOrder[0]);
     });
 });

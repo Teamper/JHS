@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { assertMovieStateEligible, getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 function createStorage(initial, { failAfterPersistKey = null, failEvent = false } = {}) {
     const emit = vi.fn(async () => { if (failEvent) throw new Error("event channel closed"); });
@@ -19,7 +20,7 @@ function createStorage(initial, { failAfterPersistKey = null, failEvent = false 
         }), removeItem: vi.fn(async key => data.delete(key))
     };
     const context = vm.createContext({
-        console, localforage: { INDEXEDDB: "indexeddb", createInstance: () => forage }, i: (target, key, value) => target[key] = value,
+        console, assertMovieStateEligible, getMovieStateEligibility, localforage: { INDEXEDDB: "indexeddb", createInstance: () => forage }, i: (target, key, value) => target[key] = value,
         clog, utils: { getNowStr: () => "2026-08-23 13:00:00" }, show: { error: vi.fn() },
         navigator: { locks: { request: async (key, callback) => callback() } }, window: { location: { origin: "https://javdb.com" }, jhsEventBus: { emit }, clean_cacheSettingObj() {}, cleanCache_filter_actor_actress_car_list: cleanCache }, B: "actor", P: "actress",
         normalizeCarNum: value => String(value || "").trim().toUpperCase().replace(/[_\s]+/g, "-"), escapeHtml: value => String(value || ""), d: "filter",

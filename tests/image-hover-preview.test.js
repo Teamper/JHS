@@ -157,6 +157,34 @@ describe("ImageHoverPreview lifecycle", () => {
         preview.destroy();
     });
 
+    it.each(["scroll", "wheel"])("restores the hovered cover on the first pointer move after %s", (eventType) => {
+        const { Preview, document, firstCover, createCover, images } = loadPreviewClass(), preview = new Preview({ selector: ".cover" });
+        const secondCover = createCover("https://example.test/b.jpg");
+        document.emit("mouseover", firstCover), images[0].onload();
+        document.emit(eventType, firstCover);
+        expect(preview.preview.classList.contains("active")).toBe(false);
+        // Boundary events caused by scrolling must stay suppressed until actual movement.
+        document.emit("mouseover", secondCover);
+        expect(images).toHaveLength(1);
+        document.emit("mousemove", secondCover, 240, 380);
+        expect(images).toHaveLength(2);
+        images[1].onload();
+        expect(preview.preview.classList.contains("active")).toBe(true);
+        expect(preview.preview.children[0].src).toBe("https://example.test/b.jpg");
+        preview.destroy();
+    });
+
+    it("restores a cached preview when the pointer moves within the same cover after scrolling", () => {
+        const { Preview, document, firstCover, images } = loadPreviewClass(), preview = new Preview({ selector: ".cover" });
+        document.emit("mouseover", firstCover), images[0].onload();
+        document.emit("scroll", firstCover);
+        document.emit("mousemove", firstCover, 120, 120);
+        expect(preview.preview.classList.contains("active")).toBe(true);
+        expect(preview.preview.children[0].src).toBe("https://example.test/a.jpg");
+        expect(images).toHaveLength(1);
+        preview.destroy();
+    });
+
     it("keeps only the most recent loaded image metadata", () => {
         const { Preview, document, firstCover, createCover, images } = loadPreviewClass(), preview = new Preview({ selector: ".cover", loadedUrlLimit: 2 }), second = createCover("https://example.test/b.jpg"), third = createCover("https://example.test/c.jpg");
         document.emit("mouseover", firstCover), images[0].onload(), document.emit("mouseover", second), images[1].onload(), document.emit("mouseover", third), images[2].onload();

@@ -5,6 +5,7 @@ import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { getIcon } from "../../core/icons.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 import { readCardNames, readListItem } from "../../core/list-item-reader.js";
+import { assertMovieStateEligible } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
@@ -134,6 +135,11 @@ export class ListPageCompatibilityService {
         /** @type {Map<HTMLImageElement, () => void>} */ this.hdPendingCleanups = new Map();
         /** @type {string | null} */ this.hoverPreviewState = null;
         this.writeQueue = Promise.resolve();
+        /** @type {Set<string>} */ this.pendingStateCarNums = new Set();
+        /** @type {string | null} */ this.pendingStateTransactionId = null;
+        /** @type {Promise<boolean> | null} */ this.stateRefreshPromise = null;
+        this.stateRefreshDisposed = false;
+        this.stateRefreshReady = true;
         /** @type {Map<string, Set<Element>>} */ this.itemIndex = new Map();
         /** @type {ListItemIndex | null} */ this.listItemIndex = null;
         /** @type {import("../../features/list/list-dom-observer.js").ListDomObserver | null} */ this.listDomObserver = null;
@@ -266,20 +272,32 @@ export class ListPageCompatibilityService {
             settingsService.addEventListener("settings.changed", onSettingsChanged);
             scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
         }
+        let lastSyncRefresh = "";
         const refreshAll = async (/** @type {any} */ payload = {}) => {
                 // 6.5 收敛：settings-changed 只对列表判定相关 key 全量刷新；主题/Preview/截图/布局
                 // 等由各自 Feature 精确处理，不再触发 doFilter/applyVisibility/History setData。
+                if (payload.notificationId && payload.notificationId === lastSyncRefresh) return;
                 const changedNames = /** @type {string[] | undefined} */ (payload?.changedNames);
-                if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
+                if (changedNames && (!payload.changedDomains || payload.changedDomains.every((/** @type {string} */ key) => key === "setting")) && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
                 await this.requestListRefresh({ reason: "event-refresh", full: true });
+                if (payload.notificationId) lastSyncRefresh = payload.notificationId;
         };
         const events = this.getRuntimeService("events");
         [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(events.on(type, refreshAll)))),
-        scope.addCleanup(events.on("car-state-changed", (async (/** @type {any} */ payload) => {
-            const items = this.getIndexedItems(payload.carNums || []);
-            await this.requestListRefresh({ items, reason: "car-state-changed", full: true });
+        scope.addCleanup(events.on("car-state-changed", (async (/** @type {any} */ payload, /** @type {any} */ event) => {
+            if (payload.notificationId && payload.notificationId === lastSyncRefresh) return;
+            const full = Boolean(payload.scope === "all" || !Array.isArray(payload.carNums)
+                || payload.changedDomains?.some((/** @type {string} */ key) => ["setting", "blacklist", "blacklist_car_list", "filter_keyword_title"].includes(key)));
+            const refreshed = full ? await this.requestListRefresh({ reason: "car-state-changed", full: true }) : await this.refreshCarNums(payload.carNums, event?.originId === events.originId ? payload.transactionId : null);
+            if (!full && refreshed !== false) {
+                const update = this.getOptionalDependency("HistoryPlugin")?.tableObj?.setData?.();
+                update?.catch?.((/** @type {unknown} */ error) => this.logger.error("鉴定记录刷新失败", error));
+            }
+            if (payload.notificationId) lastSyncRefresh = payload.notificationId;
         })));
         scope.addCleanup(() => {
+            this.stateRefreshDisposed = true;
+            this.pendingStateCarNums.clear();
             this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
             this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
             this.hdPendingCleanups.forEach((cleanup) => cleanup()), this.hdPendingCleanups.clear();
@@ -317,6 +335,7 @@ export class ListPageCompatibilityService {
     }
     /** @param {string} phase @param {number | null} [itemCount] */
     recordListPhase(phase, itemCount = null) {
+        this.runtimeServices.diagnostics?.recordWork?.(`list.${phase}`, itemCount ?? 0);
         const diagnostics = /** @type {any} */ (globalThis).__jhsBrowserDiagnostics;
         if (!diagnostics) return;
         const phases = diagnostics.listPhases ||= [];
@@ -329,11 +348,16 @@ export class ListPageCompatibilityService {
         this.applyVisibility(items);
         return !0;
     }
-    invalidateListRefreshContext() {
+    /** @param {{stateOnly?: boolean, transactionId?: string | null, carNums?: string[]}} [options] */
+    invalidateListRefreshContext({ stateOnly = false, transactionId = null, carNums = [] } = {}) {
         this.filterContext = null;
-        this.filterContextProvider?.invalidate();
         const storage = this.getRuntimeService("legacyStorage");
-        storage._invalidateCache(storage.car_list_key);
+        if (stateOnly && this.filterContextProvider) {
+            const state = this.getRuntimeService("state");
+            const readCommitted = transactionId ? () => state.getCommittedListSnapshot?.(transactionId, carNums) : null;
+            this.filterContextProvider.invalidateState(readCommitted);
+            if (!readCommitted?.()) storage._invalidateCache(storage.car_list_key);
+        } else { this.filterContextProvider?.invalidate(); storage._invalidateCache(storage.car_list_key); }
     }
     createListRefreshCoordinator() {
         return new ListRefreshCoordinator({
@@ -356,6 +380,34 @@ export class ListPageCompatibilityService {
     requestListRefresh(options = {}) {
         const coordinator = this.featureListRefreshAdapter || (this.legacyListRefreshCoordinator ||= this.createListRefreshCoordinator());
         return coordinator.request(options);
+    }
+    /** Broadcast and parent-close notices share one serial queue; only a new pass invalidates its snapshot. */
+    /** @param {unknown[]} carNums @param {string | null} [transactionId] */
+    refreshCarNums(carNums, transactionId = null) {
+        if (this.stateRefreshDisposed) return Promise.resolve(false);
+        for (const value of carNums) { const key = normalizeCarNum(value); if (key) this.pendingStateCarNums.add(key); }
+        if (carNums.length) this.pendingStateTransactionId = transactionId;
+        if (!this.stateRefreshReady) return Promise.resolve(false);
+        if (this.stateRefreshPromise) return this.stateRefreshPromise;
+        const run = async () => {
+            while (this.pendingStateCarNums.size && !this.stateRefreshDisposed) {
+                const keys = [...this.pendingStateCarNums], transactionId = this.pendingStateTransactionId; this.pendingStateCarNums.clear();
+                this.pendingStateTransactionId = null;
+                this.invalidateListRefreshContext({ stateOnly: true, transactionId, carNums: keys });
+                let items = this.getIndexedItems(keys);
+                if (!items.length || keys.some(key => !this.getIndexedItems([key]).length)) {
+                    this.rebuildItemIndex();
+                    items = this.getIndexedItems(keys);
+                }
+                if (items.length) await this.requestListRefresh({ items, reason: "car-state-changed", full: false });
+            }
+            return !this.stateRefreshDisposed;
+        };
+        this.stateRefreshPromise = Promise.resolve().then(run).finally(() => {
+            this.stateRefreshPromise = null;
+            if (this.pendingStateCarNums.size && !this.stateRefreshDisposed) void this.refreshCarNums([]).catch(error => this.logger.error("列表状态补刷失败", error));
+        });
+        return this.stateRefreshPromise;
     }
     async createQuickFilter() {
         if (this.listView) {
@@ -514,8 +566,9 @@ export class ListPageCompatibilityService {
             node.nodeType === Node.ELEMENT_NODE && (removed.add(element), element.querySelectorAll?.(this.getSelector().itemSelector).forEach((/** @type {Element} */ item) => removed.add(item)));
         });
         if (!removed.size) return;
+        const root = $(this.getSelector().boxSelector)[0];
         this.itemIndex.forEach(((/** @type {Set<Element>} */ items, /** @type {string} */ key) => {
-            items.forEach((/** @type {Element} */ item) => { removed.has(item) && items.delete(item); }), items.size || this.itemIndex.delete(key);
+            items.forEach((/** @type {Element} */ item) => { removed.has(item) && !root?.contains(item) && items.delete(item); }), items.size || this.itemIndex.delete(key);
         }));
     }
     /** @param {unknown[]} carNums */
@@ -659,8 +712,8 @@ export class ListPageCompatibilityService {
                 n > 0 && n % 12 == 0 && await this.yieldListFrame();
                 let t = $(e[n]);
                 if (l && t.find(".avatar-box").length > 0) continue;
-                const {carNum: a, title: i} = this.findCarNumAndHref(t), evaluation = evaluateListItem({ carNum: a, title: i }, evaluationContext, { filter: activeFilter }), {flags, visibilityReasons, hardHidden} = evaluation, keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i, a) : null;
-                t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a) ? _ : C).attr("data-jhs-tag-position", P);
+                const record = this.findCarNumAndHref(t), {carNum: a, title: i} = record, evaluation = evaluateListItem(record, evaluationContext, { filter: activeFilter }), {flags, visibilityReasons, hardHidden} = evaluation, keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i, a) : null;
+                t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", evaluation.recent ? _ : C).attr("data-jhs-tag-position", P);
                 const signature = JSON.stringify({ flags, visibilityReasons, P });
                 if (t.attr("data-jhs-state-signature") !== signature) {
                     t.attr("data-jhs-state-signature", signature), t.find(".jhs-status-tags").remove();
@@ -710,11 +763,15 @@ export class ListPageCompatibilityService {
         else $(e.boxSelector).off("contextmenu.jhsListMenu").on("contextmenu.jhsListMenu", ".item img, .item video", (async (/** @type {any} */ e) => {
             try {
                 e.preventDefault();
-                const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i, fc2Source} = this.findCarNumAndHref(t);
+                const t = $(e.target).closest(".item"), movie = this.findCarNumAndHref(t), {carNum: n, url: a, publishTime: i, fc2Source} = movie;
+                assertMovieStateEligible(movie);
                 let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
                 s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `屏蔽「${escapeHtml(n)}」？`, (async () => {
                     try {
-                        o || (o = await this.parseActressName(a)), await this.getRuntimeService("state").patch(n, { blocked: !0 }, { record: { carNum: n, url: a, names: o, publishTime: i, fc2Source } }), show.ok("已屏蔽");
+                        const current = this.findCarNumAndHref(t);
+                        assertMovieStateEligible(current);
+                        if (current.carNum !== n) throw new Error("影片信息已变化，请重试");
+                        o || (o = await this.parseActressName(a)), await this.getRuntimeService("state").patch(n, { blocked: !0 }, { record: { ...this.findCarNumAndHref(t), carNum: n, url: a, names: o, publishTime: i, fc2Source } }), show.ok("已屏蔽");
                     } catch (s) { this.logger.error("屏蔽操作失败:", s), show.error("屏蔽失败，请重试"); }
                 }), undefined, { confirmText: "屏蔽" });
             } catch (t) { this.logger.error("右键菜单处理失败:", t); }
@@ -725,7 +782,7 @@ export class ListPageCompatibilityService {
     async openMovieDetail(item, { event = null, autoplay = !1, newTab = !1 } = {}) {
         if (this.featureListNavigationAdapter) return this.featureListNavigationAdapter.openMovieDetail(item, { event, autoplay, newTab });
         const card = item?.jquery ? item : $(item), {carNum, aHref} = this.findCarNumAndHref(card);
-        if (!carNum || !aHref) return;
+        if (!aHref) return;
         const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
         if (carNum.includes("FC2-")) return;
         const destination = new URL(aHref, window.location.origin);
@@ -750,8 +807,15 @@ export class ListPageCompatibilityService {
             this.logger.debug("鉴定补录演员信息-已启用, 开始解析详情页"), this.logger.debug("开始解析演员详情页", e);
             scope ??= await this.getRuntimeService("scope")();
             scope?.assertActive();
-            const n = await requestHostPage(this.getRuntimeService("http"), e, scope), a = utils.htmlTo$dom(n);
-            r ? t = a.find(".female").prev().map(((/** @type {number} */ e, /** @type {Element} */ t) => $(t).text())).get().join(" ") : l && (t = a.find('span[onmouseover*="star_"] a').map(((/** @type {number} */ e, /** @type {Element} */ t) => $(t).text())).get().join(" ")),
+            const n = await requestHostPage(this.getRuntimeService("http"), e, scope);
+            if (r) {
+                const detail = new DOMParser().parseFromString(n, "text/html");
+                t = this.getRuntimeService("host").readMovieActors(detail, new URL(e, window.location.href).href).actors
+                    .filter((/** @type {{role: string}} */ actor) => actor.role === "actress")
+                    .map((/** @type {{name: string}} */ actor) => actor.name).join(" ");
+            } else if (l) {
+                t = utils.htmlTo$dom(n).find('span[onmouseover*="star_"] a').map(((/** @type {number} */ e, /** @type {Element} */ t) => $(t).text())).get().join(" ");
+            }
             this.logger.debug("解析到名称:", t);
         }
         return t;

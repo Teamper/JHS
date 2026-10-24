@@ -49,6 +49,8 @@ import { ProviderRegistry } from "./provider-registry.js";
 import { IntegrationRegistry } from "./integration-registry.js";
 import { SettingsRegistry } from "./settings-registry.js";
 import { registerDefaultSettings } from "./settings-catalog.js";
+import { ComputationBudget } from "../core/cooperative-work.js";
+import { BackgroundWork } from "../core/background-work.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { parseDetailPage } from "../integrations/host-list/parser.js";
 
@@ -56,6 +58,7 @@ import { parseDetailPage } from "../integrations/host-list/parser.js";
 export function createAppContext(runtime) {
     const diagnostics = new DiagnosticsService({ legacyHttp: runtime.legacyHttp });
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
+    const backgroundWork = new BackgroundWork({ document: runtime.hostAdapter?.document ?? document, window, scope: rootScope });
     const container = new DependencyContainer(diagnostics);
     const navigationPort = new BrowserNavigationAdapter();
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
@@ -114,7 +117,14 @@ export function createAppContext(runtime) {
     const credential = new CredentialService(storage, runtime.localStorage);
     const pan123Credential = new Pan123CredentialService(storage, notifications);
     const webdav = new WebDavService(http, credential, settings);
-    const syncState = new WebDavSyncStore({ forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting });
+    mutationCoordinator.diagnostics = diagnostics;
+    if (runtime.stateService) runtime.stateService.computation = new ComputationBudget({ diagnostics });
+    const syncState = new WebDavSyncStore({ forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting, diagnostics, backgroundWork });
+    rootScope.addCleanup(() => syncState.dispose());
+    for (const type of ["car-state-changed", "offline-history-changed", "actress-changed", "settings-changed"]) {
+        const unsubscribe = runtime.eventBus?.on?.(type, () => syncState.requestReconciliation());
+        if (unsubscribe) rootScope.addCleanup(unsubscribe);
+    }
     mutationCoordinator.observer = syncState;
     mutationCoordinator.beforeMutation = () => syncState.recoverWithoutLock();
     if (runtime.legacyStorage) runtime.legacyStorage.syncState = syncState;
@@ -124,7 +134,7 @@ export function createAppContext(runtime) {
     const preferences = new PersonalPreferencesService(settings, runtime.localStorage, message => notifications.error(message));
     storage.preferences = preferences;
     /** @type {import("../contracts/webdav-sync.js").WebDavSync} */
-    const webdavSync = new WebDavSyncService({ webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
+    const webdavSync = new WebDavSyncService({ diagnostics, backgroundWork, webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;
@@ -176,6 +186,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.legacyStorage, runtime.legacyStorage).register(SERVICE.legacyUtils, runtime.legacyUtils).register(SERVICE.webdav, webdav)
         .register(SERVICE.autoBackup, webdavSync)
         .register(SERVICE.webdavSync, webdavSync)
+        .register(SERVICE.backgroundWork, backgroundWork)
         .register(SERVICE.credential, credential)
         .register(SERVICE.pan123Credential, pan123Credential)
           .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.resourceSettings, resourceSettings).register(SERVICE.notifications, notifications).register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
@@ -188,7 +199,7 @@ export function createAppContext(runtime) {
     if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
     if (runtime.hostAdapters?.javbus) container.register(PORT.javbusHost, runtime.hostAdapters.javbus);
 
-    const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
+    const features = new FeatureRuntime({ backgroundWork, container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, webdavSync, autoBackup: webdavSync, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, titleKeywords, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ backgroundWork, diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, webdavSync, autoBackup: webdavSync, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, titleKeywords, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

@@ -29,7 +29,7 @@ async function settings(page, panel = "shortcut-panel") {
 test.describe("详情鉴定快捷键", () => {
     test.beforeEach(async ({}, info) => { test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "桌面及窄屏覆盖键盘与详情作用域"); });
 
-    for (const url of ["https://javdb.com/v/test-id", "https://www.javbus.com/ABP-123", "https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-100&url=%2Fv%2Ffixture-id&source=fc2"]) {
+    for (const url of ["https://javdb.com/v/test-id", "https://www.javbus.com/ABC-123", "https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-100&url=%2Fv%2Ffixture-id&source=fc2"]) {
         test(`普通及 FC2 页面复用四状态操作 ${url}`, async ({ page, context }) => {
             await boot(page, context, url);
             for (const [key, id] of [["f", "favoriteBtn"], ["d", "hasDownBtn"], ["w", "hasWatchBtn"]]) {

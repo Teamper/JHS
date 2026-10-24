@@ -26,23 +26,23 @@ describe("ListEvaluator (唯一列表判定器)", () => {
     });
 
     it("waitCheck requires no state and no hard-hidden reason", () => {
-        const context = makeContext({ cars: { "A": {}, "B": { favorite: true }, "C": { blocked: true } }, titleKeywords: [ "禁" ] });
-        expect(evaluateListItem({ carNum: "A", title: "普通" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(true);
-        expect(evaluateListItem({ carNum: "B", title: "普通" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(false);
-        expect(evaluateListItem({ carNum: "C", title: "普通" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(false);
-        expect(evaluateListItem({ carNum: "A", title: "禁播" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(false);
+        const context = makeContext({ cars: { "A-1": {}, "B-1": { favorite: true }, "C-1": { blocked: true } }, titleKeywords: [ "禁" ] });
+        expect(evaluateListItem({ carNum: "A-1", title: "普通" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(true);
+        expect(evaluateListItem({ carNum: "B-1", title: "普通" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(false);
+        expect(evaluateListItem({ carNum: "C-1", title: "普通" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(false);
+        expect(evaluateListItem({ carNum: "A-1", title: "禁播" }, context, { filter: "waitCheck" }).matchesCurrentFilter).toBe(false);
     });
 
     it("status filters exclude hard-hidden but keep the status flag", () => {
-        const context = makeContext({ cars: { "A": { favorite: true }, "B": { favorite: true, blocked: true } } });
-        expect(evaluateListItem({ carNum: "A" }, context, { filter: "favorite" }).matchesCurrentFilter).toBe(true);
-        expect(evaluateListItem({ carNum: "B" }, context, { filter: "favorite" }).matchesCurrentFilter).toBe(false);
-        expect(evaluateListItem({ carNum: "B" }, context, { filter: "blockedItems" }).matchesCurrentFilter).toBe(true);
+        const context = makeContext({ cars: { "A-1": { favorite: true }, "B-1": { favorite: true, blocked: true } } });
+        expect(evaluateListItem({ carNum: "A-1" }, context, { filter: "favorite" }).matchesCurrentFilter).toBe(true);
+        expect(evaluateListItem({ carNum: "B-1" }, context, { filter: "favorite" }).matchesCurrentFilter).toBe(false);
+        expect(evaluateListItem({ carNum: "B-1" }, context, { filter: "blockedItems" }).matchesCurrentFilter).toBe(true);
     });
 
     it("returns flags, visibilityReasons, recent and hardHidden for reuse", () => {
-        const context = makeContext({ cars: { "A": { watched: true } }, recent: [ "A" ] });
-        const result = evaluateListItem({ carNum: "A", title: "x" }, context, { filter: "recent7d" });
+        const context = makeContext({ cars: { "A-1": { watched: true } }, recent: [ "A-1" ] });
+        const result = evaluateListItem({ carNum: "A-1", title: "x" }, context, { filter: "recent7d" });
         expect(result.flags.watched).toBe(true);
         expect(result.hardHidden).toBe(false);
         expect(result.recent).toBe(true);
@@ -53,25 +53,25 @@ describe("ListEvaluator (唯一列表判定器)", () => {
     it("undownloaded includes pending, favorite and watched items while excluding downloads and every blocking rule", () => {
         const context = makeContext({
             cars: {
-                pending: {}, favorite: { favorite: true }, watched: { watched: true },
-                favoriteWatched: { favorite: true, watched: true },
-                downloaded: { downloaded: true }, favoriteDownloaded: { favorite: true, downloaded: true },
-                watchedDownloaded: { watched: true, downloaded: true },
-                favoriteWatchedDownloaded: { favorite: true, watched: true, downloaded: true },
-                blocked: { blocked: true }, favoriteBlocked: { favorite: true, blocked: true },
+                "TEST-1": {}, "TEST-2": { favorite: true }, "TEST-3": { watched: true },
+                "TEST-4": { favorite: true, watched: true },
+                "TEST-5": { downloaded: true }, "TEST-6": { favorite: true, downloaded: true },
+                "TEST-7": { watched: true, downloaded: true },
+                "TEST-8": { favorite: true, watched: true, downloaded: true },
+                "TEST-9": { blocked: true }, "TEST-10": { favorite: true, blocked: true },
             },
             titleKeywords: [ "禁播" ],
-            actorBlacklist: { actorBlocked: "男优甲" },
-            actressBlacklist: { actressBlocked: "女优甲" },
+            actorBlacklist: { "TEST-11": "男优甲" },
+            actressBlacklist: { "TEST-12": "女优甲" },
         });
         const records = [
             ...Array.from(context.carMap.keys()).map(carNum => ({ carNum })),
-            { carNum: "keywordBlocked", title: "禁播合集" },
-            { carNum: "actorBlocked" }, { carNum: "actressBlocked" },
+            { carNum: "TEST-13", title: "禁播合集" },
+            { carNum: "TEST-11" }, { carNum: "TEST-12" },
         ];
         const before = structuredClone(context.carMap);
         expect(records.filter(record => evaluateListItem(record, context, { filter: "undownloaded" }).matchesCurrentFilter)
-            .map(record => record.carNum)).toEqual([ "pending", "favorite", "watched", "favoriteWatched" ]);
+            .map(record => record.carNum)).toEqual([ "TEST-1", "TEST-2", "TEST-3", "TEST-4" ]);
         expect(context.carMap).toEqual(before);
     });
 

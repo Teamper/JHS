@@ -3,6 +3,7 @@
 import { readCardNames, readListItem } from "../../core/list-item-reader.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
+import { assertMovieStateEligible, getMovieStateEligibility } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
 import { isBatchRunCancelled, isActiveBatchRun, requestCancelBatchRun, tryBeginBatchRun, endBatchRun } from "./batch-coordinator.js";
 import { scanAllPages } from "./batch-scanner.js";
@@ -70,7 +71,7 @@ export class ListBatchController {
             setProgress(`已扫描 ${value.page} 页 · 匹配 ${value.matched} 项`);
             this.ui.debug(`批量扫描第 ${value.page} 页 · 已扫描 ${value.scanned} · 匹配 ${value.matched}`);
         };
-        let matched = 0, updated = 0, writing = false;
+        let matched = 0, updated = 0, skipped = 0, writing = false;
         try {
             const context = await this.getEvaluationContext();
             const selectors = this.hostAdapter?.getListSelectors?.();
@@ -83,7 +84,7 @@ export class ListBatchController {
             this.ui.setButtonsDisabled(true);
             const pageUrl = this.location?.href ?? globalThis.window?.location?.href ?? "";
             const firstPageUrl = isPageScopedList || root ? null : (this.hostAdapter?.resolveFirstPageUrl?.(pageUrl) ?? pageUrl);
-            const records = await scanAllPages({
+            const scannedRecords = await scanAllPages({
                 startDom: root ? $(root) : $(this.document),
                 currentUrl: isPageScopedList || root ? null : pageUrl,
                 firstPageUrl,
@@ -92,10 +93,15 @@ export class ListBatchController {
                 maxPages: isPageScopedList ? 1 : 200,
                 fetchHtml: (/** @type {string} */ url) => requestHostPage(this.http, url, this.scope),
                 parseItem: (/** @type {any} */ item) => {
-                    const parsed = readListItem(item);
-                    return actorScope ? parsed : { ...parsed, names: readCardNames(item) };
+                    let parsed;
+                    try { parsed = readListItem(item); } catch (error) { skipped++; throw error; }
+                    if (!getMovieStateEligibility(parsed).eligible) skipped++;
+                    return { ...parsed, sourceCard: item, ...(actorScope ? {} : { names: readCardNames(item) }) };
                 },
-                evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
+                evaluate: (/** @type {any} */ item) => {
+                    if (!getMovieStateEligibility(item).eligible) return { matchesCurrentFilter: false };
+                    return evaluateListItem(item, context, { filter: normalized });
+                },
                 isCancelled,
                 onProgress,
             });
@@ -103,6 +109,16 @@ export class ListBatchController {
                 this.ui.removeProgress(progress);
                 return { cancelled: true };
             }
+
+            // Re-read every source before the first chunk, so later-page mutations cannot cause partial writes.
+            /** @type {Array<Record<string, any>>} */ const records = scannedRecords.flatMap((item) => {
+                let source;
+                try { source = readListItem(item.sourceCard); } catch { skipped++; return []; }
+                const stateEligibility = getMovieStateEligibility(source);
+                if (!stateEligibility.eligible || source.carNum !== item.carNum) { skipped++; return []; }
+                return [{ ...item, ...source, stateEligibility }];
+            });
+            records.forEach(assertMovieStateEligible);
 
             // Once writes start the cancel button is disabled, matching the 6.5.1 interaction contract.
             matched = records.length; writing = true;
@@ -112,14 +128,14 @@ export class ListBatchController {
                 const chunk = records.slice(index, index + 75);
                 await this.state.patch(chunk.map((item) => item.carNum), { [stateFlag]: true }, {
                     type: stateFlag === "blocked" ? "actor-page-block" : "actor-page-batch-state",
-                    records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: item.names ?? recordName, publishTime: item.publishTime || "", fc2Source: item.fc2Source })),
+                    records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: item.names ?? recordName, publishTime: item.publishTime || "", fc2Source: item.fc2Source, stateEligibility: item.stateEligibility })),
                 });
                 updated += chunk.length;
                 setProgress(`已更新 ${updated}/${records.length} 项`);
             }
-            setProgress(`批量完成：匹配 ${records.length} 项 · 已更新 ${updated} 项`);
+            setProgress(`批量完成：匹配 ${records.length} 项 · 已更新 ${updated} 项${skipped ? ` · 已跳过 ${skipped} 项番号不可靠的影片` : ""}`);
             this.ui.completeProgress(progress);
-            return { matched: records.length, updated };
+            return { matched: records.length, updated, ...(skipped ? { skipped } : {}) };
         } catch (error) {
             if (this.disposed || this.scope.disposed) {
                 this.ui.removeProgress(progress);

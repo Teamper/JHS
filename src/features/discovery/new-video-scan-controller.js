@@ -1,19 +1,22 @@
 // @ts-check
 
 import { selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 
 /** Converts discovered actor titles into the existing 6.5.1 actress record shape. */
 export class NewVideoScanController {
-    /** @param {{state: any, titleKeywords: any, actressInfo: any, scope: any, logger: any, getTimestamp: () => string, onNewItems: (name: string, count: number) => void}} options */
+    /** @param {{state: any, titleKeywords: any, actressInfo: any, scope: any, logger: any, getTimestamp: () => string, backgroundWork?: any, onNewItems: (name: string, count: number) => void}} options */
     constructor(options) {
         this.state = options.state;
         this.titleKeywords = options.titleKeywords;
         this.actressInfo = options.actressInfo;
         this.scope = options.scope;
+        this.backgroundWork = options.backgroundWork;
         this.logger = options.logger;
         this.getTimestamp = options.getTimestamp;
         this.onNewItems = options.onNewItems;
         this.disposed = false;
+        /** @type {Set<() => void>} */ this.visibilityWaits = new Set();
     }
 
     /** Fetch and persist one actor's manual scan through the same feature-owned write path. */
@@ -123,6 +126,8 @@ export class NewVideoScanController {
             while (!stopWorkers && !this.disposed) {
                 const index = nextIndex++;
                 if (index >= eligible.length) return;
+                if (!options.force) { await this.waitForVisible(); await this.backgroundWork?.waitForTurn({ signal: this.scope.signal }); }
+                this.assertActive();
                 const actress = eligible[index], { name, starId } = actress, url = `${options.baseUrl}/actors/${starId}?t=d`;
                 let movies;
                 try {
@@ -172,6 +177,7 @@ export class NewVideoScanController {
     /** @param {any[]} items @param {string} starId @param {string} name @param {string[]} titleKeywords @param {Set<string>} blacklistSet */
     async parseActorMovies(items, starId, name, titleKeywords, blacklistSet) {
         this.assertActive();
+        if (items.some(item => !getMovieStateEligibility(item).eligible)) throw Object.assign(new Error("部分影片番号无法确认，本次未更新检测结果"), { code: "INCOMPLETE_MOVIE_IDENTITY" });
         if (!items.length) {
             const saved = await this.state.updateFavoriteActress({ starId, lastCheckTime: this.getTimestamp(), newVideoList: [] });
             if (saved === false) throw new Error("演员记录已不存在");
@@ -205,7 +211,22 @@ export class NewVideoScanController {
         return fresh.length;
     }
 
+    async waitForVisible() {
+        const doc = globalThis.document;
+        if (!doc?.hidden) return;
+        await new Promise((resolve, reject) => {
+            const cleanup = () => { this.visibilityWaits.delete(abort); doc.removeEventListener("visibilitychange", check); this.scope.signal?.removeEventListener("abort", abort); };
+            const check = () => { if (!doc.hidden) { cleanup(); resolve(undefined); } };
+            const abort = () => { cleanup(); reject(new DOMException("Scan disposed", "AbortError")); };
+            this.visibilityWaits.add(abort);
+            doc.addEventListener("visibilitychange", check);
+            this.scope.signal?.addEventListener("abort", abort, { once: true });
+            if (this.scope.disposed || this.disposed) abort(); else check();
+        });
+    }
+
     dispose() {
+        for (const abort of this.visibilityWaits) abort();
         this.disposed = true;
     }
 

@@ -25,18 +25,27 @@ export class ListView {
         /** @type {OwnedPopover | null} */ this.filterPopover = null;
         /** @type {any} */ this.navigationRoot = null;
         /** @type {any} */ this.videoRoot = null;
+        /** @type {WeakMap<Element, string>} */ this.cardDisplays = new WeakMap();
     }
 
     /** @param {Element[] | null} items @param {unknown} filter @param {(element: Element, visible: boolean) => void} [onVisibility] */
     applyVisibility(items, filter, onVisibility) {
-        const elements = items ? $(items) : $(this.selectors.itemSelector), normalizedFilter = normalizeQuickFilterKey(filter);
-        elements.each(((/** @type {number} */ _index, /** @type {Element} */ element) => {
-            const item = $(element), flags = normalizeStateFlags(parseData(item.attr("data-jhs-flags") || "{}", {}));
-            const visibilityReasons = parseData(item.attr("data-jhs-visibility") || "{}", {}), recent = item.attr("data-jhs-recent") === "yes";
+        const elements = (items ? $(items) : $(this.selectors.itemSelector)).toArray(), normalizedFilter = normalizeQuickFilterKey(filter);
+        // Read attributes before writing styles. jQuery show() can force layout
+        // for every previously hidden card while restoring its display value.
+        const changes = elements.map((/** @type {Element} */ element) => {
+            const flags = normalizeStateFlags(parseData(element.getAttribute("data-jhs-flags") || "{}", {}));
+            const visibilityReasons = parseData(element.getAttribute("data-jhs-visibility") || "{}", {}), recent = element.getAttribute("data-jhs-recent") === "yes";
             const visible = shouldShowItem({ filter: normalizedFilter, flags, visibilityReasons, recent });
-            visible ? item.show() : item.hide();
+            const style = /** @type {HTMLElement} */ (element).style;
+            if (style.display !== "none") this.cardDisplays.set(element, style.display);
+            return { element, visible, display: visible ? this.cardDisplays.get(element) || "" : "none" };
+        });
+        for (const { element, visible, display } of changes) {
+            const style = /** @type {HTMLElement} */ (element).style;
+            if (style.display !== display) style.display = display;
             onVisibility?.(element, visible);
-        }));
+        }
     }
 
     /** @param {unknown} initialFilter */

@@ -1184,10 +1184,26 @@ export function initializeUiAccessibility(lifecycleScope) {
     lifecycleScope.listen(document, "keydown", blockDisabled, true);
     const pending = new Set;
     let scheduled = !1;
+    let timer = 0;
+    lifecycleScope.addCleanup(() => { clearTimeout(timer); pending.clear(); });
     const flush = () => {
         scheduled = !1;
-        const all = [ ...pending ], roots = all.filter((e => !all.some((t => t !== e && t.contains?.(e)))));
-        pending.clear(), roots.forEach(enhance);
+        if (lifecycleScope.disposed) { pending.clear(); return; }
+        const roots = [...pending].filter(node => {
+            for (let parent = node.parentElement; parent; parent = parent.parentElement) if (pending.has(parent)) return false;
+            return node.isConnected;
+        });
+        pending.clear();
+        const deadline = performance.now() + 4;
+        for (let index = 0; index < roots.length; index++) {
+            if (index > 0 && performance.now() >= deadline) {
+                roots.slice(index).forEach(node => pending.add(node));
+                scheduled = true;
+                timer = setTimeout(flush, 0);
+                break;
+            }
+            enhance(roots[index]);
+        }
     };
     return lifecycleScope.observe(document.documentElement, (records => {
         records.forEach((record => record.addedNodes.forEach((node => {

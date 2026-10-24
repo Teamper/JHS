@@ -4,6 +4,7 @@ import { I, T } from "../../core/constants.js";
 import { A, B, D, P } from "../../core/constants.js";
 import { selectLatestPublishTime } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
+import { assertMovieStateEligible } from "../../core/movie-identity.js";
 import { parseDetailPage } from "./parser.js";
 
 const LIST_SELECTORS = Object.freeze({
@@ -72,7 +73,9 @@ export function parseBlacklistFilterPage(options) {
     if (!movieItems.length && nextPageLink) throw new Error("黑名单作品空页面包含下一页");
     const records = [], publishTimes = [];
     for (const item of movieItems.toArray()) {
-        const { carNum, url, publishTime } = readListItem(jquery(item));
+        const movie = readListItem(jquery(item));
+        assertMovieStateEligible(movie);
+        const { carNum, url, publishTime } = movie;
         if (publishTime) publishTimes.push(publishTime);
         if (url && carNum) records.push({ carNum, url, names: name, actionType: "filter", starId, publishTime });
     }

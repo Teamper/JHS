@@ -28,8 +28,11 @@ export class ListPaginationController {
                 const element = /** @type {Element} */ (node);
                 return element.matches(".pagination, .pagination-list, .pagination-link") || Boolean(element.querySelector(".pagination, .pagination-list, .pagination-link"));
             };
+            const itemSelector = this.hostAdapter?.getListSelectors?.()?.itemSelector;
             const observer = new MutationObserverType((/** @type {MutationRecord[]} */ records) => {
-                const changed = records.some((/** @type {MutationRecord} */ record) => touchesPagination(record.target) || [...record.addedNodes, ...record.removedNodes].some(touchesPagination));
+                const nodes = new Set(records.flatMap(record => [...record.addedNodes, ...record.removedNodes]));
+                const changed = records.some(record => ElementType && record.target instanceof ElementType && /** @type {Element} */ (record.target).closest(".pagination, .pagination-list, .pagination-link"))
+                    || [...nodes].some(node => !(ElementType && node instanceof ElementType && itemSelector && /** @type {Element} */ (node).matches(itemSelector)) && touchesPagination(node));
                 if (!changed) return;
                 if (this.root && !this.root.isConnected) this.root = null;
                 this.mountIfAvailable();

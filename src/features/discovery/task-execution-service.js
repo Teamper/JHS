@@ -3,6 +3,7 @@
 import { I, T, _, escapeHtml, l, normalizeCarNum } from "../../core/constants.js";
 import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 import { detectSite } from "../../core/site-context.js";
 import { StorageQueue } from "../../core/storage-queue.js";
 import { getTaskIntervalDefinition, parseTaskInterval } from "./task-intervals.js";
@@ -10,6 +11,11 @@ import { getTaskIntervalDefinition, parseTaskInterval } from "./task-intervals.j
 /** @typedef {"blacklist" | "favoriteActress" | "newVideo"} TaskName */
 /** @typedef {Record<string, any>} TaskRecord */
 /** @typedef {{ attempted: boolean, completed: boolean, fatal: boolean, success: number, networkFailed: number, parseFailed: number, aborted: number, skippedInterval: number, skippedStopped: number, [key: string]: any }} TaskResult */
+
+/** @param {any[]} items */
+function assertCompleteMovieIdentities(items) {
+    if (items.some(item => !getMovieStateEligibility(item).eligible)) throw Object.assign(new Error("部分影片番号无法确认，本次未更新检测结果"), { code: "INCOMPLETE_MOVIE_IDENTITY" });
+}
 
 /** Runs due background scans behind the Scheduler Feature and preserves the 6.5.1 task metadata contract. */
 export class TaskExecutionService {
@@ -388,6 +394,13 @@ export class TaskExecutionService {
                         }
                         try {
                             const page = this.utils.htmlTo$dom(responseText);
+                            const selector = this.getSelector(site), pageState = this.getRuntimeService("hostListParser").parseDetailPage(page, {
+                                boxSelector: site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector,
+                                requestDomItemSelector: selector.requestDomItemSelector,
+                            });
+                            if (pageState.state !== "valid") throw new Error("黑名单作品页面无效");
+                            const sourceItems = [...pageState.items].filter(item => site !== I || !this.jquery(item).find(".avatar-box").length);
+                            this.readCompletePageMovies(sourceItems);
                             await this.storageQueue.addTask((async () => {
                                 const parsed = await blacklistPlugin.parseAndSaveFilterInfo(page, name, starId, site);
                                 await this.legacyStorage.updateBlacklistItem({ starId, name, checkTime: this.utils.getNowStr(), lastPublishTime: parsed.lastPublishTime });
@@ -582,6 +595,14 @@ export class TaskExecutionService {
         const message = `${prefix}：成功 ${result.success}，解析/存储失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}${result.aborted ? `，未执行 ${result.aborted}` : ""}`;
         this.jquery("#checkNewVideoMsg").text(message), this.logger.log(message);
     }
+    /** Read every source identity before any item may be filtered or persisted. @param {any[]} items */
+    readCompletePageMovies(items) {
+        let movies;
+        try { movies = items.map(item => ({ element: this.jquery(item), movie: readListItem(this.jquery(item)) })); }
+        catch (cause) { throw Object.assign(new Error("部分影片番号无法确认，本次未更新检测结果", { cause }), { code: "INCOMPLETE_MOVIE_IDENTITY" }); }
+        assertCompleteMovieIdentities(movies.map(item => item.movie));
+        return movies;
+    }
     /** @param {any} e @param {string} site @param {string} t @param {string} n @param {string[]} a @param {Set<string>} i */
     async parsePage(e, site, t, n, a, i) {
         const selector = this.getSelector(site);
@@ -598,10 +619,11 @@ export class TaskExecutionService {
             lastCheckTime: this.utils.getNowStr(),
             newVideoList: []
         }), 0;
+        const movies = this.readCompletePageMovies([...s]);
         let c = [];
         const publishTimes = [];
-        for (const m of s) {
-            const e = this.jquery(m), {carNum: s, url: o, title: r, publishTime: l} = readListItem(e);
+        for (const { element: e, movie } of movies) {
+            const {carNum: s, url: o, title: r, publishTime: l} = movie;
             l && publishTimes.push(l);
             if (!s) continue;
             a.find((/** @type {string} */ e) => r.includes(e) || s.includes(e)) || (i.has(s) || (() => {
@@ -639,6 +661,7 @@ export class TaskExecutionService {
     /** @param {TaskRecord[]} items @param {string} starId @param {string} name @param {string[]} titleKeywords @param {Set<string>} blacklistSet */
     async parseActorMovies(items, starId, name, titleKeywords, blacklistSet) {
         if (this.featureNewVideoScanController) return this.featureNewVideoScanController.parseActorMovies(items, starId, name, titleKeywords, blacklistSet);
+        assertCompleteMovieIdentities(items);
         if (!items.length) {
             const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: [] });
             if (saved === false) throw new Error("演员记录已不存在");

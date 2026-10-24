@@ -2,7 +2,7 @@
 
 /** Own debounced discovery of list cards added by host-page navigation. */
 export class ListDomObserver {
-    /** @param {{root: Element | null, itemSelector: string, scope: any, getRevision: () => string, isProcessed: (item: Element) => boolean, onRemoved: (nodes: NodeList | Node[]) => void, onAddedNodes: (count: number) => void, onAdded: (items: Element[], revision: string) => Promise<any> | any, onError?: (error: unknown) => void, onMissingRoot?: () => void, delay?: number}} options */
+    /** @param {{root: Element | null, itemSelector: string, scope: any, getRevision: () => string, isProcessed: (item: Element) => boolean, onRemoved: (nodes: NodeList | Node[]) => void, onAddedNodes: (count: number) => void, onAdded: (items: Element[], revision: string) => Promise<any> | any, onRetained?: (items: Element[]) => void, onError?: (error: unknown) => void, onMissingRoot?: () => void, delay?: number}} options */
     constructor(options) {
         this.root = options.root;
         this.itemSelector = options.itemSelector;
@@ -12,6 +12,7 @@ export class ListDomObserver {
         this.onRemoved = options.onRemoved;
         this.onAddedNodes = options.onAddedNodes;
         this.onAdded = options.onAdded;
+        this.onRetained = options.onRetained;
         this.onError = options.onError ?? (() => {});
         this.onMissingRoot = options.onMissingRoot ?? (() => {});
         this.delay = options.delay ?? 100;
@@ -37,18 +38,23 @@ export class ListDomObserver {
     /** @param {MutationRecord[]} records */
     handleMutations(records) {
         if (this.disposed) return;
+        const discovered = new Set();
         for (const record of records) {
             this.onRemoved(record.removedNodes);
-            if (record.addedNodes.length) this.onAddedNodes(record.addedNodes.length);
             for (const node of record.addedNodes) {
                 if (node.nodeType !== 1) continue;
                 const element = /** @type {Element} */ (node);
-                element.matches(this.itemSelector) && !this.isProcessed(element) && this.pendingItems.add(element);
+                element.matches(this.itemSelector) && discovered.add(element);
                 element.querySelectorAll(this.itemSelector).forEach((/** @type {Element} */ item) => {
-                    if (!this.isProcessed(item)) this.pendingItems.add(item);
+                    discovered.add(item);
                 });
             }
         }
+        const retained = /** @type {Element[]} */ ([]), added = /** @type {Element[]} */ ([]);
+        for (const item of discovered) if (this.root?.contains(item)) (this.isProcessed(item) ? retained : added).push(item);
+        if (retained.length) this.onRetained?.(retained);
+        if (added.length) this.onAddedNodes(added.length);
+        added.forEach(item => this.pendingItems.add(item));
         if (!this.pendingItems.size) return;
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => {

@@ -83,7 +83,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         const pages = fixture.controller.pageItems, nextUrl = fixture.controller.nextUrl, firstScope = fixture.controller.liveScope;
         expect(pages.map(({ page }) => page)).toEqual([1, 2]);
         expect($(".movie-list").children()).toHaveLength(2);
-        expect(firstScope.snapshot().listeners).toBe(1);
+        expect(firstScope.snapshot().listeners).toBe(3);
         fixture.controller.stop();
         expect(fixture.controller.loader).toBeUndefined();
         expect(firstScope.snapshot()).toMatchObject({ disposed: true, listeners: 0, requestConsumers: 0 });
@@ -99,7 +99,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect(fixture.controller.nextUrl).toBe("/page/3");
         expect($(".movie-list").children()).toHaveLength(2);
         expect($(".jhs-scroll")).toHaveLength(1);
-        expect(fixture.controller.liveScope.snapshot().listeners).toBe(1);
+        expect(fixture.controller.liveScope.snapshot().listeners).toBe(3);
         expect(request).toHaveBeenCalledOnce();
         fixture.controller.dispose();
         expect(fixture.controller.pageItems).toEqual([]);
@@ -185,7 +185,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect(firstScope).not.toBeNull();
         const loadPromise = fixture.controller.loadNextPage();
         await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
-        expect(firstScope.snapshot()).toMatchObject({ listeners: 1, requestConsumers: 1 });
+        expect(firstScope.snapshot()).toMatchObject({ listeners: 3, requestConsumers: 1 });
         fixture.controller.stop();
         expect(fixture.controller.started).toBe(false);
         expect(fixture.controller.liveScope).toBeNull();
@@ -202,7 +202,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect(fixture.controller.pageItems).toBe(pages);
         expect(fixture.controller.pageItems.map(({ page }) => page)).toEqual([1]);
         expect($(".jhs-scroll")).toHaveLength(1);
-        expect(fixture.controller.liveScope.snapshot().listeners).toBe(1);
+        expect(fixture.controller.liveScope.snapshot().listeners).toBe(3);
         fixture.controller.dispose();
         expect(fixture.controller.pageItems).toEqual([]);
         expect(fixture.controller.nextUrl).toBeNull();
@@ -228,7 +228,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect(fixture.controller.waterfallPromise).toBeNull();
         await fixture.controller.start();
         expect($(".jhs-scroll")).toHaveLength(1);
-        expect(fixture.controller.liveScope.snapshot().listeners).toBe(1);
+        expect(fixture.controller.liveScope.snapshot().listeners).toBe(3);
         expect(fixture.controller.pageItems.map(({ page }) => page)).toEqual([1]);
         fixture.controller.dispose();
         fixture.scope.dispose();

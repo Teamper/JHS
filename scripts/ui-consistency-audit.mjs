@@ -1,5 +1,9 @@
 import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
+import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
+import { parseJavStoreSearch, parseJavStorePreview } from "../src/integrations/javstore/parser.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 const srcRoot = join(repoRoot, "src");
@@ -20,6 +24,10 @@ function requireMatch(source, pattern, message) {
 
 function forbidMatch(source, pattern, message) {
   if (pattern.test(source)) failures.push(message);
+}
+
+function requireBehavior(check, message) {
+  try { check(); } catch (error) { failures.push(`${message}: ${error.message}`); }
 }
 
 async function listJavaScriptFiles(dir) {
@@ -249,7 +257,16 @@ requireMatch(builtCardSource, /`\/actors\/\$\{encodeURIComponent\(\w+\)\}\?t=d`/
 forbidMatch(builtCardSource, /\w+=`\$\{(\w+)\}\/actors\/\$\{\w+\.starId\}\?t=d`[\s\S]{0,1000}\b(?:const|let)\b[^;]*\b\1=/,
   "built actress cards read a shadowed variable before initialization");
 requireMatch(constants, /function normalizeCarNum[\s\S]*\[ "undefined", "null" \]/, "shared car number normalization is missing");
-requireMatch(javDbHostAdapter, /location\.searchParams\.get\("jhsCarNum"\)[\s\S]*copiedCarNum[\s\S]*panelCarNum[\s\S]*fallbackCarNum/, "detail car number priority is incomplete");
+requireBehavior(() => {
+  const dom = new JSDOM('<main class="video-detail"><a title="复制番号" data-clipboard-text="ABC-123"></a></main>', {url:"https://javdb.com/v/test?jhsCarNum=XYZ-999"});
+  try {
+    const host = new JavDbHostAdapter(dom.window.document, dom.window.location);
+    assert.equal(host.readMovieRef().carNum, "ABC-123");
+    assert.deepEqual(host.readMovieRef().stateEligibility, {eligible:false,reason:"conflicting"});
+    dom.window.document.querySelector("a").remove();
+    assert.equal(host.readMovieRef().stateEligibility.eligible, false);
+  } finally { dom.window.close(); }
+}, "native detail evidence must outrank URL hints and reject conflicts or missing evidence");
 requireMatch(constants, /function assertPageInfoContract[\s\S]*expected object/, "getPageInfo development contract assertion is missing");
 requireMatch(javDbHostAdapter, /readMovieInfo\(\)[\s\S]*actress[\s\S]*actors[\s\S]*publishTime/, "JavDB host adapter must return complete detail identity and metadata");
 requireMatch(utils, /new URL\(e, window\.location\.origin\)[\s\S]*searchParams\.set\("jhsCarNum", carNum\)/, "detail URLs must carry the known car number");
@@ -265,15 +282,24 @@ forbidMatch(previewVideo, /\$nativeVideo\.attr\("src"|nativeVideo\.load\(\)/, "J
 requireMatch(screenshot, /async getScreenshot\(rawCarNum/, "screenshots must validate carNum first");
 requireMatch(screenshot, /无法获取番号，缩略图未加载/, "screenshot invalid-number fallback is missing");
 requireMatch(javstoreIntegration, /javstore\.net\/search\?q=\$\{encodeURIComponent\(movieRef\.carNum \|\| ""\)\}/, "JavStore must use its query search endpoint");
-requireMatch(parsers, /a\[href\$=["']-pn\.html["']\][\s\S]{0,240}includes\(normalizedCarNum\.toUpperCase\(\)\)[\s\S]{0,180}\.map\([\s\S]{0,120}\.get\(\)/,
-  "JavStore must preserve all matching -pn.html results in source order");
+requireBehavior(() => {
+  const dom = new JSDOM('<a href="/ABC-123-pn.html">ABC-123</a><a href="/ABC-1234-pn.html">ABC-1234</a><main><div class="grid"><a href="/ABC-123-new.html">ABC-123</a><a href="/ABC-123-pn.html">ABC-123</a><a href="https://external.test/ABC-123-pn.html">ABC-123</a></div></main>');
+  try { assert.deepEqual(parseJavStoreSearch(dom.window.document,"ABC-123"),["https://javstore.net/ABC-123-pn.html","https://javstore.net/ABC-123-new.html"]); }
+  finally { dom.window.close(); }
+}, "JavStore must match full numbers, reject external details and deduplicate old/grid candidates in DOM order");
 requireMatch(javstoreIntegration, /for \(const candidate of candidates\)[\s\S]*await request\(candidate/, "JavStore detail URLs must be checked sequentially");
 requireMatch(parsers, /normalizeJavStoreAssetUrl\(previewHref, detailUrl\)/, "JavStore preview URLs must be resolved and normalized against the detail page");
 requireMatch(parsers, /"javstore\.net" === hostname \|\| hostname\.endsWith\("\.javstore\.net"\)[\s\S]{0,100}url\.protocol = "https:"/, "JavStore HTTP preview URLs must be upgraded selectively");
 requireMatch(parsers, /previewUrl\.replace\("\.th", ""\)/, "JavStore preview URLs must retain .th compatibility");
 requireMatch(screenshot, /this\.screenshot\.resolve\(\{ carNum \}/, "screenshots must resolve through ScreenshotService");
 requireMatch(screenshot, /this\.screenshot\.normalizeAssetUrl\(rawUrl/, "screenshot rendering must normalize assets through ScreenshotService");
-requireMatch(parsers, /"CLICK HERE!" === wrap\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
+requireBehavior(() => {
+  for (const label of ["CLICK HERE!","CLICK HERE"]) {
+    const dom = new JSDOM(`<main><img src="/ABC-123_s.jpg"><a href="/ABC-123.th.jpg">${label}</a></main>`);
+    try { assert.equal(parseJavStorePreview(dom.window.document,"https://javstore.net/ABC-123-pn.html","ABC-123"),"https://javstore.net/ABC-123.jpg"); }
+    finally { dom.window.close(); }
+  }
+}, "JavStore explicit preview links must take priority and retain both punctuation forms");
 requireMatch(javstoreIntegration, /if \(imageUrl\) return[\s\S]*return \[\]/, "JavStore must continue after a candidate without CLICK HERE!");
 forbidMatch(screenshot, /javstore\.net\/search\/|img\[src\*=['"]_s\.jpg/, "legacy JavStore search or detail fallback must not return");
 requireMatch(otherSite, /跳过第三方站点解析：番号不可用/, "external sites must fail fast without a car number");

@@ -226,7 +226,7 @@ assertIncludes(listPageSource, "async doFilter(revision =", "list page function 
 assert(!listPageSource.includes("getListFilterCapability"), "list filter context must not be resolved from the legacy plugin");
 assert(!listControllerSource.includes("getListFilterCapability"), "ListController must consume declared filter inputs directly");
 assertIncludes(listFeatureSource, "SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.clog, SERVICE.titleKeywords", "List Feature declares its filter data dependencies");
-assertIncludes(listFeatureSource, "deps[SERVICE.state].getActivityLog()", "List Feature reads activity history through StateService");
+assertIncludes(listFeatureSource, "deps[SERVICE.state].getListActivity()", "List Feature reads lightweight recent activity through StateService");
 assertIncludes(listFeatureSource, "deps[SERVICE.legacyStorage].getBlacklistMap()", "List Feature reads the established blacklist map through its declared storage boundary");
 assertIncludes(listControllerSource, "new ListFilterContextProvider({", "ListController owns the cached list evaluation context");
 assertIncludes(javDbHostAdapter, 'querySelector("#magnets-content")', "protected JavDB resource boundary");
@@ -272,7 +272,8 @@ for (const retiredVisibilityToken of [ "shouldHideInDefaultView", "settingHidden
   assert(!listPageSource.includes(retiredVisibilityToken), `retired all-view visibility rule returned: ${retiredVisibilityToken}`);
 for (const retiredSetting of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem" ])
   assert(!listPageSource.includes(retiredSetting) && !settingFormsSource.includes(retiredSetting) && !settingTemplatesSource.includes(retiredSetting), `retired list visibility setting returned: ${retiredSetting}`);
-assertIncludes(listPageSource, "getIndexedItems(payload.carNums || [])", "precise list DOM index lookup");
+assertIncludes(listPageSource, "refreshCarNums(payload.carNums,", "precise list state refresh dispatch with local commit proof");
+assertIncludes(listPageSource, "this.getIndexedItems(keys)", "precise list DOM index lookup");
 assertIncludes(listPageSource, "scheduleRecount()", "frame-coalesced status recount");
 assertIncludes(listFiltersSource, "normalizeQuickFilterKey", "quick filter compatibility boundary");
 assertIncludes(listPageSource, "collectCurrentPageSummary", "single current-page summary collector");

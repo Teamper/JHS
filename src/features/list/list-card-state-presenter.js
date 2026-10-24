@@ -24,9 +24,12 @@ export class ListCardStatePresenter {
         this.hostAdapter = options.hostAdapter;
         this.document = options.document ?? options.hostAdapter?.document ?? globalThis.document;
         this.readCardIdentity = options.readCardIdentity ?? null;
+        /** @type {Map<Element, any>} */ this.summaryItems = new Map();
+        /** @type {any} */ this.summary = null;
         this.yieldFrame = options.yieldFrame ?? (() => new Promise((resolve) => {
             const view = this.document?.defaultView;
-            view?.requestAnimationFrame ? view.requestAnimationFrame(() => setTimeout(resolve)) : setTimeout(resolve);
+            const scheduler = /** @type {any} */ (view)?.scheduler;
+            if (scheduler?.yield) void scheduler.yield().then(resolve); else setTimeout(resolve);
         }));
     }
 
@@ -35,16 +38,18 @@ export class ListCardStatePresenter {
     async processItems(items, { context, filter, tagPosition = "rightTop", isCurrent }) {
         if (!this.readCardIdentity) throw new Error("List card identity reader is unavailable");
         const visibleItems = [];
+        let deadline = performance.now() + 4;
         for (let index = 0; index < items.length; index++) {
             if (!isCurrent()) return null;
-            if (index > 0 && index % 12 === 0) {
+            if (index > 0 && (index % 12 === 0 || performance.now() >= deadline)) {
                 await this.yieldFrame();
                 if (!isCurrent()) return null;
+                deadline = performance.now() + 4;
             }
             const item = items[index];
             if (this.hostAdapter?.site === "javbus" && item.querySelector(".avatar-box")) continue;
-            const { carNum, title } = this.readCardIdentity(item);
-            const evaluation = evaluateListItem({ carNum, title }, context, { filter });
+            const record = this.readCardIdentity(item), { carNum, title } = record;
+            const evaluation = evaluateListItem(record, context, { filter });
             this.presentCard({ item, carNum, title, evaluation, context, tagPosition });
             if (!evaluation.hardHidden) visibleItems.push(item);
         }
@@ -67,6 +72,7 @@ export class ListCardStatePresenter {
             item.querySelectorAll(".jhs-status-tags").forEach((node) => node.remove());
             this.renderBadges(item, { carNum, title, flags, visibilityReasons, context, tagPosition });
         }
+        this.updateSummary(item);
         return hardHidden;
     }
 
@@ -105,7 +111,32 @@ export class ListCardStatePresenter {
         }
     }
 
+    /** @param {Element} item */
+    updateSummary(item) {
+        const next = this.collectSummary([item]), previous = this.summaryItems.get(item);
+        this.summary ??= this.collectSummary([]);
+        this.adjustSummary(next, 1);
+        if (previous) this.adjustSummary(previous, -1);
+        this.summaryItems.set(item, next);
+    }
+    /** @param {any} value @param {number} direction */
+    adjustSummary(value, direction) {
+        for (const key of Object.keys(value)) {
+            if (key === "debug") for (const name of Object.keys(value.debug)) this.summary.debug[name] += direction * value.debug[name];
+            else this.summary[key] += direction * value[key];
+        }
+    }
+    removeDetachedSummaries() {
+        for (const [item, value] of this.summaryItems) if (!item.isConnected) {
+            this.adjustSummary(value, -1);
+            this.summaryItems.delete(item);
+        }
+    }
+    resetSummary() { this.summaryItems.clear(); this.summary = null; }
+    getSummary() { return this.summary ? { ...this.summary, debug: { ...this.summary.debug } } : this.collectSummary(); }
+
     /** Collect the same current-page state and debug counters exposed by the 6.5.1 compatibility surface. */
+    /** @param {Iterable<Element> | null} [items] */
     collectSummary(items = null) {
         const selectors = this.hostAdapter?.getListSelectors?.();
         const cards = items ?? (selectors?.itemSelector && this.document ? this.document.querySelectorAll(selectors.itemSelector) : []);

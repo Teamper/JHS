@@ -54,6 +54,64 @@ export class DiagnosticsService {
         this.legacyTimings = [];
         this.legacyHttp = options.legacyHttp ?? null;
         this.networkController = null;
+        /** @type {{longTasks: number, blockingMs: number, longFrames: number, interactions: number[]} | null} */ this.performanceCapture = null;
+        this.performanceRecording = false;
+        /** @type {PerformanceObserver[]} */ this.performanceObservers = [];
+        /** @type {Map<string, {count: number, total: number}>} */ this.work = new Map();
+        /** @type {Map<string, Record<string, number>>} */ this.computations = new Map();
+    }
+
+    /** Opt-in, bounded, numeric-only capture. No observer is attached during normal browsing.
+     * @param {Window & typeof globalThis} [view] */
+    startPerformanceCapture(view = window) {
+        this.stopPerformanceCapture();
+        this.work.clear(); this.computations.clear();
+        this.performanceRecording = true;
+        this.performanceCapture = { longTasks: 0, blockingMs: 0, longFrames: 0, interactions: /** @type {number[]} */ ([]) };
+        const Observer = view.PerformanceObserver;
+        if (!Observer) return;
+        for (const type of ["longtask", "long-animation-frame", "event"]) {
+            if (!Observer.supportedEntryTypes.includes(type)) continue;
+            const observer = new Observer(list => {
+                const capture = this.performanceCapture;
+                if (!capture) return;
+                for (const entry of list.getEntries()) {
+                    if (type === "longtask") { capture.longTasks++; capture.blockingMs += Math.max(0, entry.duration - 50); }
+                    else if (type === "long-animation-frame") capture.longFrames++;
+                    else if (/** @type {any} */ (entry).interactionId) {
+                        capture.interactions.push(entry.duration);
+                        if (capture.interactions.length > 200) capture.interactions.shift();
+                    }
+                }
+            });
+            observer.observe(/** @type {PerformanceObserverInit} */ (type === "event" ? { type, durationThreshold: 16 } : { type }));
+            this.performanceObservers.push(observer);
+        }
+    }
+    stopPerformanceCapture() { this.performanceRecording = false; this.performanceObservers.forEach(observer => observer.disconnect()); this.performanceObservers = []; }
+    /** @param {string} name @param {number} [amount] */
+    recordWork(name, amount = 1) {
+        if (!this.performanceRecording) return;
+        const item = this.work.get(name) ?? { count: 0, total: 0 };
+        item.count++; item.total += amount; this.work.set(name, item);
+    }
+    /** Numeric-only bounded phase accounting; callers supply no user data. @param {string} name @param {Record<string, number>} sample */
+    recordComputation(name, sample) {
+        if (!this.performanceRecording) return;
+        const value = this.computations.get(name) ?? { calls: 0 };
+        value.calls++;
+        for (const key of ["cpuMs", "steps", "yields", "waitMs", "holdMs"]) if (Number.isFinite(sample[key])) value[key] = (value[key] || 0) + sample[key];
+        for (const [key, source] of [["maxSliceMs", "maxSliceMs"], ["maxWaitMs", "waitMs"], ["maxHoldMs", "holdMs"]]) if (Number.isFinite(sample[source])) value[key] = Math.max(value[key] || 0, sample[source]);
+        this.computations.delete(name); this.computations.set(name, value);
+        if (this.computations.size > 32) { const first = this.computations.keys().next().value; if (first !== undefined) this.computations.delete(first); }
+    }
+    performanceSnapshot() {
+        const capture = this.performanceCapture;
+        if (!capture) return null;
+        const durations = [...capture.interactions].sort((a, b) => a - b);
+        return { longTasks: capture.longTasks, blockingMs: capture.blockingMs, longFrames: capture.longFrames,
+            interactionP95: durations.length ? durations[Math.ceil(durations.length * .95) - 1] : null,
+            sampledInteractions: durations.length, work: Object.fromEntries(this.work), computations: Object.fromEntries(this.computations) };
     }
 
     /** @param {string} id @param {number} durationMs */
@@ -113,6 +171,7 @@ export class DiagnosticsService {
             cacheHits: this.cacheStats.hits, cacheMisses: this.cacheStats.misses,
             providerHealth: Object.fromEntries(this.providerHealth), errors: this.errors.map((error) => ({ ...error })),
             legacyPlugins: [...this.legacyPlugins], legacyPluginDescriptors: this.legacyPluginDescriptors.map((item) => ({ ...item })), legacyStartup: this.legacyStartup, legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
+            performance: this.performanceSnapshot(),
             browser: this.browserMetadata, uptimeMs: performance.now() - this.startedAt,
         });
     }

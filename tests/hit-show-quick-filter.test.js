@@ -5,6 +5,7 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import { getIcon } from "../src/core/icons.js";
+import { assertMovieStateEligible, getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -30,7 +31,7 @@ function loadRealListPage({ carList = [] } = {}) {
         }
     }
     const context = vm.createContext({
-        console, getIcon, window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver,
+        console, getIcon, assertMovieStateEligible, getMovieStateEligibility, window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver,
         IntersectionObserver: undefined, localStorage: dom.window.localStorage, URLSearchParams, URL, fetch, $, BasePlugin,
         storageManager, utils: { time: vi.fn(() => "t") }, clog: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn(), html: vi.fn() }, show: { error: vi.fn() },
         isHitShowPage: () => true, mapLimit: vi.fn(async (items, limit, mapper) => Promise.all(items.map(mapper))), i: (target, key, value) => (target[key] = value),
