@@ -80,8 +80,28 @@ jobs:
       - name: Install configured browser dependencies
         working-directory: tests/browser
         run: npx playwright install chromium firefox --with-deps
-      - name: Run deterministic browser smoke
-        run: npm run check:browser
+      - name: Run deterministic startup gate
+        id: startup
+        env:
+          JHS_BROWSER_OUTPUT_DIR: ${{ github.workspace }}/output/playwright/startup/test-results
+          JHS_BROWSER_REPORT_DIR: ${{ github.workspace }}/output/playwright/startup/report
+        run: npm --prefix tests/browser run test:startup
+      - name: Diagnose unpacked startup after candidate failure
+        if: ${{ !cancelled() && steps.startup.outcome == 'failure' }}
+        env:
+          JHS_BROWSER_OUTPUT_DIR: ${{ github.workspace }}/output/playwright/startup-control/test-results
+          JHS_BROWSER_REPORT_DIR: ${{ github.workspace }}/output/playwright/startup-control/report
+        run: |
+          JHS_PACK_STATIC_RESOURCES=0 npm run build
+          npm --prefix tests/browser run test:startup
+      - name: Run independent functional regression
+        if: ${{ !cancelled() && (steps.startup.outcome == 'success' || steps.startup.outcome == 'failure') }}
+        env:
+          JHS_BROWSER_OUTPUT_DIR: ${{ github.workspace }}/output/playwright/functional/test-results
+          JHS_BROWSER_REPORT_DIR: ${{ github.workspace }}/output/playwright/functional/report
+        run: |
+          npm run build
+          npm --prefix tests/browser run test:functional
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

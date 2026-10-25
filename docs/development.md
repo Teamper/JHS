@@ -46,6 +46,8 @@ Remove-Item Env:JHS_PACK_STATIC_RESOURCES
 
 CI 的 Node 22 完整检查、浏览器功能和视觉任务显式验证编码候选，沿用原体积、启动与视觉门禁；Node 20 任务保留默认未编码构建覆盖。该 CI 配置不改变普通 Dev 构建的默认值。
 
+CI 启动门禁失败后会额外记录同源码未编码构建的启动对照，并独立运行编码候选的功能回归；各阶段报告分目录保留，启动失败仍使任务失败，不会被后续功能通过覆盖。
+
 日常功能分支以 develop 为基础，正式发布准备完成后再按授权合入 main。main 热修复须在 24 小时内同步到 develop；develop 的 `scripts/check-refactor-sync.mjs` 检查 origin/main 的祖先关系和提交年龄。
 
 开始前检查：
