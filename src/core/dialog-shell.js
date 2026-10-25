@@ -100,6 +100,14 @@ export function enhanceDialogButtons(root) {
 }
 
 const prepared = new WeakSet();
+/** @type {WeakMap<Function, (element: HTMLElement, id: number) => boolean>} */
+const shellMounts = new WeakMap();
+
+/** Mount the iframe shell before its remote document finishes loading. @param {Record<string, any>} options @param {number} id @param {Document} doc */
+export function mountPendingDialogShell(options, id, doc) {
+    const root = doc.getElementById(`layui-layer${id}`);
+    return Boolean(root && shellMounts.get(options.success)?.(root, id));
+}
 
 /** 消费内部 UI 配置，保留 vendor 回调、返回值和关闭策略。 */
 /** @param {Record<string, any>} options @param {{getDialogArea?: (size: string) => string[]}} [utils] */
@@ -116,9 +124,9 @@ export function prepareDialogOptions(options = {}, utils = {}) {
     let ownedRoot;
     let ended = false;
     const success = vendor.success, end = vendor.end;
-    vendor.success = function(/** @type {any} */ element, /** @type {number} */ id) {
+    const mount = function(/** @type {any} */ element, /** @type {number} */ id) {
         const root = element?.nodeType === 1 ? element : element?.[0] || globalThis.document?.getElementById(`layui-layer${id}`);
-        if (ended || root && !root.isConnected) return;
+        if (ended || root && !root.isConnected) return false;
         // Layer can call success on every iframe load; one root owns one lock/listener scope.
         if (root?.classList && root !== ownedRoot) {
             scope?.dispose();
@@ -165,9 +173,14 @@ export function prepareDialogOptions(options = {}, utils = {}) {
             scope.listen(window, "resize", resize);
             resize();
         }
+        return true;
+    };
+    vendor.success = function(/** @type {any} */ element, /** @type {number} */ id) {
+        if (!mount(element, id)) return;
         try { return success?.call(this, element, id); }
         catch (error) { scope?.dispose(); throw error; }
     };
+    shellMounts.set(vendor.success, mount);
     vendor.end = function(/** @type {any[]} */ ...args) {
         ended = true;
         scope?.dispose();

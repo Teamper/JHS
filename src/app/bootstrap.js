@@ -1,6 +1,6 @@
 // @ts-check
 
-import { prepareDialogOptions } from "../core/dialog-shell.js";
+import { mountPendingDialogShell, prepareDialogOptions } from "../core/dialog-shell.js";
 import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { detectSite, resolveLegacyJavDbUrl } from "../core/site-context.js";
 import { injectCoreCss } from "../core/css-injection.js";
@@ -36,10 +36,12 @@ function patchLayerRuntime(layerRuntime, utilsRuntime) {
     layerRuntime.open = function(options = {}) {
         options = prepareDialogOptions(options, utilsRuntime);
         const success = options.success;
-        return originalOpen.call(this, { ...options, success(element, id) {
+        const id = originalOpen.call(this, { ...options, success(element, id) {
             if (typeof success === "function") success.call(this, element, id);
-            utilsRuntime.setupEscClose(id);
+            if (document.getElementById(`layui-layer${id}`)) utilsRuntime.setupEscClose(id);
         } });
+        if (Number(options.type) === 2 && mountPendingDialogShell(options, id, document)) utilsRuntime.setupEscClose(id);
+        return id;
     };
 }
 
