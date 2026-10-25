@@ -55,6 +55,17 @@ function javStoreUrlPath(value, baseUrl) {
     } catch { return ""; }
 }
 
+/** DMM 的封面 CID 可带 maker 数字前缀；仅认可固定域、目录与同名封面文件。 @param {string} value @param {string} baseUrl @param {string} target */
+function javStoreCoverPath(value, baseUrl, target) {
+    const path = javStoreUrlPath(value, baseUrl);
+    try {
+        const url = new URL(value, baseUrl);
+        const cid = url.hostname === "pics.dmm.co.jp" && !url.username && !url.password
+            && path.match(/^\/mono\/movie\/adult\/(\d{1,3}([a-z]{2,10}\d{2,}))\/\1(?:pl|ps)\.jpg$/i);
+        return cid && cid[2].toUpperCase() === target ? target : path;
+    } catch { return path; }
+}
+
 /** 全部可识别编号必须一致，且至少存在一项目标编号证据。 @param {string[]} evidence @param {string} target */
 function matchesJavStoreIdentity(evidence, target) {
     const tokens = evidence.flatMap(javStoreIdentityTokens);
@@ -80,7 +91,7 @@ export function parseJavStoreSearch($searchPage, carNum, baseUrl = "https://javs
         const url = javStoreDetailUrl(anchor.getAttribute("href") || "", baseUrl);
         if (!url || !(/-pn\.html$/i.test(url.pathname) || anchor.matches("main .grid a"))) continue;
         const evidence = [javStoreUrlPath(url.href, baseUrl), anchor.textContent || "", anchor.getAttribute("title") || ""];
-        for (const image of anchor.querySelectorAll("img")) evidence.push(image.getAttribute("alt") || "", image.getAttribute("title") || "", javStoreUrlPath(image.getAttribute("src") || "", baseUrl));
+        for (const image of anchor.querySelectorAll("img")) evidence.push(image.getAttribute("alt") || "", image.getAttribute("title") || "", javStoreCoverPath(image.getAttribute("src") || "", baseUrl, target));
         if (matchesJavStoreIdentity(evidence, target)) candidates.add(url.href);
     }
     return [...candidates];
