@@ -16,6 +16,10 @@ const staticStyleFiles = new Set([
     "src/features/detail/detail-shortcut-controller.js",
     "src/features/system/responsive-shell-controller.js", "src/features/list/cover-button-controller.js",
     "src/features/detail/javbus-preview-controller.js",
+    "src/features/detail/native-detail-media-controller.js", "src/features/identity/image-search-controller.js",
+    "src/features/external-bridge/magnet-hub-controller.js", "src/features/list/auto-page-controller.js",
+    "src/features/list/list-batch-ui.js", "src/features/translation/translation-controller.js",
+    "src/core/logger.js", "src/core/css-injection.js",
 ]);
 
 /** Keep the existing style envelope while compacting CSS with the build's CSS parser. */
@@ -35,16 +39,22 @@ export async function prebuildStyles(path, source) {
     if (!entry && !staticStyleFiles.has(path)) return source;
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     if (!entry) {
-        const replacements = [];
-        for (const statement of file.statements) {
-            if (!ts.isVariableStatement(statement)) continue;
-            for (const declaration of statement.declarationList.declarations) {
-                const value = declaration.initializer;
-                if (value && ts.isIdentifier(declaration.name) && declaration.name.text.endsWith("_STYLES") &&
-                    (ts.isNoSubstitutionTemplateLiteral(value) || ts.isStringLiteral(value))) {
-                    replacements.push({ start: value.getStart(file), end: value.end, text: JSON.stringify(await compactCss(value.text)) });
-                }
+        const values = [], replacements = [];
+        function visit(node) {
+            let value;
+            if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) &&
+                (/(?:_STYLES|_CSS)$/.test(node.name.text) || path === "src/core/css-injection.js" && node.name.text === "F")) {
+                value = node.initializer;
+            } else if (path === "src/core/logger.js" && ts.isBinaryExpression(node) &&
+                node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText(file) === "style.textContent") {
+                value = node.right;
             }
+            if (value && (ts.isNoSubstitutionTemplateLiteral(value) || ts.isStringLiteral(value))) values.push(value);
+            ts.forEachChild(node, visit);
+        }
+        visit(file);
+        for (const value of values) {
+            replacements.push({ start: value.getStart(file), end: value.end, text: JSON.stringify(await compactCss(value.text)) });
         }
         for (const replacement of replacements.reverse()) source = source.slice(0, replacement.start) + replacement.text + source.slice(replacement.end);
         return source;

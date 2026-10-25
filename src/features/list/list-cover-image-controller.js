@@ -1,5 +1,44 @@
 // @ts-check
 
+/** Upgrade the source only; observers, pending loads and disposal remain with each caller.
+ * @param {HTMLImageElement} image @param {string | undefined} site
+ */
+export function upgradeListCoverImage(image, site) {
+    if (image.dataset.hdReplaced === "true") return;
+    const originalSrc = image.currentSrc || image.src;
+    let upgradedSrc = image.dataset.full || originalSrc;
+    if (site === "javdb") {
+        if (/jdbstatic\.com|javdb\.com/i.test(originalSrc)) {
+            upgradedSrc = upgradedSrc.replace("thumbs", "covers");
+            image.dataset.full = upgradedSrc;
+            image.dataset.hdReplaced = "true";
+            image.title = "";
+        }
+    } else if (site === "javbus") {
+        const thumbnailPath = /\/(imgs|pics)\/(thumb|thumbs)\//;
+        const extension = /(\.jpg|\.jpeg|\.png)$/i;
+        if (thumbnailPath.test(originalSrc)) {
+            upgradedSrc = upgradedSrc.replace(thumbnailPath, "/$1/cover/").replace(extension, "_b$1");
+            image.dataset.full = upgradedSrc;
+            image.dataset.hdReplaced = "true";
+            image.dataset.title = image.title;
+            image.title = "";
+        } else if (/ps(\.jpg|\.jpeg|\.png)$/i.test(originalSrc)) {
+            upgradedSrc = upgradedSrc.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1");
+            image.dataset.full = upgradedSrc;
+            image.dataset.hdReplaced = "true";
+            image.dataset.title = image.title;
+            image.title = "";
+        }
+    }
+    if (image.dataset.hdReplaced !== "true" || upgradedSrc === originalSrc) return;
+    image.src = upgradedSrc;
+    image.onerror = function () {
+        if (this.src !== originalSrc) this.src = originalSrc;
+        this.onerror = null;
+    };
+}
+
 /** Upgrade visible list covers while preserving the host's initial thumbnail request. */
 export class ListCoverImageController {
     /** @param {{hostAdapter: any, scope?: any, window?: any}} options */
@@ -75,39 +114,7 @@ export class ListCoverImageController {
 
     /** @param {HTMLImageElement} image */
     replaceOne(image) {
-        if (image.dataset.hdReplaced === "true") return;
-        const originalSrc = image.currentSrc || image.src;
-        let upgradedSrc = image.dataset.full || originalSrc;
-        if (this.site === "javdb") {
-            if (/jdbstatic\.com|javdb\.com/i.test(originalSrc)) {
-                upgradedSrc = upgradedSrc.replace("thumbs", "covers");
-                image.dataset.full = upgradedSrc;
-                image.dataset.hdReplaced = "true";
-                image.title = "";
-            }
-        } else if (this.site === "javbus") {
-            const thumbnailPath = /\/(imgs|pics)\/(thumb|thumbs)\//;
-            const extension = /(\.jpg|\.jpeg|\.png)$/i;
-            if (thumbnailPath.test(originalSrc)) {
-                upgradedSrc = upgradedSrc.replace(thumbnailPath, "/$1/cover/").replace(extension, "_b$1");
-                image.dataset.full = upgradedSrc;
-                image.dataset.hdReplaced = "true";
-                image.dataset.title = image.title;
-                image.title = "";
-            } else if (/ps(\.jpg|\.jpeg|\.png)$/i.test(originalSrc)) {
-                upgradedSrc = upgradedSrc.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1");
-                image.dataset.full = upgradedSrc;
-                image.dataset.hdReplaced = "true";
-                image.dataset.title = image.title;
-                image.title = "";
-            }
-        }
-        if (image.dataset.hdReplaced !== "true" || upgradedSrc === originalSrc) return;
-        image.src = upgradedSrc;
-        image.onerror = function () {
-            if (this.src !== originalSrc) this.src = originalSrc;
-            this.onerror = null;
-        };
+        return upgradeListCoverImage(image, this.site);
     }
 
     dispose() {

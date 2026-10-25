@@ -32,6 +32,18 @@ node --check JHS-7.0.dev.user.js
 
 该命令由构建器同时输出根目录和 dist 的完整 Dev 脚本，不手工编辑产物。将根目录 Dev 文件与本次改动一起提交；也可在源码提交后生成独立的产物提交，使构建标识指向已提交源码。普通 `npm run build` / `npm run check` 仍只写忽略的 dist，不刷新仓库交付快照。正式 `JHS.user.js` 与 `dist/JHS.user.js` 始终保留。
 
+`npm run analyze:bundle` 在 `output/static-resource-size/` 生成同一 Dev 元数据的 `unpacked.user.js`、`packed.user.js` 和 `size-report.json`，报告包含最终 UTF-8 字节、解码器与许可证成本、资源来源及未编码模块贡献。资源编码只处理登记的固定 CSS/HTML 文本，保持单文件与源码明文，不增加线上依赖或存储格式。
+
+资源编码目前默认关闭，候选构建使用 `JHS_PACK_STATIC_RESOURCES=1`；须在等价性、启动、功能与视觉验收完成后再调整默认值。PowerShell 示例：
+
+```powershell
+$env:JHS_PACK_STATIC_RESOURCES = "1"
+npm run build:dev
+Remove-Item Env:JHS_PACK_STATIC_RESOURCES
+```
+
+候选验证时同样向 `npm run check` 与浏览器构建传入该环境变量。`dist/dev/JHS-7.0.dev.size.json` 记录本次 Dev 构建的资源成本。对照启动测试可将 `JHS_STARTUP_BUNDLE` 指向其中一份产物，并分别设置 `JHS_STARTUP_MODE=cold` / `warm`；每站点默认 30 次采样，历史绝对门禁与两份产物的相对变化分别报告。
+
 日常功能分支以 develop 为基础，正式发布准备完成后再按授权合入 main。main 热修复须在 24 小时内同步到 develop；develop 的 `scripts/check-refactor-sync.mjs` 检查 origin/main 的祖先关系和提交年龄。
 
 开始前检查：

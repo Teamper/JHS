@@ -622,10 +622,16 @@ assert(!reviewSource.includes("R(movieId, 2, pageSize).catch"), "review page 2 m
 assert(!sourceMain.includes("isFc2Page"), "FC2 title filtering must bind to the mounted detail root");
 
 const devBuilder = await read("scripts/build-dev.mjs");
+const devMetadata = await read("scripts/dev-metadata.mjs");
+const devArtifact = await read("dist/dev/JHS-7.0.dev.user.js");
 assertIncludes(devBuilder, '"JHS-7.0.dev.user.js"', "isolated migration build output");
-assertIncludes(devBuilder, "JHS Dev 7.0", "isolated migration build name");
-assertIncludes(devBuilder, "https://github.com/Teamper/JHS/dev/7.0", "isolated migration namespace");
+assertIncludes(devBuilder, "createDevTransforms(version, commit + dirty)", "shared migration build identity");
+assertIncludes(devMetadata, "JHS Dev 7.0", "isolated migration build name");
+assertIncludes(devMetadata, "https://github.com/Teamper/JHS/dev/7.0", "isolated migration namespace");
 assertIncludes(devBuilder, "7.0.0-dev.${timestamp}", "isolated migration version identifier");
+assert(/^\/\/ @name\s+JHS Dev 7\.0\s*$/m.test(devArtifact), "built migration script must retain its isolated name");
+assert(/^\/\/ @namespace\s+https:\/\/github\.com\/Teamper\/JHS\/dev\/7\.0\s*$/m.test(devArtifact), "built migration script must retain its isolated namespace");
+assert(/^\/\/ @version\s+7\.0\.0-dev\.\d{12}\s*$/m.test(devArtifact), "built migration script must retain its timestamped version");
 
 console.log(
   `Regression checks passed for ${version}: ${expectedPlugins.length} plugins, ${regressionMatrix.length} scopes, ${stableReleaseChecks.length} stable release checks`

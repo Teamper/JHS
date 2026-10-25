@@ -22,6 +22,17 @@ function staticStyles(source) {
 }
 
 describe("build-time core styles", () => {
+    it("compacts explicitly owned _CSS constants without rewriting dynamic styles", async () => {
+        const source = 'export const IMAGE_SEARCH_CSS = `.jhs-image-search { padding: 4px; content:"a  b"; }`; export const DYNAMIC_CSS = `.item {width:${width}px}`;';
+        const compiled = await prebuildStyles("src/features/identity/image-search-controller.js", source);
+        expect(compiled).toContain('".jhs-image-search{padding:4px;content:\\"a  b\\"}"');
+        expect(compiled).toContain('export const DYNAMIC_CSS = `.item {width:${width}px}`;');
+    });
+    it("compacts the owned preview stylesheet without changing its assignment or lifecycle", async () => {
+        const source = 'function inject() { const style = document.createElement("style"); style.textContent = `.image-hover-preview { color: var(--jhs-text); }`; document.head.append(style); }';
+        const compiled = await prebuildStyles("src/core/logger.js", source);
+        expect(compiled).toBe(source.replace('`.image-hover-preview { color: var(--jhs-text); }`', '".image-hover-preview{color:var(--jhs-text)}"'));
+    });
     it("preserves CSS strings, descendant selectors, calc spacing and attributed envelopes", async () => {
         const output = await compactCss('<style id="fixture"> .parent .child { content:"a  b"; width:calc(100% - 2px); --label: a b; } </style>');
         expect(output).toContain('<style id="fixture">');

@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { buildUserscript, distPath, repoRoot, rootPath } from "./build.mjs";
+import { createDevTransforms } from "./dev-metadata.mjs";
 
 async function sha256(path) {
   try {
@@ -22,15 +23,11 @@ const devPath = join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js");
 const deliver = process.argv.includes("--deliver");
 const deliveryPath = join(repoRoot, "JHS-7.0.dev.user.js");
 
-const transformMetadata = (metadata) => metadata
-  .replace(/^\/\/ @name\s+.+$/m, "// @name         JHS Dev 7.0")
-  .replace(/^\/\/ @namespace\s+.+$/m, "// @namespace    https://github.com/Teamper/JHS/dev/7.0")
-  .replace(/^\/\/ @version\s+.+$/m, `// @version      ${version}`)
-  .replace(/^\/\/ @description\s+.+$/m, `// @description  JHS 7.0 migration build ${commit}${dirty}`)
-  .replace(/^\/\/ @(downloadURL|updateURL).*(?:\r?\n|$)/gm, "");
-
-const transformBundle = (bundle) => `document.documentElement?.setAttribute("data-jhs-dev-build", ${JSON.stringify(`${version}|${commit}${dirty}`)});\n${bundle}`;
-const result = await buildUserscript({ outputPaths: deliver ? [devPath, deliveryPath] : [devPath], transformMetadata, transformBundle });
+const { transformMetadata, transformBundle } = createDevTransforms(version, commit + dirty);
+// Validation can opt in before the default changes; the common/release builder remains unpacked.
+const packStaticResources = process.env.JHS_PACK_STATIC_RESOURCES === "1";
+const result = await buildUserscript({ outputPaths: deliver ? [devPath, deliveryPath] : [devPath], transformMetadata, transformBundle, packStaticResources });
+await writeFile(join(repoRoot, "dist", "dev", "JHS-7.0.dev.size.json"), JSON.stringify(result.analysis, null, 2) + "\n", "utf8");
 for (const [path, hash] of before) {
   if (await sha256(path) !== hash) throw new Error(`Dev build modified formal artifact: ${path}`);
 }

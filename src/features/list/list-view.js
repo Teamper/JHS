@@ -11,6 +11,18 @@ function parseData(value, fallback) {
     try { return JSON.parse(value); } catch { return fallback; }
 }
 
+/** Render identical selection markers for the Feature view and its compatibility fallback.
+ * @param {any} root @param {any} options @param {ReturnType<typeof normalizeQuickFilterKey>} filter
+ */
+export function syncQuickFilterPresentation(root, options, filter) {
+    const isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), tabs = root.find(".jhs-segmented__item");
+    tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
+    isPrimary ? tabs.filter(`[data-jhs-filter="${filter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
+    options.attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+    root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[filter]}`);
+    $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[filter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+}
+
 /** Own list visibility, quick-filter controls, and card navigation. */
 export class ListView {
     /** @param {{hostAdapter: any, selectors: Record<string, string>, logger?: Pick<Console, "error">, onFilterChange?: (filter: unknown, options?: any) => any, onOpenMovieDetail?: (item: any, options?: any) => any}} options */
@@ -76,7 +88,7 @@ export class ListView {
             .on("click.jhsListView", ".jhs-segmented__item", ((/** @type {any} */ event) => this.selectFilter($(event.currentTarget).data("jhs-filter"))))
             .on("keydown.jhsListView", ".jhs-segmented__item", ((/** @type {any} */ event) => {
                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-                event.preventDefault();
+                event.preventDefault(), event.stopPropagation();
                 const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
                 tabs.eq(next).trigger("click").trigger("focus");
             }));
@@ -104,13 +116,9 @@ export class ListView {
 
     /** @param {unknown} filter */
     syncQuickFilterUi(filter) {
-        const normalizedFilter = normalizeQuickFilterKey(filter), isPrimary = PRIMARY_QUICK_FILTERS.includes(normalizedFilter), root = this.quickFilterRoot?.length ? this.quickFilterRoot : $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = this.filterPopover ? $(this.filterPopover.menu).find(".jhs-filter-option") : root.find(".jhs-filter-option");
+        const normalizedFilter = normalizeQuickFilterKey(filter), root = this.quickFilterRoot?.length ? this.quickFilterRoot : $("#jhs-quick-filter"), options = this.filterPopover ? $(this.filterPopover.menu).find(".jhs-filter-option") : root.find(".jhs-filter-option");
         this.activeFilter = normalizedFilter;
-        tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
-        isPrimary ? tabs.filter(`[data-jhs-filter="${normalizedFilter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
-        options.attr("aria-checked", "false").filter(`[data-jhs-filter="${normalizedFilter}"]`).attr("aria-checked", "true");
-        root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[normalizedFilter]}`);
-        $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[normalizedFilter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${normalizedFilter}"]`).attr("aria-checked", "true");
+        syncQuickFilterPresentation(root, options, normalizedFilter);
     }
 
     /** @param {unknown} filter @returns {ReturnType<typeof normalizeQuickFilterKey>} */

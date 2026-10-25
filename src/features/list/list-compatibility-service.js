@@ -13,6 +13,8 @@ import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword 
 import { scanAllPages } from "../../features/list/batch-scanner.js";
 import { ListItemIndex } from "../../features/list/list-item-index.js";
 import { ListRefreshCoordinator } from "../../features/list/list-refresh-coordinator.js";
+import { upgradeListCoverImage } from "./list-cover-image-controller.js";
+import { syncQuickFilterPresentation } from "./list-view.js";
 
 /** @typedef {Record<string, any>} ListRecord */
 /** @typedef {any} JQueryHandle */
@@ -431,7 +433,7 @@ export class ListPageCompatibilityService {
         root.on("click", ".jhs-segmented__item", ((/** @type {any} */ event) => this.setQuickFilter($(event.currentTarget).data("jhs-filter"))))
             .on("keydown", ".jhs-segmented__item", ((/** @type {any} */ event) => {
                 if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
-                event.preventDefault();
+                event.preventDefault(), event.stopPropagation();
                 const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
                 tabs.eq(next).trigger("click").trigger("focus");
             })).on("click", ".jhs-filter-option", ((/** @type {any} */ event) => {
@@ -470,12 +472,8 @@ export class ListPageCompatibilityService {
     }
     syncQuickFilterUi() {
         if (this.listView) return this.listView.syncQuickFilterUi(this.activeQuickFilter);
-        const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
-        tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
-        isPrimary ? tabs.filter(`[data-jhs-filter="${filter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
-        options.attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
-        root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[filter]}`);
-        $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[filter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+        const filter = normalizeQuickFilterKey(this.activeQuickFilter), root = $("#jhs-quick-filter");
+        syncQuickFilterPresentation(root, root.find(".jhs-filter-option"), filter);
     }
     rememberTagExpand() {
         if (this.featureListTagExpansionAdapter) return this.featureListTagExpansionAdapter.start();
@@ -834,29 +832,7 @@ export class ListPageCompatibilityService {
     }
     /** @param {HTMLImageElement} e */
     _replaceSingleHdImg(e) {
-        if ("true" === e.dataset.hdReplaced) return;
-        const originalSrc = e.currentSrc || e.src;
-        let upgradedSrc = e.dataset.full || originalSrc;
-        if (r) {
-            const isJavdbCdn = /jdbstatic\.com|javdb\.com/i.test(originalSrc);
-            if (isJavdbCdn) {
-                upgradedSrc = upgradedSrc.replace("thumbs", "covers");
-                e.dataset.full = upgradedSrc;
-                e.dataset.hdReplaced = "true";
-                e.title = "";
-            }
-        } else if (l) {
-            const t = /\/(imgs|pics)\/(thumb|thumbs)\//, n = /(\.jpg|\.jpeg|\.png)$/i;
-            t.test(originalSrc) ? (upgradedSrc = upgradedSrc.replace(t, "/$1/cover/").replace(n, "_b$1"), e.dataset.full = upgradedSrc, e.dataset.hdReplaced = "true",
-            e.dataset.title = e.title, e.title = "") : /ps(\.jpg|\.jpeg|\.png)$/i.test(originalSrc) && (upgradedSrc = upgradedSrc.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1"), e.dataset.full = upgradedSrc,
-            e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
-        }
-        if ("true" !== e.dataset.hdReplaced || upgradedSrc === originalSrc) return;
-        e.src = upgradedSrc;
-        e.onerror = function() {
-            if (this.src !== originalSrc) this.src = originalSrc;
-            this.onerror = null;
-        };
+        return upgradeListCoverImage(e, r ? "javdb" : l ? "javbus" : undefined);
     }
     /** 先完成当前缩略图请求，再升级为高清图，避免取消首屏可见内容。 @param {HTMLImageElement} image */
     _scheduleHdUpgrade(image) {

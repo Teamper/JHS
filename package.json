@@ -20,6 +20,7 @@
     "build": "node scripts/build-dev.mjs",
     "build:dev": "node scripts/build-dev.mjs",
     "build:dev:deliver": "node scripts/build-dev.mjs --deliver",
+    "analyze:bundle": "node scripts/analyze-bundle-size.mjs",
     "build:release": "node scripts/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
+    "fflate": "0.8.3",
     "jquery": "^3.7.1",
     "jsdom": "^26.1.0",
     "typescript": "5.9.3",

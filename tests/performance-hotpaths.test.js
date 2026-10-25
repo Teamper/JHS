@@ -34,6 +34,8 @@ function loadListObserver() {
     const source = [
         readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-refresh-coordinator.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-cover-image-controller.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-compatibility-service.js"), "utf8"),
         "globalThis.TestListPagePlugin=ListPageCompatibilityService;"
     ].join("\n");
@@ -48,9 +50,9 @@ function loadListObserver() {
     return { dom, plugin, $, translate, mapLimit, storageManager, clog: context.clog };
 }
 
-function initializeAccessibilityDom(html) {
+function initializeAccessibilityDom(html, clock = performance) {
     const dom = new JSDOM(html), source = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
-        document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask, performance, setTimeout, clearTimeout
+        document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask, performance: clock, setTimeout, clearTimeout
     });
     context.lifecycleScope = {
         addCleanup() {},
@@ -167,15 +169,17 @@ describe("list mutation hot path", () => {
 
 describe("accessibility mutation scope", () => {
     it("enhances JHS controls without relabeling ordinary host buttons", async () => {
-        const dom = initializeAccessibilityDom('<button id="host" title="宿主"></button><button id="jhs" class="jhs-btn" title="工具"></button>'), { document } = dom.window;
+        let elapsed = 0;
+        const dom = initializeAccessibilityDom('<button id="host" title="宿主"></button><button id="jhs" class="jhs-btn" title="工具"></button>', { now: () => elapsed += 100 }), { document } = dom.window;
         expect(document.querySelector("#host").hasAttribute("aria-label")).toBe(false);
         expect(document.querySelector("#jhs").getAttribute("aria-label")).toBe("工具");
 
         const hostRoot = document.createElement("div"), jhsRoot = document.createElement("div");
         hostRoot.innerHTML = '<button id="host-dynamic" title="宿主动态"></button>', jhsRoot.className = "jhs-panel", jhsRoot.innerHTML = '<button id="jhs-dynamic" title="动态工具"></button>',
         document.body.append(hostRoot, jhsRoot);
-        await new Promise((resolve => setTimeout(resolve, 0)));
+        // The accessibility budget can yield after the first root; join the observable completion.
+        await vi.waitFor(() => expect(document.querySelector("#jhs-dynamic").getAttribute("aria-label")).toBe("动态工具"));
         expect(document.querySelector("#host-dynamic").hasAttribute("aria-label")).toBe(false);
-        expect(document.querySelector("#jhs-dynamic").getAttribute("aria-label")).toBe("动态工具");
+        dom.window.close();
     });
 });

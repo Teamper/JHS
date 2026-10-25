@@ -47,6 +47,8 @@ function loadRealListPage({ carList = [] } = {}) {
         readTestFile(join(repoRoot, "src/features/list/list-refresh-coordinator.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/list-item-reader.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/storage-index.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-cover-image-controller.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-compatibility-service.js"), "utf8"),
         "normalizeMovieCarNum = normalizeCarNum;",
         `globalThis.__testCarMap = createIndexedMap(${JSON.stringify(carList)}, "carNum");`,
@@ -75,6 +77,18 @@ const hitShowCard = (id, carNum, title = "测试标题") => `
     </div>`;
 
 describe("hit-show quick filter pipeline (real ListPagePlugin)", () => {
+    it("isolates fallback filter arrow navigation from host page shortcuts", async () => {
+        const { dom, plugin, $ } = loadRealListPage(), hostKeys = [];
+        dom.window.document.body.addEventListener("keydown", event => hostKeys.push(event.key));
+        await plugin.createQuickFilter();
+        const tab = dom.window.document.querySelector('[role="tab"][data-jhs-filter="waitCheck"]');
+        tab.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", keyCode: 39, bubbles: true, cancelable: true }));
+        expect($('.jhs-segmented__item[aria-selected="true"]').text()).toBe("收藏");
+        expect(hostKeys).toEqual([]);
+        $("#jhs-quick-filter").remove();
+        $(dom.window.document).off(".jhsQuickFilter");
+        dom.window.close();
+    });
     it("marks a downloaded ranking item and routes it to the downloaded tab only", async () => {
         const { dom, plugin, $ } = loadRealListPage({ carList: [ { carNum: "ABC-123", stateFlags: { downloaded: true } } ] });
         const container = dom.window.document.querySelector(".movie-list");

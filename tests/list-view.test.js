@@ -113,6 +113,23 @@ describe("ListView", () => {
         view.dispose();
     });
 
+    it("keeps owned filter navigation away from host page shortcuts without swallowing other keys", () => {
+        const { dom, view } = createHarness(), hostKeys = [];
+        dom.window.document.body.addEventListener("keydown", event => hostKeys.push(event.key));
+        view.createQuickFilter("waitCheck");
+        const tab = dom.window.document.querySelector('[role="tab"][data-jhs-filter="waitCheck"]');
+        tab.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", keyCode: 39, bubbles: true, cancelable: true }));
+        expect(view.getActiveFilter()).toBe("favorite");
+        expect(dom.window.document.activeElement.textContent).toBe("收藏");
+        expect(hostKeys).toEqual([]);
+        tab.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "a", bubbles: true }));
+        expect(hostKeys).toEqual(["a"]);
+        view.dispose();
+        tab.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+        expect(hostKeys).toEqual(["a", "ArrowLeft"]);
+        dom.window.close();
+    });
+
     it("preserves modified navigation and opens the detail view for ordinary clicks", async () => {
         const { $, view } = createHarness(), onOpenMovieDetail = vi.fn(async () => {});
         view.onOpenMovieDetail = onOpenMovieDetail;

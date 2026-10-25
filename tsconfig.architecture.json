@@ -25,6 +25,7 @@
     "src/core/credential-crypto.js",
     "src/core/css-injection.js",
     "src/core/icons.js",
+    "src/core/packed-text.js",
     "src/core/icon-license.js",
     "src/core/product-names.js",
     "src/core/detail-state-controller.js",
