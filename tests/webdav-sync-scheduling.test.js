@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
 import { nextSyncDelay, syncPublishDueAt } from "../src/services/webdav-sync-scheduling.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -107,6 +108,39 @@ describe("durable publication deadlines", () => {
         expect((await a.store.read()).dirty).toBe(true); expect(aTimers.at(-1)).toBeLessThanOrEqual(1000);
         b.advance(1000); await b.service.check({ scheduled: true });
         expect((await b.store.read()).dirty).toBe(false); expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(3);
+    });
+
+    it("wakes the editing tab when another tab drains its deferred changes first", async () => {
+        const dav = memoryDav(), a = await syncReplica(dav); await a.service.check();
+        const b = await syncReplica(dav, { values: a.values, locks: a.locks });
+        const timers = recordTimers(b.service), owner = new LifecycleScope("editing-tab");
+        b.service.window = Object.assign(new EventTarget(), b.service.window);
+        b.service.start(owner, Object.assign(new EventTarget(), { hidden: false }));
+        await b.service.reschedule();
+        const entered = deferred(), gate = deferred(), original = dav.client.writeSyncFile.getMockImplementation();
+        let upload;
+        dav.client.writeSyncFile.mockImplementationOnce(async (...args) => { entered.resolve(); await gate.promise; return original(...args); });
+        try {
+            await a.state.patch("POLL-1", { favorite: true });
+            upload = a.service.check(); await entered.promise;
+            await b.state.patch("POLL-1", { watched: true });
+            // The application forwards the committed business event to this method.
+            b.store.requestReconciliation();
+            // Another tab can drain the shared intent before this tab's delayed worker.
+            await a.store.flushPending(); await b.store.flushPending();
+            await vi.waitFor(() => expect(timers.at(-1)).toBeLessThanOrEqual(1000));
+            await b.service.check({ scheduled: true });
+            expect(timers.at(-1)).toBe(1000);
+            const pending = await b.store.read();
+            expect(pending.localRevision).toBeGreaterThan(pending.pending.coveredRevision);
+            expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(2);
+            gate.resolve(); await upload;
+            b.advance(5000); await b.service.check({ scheduled: true });
+            expect((await b.service.getStatus()).pendingChanges).toBe(0);
+            expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(3);
+            const reader = await syncReplica(dav); await reader.service.check();
+            expect(reader.values.get("car_list")[0].stateFlags).toMatchObject({ favorite: true, watched: true });
+        } finally { gate.resolve(); await upload; owner.dispose(); }
     });
 
     it("repairs missing/future deadlines immediately and lets network backoff outrank publication", async () => {

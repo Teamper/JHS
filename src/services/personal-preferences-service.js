@@ -27,7 +27,7 @@ export class PersonalPreferencesService {
             if (raw == null || Object.hasOwn(this.settings.snapshot(), name)) continue;
             try { patch[name] = this.decode(key, raw); } catch { /* Preserve invalid legacy values for recovery. */ }
         }
-        await this.settings.update((/** @type {any} */ draft) => { for (const [name, value] of Object.entries(patch)) if (!Object.hasOwn(draft, name)) draft[name] = value; });
+        if (Object.keys(patch).length) await this.settings.update((/** @type {any} */ draft) => { for (const [name, value] of Object.entries(patch)) if (!Object.hasOwn(draft, name)) draft[name] = value; });
         const snapshot = this.settings.snapshot();
         if (!Object.hasOwn(snapshot, "webDavSyncKeepCount") && ["yes", true].includes(snapshot.webDavAutoBackupEnabled)) {
             const count = Number(snapshot.webDavAutoBackupKeepCount);

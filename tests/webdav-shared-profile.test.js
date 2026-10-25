@@ -13,6 +13,16 @@ function fixture() {
     return { values, storage, credential, profile, make };
 }
 describe("encrypted shared WebDAV authority", () => {
+    it("finishes an empty preference migration without entering a settings transaction", async () => {
+        const get = vi.fn(async () => ({})), settings = new SettingsService({ get, set: async () => {} });
+        await settings.load(); get.mockClear();
+        const values = new Map(), local = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+        const prefs = new PersonalPreferencesService(settings, local);
+        await prefs.migrate();
+        expect(values.get("jhs_personal_preferences_migrated_v1")).toBe("yes");
+        expect(get).not.toHaveBeenCalled();
+        expect(settings.snapshot()).toEqual({});
+    });
     it("preserves the legacy partial-save API before a shared authority exists", async () => {
         const f = fixture(), a = f.make("https://javdb.com");
         await a.save({ password: "replacement" }); expect((await a.snapshot()).profile).toEqual({ ...f.profile, password: "replacement" });

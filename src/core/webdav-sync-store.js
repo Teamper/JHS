@@ -54,9 +54,14 @@ export class WebDavSyncStore extends EventTarget {
         for (;;) {
         const before = await this.ledger.read();
         const state = await this.forage.getItem(SYNC_STATE_KEY);
-        if (state && (state.schema !== 1 || !state.model?.records || !state.shadow || !Array.isArray(state.undoEligible))) throw new Error("同步状态损坏或版本不受支持，请保留数据并使用恢复入口");
         const pending = await this.ledger.read();
         if (before.epoch !== pending.epoch) continue;
+        return this.readStateSnapshot(state, pending);
+        }
+    }
+    /** Interpret an epoch-verified read, or a snapshot owned by the shared lock. @param {Dict | null} state @param {Dict} pending @returns {Dict} */
+    readStateSnapshot(state, pending) {
+        if (state && (state.schema !== 1 || !state.model?.records || !state.shadow || !Array.isArray(state.undoEligible))) throw new Error("同步状态损坏或版本不受支持，请保留数据并使用恢复入口");
         // A crashed reset may leave a new ledger epoch beside an old sidecar.
         // Fail closed until initialization repairs it; never spin on storage.
         if (state?.undoEpoch && state.undoEpoch !== pending.epoch) state.undoEligible = [];
@@ -71,41 +76,35 @@ export class WebDavSyncStore extends EventTarget {
             return compactSyncMetadata(state);
         }
         return { schema: 1, replicaId: "", counter: 0, seq: 0, localRevision: 0, publishedRevision: 0, joined: false, binding: "", model: emptySyncModel(), shadow: {}, layout: {}, dirty: false, dirtySinceAt: 0, lastLocalChangeAt: 0, pending: null, confirmed: {}, known: {}, deleting: [], lastSuccessAt: 0, retryAt: 0, failures: 0, error: "", cleanupError: "", paused: false, undoEligible: [] };
-        }
     }
     async initialize() {
         return this.coordinator.runExclusive(async () => {
             await this.recoverWithoutLock();
             const pending = await this.ledger.read();
-            await this.ledger.write(pending);
-            // Adopt legacy sidecars once under the shared lock. Subsequent reads
-            // pair their undo baseline with the durable epoch, including imports.
-            const legacy = await this.forage.getItem(SYNC_STATE_KEY);
-            if (legacy?.schema === 1 && legacy.model?.records && legacy.shadow && Array.isArray(legacy.undoEligible) && legacy.undoEpoch !== pending.epoch) {
-                if (legacy.undoEpoch) legacy.undoEligible = [];
-                await this.writeWithoutLock(legacy);
-            }
-            let state = await this.read();
-            if (!state.replicaId) {
+            const state = this.readStateSnapshot(await this.forage.getItem(SYNC_STATE_KEY), pending);
+            const needsReplica = !state.replicaId;
+            if (needsReplica) {
                 state.replicaId = crypto.randomUUID();
                 const activity = await this.forage.getItem("activity_log");
                 state.undoEligible = (activity?.entries || []).filter((/** @type {any} */ entry) => entry.commitState === "committed").map((/** @type {any} */ entry) => entry.id);
-                await this.writeWithoutLock(state);
             }
+            // First creation, legacy adoption and interrupted resets persist ledger before sidecar.
+            // All reads here remain under this same shared lock; public read() still verifies epochs.
+            if (needsReplica || state.undoEpoch !== pending.epoch) await this.writeWithoutLock(state, pending);
             return state;
         });
     }
-    /** @param {Dict} state */
-    async writeWithoutLock(state) {
-        const pending = await this.ledger.read();
-        pending.metadataRevision++;
-        if (!Number.isSafeInteger(pending.metadataRevision)) throw new Error("同步元数据版本已超出安全范围");
-        pending.replicaId = state.replicaId;
-        state.undoEpoch = pending.epoch;
-        await this.ledger.write(pending);
+    /** @param {Dict} state @param {Dict | null} [pending] */
+    async writeWithoutLock(state, pending = null) {
+        const current = pending ?? await this.ledger.read();
+        current.metadataRevision++;
+        if (!Number.isSafeInteger(current.metadataRevision)) throw new Error("同步元数据版本已超出安全范围");
+        current.replicaId = state.replicaId;
+        state.undoEpoch = current.epoch;
+        await this.ledger.write(current);
         this.deps.diagnostics?.recordWork("sync.metadataWrites");
         await this.forage.setItem(SYNC_STATE_KEY, compactSyncMetadata(state));
-        this.replicaId = state.replicaId; this.installUndo(state.undoEligible, pending);
+        this.replicaId = state.replicaId; this.installUndo(state.undoEligible, current);
     }
     /** @param {(state: Dict) => void | Promise<void>} change */
     update(change) { return this.coordinator.runExclusive(async () => { const state = await this.read(); await change(state); await this.writeWithoutLock(state); return state; }); }
@@ -173,7 +172,8 @@ export class WebDavSyncStore extends EventTarget {
         await this.ledger.write(pending); this.baseEligible.clear(); await this.refreshUndo();
         if (state.replicaId) { state.undoEligible = []; await this.writeWithoutLock(state); }
     }
-    requestReconciliation() { this.hasDeferred = true; this.scheduleReconciliation(); }
+    // Wake transport before another tab can drain the shared intent without a local reconciliation event.
+    requestReconciliation() { this.hasDeferred = true; this.dispatchEvent(new Event("changes")); this.scheduleReconciliation(); }
     scheduleReconciliation() {
         if (!this.enabled || !this.hasDeferred || !this.deps.backgroundWork || this.reconciliationTimer || this.reconciliation || this.backgroundAbort.signal.aborted) return;
         this.reconciliationTimer = setTimeout(() => {

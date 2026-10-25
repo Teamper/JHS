@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
 import { SYNC_STATE_KEY } from "../src/core/webdav-sync-store.js";
+import { SYNC_PENDING_KEY } from "../src/core/sync-pending-ledger.js";
 import { historyRank, maximumClock, SYNC_DOMAINS } from "../src/core/webdav-sync-model.js";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -15,6 +16,55 @@ async function writeDomain(replica, domain, value, pruned = []) {
 }
 
 describe("incremental WebDAV sync bookkeeping", () => {
+    it("reopens an initialized replica without rewriting its durable epoch or sidecar", async () => {
+        const a = await syncReplica(memoryDav());
+        const state = structuredClone(a.values.get(SYNC_STATE_KEY)), pending = structuredClone(a.values.get(SYNC_PENDING_KEY));
+        a.forage.setItem.mockClear();
+        await a.store.initialize();
+        expect(a.forage.setItem).not.toHaveBeenCalled();
+        expect(a.values.get(SYNC_STATE_KEY)).toEqual(state);
+        expect(a.values.get(SYNC_PENDING_KEY)).toEqual(pending);
+        expect(pending.replicaId).toBe(state.replicaId);
+        expect(pending.epoch).toBe(state.undoEpoch);
+    });
+
+    it("rejects a future sidecar before issuing any initialization writes", async () => {
+        const a = await syncReplica(memoryDav());
+        const future = { ...a.values.get(SYNC_STATE_KEY), schema: 99 };
+        a.values.set(SYNC_STATE_KEY, future); a.forage.setItem.mockClear();
+        await expect(a.store.initialize()).rejects.toThrow("同步状态损坏或版本不受支持");
+        expect(a.forage.setItem).not.toHaveBeenCalled();
+        expect(a.values.get(SYNC_STATE_KEY)).toEqual(future);
+    });
+
+    it("durably repairs a missing replica identity even when its epoch already matches", async () => {
+        const a = await syncReplica(memoryDav());
+        a.values.set(SYNC_STATE_KEY, { ...a.values.get(SYNC_STATE_KEY), replicaId: "" });
+        const state = await a.store.initialize(), pending = a.values.get(SYNC_PENDING_KEY);
+        expect(state.replicaId).not.toBe("");
+        expect(a.values.get(SYNC_STATE_KEY).replicaId).toBe(state.replicaId);
+        expect(pending.replicaId).toBe(state.replicaId);
+    });
+
+    it("adopts a legacy undo baseline and retries a first sidecar write without losing the epoch", async () => {
+        const a = await syncReplica(memoryDav());
+        const legacy = { ...a.values.get(SYNC_STATE_KEY), undoEligible: ["legacy-undo"] };
+        delete legacy.undoEpoch; a.values.set(SYNC_STATE_KEY, legacy);
+        await a.store.initialize();
+        expect(a.store.canUndo("legacy-undo")).toBe(true);
+        expect(a.values.get(SYNC_STATE_KEY).undoEpoch).toBe(a.values.get(SYNC_PENDING_KEY).epoch);
+        a.values.delete(SYNC_STATE_KEY); a.values.delete(SYNC_PENDING_KEY);
+        const save = a.forage.setItem.getMockImplementation();
+        a.forage.setItem.mockImplementation(async (key, value) => { if (key === SYNC_STATE_KEY) throw new Error("sidecar unavailable"); return save(key, value); });
+        await expect(a.store.initialize()).rejects.toThrow("sidecar unavailable");
+        const epoch = a.values.get(SYNC_PENDING_KEY).epoch;
+        expect(a.values.has(SYNC_STATE_KEY)).toBe(false);
+        a.forage.setItem.mockImplementation(save);
+        const state = await a.store.initialize();
+        expect(a.values.get(SYNC_STATE_KEY)).toEqual(state);
+        expect(a.values.get(SYNC_PENDING_KEY)).toMatchObject({ epoch, replicaId: state.replicaId });
+    });
+
     it("reads only the changed domain and preserves unrelated fields, tombstones, frontiers and layout", async () => {
         const a = await syncReplica(memoryDav(), { data: { car_list: [{ carNum: "SYNC-1", stateFlags: { favorite: true }, remark: "untouched" }], setting: { containerColumns: 4 }, filter_keyword_review: ["removed"] } });
         await a.service.check();
