@@ -165,7 +165,10 @@ test("6.5.1 → isolated 7.0 → 6.5.1 restores and continues using the same syn
   }
 });
 
-test("6.5.1 recovers a 7.0 journal interrupted after the car-list write", async ({ browser }, testInfo) => {
+for (const scenario of [
+  { name: "all affected domains", discovery: true, touchedDomains: ["carList", "actresses", "decisions", "activity"] },
+  { name: "state-only domains", discovery: false, touchedDomains: ["carList", "activity"] },
+]) test(`6.5.1 recovers a 7.0 journal interrupted after the car-list write: ${scenario.name}`, async ({ browser }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one shared IndexedDB context owns the interrupted transaction");
   const releaseUserscript = execFileSync("git", ["show", `${releaseCommit}:JHS.user.js`], {
     cwd: repoRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
@@ -176,11 +179,17 @@ test("6.5.1 recovers a 7.0 journal interrupted after the car-list write", async 
     const devPage = await context.newPage();
     await devPage.goto("https://javdb.com/search_advanced", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(devPage, { userscriptPath: devUserscriptPath, version: "7.0-dev", preserveStorage: false });
-    await devPage.evaluate(async () => {
+    const before = await devPage.evaluate(async discovery => {
       await window.storageManager.saveCar({
         carNum: "REC-123", url: "https://javdb.com/v/synthetic-rec-123", names: "synthetic recovery fixture", actionType: "hasDown",
       });
       const forage = window.storageManager.forage;
+      const carNum = discovery ? "REC-123" : "UNTOUCHED-456";
+      const actresses = [{ starId: "recovery-fixture", name: "Recovery fixture", actressType: "censored", newVideoList: [{ carNum, title: "Recovery fixture", publishTime: "2026-10-24" }] }];
+      const decisions = { [carNum]: { action: "snoozed", until: "2099-01-01T00:00:00.000Z" } };
+      await forage.setItem("favorite_actresses", actresses);
+      await forage.setItem("new_video_decisions", decisions);
+      window.storageManager._invalidateCache();
       const persist = forage.setItem.bind(forage);
       forage.setItem = (key, value) => {
         if (key === "activity_log" && value?.entries?.some((entry) => entry.type === "interrupted-v7")) {
@@ -190,13 +199,16 @@ test("6.5.1 recovers a 7.0 journal interrupted after the car-list write", async 
         return persist(key, value);
       };
       void window.stateService.patch("REC-123", { favorite: true }, { type: "interrupted-v7" });
-    });
+      return { actresses, decisions };
+    }, scenario.discovery);
     await devPage.waitForFunction(() => window.__jhsCrashProbe === "paused-after-car-list");
     const interrupted = await devPage.evaluate(async () => ({
       journal: await window.storageManager.forage.getItem("mutation_journal"),
       car: await window.storageManager.forage.getItem("car_list"),
     }));
-    expect(interrupted.journal).toMatchObject({ schema: 2, state: "prepared", touchedDomains: ["carList", "actresses", "decisions", "activity"] });
+    expect(interrupted.journal).toMatchObject({ schema: 2, state: "prepared", touchedDomains: scenario.touchedDomains });
+    expect(Object.keys(interrupted.journal.before)).toEqual(scenario.touchedDomains);
+    expect(Object.keys(interrupted.journal.after)).toEqual(scenario.touchedDomains);
     expect(interrupted.car.find((item) => item.carNum === "REC-123")?.stateFlags).toMatchObject({ downloaded: true, favorite: true });
     await devPage.close();
 
@@ -208,11 +220,15 @@ test("6.5.1 recovers a 7.0 journal interrupted after the car-list write", async 
       journal: await window.storageManager.forage.getItem("mutation_journal"),
       activity: await window.storageManager.forage.getItem("activity_log"),
       conflicts: await window.storageManager.forage.getItem("mutation_journal_conflicts"),
+      actresses: await window.storageManager.forage.getItem("favorite_actresses"),
+      decisions: await window.storageManager.forage.getItem("new_video_decisions"),
     }));
     expect(recovered.car?.stateFlags).toMatchObject({ downloaded: true, favorite: false });
     expect(recovered.journal).toBeNull();
     expect(recovered.activity?.entries?.some((entry) => entry.type === "interrupted-v7")).toBe(false);
     expect(recovered.conflicts ?? []).toEqual([]);
+    expect(recovered.actresses).toEqual(before.actresses);
+    expect(recovered.decisions).toEqual(before.decisions);
     await releasePage.evaluate(() => window.stateService.patch("REC-123", { watched: true }, { type: "post-rollback-v651" }));
     const continued = await releasePage.evaluate(async () => ({
       car: await window.storageManager.getCar("REC-123"),
