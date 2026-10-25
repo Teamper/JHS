@@ -47,7 +47,7 @@ export async function syncReplica(remote, options = {}) {
     await settings.load();
     store = new WebDavSyncStore({ forage, coordinator, storage, settings, events, clock: () => now, validateSetting });
     storage.syncState = store; store.enabled = true;
-    coordinator.observer = store; coordinator.beforeMutation = () => store.recoverWithoutLock();
+    coordinator.observer = store; coordinator.beforeMutation = store.recoverBeforeMutation;
     const shared = Object.assign(new EventTarget(), {
         profile: options.profile ?? { url: "https://dav.example/dav", username: "user", password: "synthetic" }, revision: "one", isPaused: false,
         migrate: vi.fn(async () => {}), snapshot: vi.fn(async () => ({ profile: shared.profile, revision: shared.revision })), paused: async () => shared.isPaused,

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
-import { SYNC_STATE_KEY } from "../src/core/webdav-sync-store.js";
+import { SYNC_JOURNAL_KEY, SYNC_STATE_KEY } from "../src/core/webdav-sync-store.js";
 import { SYNC_PENDING_KEY } from "../src/core/sync-pending-ledger.js";
 import { historyRank, maximumClock, SYNC_DOMAINS } from "../src/core/webdav-sync-model.js";
 
@@ -16,6 +16,52 @@ async function writeDomain(replica, domain, value, pruned = []) {
 }
 
 describe("incremental WebDAV sync bookkeeping", () => {
+    it("uses its registered recovery hook once in each initialization lock", async () => {
+        const a = await syncReplica(memoryDav()), recover = vi.spyOn(a.store, "recoverWithoutLock");
+        a.coordinator.beforeMutation = a.store.recoverBeforeMutation;
+        await a.coordinator.runExclusive(async () => {});
+        expect(recover).toHaveBeenCalledOnce();
+        recover.mockClear();
+        await a.store.initialize();
+        expect(recover).toHaveBeenCalledOnce();
+        a.values.set(SYNC_PENDING_KEY, { ...a.values.get(SYNC_PENDING_KEY), schema: 99 });
+        a.forage.setItem.mockClear();
+        await expect(a.store.initialize()).rejects.toThrow("同步待处理记录损坏或来自未来版本");
+        expect(a.forage.setItem).not.toHaveBeenCalled();
+    });
+
+    it.each(["missing", "unrelated"])("still validates recovery with a %s coordinator hook", async mode => {
+        const a = await syncReplica(memoryDav()), recover = vi.spyOn(a.store, "recoverWithoutLock");
+        a.coordinator.beforeMutation = mode === "missing" ? null : async () => {};
+        a.values.set(SYNC_PENDING_KEY, { ...a.values.get(SYNC_PENDING_KEY), schema: 99 });
+        a.forage.setItem.mockClear();
+        await expect(a.store.initialize()).rejects.toThrow("同步待处理记录损坏或来自未来版本");
+        expect(recover).toHaveBeenCalledOnce();
+        expect(a.forage.setItem).not.toHaveBeenCalled();
+    });
+
+    it.each(["recovery", "initialized snapshot"])("overlaps independent %s reads while retaining the write barrier", async phase => {
+        const a = await syncReplica(memoryDav());
+        const before = structuredClone(a.values.get(SYNC_STATE_KEY));
+        if (phase !== "recovery") vi.spyOn(a.store, "recoverWithoutLock").mockResolvedValue(null);
+        const read = a.forage.getItem.getMockImplementation();
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        a.forage.getItem.mockImplementation(async key => {
+            if (key === SYNC_PENDING_KEY) await gate;
+            return read(key);
+        });
+        a.forage.getItem.mockClear(); a.forage.setItem.mockClear();
+        const operation = phase === "recovery" ? a.store.recoverWithoutLock() : a.store.initialize();
+        try {
+            const independentKey = phase === "recovery" ? SYNC_JOURNAL_KEY : SYNC_STATE_KEY;
+            await vi.waitFor(() => expect(a.forage.getItem.mock.calls.some(([key]) => key === independentKey)).toBe(true));
+            expect(a.forage.setItem).not.toHaveBeenCalled();
+        } finally { release(); await operation; }
+        expect(a.values.get(SYNC_STATE_KEY)).toEqual(before);
+        expect(a.forage.setItem).not.toHaveBeenCalled();
+    });
+
     it("reopens an initialized replica without rewriting its durable epoch or sidecar", async () => {
         const a = await syncReplica(memoryDav());
         const state = structuredClone(a.values.get(SYNC_STATE_KEY)), pending = structuredClone(a.values.get(SYNC_PENDING_KEY));

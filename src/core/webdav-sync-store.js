@@ -28,6 +28,7 @@ export class WebDavSyncStore extends EventTarget {
         this.deps = dependencies;
         this.forage = dependencies.forage;
         this.coordinator = dependencies.coordinator;
+        this.recoverBeforeMutation = () => this.recoverWithoutLock();
         this.ledger = new SyncPendingLedger(this.forage, dependencies.clock);
         this.undoEpoch = "";
         /** @type {Set<string>} */ this.baseEligible = new Set();
@@ -79,9 +80,10 @@ export class WebDavSyncStore extends EventTarget {
     }
     async initialize() {
         return this.coordinator.runExclusive(async () => {
-            await this.recoverWithoutLock();
-            const pending = await this.ledger.read();
-            const state = this.readStateSnapshot(await this.forage.getItem(SYNC_STATE_KEY), pending);
+            // The registered hook already completed recovery inside this same lock.
+            if (this.coordinator.beforeMutation !== this.recoverBeforeMutation) await this.recoverWithoutLock();
+            const [pending, stored] = await Promise.all([this.ledger.read(), this.forage.getItem(SYNC_STATE_KEY)]);
+            const state = this.readStateSnapshot(stored, pending);
             const needsReplica = !state.replicaId;
             if (needsReplica) {
                 state.replicaId = crypto.randomUUID();
@@ -199,8 +201,8 @@ export class WebDavSyncStore extends EventTarget {
     }
     /** Must run before every subsequent writer, even after a page crash. @returns {Promise<{notificationId: string, carNums: string[], domains?: string[], changedNames?: string[]} | null>} */
     async recoverWithoutLock() {
-        await this.ledger.read(); // Refuse unknown future intent schemas before any subsequent writer.
-        let journal = await this.forage.getItem(SYNC_JOURNAL_KEY);
+        // Independent reads start under the caller's lock; intent validation still precedes every write.
+        let [, journal] = await Promise.all([this.ledger.read(), this.forage.getItem(SYNC_JOURNAL_KEY)]);
         if (!journal) return null;
         await assertSupportedDataVersion(this.deps.storage);
         if (journal.schema !== 1 || !journal.after || journal.afterState?.schema !== 1 || !SYNC_DOMAINS.every(key => Object.hasOwn(journal.after, key))) throw new Error("同步恢复日志版本无效，已停止写入以保留本地数据");

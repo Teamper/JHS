@@ -126,7 +126,7 @@ export function createAppContext(runtime) {
         if (unsubscribe) rootScope.addCleanup(unsubscribe);
     }
     mutationCoordinator.observer = syncState;
-    mutationCoordinator.beforeMutation = () => syncState.recoverWithoutLock();
+    mutationCoordinator.beforeMutation = syncState.recoverBeforeMutation;
     if (runtime.legacyStorage) runtime.legacyStorage.syncState = syncState;
     storagePort.beforeSet = key => syncState.capture(key);
     const sharedProfile = new WebDavSharedProfile({ credential, storage, origin: globalThis.location?.origin || "", readLegacy: () => settings.runExclusive(() => webdav.readProfileWithoutLock()) });
