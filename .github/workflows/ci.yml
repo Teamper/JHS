@@ -29,6 +29,9 @@ jobs:
   check:
     name: Node 22 full check
     runs-on: ubuntu-latest
+    # Validate the packed candidate without enabling it in ordinary Dev builds.
+    env:
+      JHS_PACK_STATIC_RESOURCES: "1"
     outputs:
       should_release: ${{ steps.push_release.outputs.should_release }}
       version: ${{ steps.push_release.outputs.version }}
@@ -59,6 +62,8 @@ jobs:
   browser-smoke:
     name: Browser smoke
     runs-on: ubuntu-24.04
+    env:
+      JHS_PACK_STATIC_RESOURCES: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,6 +92,8 @@ jobs:
   visual:
     name: Windows visual regression
     runs-on: windows-2025
+    env:
+      JHS_PACK_STATIC_RESOURCES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

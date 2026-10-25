@@ -9,7 +9,15 @@ const digest = value => createHash("sha256").update(value).digest("hex");
 describe("userscript static resource build contract", () => {
     it("keeps metadata, licenses and formal files while reducing the complete UTF-8 artifact", async () => {
         const paths = ["JHS.user.js", "dist/JHS.user.js"];
-        const before = await Promise.all(paths.map(async path => digest(await readFile(path))));
+        const snapshotFormal = () => Promise.all(paths.map(async path => {
+            try { return digest(await readFile(new URL(`../${path}`, import.meta.url))); }
+            catch (error) {
+                // A clean checkout has no ignored dist artifact; its absence must also be preserved.
+                if (path === "dist/JHS.user.js" && error.code === "ENOENT") return null;
+                throw error;
+            }
+        }));
+        const before = await snapshotFormal();
         const transforms = {
             outputPaths: [],
             transformMetadata: metadata => metadata.replace(/^\/\/ @name\s+.+$/m, "// @name         JHS Dev 7.0"),
@@ -27,8 +35,8 @@ describe("userscript static resource build contract", () => {
         expect(packed.analysis.packing.resourceCount).toBeGreaterThan(0);
         expect(packed.analysis.modules.every(item => item.path.startsWith("src/"))).toBe(true);
         expect(() => new vm.Script(packed.output)).not.toThrow();
-        expect(await Promise.all(paths.map(async path => digest(await readFile(path))))).toEqual(before);
         const repeated = await buildUserscript({ ...transforms, packStaticResources: true });
         expect(repeated.output).toBe(packed.output);
+        expect(await snapshotFormal()).toEqual(before);
     }, 20_000);
 });

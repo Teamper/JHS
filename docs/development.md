@@ -44,6 +44,8 @@ Remove-Item Env:JHS_PACK_STATIC_RESOURCES
 
 候选验证时同样向 `npm run check` 与浏览器构建传入该环境变量。`dist/dev/JHS-7.0.dev.size.json` 记录本次 Dev 构建的资源成本。对照启动测试可将 `JHS_STARTUP_BUNDLE` 指向其中一份产物，并分别设置 `JHS_STARTUP_MODE=cold` / `warm`；每站点默认 30 次采样，历史绝对门禁与两份产物的相对变化分别报告。
 
+CI 的 Node 22 完整检查、浏览器功能和视觉任务显式验证编码候选，沿用原体积、启动与视觉门禁；Node 20 任务保留默认未编码构建覆盖。该 CI 配置不改变普通 Dev 构建的默认值。
+
 日常功能分支以 develop 为基础，正式发布准备完成后再按授权合入 main。main 热修复须在 24 小时内同步到 develop；develop 的 `scripts/check-refactor-sync.mjs` 检查 origin/main 的祖先关系和提交年龄。
 
 开始前检查：
