@@ -6,7 +6,7 @@ let writeChain = Promise.resolve();
 /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<unknown>, remove?: (key: string) => Promise<unknown>}} storage @param {string} [keyword] @param {{coordinator?: {runExclusive: (operation: () => any) => Promise<any>}, alreadyLocked?: boolean}} [options] */
 export function readReviewKeywords(storage, keyword, options = {}) {
     const write = async () => {
-        const current = await storage.get(REVIEW_KEY), legacy = await storage.get(LEGACY_KEY);
+        const [current, legacy] = await Promise.all([storage.get(REVIEW_KEY), storage.get(LEGACY_KEY)]);
         const values = [...new Set([...(Array.isArray(current) ? current.map(String) : []), ...(Array.isArray(legacy) ? legacy.map(String) : []), ...(keyword == null ? [] : [keyword])])];
         if (JSON.stringify(current ?? []) !== JSON.stringify(values)) {
             await storage.set(REVIEW_KEY, values);

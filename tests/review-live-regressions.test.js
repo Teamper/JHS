@@ -4,6 +4,7 @@ import jquery from "jquery";
 import { ReviewPanel } from "../src/ui/detail/review-panel.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { readReviewKeywords } from "../src/core/review-keywords.js";
 let dom;
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
 async function harness() {
@@ -18,6 +19,25 @@ async function harness() {
     return { $, settings, values, scope, list, panel };
 }
 describe("review settings regressions", () => {
+    it("reads both keyword sources before waiting and still verifies the merged write before cleanup", async () => {
+        const values = new Map([["filter_keyword_review", ["canonical"]], ["review_filter_keyword", ["legacy"]]]);
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        const storage = {
+            get: vi.fn(async key => { if (key === "filter_keyword_review") await gate; return values.get(key); }),
+            set: vi.fn(async (key, value) => values.set(key, value)),
+            remove: vi.fn(async key => { expect(values.get("filter_keyword_review")).toEqual(["canonical", "legacy"]); values.delete(key); }),
+        };
+        const reading = readReviewKeywords(storage, undefined, { alreadyLocked: true });
+        try {
+            await vi.waitFor(() => expect(storage.get).toHaveBeenCalledWith("review_filter_keyword"));
+            expect(storage.set).not.toHaveBeenCalled();
+            expect(storage.remove).not.toHaveBeenCalled();
+        } finally { release(); await reading; }
+        expect(await reading).toEqual(["canonical", "legacy"]);
+        expect(storage.remove).toHaveBeenCalledWith("review_filter_keyword");
+    });
+
     it("merges mistaken legacy keywords without losing the canonical list", async () => {
         const { values, panel } = await harness();
         values.set("review_filter_keyword", ["legacy", "blocked"]);

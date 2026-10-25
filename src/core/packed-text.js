@@ -13,7 +13,8 @@ export function createPackedTextReader(payload, expectedCount) {
         if (!Number.isInteger(index) || index < 0 || index >= expectedCount) throw new RangeError("Invalid static text index");
         if (!texts) {
             try {
-                const bytes = Uint8Array.from(atob(payload), character => character.charCodeAt(0));
+                const binary = atob(payload), bytes = new Uint8Array(binary.length);
+                for (let offset = 0; offset < binary.length; offset++) bytes[offset] = binary.charCodeAt(offset);
                 const decoded = JSON.parse(strFromU8(inflateSync(bytes)));
                 if (!Array.isArray(decoded) || decoded.length !== expectedCount || decoded.some(text => typeof text !== "string")) {
                     throw new TypeError("Invalid static text table");
