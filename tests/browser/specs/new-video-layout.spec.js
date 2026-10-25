@@ -28,21 +28,34 @@ for (const scenario of [
     await expect(page.locator("#nv-grid .nv-card")).toHaveCount(3);
     const result = await page.evaluate(async ({ removed, target, back }) => {
         const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
-        await plugin.getRuntimeService("state").removeFromNewVideoList(removed, "manual");
-        const pending = plugin.flushWorkspaceReload();
-        for (let attempt = 0; attempt < 50 && !plugin.nvRemovingCards.size; attempt++) await new Promise(resolve => setTimeout(resolve, 0));
-        const animationWasActive = plugin.nvRemovingCards.size > 0;
-        window.jQuery(`.nv-card[data-car="${removed[0]}"] .nv-select`).prop("checked", true).trigger("change");
-        window.jQuery('.nv-card[data-car="ABC-003"] .nv-select').prop("checked", true).trigger("change");
-        document.querySelector(`#nv-pagination-bar [data-nvpage="${target}"]`).click();
-        await pending;
-        if (back) document.querySelector('#nv-pagination-bar [data-nvpage="1"]').click();
-        const actresses = await window.storageManager.getFavoriteActressList();
-        return { animationWasActive, page: plugin.nvCurrentPage, selected: [...plugin.nvSelected],
-            visible: [...document.querySelectorAll("#nv-grid .nv-card")].map(card => card.dataset.car),
-            cached: plugin.nvFlatListCache.map(item => item.carNum),
-            stored: actresses.flatMap(actress => actress.newVideoList.map(item => typeof item === "string" ? item : item.carNum)),
+        const animate = window.jQuery.fn.animate;
+        let signalRemovalStarted;
+        const removalStarted = new Promise(resolve => { signalRemovalStarted = resolve; });
+        window.jQuery.fn.animate = function(properties, ...args) {
+            const result = animate.call(this, properties, ...args);
+            if (properties.opacity === 0 && this.is("#nv-grid .nv-card")) signalRemovalStarted();
+            return result;
         };
+        try {
+            await plugin.getRuntimeService("state").removeFromNewVideoList(removed, "manual");
+            // Committed writes defer local notifications; observe the real fade before joining its reload.
+            await removalStarted;
+            const pending = plugin.flushWorkspaceReload();
+            const animationWasActive = plugin.nvRemovingCards.size > 0;
+            window.jQuery(`.nv-card[data-car="${removed[0]}"] .nv-select`).prop("checked", true).trigger("change");
+            window.jQuery('.nv-card[data-car="ABC-003"] .nv-select').prop("checked", true).trigger("change");
+            document.querySelector(`#nv-pagination-bar [data-nvpage="${target}"]`).click();
+            await pending;
+            if (back) document.querySelector('#nv-pagination-bar [data-nvpage="1"]').click();
+            const actresses = await window.storageManager.getFavoriteActressList();
+            return { animationWasActive, page: plugin.nvCurrentPage, selected: [...plugin.nvSelected],
+                visible: [...document.querySelectorAll("#nv-grid .nv-card")].map(card => card.dataset.car),
+                cached: plugin.nvFlatListCache.map(item => item.carNum),
+                stored: actresses.flatMap(actress => actress.newVideoList.map(item => typeof item === "string" ? item : item.carNum)),
+            };
+        } finally {
+            window.jQuery.fn.animate = animate;
+        }
     }, scenario);
     expect(result.animationWasActive).toBe(true);
     expect(result.visible).toEqual(scenario.expected);

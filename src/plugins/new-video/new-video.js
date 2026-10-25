@@ -102,6 +102,7 @@ export class NewVideoWorkspaceService {
     }
     async flushWorkspaceReload() {
         if (this.nvWorkspaceReloadPromise) return this.nvWorkspaceReloadPromise;
+        if (!this.nvWorkspaceReloadDirty) return;
         return this.nvWorkspaceReloadPromise = (async () => {
             do {
                 const fullReload = this.nvWorkspaceFullReloadRequested, removals = new Set(this.nvPendingRemovals);

@@ -5,8 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { NewVideoWorkspaceService } from "../src/plugins/new-video/new-video.js";
-import { initializeEventBus } from "../src/core/event-bus.js";
+import { JhsEventBus } from "../src/core/event-bus.js";
 import { normalizeCarNum } from "../src/core/constants.js";
+import { StateService } from "../src/core/state-service.js";
 
 const html = `<body><span id="newVideoCount"></span><div class="newVideoToolBox">
     <select id="nvSortBy"><option value="carNum_asc">asc</option><option value="carNum_desc">desc</option></select>
@@ -17,7 +18,7 @@ const html = `<body><span id="newVideoCount"></span><div class="newVideoToolBox"
 </div></body>`;
 const harnesses = [];
 
-async function createHarness(count = 9) {
+async function createHarness(count = 9, { durableState = false } = {}) {
     const dom = new JSDOM(html, { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     vi.stubGlobal("window", dom.window);
     vi.stubGlobal("document", dom.window.document);
@@ -35,13 +36,13 @@ async function createHarness(count = 9) {
         carNum: `ABC-${String(index + 1).padStart(3, "0")}`, title: index % 2 ? "Other" : "Keep",
         publishTime: "2026-09-09", coverUrl: `https://images.example.test/${index}.jpg`,
     })) }];
-    const decisions = {}, bus = initializeEventBus();
+    const decisions = {}, bus = new JhsEventBus();
     const storageManager = {
         getFavoriteActressList: vi.fn(async () => actresses), getCarMap: vi.fn(async () => new Map()),
         getSetting: vi.fn(async key => key === "autoRemoveNewVideoMarkAfterBrowse" ? "yes" : key === "checkNewVideo_ruleTime" ? 8760 : {}),
     };
     vi.stubGlobal("storageManager", storageManager);
-    const state = {
+    let state = {
         getFavoriteActressList: storageManager.getFavoriteActressList, getCarMap: storageManager.getCarMap,
         getNewVideoDecisions: vi.fn(async () => decisions),
         removeFromNewVideoList: vi.fn(async (values, reason) => {
@@ -52,6 +53,21 @@ async function createHarness(count = 9) {
             return { changed: keys };
         }),
     };
+    if (durableState) {
+        const data = new Map([["favorite_actresses", actresses], ["car_list", []]]);
+        Object.assign(storageManager, {
+            favorite_actresses_key: "favorite_actresses", car_list_key: "car_list",
+            forage: {
+                getItem: async key => data.get(key),
+                setItem: async (key, value) => { data.set(key, value); },
+                removeItem: async key => { data.delete(key); },
+            },
+            _invalidateCache() {},
+            getFavoriteActressList: async () => data.get("favorite_actresses"),
+            getCarMap: async () => new Map(data.get("car_list").map(item => [item.carNum, item])),
+        });
+        state = new StateService(storageManager, bus);
+    }
     const settings = { snapshot: () => ({ checkNewVideo_ruleTime: 8760 }) };
     const runtimeServices = {
         settings,
@@ -89,6 +105,28 @@ afterEach(async () => {
 });
 
 describe("new-video browse removal", () => {
+    it("keeps the mounted grid when flushed before a durable removal notification is delivered", async () => {
+        const { plugin, $, state, dom } = await createHarness(9, { durableState: true });
+        dom.window.matchMedia = () => ({ matches: false });
+        const grid = $("#nv-grid")[0], pagination = $("#nv-pagination-bar")[0];
+        let finish;
+        vi.spyOn($.fn, "animate").mockImplementation(function(_properties, _duration, complete) {
+            finish = complete;
+            return this;
+        });
+        await state.removeFromNewVideoList(["ABC-002"], "manual");
+        await plugin.flushWorkspaceReload();
+        expect($("#nv-grid")[0]).toBe(grid);
+        expect($("#nv-pagination-bar")[0]).toBe(pagination);
+        expect(visibleKeys($)).toEqual(["ABC-001", "ABC-002", "ABC-003"]);
+        await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+        finish();
+        await plugin.flushWorkspaceReload();
+        expect($("#nv-grid")[0]).toBe(grid);
+        expect(visibleKeys($)).toEqual(["ABC-001", "ABC-003", "ABC-004"]);
+        expect(plugin.nvFlatListCache).toHaveLength(8);
+    });
+
     it("keeps the page, both scroll containers, retained card/image nodes and selection while filling the gap", async () => {
         const { plugin, $, state, dom, storageManager } = await createHarness();
         plugin.nvCurrentPage = 2, plugin.nvRenderPage();
@@ -234,15 +272,15 @@ describe("new-video browse removal", () => {
         { name: "clamps an old last-page button", count: 7, removed: ["ABC-002"], target: 3, page: 2, expected: ["ABC-005", "ABC-006", "ABC-007"] },
         { name: "shows the empty view after all records are removed", count: 4, removed: ["ABC-001", "ABC-002", "ABC-003", "ABC-004"], target: 2, page: 1, expected: [] },
     ])("pagination during a removal $name", async ({ count, removed, target, back, page, expected }) => {
-        const { plugin, $, state, dom } = await createHarness(count), finishes = [];
+        const { plugin, $, state, dom } = await createHarness(count, { durableState: true }), finishes = [];
         dom.window.matchMedia = () => ({ matches: false });
         vi.spyOn($.fn, "animate").mockImplementation(function(_properties, _duration, complete) {
             finishes.push(complete);
             return this;
         });
         await state.removeFromNewVideoList(removed, "manual");
-        const pending = plugin.flushWorkspaceReload();
         await vi.waitFor(() => expect(finishes.length).toBeGreaterThan(0));
+        const pending = plugin.flushWorkspaceReload();
         try {
             $(`.nv-card[data-car="${removed[0]}"] .nv-select`).prop("checked", true).trigger("change");
             $('.nv-card[data-car="ABC-003"] .nv-select').prop("checked", true).trigger("change");
