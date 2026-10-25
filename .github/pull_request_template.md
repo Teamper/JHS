@@ -10,6 +10,7 @@
 
 - [ ] 代码修改已运行 `npm run check`；纯文档修改注明不适用
 - [ ] `git diff --check`
+- [ ] 若 7.0 Dev 完整产物超过 1,600,000 字节，已说明增长来源并附 `npm run analyze:bundle` 报告供模块成本审查（软预警不阻断 CI；硬上限 2,000,000 字节）
 - [ ] develop 源码修改已生成 `dist/dev/JHS-7.0.dev.user.js`，正式 `JHS.user.js` 未被改写
 - [ ] 开发版交付已执行 `npm run build:dev:deliver`，提交根目录 `JHS-7.0.dev.user.js` 并核对与 dist Dev 文件字节一致
 - [ ] main 正式版本修改已重新构建根目录 `JHS.user.js`，并确认它与本地 `dist/JHS.user.js` 字节一致；纯文档修改注明不适用

@@ -29,9 +29,6 @@ jobs:
   check:
     name: Node 22 full check
     runs-on: ubuntu-latest
-    # Validate the packed candidate without enabling it in ordinary Dev builds.
-    env:
-      JHS_PACK_STATIC_RESOURCES: "1"
     outputs:
       should_release: ${{ steps.push_release.outputs.should_release }}
       version: ${{ steps.push_release.outputs.version }}
@@ -62,8 +59,6 @@ jobs:
   browser-smoke:
     name: Browser smoke
     runs-on: ubuntu-24.04
-    env:
-      JHS_PACK_STATIC_RESOURCES: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,22 +81,12 @@ jobs:
           JHS_BROWSER_OUTPUT_DIR: ${{ github.workspace }}/output/playwright/startup/test-results
           JHS_BROWSER_REPORT_DIR: ${{ github.workspace }}/output/playwright/startup/report
         run: npm --prefix tests/browser run test:startup
-      - name: Diagnose unpacked startup after candidate failure
-        if: ${{ !cancelled() && steps.startup.outcome == 'failure' }}
-        env:
-          JHS_BROWSER_OUTPUT_DIR: ${{ github.workspace }}/output/playwright/startup-control/test-results
-          JHS_BROWSER_REPORT_DIR: ${{ github.workspace }}/output/playwright/startup-control/report
-        run: |
-          JHS_PACK_STATIC_RESOURCES=0 npm run build
-          npm --prefix tests/browser run test:startup
       - name: Run independent functional regression
         if: ${{ !cancelled() && (steps.startup.outcome == 'success' || steps.startup.outcome == 'failure') }}
         env:
           JHS_BROWSER_OUTPUT_DIR: ${{ github.workspace }}/output/playwright/functional/test-results
           JHS_BROWSER_REPORT_DIR: ${{ github.workspace }}/output/playwright/functional/report
-        run: |
-          npm run build
-          npm --prefix tests/browser run test:functional
+        run: npm --prefix tests/browser run test:functional
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -112,8 +97,6 @@ jobs:
   visual:
     name: Windows visual regression
     runs-on: windows-2025
-    env:
-      JHS_PACK_STATIC_RESOURCES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

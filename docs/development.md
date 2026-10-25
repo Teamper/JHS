@@ -32,7 +32,7 @@ node --check JHS-7.0.dev.user.js
 
 该命令由构建器同时输出根目录和 dist 的完整 Dev 脚本，不手工编辑产物。将根目录 Dev 文件与本次改动一起提交；也可在源码提交后生成独立的产物提交，使构建标识指向已提交源码。普通 `npm run build` / `npm run check` 仍只写忽略的 dist，不刷新仓库交付快照。正式 `JHS.user.js` 与 `dist/JHS.user.js` 始终保留。
 
-`npm run analyze:bundle` 在 `output/static-resource-size/` 生成同一 Dev 元数据的 `unpacked.user.js`、`packed.user.js` 和 `size-report.json`，报告包含最终 UTF-8 字节、解码器与许可证成本、资源来源及未编码模块贡献。资源编码只处理登记的固定 CSS/HTML 文本，保持单文件与源码明文，不增加线上依赖或存储格式。
+`npm run analyze:bundle` 在 `output/static-resource-size/` 生成同一 Dev 元数据的 `unpacked.user.js`、`packed.user.js` 和 `size-report.json`，报告包含最终 UTF-8 字节、Gzip 字节、解码器与许可证成本、资源来源及未编码模块贡献。`unpackedBudget` 和 `packedBudget` 分别给出两种产物的 `ok` / `warning` / `exceeded` 状态、双阈值和剩余字节；负数表示已超出对应阈值。兼容字段 `maximumBytes` 仍表示硬上限，`withinBudget` 仍表示编码产物是否不超过硬上限。分析命令用于对比，实际产物门禁由 `npm run check:performance` 执行。资源编码只处理登记的固定 CSS/HTML 文本，保持单文件与源码明文，不增加线上依赖或存储格式。
 
 资源编码目前默认关闭，候选构建使用 `JHS_PACK_STATIC_RESOURCES=1`；须在等价性、启动、功能与视觉验收完成后再调整默认值。PowerShell 示例：
 
@@ -44,9 +44,21 @@ Remove-Item Env:JHS_PACK_STATIC_RESOURCES
 
 候选验证时同样向 `npm run check` 与浏览器构建传入该环境变量。`dist/dev/JHS-7.0.dev.size.json` 记录本次 Dev 构建的资源成本。对照启动测试可将 `JHS_STARTUP_BUNDLE` 指向其中一份产物，并分别设置 `JHS_STARTUP_MODE=cold` / `warm`；每站点默认 30 次采样，历史绝对门禁与两份产物的相对变化分别报告。
 
-CI 的 Node 22 完整检查、浏览器功能和视觉任务显式验证编码候选，沿用原体积、启动与视觉门禁；Node 20 任务保留默认未编码构建覆盖。该 CI 配置不改变普通 Dev 构建的默认值。
+CI 的 Node 20、Node 22 完整检查、浏览器和视觉任务统一使用默认未编码构建，与普通 Dev 构建一致；编码候选保留为显式手动验证能力。是否采用编码应结合原始大小、Gzip 大小及启动实测决定，体积报告不能证明运行性能改善。
 
-CI 启动门禁失败后会额外记录同源码未编码构建的启动对照，并独立运行编码候选的功能回归；各阶段报告分目录保留，启动失败仍使任务失败，不会被后续功能通过覆盖。
+CI 启动门禁失败后仍独立运行同一默认产物的功能回归；各阶段报告分目录保留，启动失败仍使任务失败，不会被后续功能通过覆盖。
+
+### 7.0 包体预算
+
+包体预算以 `performance-budget.json` 的 `softLimitBytes` / `hardLimitBytes` 为唯一阈值来源，按完整单文件产物（包含元数据和许可证）的 UTF-8 字节计量。这里的 MB 为十进制，1 MB = 1,000,000 字节；阈值是项目管理规则。6.5 的 1,170,844 字节及引用提交仅作为历史参考，不再计算增长上限。
+
+| 完整文件大小 | 门禁行为 |
+| --- | --- |
+| ≤1,600,000 字节 | `ok`，记录大小和预算余量 |
+| >1,600,000 且 ≤2,000,000 字节 | `warning`，CI 显示预警但继续通过 |
+| >2,000,000 字节 | `exceeded`，检查失败并阻断依赖它的发布门禁 |
+
+超过软预算时，在改动说明中解释增长来源，附 `npm run analyze:bundle` 报告并检查模块贡献与资源成本；不增加自动审批门槛。超过硬预算时须削减体积，或给出审查依据后显式调整阈值与 `reason`。启动绝对基线、10% 回归比例以及首屏请求 0 / 2 次约束独立保留；包体通过不能抵消启动或功能失败。
 
 日常功能分支以 develop 为基础，正式发布准备完成后再按授权合入 main。main 热修复须在 24 小时内同步到 develop；develop 的 `scripts/check-refactor-sync.mjs` 检查 origin/main 的祖先关系和提交年龄。
 

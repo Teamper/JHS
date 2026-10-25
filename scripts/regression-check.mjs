@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import { evaluateBundleBudget, formatBundleBudget } from "./bundle-budget.mjs";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -101,7 +102,9 @@ if (version === "6.5.1") {
   });
   assert(rootOutput === releaseBaseline, "6.5.1 formal artifact must remain byte-identical to the pinned release baseline");
 }
-assert(Buffer.byteLength(devOutput, "utf8") < 2_000_000, "migration userscript exceeds Sleazy Fork 2 MB limit");
+const budget = JSON.parse(await read("performance-budget.json"));
+const bundleBudget = evaluateBundleBudget(Buffer.byteLength(devOutput, "utf8"), budget.bundle);
+assert(bundleBudget.status !== "exceeded", formatBundleBudget("Dev artifact", bundleBudget));
 
 assert(extractMetadata(rootOutput, "name") === "JHS", "userscript @name changed");
 assert(extractMetadata(rootOutput, "version") === version, "preserved release artifact version changed");

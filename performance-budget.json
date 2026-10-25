@@ -4,8 +4,9 @@
     "baselineBytes": 1170844,
     "referenceCommit": "4ea5536",
     "referenceBytes": 1170844,
-    "maximumGrowthRatio": 0.12,
-    "reason": "Pinned to the refactor/6.5@4ea5536 RC artifact; 6.5.0 keeps the 12% growth cap fixed"
+    "softLimitBytes": 1600000,
+    "hardLimitBytes": 2000000,
+    "reason": "JHS 7.0 uses a 1.6 MB warning and 2.0 MB hard project budget in decimal UTF-8 bytes, independently of runtime performance. The refactor/6.5@4ea5536 artifact is retained only as historical reference."
   },
   "browserFixture": {
     "maximumInitialRequests": {
