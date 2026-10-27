@@ -38,7 +38,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
                 platform: "ios", system_version: "17.4", app_version: "official", app_version_number: "1.9.29", app_channel: "official",
             }).forEach(([key, value]) => url.searchParams.set(key, value));
             const response = await http.request({
-                providerId: "javdb", capability: "account.login", method: "POST", url: url.href, responseType: "json",
+                providerId: "javdb", capability: "account.login", method: "POST", url: url.href, responseType: "json", circuitGroup: "account-mutation", retryCount: 0,
                 headers: { "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", "content-type": "multipart/form-data; boundary=--dio-boundary-2210433284", jdsignature: sign() },
                 urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] },
             }, options.scope);
@@ -154,9 +154,9 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
 
 export default defineIntegration({
     id: "javdb", trustClass: "builtin-public", hosts: ["javdb.com", "jdforrepam.com", "c0.jdbstatic.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "actor.avatar-placeholder", "account.login"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "actor.avatar-placeholder", "account.login", "account.want-read", "account.want-write"],
     requires: [SERVICE.http, PORT.javdbHost],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost] }),
     createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter), createHostAdapter: null,
-    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none" }, quality: "silver",
+    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none", "account.want-read": "none", "account.want-write": "none" }, quality: "silver",
 });

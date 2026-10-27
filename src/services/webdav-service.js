@@ -76,12 +76,27 @@ export class WebDavClient {
     }
     /** @param {string} folder */
     async getFileList(folder) {
-        const xml = String(await this.request("PROPFIND", folder, { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:iscollection/></d:prop></d:propfind>'));
-        const responses = new DOMParser().parseFromString(xml, "text/xml").getElementsByTagNameNS("DAV:", "response"), files = [];
-        for (let index = 1; index < responses.length; index++) {
-            const item = responses[index], node = (/** @type {string} */ name) => item.getElementsByTagNameNS("DAV:", name)[0]?.textContent || "";
-            const href = node("href"), name = node("displayname") || decodeURIComponent(href.replace(/\/$/, "").split("/").pop() || ""), size = node("getcontentlength");
-            if (size !== "0") files.push({ fileId: name, name, size: Number(size), createTime: node("creationdate") || node("getlastmodified") });
+        const directory = new URL(`${encodeBackupFileName(folder)}/`, this.baseUrl);
+        const xml = String(await this.request("PROPFIND", encodeBackupFileName(folder), { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:resourcetype/></d:prop></d:propfind>'));
+        const document = new DOMParser().parseFromString(xml, "text/xml");
+        if (document.getElementsByTagName("parsererror").length || document.documentElement?.localName !== "multistatus" || document.documentElement.namespaceURI !== "DAV:") throw new Error("WebDAV 备份列表格式无效");
+        const files = [], seen = new Set();
+        for (const item of document.getElementsByTagNameNS("DAV:", "response")) {
+            const hrefs = [...item.children].filter(node => node.namespaceURI === "DAV:" && node.localName === "href");
+            if (hrefs.length !== 1 || !hrefs[0].textContent?.trim()) continue;
+            let fileId;
+            try {
+                const url = new URL(hrefs[0].textContent.trim(), directory), suffix = url.pathname.slice(directory.pathname.length);
+                if (url.origin !== directory.origin || url.username || url.password || url.search || url.hash || !url.pathname.startsWith(directory.pathname) || !suffix || suffix.includes("/")) continue;
+                fileId = decodeURIComponent(suffix);
+                encodeBackupFileName(fileId);
+            } catch { continue; }
+            if (seen.has(fileId)) continue;
+            const properties = [...item.getElementsByTagNameNS("DAV:", "propstat")].filter(propstat => /\s2\d\d(?:\s|$)/.test(propstat.getElementsByTagNameNS("DAV:", "status")[0]?.textContent || ""));
+            if (properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "collection").length) || !properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "resourcetype").length)) continue;
+            const node = (/** @type {string} */ name) => properties.map(prop => prop.getElementsByTagNameNS("DAV:", name)[0]?.textContent).find(Boolean) || "";
+            seen.add(fileId);
+            files.push({ fileId, name: node("displayname") || fileId, size: Number(node("getcontentlength")) || 0, createTime: node("creationdate") || node("getlastmodified") });
         }
         return files.reverse();
     }

@@ -518,6 +518,26 @@ export class NewVideoWorkspaceService {
             container.append(renderTaskStatus(this.jquery, name, snapshot, settings));
         }
         this.jquery("#nvTaskToggle span").text(`任务：${[...statuses].map(([status, count]) => `${count}项${status}`).join(" · ")}`);
+        const health = this.getRuntimeService("sourceHealth");
+        const origin = this.getRuntimeService("movie")?.externalSiteOrigin?.("javDbBtn", settings);
+        const unavailable = origin && health ? health.list(origin) : [];
+        if (unavailable.length) {
+            const panel = this.jquery('<section class="jhs-task-status" aria-label="来源不可用的演员"></section>');
+            panel.append(this.jquery("<strong></strong>").text(`来源不可用：${unavailable.length} 位演员`), this.jquery("<p></p>").text("原作品保留；24 小时后自动重查，也可单独重试。"));
+            for (const item of unavailable) {
+                const retry = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary"><span>重试</span></button>').attr({ "aria-label": `重试 ${item.name}`, "data-source-retry": item.starId });
+                const row = this.jquery('<div class="jhs-setting-row"></div>').append(this.jquery("<span></span>").text(`${item.name} · 页面不存在 · ${formatUiDateTime(item.retryAt)} 重查`), retry);
+                retry.on("click", async () => {
+                    const actress = this.nvActressesCache?.find(actor => actor.starId === item.starId);
+                    if (!actress) return void this.notifications.info("本地收藏中已没有该演员");
+                    const generation = this.nvDialogGeneration;
+                    await this.runManualTask(retry, "检测中…", () => taskPlugin?.checkOneNewVideo?.(actress));
+                    if (!this.disposed && this.nvWorkspaceMounted && generation === this.nvDialogGeneration) (this.jquery('[data-source-retry]').filter((_, node) => node.getAttribute("data-source-retry") === item.starId)[0] || this.jquery("#nvTaskToggle:visible")[0] || this.jquery(".jhs-new-video-view [role='tab'][aria-selected='true']")[0])?.focus({ preventScroll: true });
+                });
+                panel.append(row);
+            }
+            container.append(panel);
+        }
     }
     async renderActressCards() {
         const e = this.jquery("#actress-card-container");

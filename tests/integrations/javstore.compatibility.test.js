@@ -52,6 +52,12 @@ it("keeps explicit CLICK HERE links first with both legacy punctuation forms", (
     }
 });
 
+it("skips conflicting or invalid explicit links before choosing a compatible preview", () => {
+    expect(parseJavStorePreview(fixture("detail-conflicting-link.html"), "https://javstore.net/ABC-123-pn.html", "ABC-123")).toBe("https://img.javstore.net/ABC-123.jpg");
+    expect(parseJavStorePreview('<main><a href="/XYZ-999_s.jpg">CLICK HERE!</a></main>', "https://javstore.net/ABC-123-pn.html", "ABC-123")).toBeNull();
+    expect(parseJavStorePreview('<main><a href="/opaque.th.jpg" title="XYZ-999">CLICK HERE!</a></main>', "https://javstore.net/ABC-123-pn.html", "ABC-123")).toBeNull();
+});
+
 it.each([
     ['<main><img src="/unknown_s.jpg"></main>', null],
     ['<main><img src="/ABC-1234_s.jpg" alt="ABC-123"></main>', null],

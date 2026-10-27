@@ -38,7 +38,7 @@ describe("JavDB login post-commit boundary", () => {
 
         root.find("#loginBtn").trigger("click");
         await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
-        expect(credential.set).toHaveBeenCalledWith("jhs_appAuthorization", "synthetic-token");
+        expect(credential.set).toHaveBeenCalledWith("jhs_appAuthorization", "synthetic-token", { assertActive: expect.any(Function) });
         expect(dialog.close).toHaveBeenCalledWith(7);
         expect(show.error).not.toHaveBeenCalled();
         expect(busy.close).toHaveBeenCalledOnce();

@@ -1,17 +1,19 @@
 // @ts-check
 
+import { isMissingActorSource } from "./actor-source-health.js";
 import { selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
 
 /** Converts discovered actor titles into the existing 6.5.1 actress record shape. */
 export class NewVideoScanController {
-    /** @param {{state: any, titleKeywords: any, actressInfo: any, scope: any, logger: any, getTimestamp: () => string, backgroundWork?: any, onNewItems: (name: string, count: number) => void}} options */
+    /** @param {{state: any, titleKeywords: any, actressInfo: any, scope: any, logger: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, onNewItems: (name: string, count: number) => void}} options */
     constructor(options) {
         this.state = options.state;
         this.titleKeywords = options.titleKeywords;
         this.actressInfo = options.actressInfo;
         this.scope = options.scope;
         this.backgroundWork = options.backgroundWork;
+        this.sourceHealth = options.sourceHealth;
         this.logger = options.logger;
         this.getTimestamp = options.getTimestamp;
         this.onNewItems = options.onNewItems;
@@ -30,9 +32,16 @@ export class NewVideoScanController {
         this.assertActive();
         const blacklistSet = new Set(blacklistCars.map((/** @type {any} */ item) => item.carNum));
         options.onActorStart?.(actress, url);
-        const movies = await this.actressInfo.movies("javdb", { actorId: starId, baseUrl: options.baseUrl }, { scope: this.scope, ttlMs: 0 });
-        this.assertActive();
-        return this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
+        try {
+            const movies = await this.actressInfo.movies("javdb", { actorId: starId, baseUrl: options.baseUrl }, { scope: this.scope, ttlMs: 0 });
+            this.assertActive();
+            const result = await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
+            this.sourceHealth?.clear(options.baseUrl, starId);
+            return result;
+        } catch (error) {
+            if (isMissingActorSource(error)) this.sourceHealth?.unavailable(options.baseUrl, actress);
+            throw error;
+        }
     }
 
     /** Fetch every saved-actress page and persist only after pagination validates completely. */
@@ -102,12 +111,13 @@ export class NewVideoScanController {
         this.assertActive();
         const sorted = sortActresses(actresses), result = {
             actressCount: sorted.length, eligibleCount: 0, success: 0, parseFailed: 0,
-            networkFailed: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, fatal: false,
+            networkFailed: 0, unavailable: 0, skippedUnavailable: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, fatal: false,
         };
         /** @type {any[]} */
         const eligible = [];
         for (const actress of sorted) {
-            if (!options.force && actress.lastCheckTime && options.isUnnecessaryCheck(actress.lastCheckTime, options.intervalHours)) result.skippedInterval++;
+            if (!options.force && this.sourceHealth?.isDeferred(options.baseUrl, actress.starId)) result.skippedUnavailable++;
+            else if (!options.force && actress.lastCheckTime && options.isUnnecessaryCheck(actress.lastCheckTime, options.intervalHours)) result.skippedInterval++;
             else if (shouldSkipStopped(actress.lastPublishTime, options.ruleHours)) result.skippedStopped++;
             else eligible.push(actress);
         }
@@ -143,13 +153,17 @@ export class NewVideoScanController {
                         stopWorkers = true;
                         throw error;
                     }
-                    result.networkFailed++;
-                    this.logger?.error?.("检测演员信息发生网络错误:", url, error);
+                    if (isMissingActorSource(taskError)) {
+                        this.sourceHealth?.unavailable(options.baseUrl, actress);
+                        result.unavailable++;
+                    } else result.networkFailed++;
+                    this.logger?.error?.("检测演员来源失败:", url, error);
                     if (eligible.length - nextIndex > 0) await options.sleep(options.sleepMs);
                     continue;
                 }
                 try {
                     await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
+                    this.sourceHealth?.clear(options.baseUrl, starId);
                     result.success++;
                 } catch (error) {
                     const taskError = /** @type {any} */ (error);

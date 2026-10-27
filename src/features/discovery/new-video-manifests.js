@@ -1,5 +1,6 @@
 // @ts-check
 
+import { ActorSourceHealth } from "./actor-source-health.js";
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { escapeHtml } from "../../core/constants.js";
@@ -28,12 +29,13 @@ export const newVideoFeature = defineFeature({
             import("./new-video-workspace-controller.js"),
             import("./new-video-scan-controller.js"),
         ]);
+        const sourceHealth = new ActorSourceHealth(deps[SERVICE.storage]);
         const compatibilityBean = runtime.resolveCompatibilityBean("NewVideoPlugin");
         /** @type {any} */ let plugin = null;
         if (compatibilityBean?.createFeatureService && compatibilityBean?.connect) {
             plugin = await compatibilityBean.createFeatureService({
                 runtimeServices: {
-                    dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], actressInfo: deps[SERVICE.actressInfo],
+                    sourceHealth, dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], actressInfo: deps[SERVICE.actressInfo],
                     movie: deps[SERVICE.movie], state: deps[SERVICE.state], settings: deps[SERVICE.settings], profile: deps[SERVICE.profile],
                     scope: () => runtime.scope,
                 },
@@ -54,7 +56,7 @@ export const newVideoFeature = defineFeature({
         });
         const taskPlugin = runtime.resolveCompatibilityBean("TaskPlugin");
         const scanController = new NewVideoScanController({
-            backgroundWork: deps[SERVICE.backgroundWork],
+            sourceHealth, backgroundWork: deps[SERVICE.backgroundWork],
             state: deps[SERVICE.state],
             titleKeywords: deps[SERVICE.titleKeywords],
             actressInfo: deps[SERVICE.actressInfo],

@@ -39,8 +39,8 @@ describe("settings backup post-commit boundary", () => {
 
         await options.yes(7);
 
-        expect(storage.createSnapshot).toHaveBeenCalledOnce();
-        expect(storage.importData).toHaveBeenCalledExactlyOnceWith(backup);
+        expect(storage.createSnapshot).not.toHaveBeenCalled();
+        expect(storage.importData).toHaveBeenCalledExactlyOnceWith(backup, expect.objectContaining({ signal: expect.any(AbortSignal), assertActive: expect.any(Function) }));
         expect(deps.notifications.error).not.toHaveBeenCalled();
         expect(deps.timers).toHaveLength(1);
         expect(deps.timers[0].delay).toBe(1000);

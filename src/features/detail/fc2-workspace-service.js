@@ -6,6 +6,7 @@ import { createStateActions } from "../../ui/detail/state-actions.js";
 
 import { _, k, m, v, y } from "../../core/constants.js";
 import { DetailStateController } from "../../core/detail-state-controller.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { normalizeBtihHash } from "../../core/feature-helpers.js";
 import { extractJavDbMovieId } from "../../core/movie-identity.js";
 import { getJavDbWantWatchState, markJavDbWantWatch } from "../../core/javdb-api.js";
@@ -36,8 +37,14 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
  * @property {(observer: { disconnect?: () => void }) => unknown} addObserver
  * @property {((enabled: boolean) => void) | undefined} [magnetFilterApply]
  * @property {Set<string> | undefined} galleryUrls
+ * @property {LifecycleScope} [wantScope]
+ * @property {number} [wantGeneration]
+ * @property {string | null} [wantRevision]
+ * @property {string} [wantMovieId]
  * @property {number | undefined} translationGeneration
  * @property {number | undefined} screenshotGeneration
+ * @property {(() => void) | undefined} [releaseScreenshotScope]
+ * @property {boolean} [screenshotCleanupRegistered]
  * @property {number | undefined} otherSiteGeneration
  * @property {((external?: boolean) => Promise<void>) | undefined} openMagnetHub
  * @property {(() => void) | undefined} syncMagnetHub
@@ -64,6 +71,7 @@ export class Fc2WorkspaceService {
         this.runtimeStatus = "managed-feature";
         /** @type {Set<string>} */ this.submittedWantMovieIds = new Set();
         /** @type {Set<string>} */ this.submittingWantMovieIds = new Set();
+        /** @type {Set<Fc2DetailContext>} */ this.wantContexts = new Set();
         /** @type {DetailStateController | null} */
         this.detailStateController = null;
         /** @type {number} */ this.translationGeneration = 0;
@@ -259,9 +267,8 @@ export class Fc2WorkspaceService {
         const settings = this.getRuntimeService("settings"), handler = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.length) return;
-            if (names.includes("enableLoadScreenShot")) {
+            if (names.some(name => ["enableLoadScreenShot", "screenshotProviders", "screenshotMode"].includes(name))) {
                 if (settings.snapshot().enableLoadScreenShot === "no") {
-                    context.screenshotGeneration = (context.screenshotGeneration || 0) + 1;
                     this.unmountFc2Screenshot(context);
                 } else {
                     void this.loadFc2Screenshot(context);
@@ -294,22 +301,27 @@ export class Fc2WorkspaceService {
     /** @param {Fc2DetailContext} context */
     loadFc2Screenshot(context) {
         const screenshotService = this.getRuntimeService("screenshot"), settings = this.getRuntimeService("settings"), screenshot = context.root.find('[data-jhs-role="screenshot"]');
-        if (!screenshotService.isEnabled(settings.snapshot())) return void screenshot.empty();
-        const generation = (context.screenshotGeneration || 0) + 1;
-        context.screenshotGeneration = generation;
-        void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
-            target: screenshot, carNum: context.carNum, screenshot: screenshotService,
-            settings: settings.snapshot(), scope,
-            isActive: () => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no" && generation === context.screenshotGeneration,
-            isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
-        })).then((/** @type {unknown} */ result) => {
-            // 稳定插槽：绝不 remove；渲染函数已写入 empty/error 状态，无需再清空。
-            if (!context.isAlive() || generation !== context.screenshotGeneration) return;
-            if (settings.snapshot().enableLoadScreenShot === "no") return void screenshot.empty();
-            if (!result) return;
+        this.unmountFc2Screenshot(context);
+        if (!context.isAlive() || !screenshotService.isEnabled(settings.snapshot())) return;
+        const generation = context.screenshotGeneration, scope = new LifecycleScope(`fc2-screenshot:${generation}`);
+        context.releaseScreenshotScope = () => scope.dispose();
+        if (!context.screenshotCleanupRegistered) {
+            context.screenshotCleanupRegistered = true;
+            context.addObserver?.({ disconnect: () => context.releaseScreenshotScope?.() });
+        }
+        const isActive = () => !scope.disposed && context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no" && generation === context.screenshotGeneration;
+        void Promise.resolve().then(() => this.getRuntimeService("scope")()).then((/** @type {LifecycleScope} */ parentScope) => {
+            if (!isActive()) return;
+            context.releaseScreenshotScope = parentScope.addCleanup(() => scope.dispose());
+            return renderScreenshotPanel({
+                target: screenshot, carNum: context.carNum, screenshot: screenshotService,
+                settings: settings.snapshot(), scope, isActive,
+                isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
+            });
         }).catch((error) => {
-            if (!context.isAlive() || generation !== context.screenshotGeneration) return;
+            if (!isActive()) return;
             screenshot.empty();
+            context.releaseScreenshotScope?.();
             this.logger.error("FC2 剧照初始化失败", error);
         });
     }
@@ -317,6 +329,8 @@ export class Fc2WorkspaceService {
     /** @param {Fc2DetailContext} context */
     unmountFc2Screenshot(context) {
         context.screenshotGeneration = (context.screenshotGeneration || 0) + 1;
+        context.releaseScreenshotScope?.();
+        context.releaseScreenshotScope = undefined;
         context.root.find('[data-jhs-role="screenshot"]').empty();
     }
     /** ON：按当前 DOM 标题重新翻译（原生/123AV 共用 .current-title）；所有翻译入口唯一实现。 */
@@ -397,63 +411,104 @@ export class Fc2WorkspaceService {
         const movieId = await source.resolveMovieId(context.carNum);
         return this.fetchAndRenderNativeMagnets(context, movieId);
     }
-    /** 绑定当前工作区自己的 JavDB“想看”操作。 */
-    /** @param {Fc2DetailContext} context @param {Promise<string | null | undefined>} movieIdPromise */
-    async configureJavDbWantButton(context, movieIdPromise) {
-        const button = context.root.find('[data-jhs-action="javdb-want"]');
-        try {
-            const movieId = await movieIdPromise;
-            if (!context.isAlive()) return;
-            if (!movieId) return void button.prop("disabled", !0).text(`${PRODUCT_NAMES.javdb} 暂无对应影片`);
-            try {
-                const alreadyWanted = await getJavDbWantWatchState(movieId);
-                if (!context.isAlive()) return;
-                if (alreadyWanted) return void button.prop("disabled", !0).attr("aria-pressed", "true").text(`已在 ${PRODUCT_NAMES.javdb} 想看`);
-            } catch (error) { try { this.logger.warn("读取 JavDB 想看状态失败，保留手动操作", error); } catch { /* keep manual action available */ } }
-            button.prop("disabled", !1).text(`${PRODUCT_NAMES.javdb} 想看`).off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.submitJavDbWant(context, movieId, button)));
-        } catch (error) {
-            context.isAlive() && button.prop("disabled", !1).text(`${PRODUCT_NAMES.javdb} 关联失败，重试`).off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, this.resolveMovieId(context.carNum)))), this.logger.error("FC2 JavDB 想看关联失败", error);
+    /** @param {Fc2DetailContext} context */
+    wantScopeFor(context) {
+        if (context.wantScope) return context.wantScope;
+        const scope = new LifecycleScope("fc2-want");
+        context.wantScope = scope;
+        this.wantContexts.add(context);
+        context.addObserver?.({ disconnect: () => { scope.dispose(); this.wantContexts.delete(context); } });
+        const parent = this.runtimeServices.scope;
+        if (parent) void Promise.resolve(parent()).then(owner => {
+            if (scope.disposed || !context.isAlive()) return;
+            if (owner.disposed) return scope.dispose();
+            const release = owner.addCleanup(() => scope.dispose());
+            scope.addCleanup(release);
+        }).catch(() => scope.dispose());
+        return scope;
+    }
+    async wantSession() {
+        if (this.runtimeServices.want) return this.runtimeServices.want.session();
+        const credential = this.runtimeServices.credential ?? /** @type {any} */ (globalThis).credentialService;
+        return credential?.readEntry ? credential.readEntry("jhs_appAuthorization") : { revision: null, value: await credential?.get?.("jhs_appAuthorization") };
+    }
+    refreshWantAccounts() {
+        this.submittedWantMovieIds.clear();
+        for (const context of this.wantContexts) {
+            context.wantGeneration = (context.wantGeneration || 0) + 1;
+            if (context.isAlive() && context.wantMovieId) void this.configureJavDbWantButton(context, Promise.resolve(context.wantMovieId));
         }
     }
-    /** @param {Fc2DetailContext} context @param {string} movieId @param {JQueryHandle} button */
+    disposeWantContexts() { for (const context of this.wantContexts) context.wantScope?.dispose(); this.wantContexts.clear(); }
+    /** @param {Fc2DetailContext} context @param {Promise<string | null | undefined>} movieIdPromise */
+    async configureJavDbWantButton(context, movieIdPromise) {
+        const button = context.root.find('[data-jhs-action="javdb-want"]'), scope = this.wantScopeFor(context);
+        const generation = context.wantGeneration = (context.wantGeneration || 0) + 1;
+        const alive = () => context.isAlive() && !scope.disposed && context.wantGeneration === generation;
+        try {
+            const movieId = await movieIdPromise;
+            if (!alive()) return;
+            if (!movieId) return void button.prop("disabled", true).text(`${PRODUCT_NAMES.javdb} 暂无对应影片`);
+            context.wantMovieId = movieId;
+            const session = await this.wantSession();
+            if (!alive()) return;
+            context.wantRevision = session.revision;
+            // State lookup is advisory; a long index scan never blocks the manual action.
+            button.prop("disabled", false).attr("aria-pressed", "false").text(`${PRODUCT_NAMES.javdb} 想看`).off(`click${context.namespace}`).on(`click${context.namespace}`, () => void this.submitJavDbWant(context, movieId, button));
+            try {
+                const wanted = this.runtimeServices.want ? await this.runtimeServices.want.get(movieId, { scope }) : await getJavDbWantWatchState(movieId, { scope });
+                if (!alive() || (await this.wantSession()).revision !== session.revision) return;
+                if (wanted) button.prop("disabled", true).attr("aria-pressed", "true").text(`已在 ${PRODUCT_NAMES.javdb} 想看`);
+            } catch (error) {
+                if (!alive()) return;
+                try { this.logger.warn("读取 JavDB 想看状态失败，保留手动操作", error); } catch { /* keep manual action */ }
+            }
+        } catch (error) {
+            if (!alive()) return;
+            button.prop("disabled", false).text(`${PRODUCT_NAMES.javdb} 关联失败，重试`).off(`click${context.namespace}`).on(`click${context.namespace}`, () => void this.configureJavDbWantButton(context, this.resolveMovieId(context.carNum)));
+            try { this.logger.error("FC2 JavDB 想看关联失败", error); } catch { /* preserve retry */ }
+        }
+    }
     /** @param {Fc2DetailContext} context @param {string} movieId @param {any} button @returns {Promise<unknown>} */
     async submitJavDbWant(context, movieId, button) {
-        if (!context.isAlive() || button.data("jhsBusy") || "true" === button.attr("aria-pressed")) return;
-        if (this.submittedWantMovieIds.has(movieId)) {
-            button.attr({ "aria-pressed": "true", "aria-disabled": "false" }).text(`已加入 ${PRODUCT_NAMES.javdb} 想看`);
-            return;
-        }
-        if (this.submittingWantMovieIds.has(movieId)) return;
-        this.submittingWantMovieIds.add(movieId);
-        button.data("jhsBusy", !0).attr({ "aria-busy": "true", "aria-disabled": "true" }).text("正在加入想看…");
+        if (!context.isAlive() || button.data("jhsBusy")) return;
+        const session = await this.wantSession(), scope = this.wantScopeFor(context);
+        if (!context.isAlive() || scope.disposed || button.data("jhsBusy")) return;
+        if (context.wantRevision !== session.revision) button.attr("aria-pressed", "false");
+        context.wantRevision = session.revision;
+        const key = `${session.revision || "unversioned"}:${movieId}`;
+        if (session.revision && this.submittedWantMovieIds.has(key)) return void button.attr("aria-pressed", "true").text(`已加入 ${PRODUCT_NAMES.javdb} 想看`);
+        if ("true" === button.attr("aria-pressed") || this.submittingWantMovieIds.has(key)) return;
+        this.submittingWantMovieIds.add(key);
+        button.data("jhsBusy", true).attr({ "aria-busy": "true", "aria-disabled": "true" }).text("正在加入想看…");
         try {
             let result;
-            try {
-                result = await markJavDbWantWatch(movieId);
-            } catch (error) {
-                if (!context.isAlive()) return;
-                const normalizedError = /** @type {{ code?: string, message?: string }} */ (error);
-                if ("LOGIN_REQUIRED" === normalizedError?.code) {
-                    button.attr("aria-disabled", "false").text(`${PRODUCT_NAMES.javdb} 想看`);
-                    return openJavDbLoginDialog({
-                        dialog: this.getRuntimeService("dialog"), account: this.getRuntimeService("account"),
-                        credential: this.getRuntimeService("credential"), getScope: this.getRuntimeService("scope"),
-                        ui: this.getRuntimeService("ui"), notifications: this.getRuntimeService("notifications"), logger: this.logger,
-                        onSuccess: () => this.submitJavDbWant(context, movieId, button),
-                    });
-                }
-                button.attr("aria-disabled", "false").text(`${PRODUCT_NAMES.javdb} 想看`), show.error(`加入 ${PRODUCT_NAMES.javdb} 想看失败`), this.logger.error("加入 JavDB 想看失败", error);
+            try { result = this.runtimeServices.want ? await this.runtimeServices.want.mark(movieId, { scope }) : await markJavDbWantWatch(movieId, { scope }); }
+            catch (error) {
+                if (!context.isAlive() || scope.disposed) return;
+                const failure = /** @type {any} */ (error);
+                button.attr("aria-disabled", "false").text(`${PRODUCT_NAMES.javdb} 想看`);
+                if (failure?.code === "LOGIN_REQUIRED") return openJavDbLoginDialog({
+                    dialog: this.getRuntimeService("dialog"), account: this.getRuntimeService("account"),
+                    credential: this.getRuntimeService("credential"), getScope: () => Promise.resolve(scope),
+                    ui: this.getRuntimeService("ui"), notifications: this.getRuntimeService("notifications"), logger: this.logger,
+                    onSuccess: () => this.submitJavDbWant(context, movieId, button),
+                });
+                show.error(`加入 ${PRODUCT_NAMES.javdb} 想看失败`);
+                this.logger.error("加入 JavDB 想看失败", error);
                 return;
             }
-            this.submittedWantMovieIds.add(movieId);
-            if (!context.isAlive()) return result;
+            try { if ((await this.wantSession()).revision !== session.revision) return result; }
+            catch { return result; /* The successful POST remains committed if local account readback fails. */ }
+            if (session.revision) this.submittedWantMovieIds.add(key);
+            if (!context.isAlive() || scope.disposed) return result;
             button.attr({ "aria-pressed": "true", "aria-disabled": "false" }).text(`已加入 ${PRODUCT_NAMES.javdb} 想看`);
             try { show.ok(`已加入 ${PRODUCT_NAMES.javdb} 想看`); }
-            catch (error) { try { this.logger.warn("JavDB 想看已提交，成功提示失败", error); } catch { /* committed state must win */ } }
+            catch (error) { try { this.logger.warn("JavDB 想看已提交，成功提示失败", error); } catch { /* committed */ } }
             return result;
         } finally {
-            this.submittingWantMovieIds.delete(movieId);
-            context.isAlive() && button.removeData("jhsBusy").removeAttr("aria-busy");
+            this.submittingWantMovieIds.delete(key);
+            if (context.isAlive()) button.removeData("jhsBusy").removeAttr("aria-busy");
         }
     }
     /** @param {Fc2DetailContext} context */

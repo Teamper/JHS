@@ -5,24 +5,25 @@ import { parseJavStorePreview, parseJavStoreSearch } from "./parser.js";
 
 /** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http */
 export function createJavStoreAdapter(http) {
-    /** @param {string} url @param {any} scope */
-    const request = (url, scope) => http.request({
+    /** @param {string} url @param {any} options @param {(response: any) => boolean} cacheAccept */
+    const request = (url, options, cacheAccept) => http.request({
         providerId: "javstore", capability: "movie.images", method: "GET", url, responseType: "text",
         urlPolicy: { trustClass: "builtin-public", hosts: ["javstore.net"] },
-    }, scope);
+        refreshCache: options.refreshCache === true, cacheAccept,
+    }, options.scope);
     return Object.freeze({
         contracts: ["Screenshot"],
         /** @param {{carNum?: string}} movieRef */
         getSearchUrl(movieRef) { return `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`; },
-        /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
+        /** @param {{carNum: string}} movieRef @param {{scope?: any, refreshCache?: boolean}} [options] */
         async getImages(movieRef, options = {}) {
             const searchUrl = this.getSearchUrl(movieRef);
-            const search = await request(searchUrl, options.scope);
+            const search = await request(searchUrl, options, response => parseJavStoreSearch(response.data, movieRef.carNum, response.finalUrl || searchUrl).length > 0);
             const candidates = parseJavStoreSearch(search.data, movieRef.carNum, search.finalUrl || searchUrl);
             if (!candidates.length) return [];
             for (const candidate of candidates) {
                 try {
-                    const detail = await request(candidate, options.scope);
+                    const detail = await request(candidate, options, response => !!parseJavStorePreview(response.data, response.finalUrl || candidate, movieRef.carNum));
                     const imageUrl = parseJavStorePreview(detail.data, detail.finalUrl || candidate, movieRef.carNum);
                     if (imageUrl) return [Object.freeze({ url: imageUrl, providerId: "javstore" })];
                 } catch (error) {

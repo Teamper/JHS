@@ -2,7 +2,7 @@
 
 export class AccountService {
     /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations */
-    constructor(integrations) { this.integrations = integrations; }
+    constructor(integrations) { this.integrations = integrations; /** @type {any} */ this.want = null; }
 
     /** @param {string} providerId @param {{username: string, password: string}} credentials @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async login(providerId, credentials, options = {}) {

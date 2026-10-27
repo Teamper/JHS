@@ -1,3 +1,4 @@
+import { ActorSourceHealth, isMissingActorSource } from "../src/features/discovery/actor-source-health.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -28,7 +29,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
   const runtimeStorage = { getLocal: vi.fn(() => null), setLocal: vi.fn(), removeLocal: vi.fn() };
   const movie = { externalSiteOrigin: vi.fn(() => "https://javdb.example") };
   const context = vm.createContext({
-    console,
+    ActorSourceHealth, isMissingActorSource, console,
     URL,
     gmHttp,
     i: (target, key, value) => (target[key] = value),

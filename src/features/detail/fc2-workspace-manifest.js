@@ -21,9 +21,10 @@ export default defineFeature({
             return { activeContributions: [], commands: { [commandId]: () => null } };
         }
 
+        const want = deps[SERVICE.account].want;
         const service = new Fc2WorkspaceService({
             runtimeServices: {
-                movie: deps[SERVICE.movie], magnet: deps[SERVICE.magnet], dialog: deps[SERVICE.dialog],
+                want, movie: deps[SERVICE.movie], magnet: deps[SERVICE.magnet], dialog: deps[SERVICE.dialog],
                 account: deps[SERVICE.account], credential: deps[SERVICE.credential], translation: deps[SERVICE.translation],
                 settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], screenshot: deps[SERVICE.screenshot],
                 review: deps[SERVICE.review], related: deps[SERVICE.related], state: deps[SERVICE.state],
@@ -45,6 +46,8 @@ export default defineFeature({
             },
             resolveDependency: (name) => runtime.resolveCompatibilityBean(name),
         });
+        runtime.scope.listen(deps[SERVICE.credential], "credentials.changed", (/** @type {any} */ event) => { if (event.detail?.key === "jhs_appAuthorization") service.refreshWantAccounts(); });
+        runtime.scope.addCleanup(() => service.disposeWantContexts());
         runtime.scope.addCleanup(deps[PORT.style].register("jhs-fc2-workspace-feature", FC2_WORKSPACE_STYLES));
         const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("Fc2Plugin", service);
         if (typeof releaseCompatibilityBean === "function") runtime.scope.addCleanup(releaseCompatibilityBean);

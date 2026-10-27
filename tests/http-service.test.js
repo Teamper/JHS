@@ -7,6 +7,15 @@ import { canonicalizeUrl, createRequestKey, HttpService, isCloudflareChallenge }
 import { SettingsService } from "../src/services/settings-service.js";
 
 describe("HTTP, URL and settings contracts", () => {
+    it("keeps explicit account mutations available when an advisory read opens the circuit", async () => {
+        const port = { request: vi.fn(async options => ({ status: options.method === "POST" ? 200 : 500, data: {}, finalUrl: options.url, responseHeaders: "content-type: text/html" })) };
+        const service = new HttpService(port, new ExternalUrlPolicy());
+        const options = { providerId: "javdb", url: "https://jdforrepam.com/api/detail", retryCount: 0, circuitThreshold: 1, urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] } };
+        await expect(service.request(options)).rejects.toMatchObject({ details: { status: 500, transport: "gm-xhr", responseClass: "html" } });
+        await expect(service.request(options)).rejects.toMatchObject({ code: "CIRCUIT_OPEN" });
+        await expect(service.request({ ...options, method: "POST", circuitGroup: "account-mutation" })).resolves.toMatchObject({ status: 200 });
+        expect(port.request).toHaveBeenCalledTimes(2);
+    });
     it("passes the configured request deadline to native fetch without changing GM requests", async () => {
         const port = { request: vi.fn(async options => ({ status: 200, data: "ok", finalUrl: options.url })) };
         const service = new HttpService(port, new ExternalUrlPolicy());
@@ -48,6 +57,47 @@ describe("HTTP, URL and settings contracts", () => {
         resolveRequest({ status: 200, data: { ok: true }, finalUrl: "https://api.example.test/data" });
         await expect(second).resolves.toMatchObject({ data: { ok: true } });
         expect(diagnostics.exportSnapshot()).toMatchObject({ requestConsumers: 0, underlyingRequests: 0 });
+    });
+
+    it("shares a fresh retry and keeps it alive when another retry consumer closes", async () => {
+        let finish;
+        const request = vi.fn(() => new Promise(resolve => { finish = resolve; }));
+        const service = new HttpService({request}, new ExternalUrlPolicy(), {cache:new CacheService()});
+        const options = {providerId:"example",url:"https://api.example.test/data",urlPolicy:{trustClass:"builtin-public",hosts:["example.test"]},cacheScope:"public",ttlMs:1000,refreshCache:true};
+        const firstScope = new LifecycleScope("retry-first"), secondScope = new LifecycleScope("retry-second");
+        const first = service.request(options, firstScope);
+        await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+        const second = service.request(options, secondScope);
+        await vi.waitFor(() => expect(service.inflight.values().next().value.consumers).toBe(2));
+        firstScope.dispose();
+        await expect(first).rejects.toMatchObject({code:"ABORTED"});
+        expect(request.mock.calls[0][0].signal.aborted).toBe(false);
+        finish({status:200,data:"fresh",finalUrl:options.url});
+        await expect(second).resolves.toMatchObject({data:"fresh"});
+        expect(request).toHaveBeenCalledOnce();
+        secondScope.dispose();
+    });
+
+    it("waits for an older cache write before refreshing without overwriting the new value", async () => {
+        let finishWrite;
+        const values = new Map();
+        const storage = {get:async key=>values.get(key), set:vi.fn(async (key,value)=>{
+            if (!values.size) await new Promise(resolve=>{finishWrite=resolve;});
+            values.set(key,value);
+        })};
+        const request = vi.fn(async options=>({status:200,data:request.mock.calls.length,finalUrl:options.url}));
+        const service = new HttpService({request}, new ExternalUrlPolicy(), {cache:new CacheService({storage})});
+        const options = {providerId:"example",url:"https://api.example.test/data",urlPolicy:{trustClass:"builtin-public",hosts:["example.test"]},cacheScope:"public",ttlMs:1000};
+        const old = service.request(options);
+        await vi.waitFor(()=>expect(finishWrite).toBeTypeOf("function"));
+        const fresh = service.request({...options,refreshCache:true});
+        await vi.waitFor(()=>expect(service.inflight.values().next().value.consumers).toBe(2));
+        finishWrite();
+        expect((await old).data).toBe(1);
+        expect((await fresh).data).toBe(2);
+        expect((await service.request(options)).data).toBe(2);
+        expect(request).toHaveBeenCalledTimes(2);
+        expect([...values.values()][0].value.data).toBe(2);
     });
 
     it("does not refill public cache when an in-flight network response crosses clearPublic", async () => {

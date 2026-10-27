@@ -1,5 +1,6 @@
 import { A, B, D, P, a, d, escapeHtml, g, h, i, normalizeCarNum, p, s } from "./constants.js";
-import { LEGACY_DATA_ALIASES, assertSupportedDataVersion, getPortableDataKeys, hasPortableUserData, mergePortableSettings, normalizeLegacyDomains, normalizeLegacySettings, normalizePortableData, runDataMigrations, selectPortableSettings } from "./migration.js";
+import { LEGACY_DATA_ALIASES, assertSupportedDataVersion, getPortableDataKeys, normalizeLegacyDomains, normalizeLegacySettings, normalizePortableData, selectPortableSettings } from "./migration.js";
+import { prepareAtomicImport } from "./atomic-import.js";
 import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 import { readReviewKeywords } from "./review-keywords.js";
@@ -577,83 +578,41 @@ export class StorageManager {
         mutator(settings);
         await this._saveSettingWithoutLock(settings);
     }
-    async importData(e) { return this.importDataWithGuard(e); }
+    async importData(e, options = {}) { return this.importDataWithGuard(e, options); }
     // prepareData runs after recovery while owning the business lock. It must
     // return only selected domains and must not acquire the same lock again.
     async importDataWithGuard(e, options = {}) {
         let { data: imported, warnings } = normalizePortableData(e);
-        let refreshSettings = false;
-        // Snapshot, import, and migration must share one write window. A gap between
-        // snapshot creation and import could omit a concurrent tab's last mutation.
+        let committed = false, refreshSettings = false;
         try {
-        await this._withCrossTabLock("jhs_state_mutation", async () => {
-            await options.assertActive?.();
-            const targetVersion = await assertSupportedDataVersion(this);
-            await this.stateService?.recoverPendingTransactionWithoutLock?.();
-            if (options.prepareData) ({ data: imported, warnings } = normalizePortableData(await options.prepareData()));
-            if (await hasPortableUserData(this)) {
-                const createSnapshot = () => this._createSnapshotWithoutMutation("导入前自动备份", "auto-import");
-                if (this.mutationCoordinator?.runExclusive) await createSnapshot();
-                else await this._withSnapshotLock(createSnapshot);
-            }
-            const canEnumerateKeys = typeof this.forage.keys === "function";
-            const knownKeys = [ ...new Set([ ...getPortableDataKeys(0), "data_version", "mutation_journal", "snapshots", "data_health_warnings", ...Object.keys(imported) ]) ];
-            const keysBefore = canEnumerateKeys ? await this.forage.keys() : knownKeys;
-            const keysAfter = () => canEnumerateKeys ? this.forage.keys() : knownKeys;
-            const before = new Map;
-            for (const key of keysBefore) {
-                const value = await this.forage.getItem(key);
-                if (canEnumerateKeys || null != value) before.set(key, value && "object" == typeof value ? (globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value))) : value);
-            }
-            try {
-                refreshSettings = targetVersion < 1 || Object.hasOwn(imported, this.setting_key);
-                // Upgrade the destination using its own version, never the source's.
-                await runDataMigrations(this, this.mutationCoordinator, true);
-                if (Object.hasOwn(imported, this.setting_key)) {
-                    imported.setting = mergePortableSettings(await this.forage.getItem(this.setting_key) || {}, imported.setting);
-                }
+            await this._withCrossTabLock("jhs_state_mutation", async () => {
                 await options.assertActive?.();
-                if (Object.hasOwn(imported, "activity_log")) await this.syncState?.resetUndoWithoutLock?.();
-                for (const key in imported) {
-                    await this._setItemAndInvalidate(key, imported[key]);
-                }
-                if (warnings.length) await this.forage.setItem("data_health_warnings", [...(await this.forage.getItem("data_health_warnings") || []), ...warnings]);
+                const targetVersion = await assertSupportedDataVersion(this);
+                const atomic = this.atomicStorage;
+                if (!atomic?.readAtomicSnapshot || !atomic?.commitAtomicBatch) throw Object.assign(new Error("当前存储不支持安全导入，数据未修改；仍可导出备份"), { code: "ATOMIC_IMPORT_UNAVAILABLE" });
+                await this.stateService?.recoverPendingTransactionWithoutLock?.();
+                if (options.prepareData) ({ data: imported, warnings } = normalizePortableData(await options.prepareData()));
+                const batch = await prepareAtomicImport(this, atomic, imported, warnings, targetVersion);
+                await options.assertActive?.();
+                for (const key of Object.keys(batch.puts)) await this.backupChanges?.capture(key);
+                await atomic.commitAtomicBatch({ ...batch, signal: options.signal });
+                committed = true;
+                refreshSettings = targetVersion < 1 || Object.hasOwn(imported, this.setting_key);
                 this._invalidateCache();
-            } catch (error) {
-                const rollbackErrors = [];
-                let currentKeys;
-                try {
-                    currentKeys = await keysAfter();
-                } catch (rollbackError) {
-                    rollbackErrors.push(rollbackError);
-                    currentKeys = knownKeys;
+                if (this.syncState) {
+                    this.syncState.verifiedMerge = null;
+                    this.syncState.hasDeferred = batch.domains.length > 0 || this.syncState.hasDeferred;
+                    try { await this.syncState.read(); }
+                    catch (error) { warnAfterCommittedStorageMutation("[import] synchronization refresh failed", error); }
                 }
-                for (const key of currentKeys) {
-                    if (!before.has(key)) {
-                        try { await this.forage.removeItem(key); }
-                        catch (rollbackError) { rollbackErrors.push(rollbackError); }
-                    }
-                }
-                for (const [key, value] of before) {
-                    try { await this.forage.setItem(key, value); }
-                    catch (rollbackError) { rollbackErrors.push(rollbackError); }
-                }
-                this._invalidateCache();
-                if (rollbackErrors.length) {
-                    const failure = new Error("导入失败且自动回滚不完整；导入前自动备份仍保留");
-                    failure.cause = error;
-                    failure.rollbackErrors = rollbackErrors;
-                    throw failure;
-                }
-                throw error;
-            }
-        });
-        } finally {
-            // Refresh only after releasing the mutation lock: SettingsService owns
-            // its own queue/lock, and a rolled-back migration may have changed its snapshot.
-            if (refreshSettings) try { await globalThis.settingsService?.refresh?.(this.setting_key); }
-            catch (error) { warnAfterCommittedStorageMutation("[settings] import refresh failed", error); }
+            });
+        } catch (error) {
+            if (!committed) throw error;
+            warnAfterCommittedStorageMutation("[import] data committed; local refresh pending", error);
         }
+        // Settings owns its own queue; never await refresh while holding its mutation lock.
+        if (committed && refreshSettings) try { await globalThis.settingsService?.refresh?.(this.setting_key); }
+        catch (error) { warnAfterCommittedStorageMutation("[settings] import refresh failed", error); }
     }
     async exportPortableData() {
         return this._withCrossTabLock("jhs_state_mutation", async () => {
@@ -665,8 +624,10 @@ export class StorageManager {
     /** Caller already owns the shared lock; migration snapshots retain the source version. */
     async _exportPortableDataWithoutLock(requireData = false) {
         const data = { data_version: await this.getDataVersion() };
-        for (const key of getPortableDataKeys(data.data_version)) {
-            const value = await this.forage.getItem(key);
+        const keys = getPortableDataKeys(data.data_version);
+        const values = await Promise.all(keys.map(key => this.forage.getItem(key)));
+        for (const [index, key] of keys.entries()) {
+            const value = values[index];
             if (null == value) continue;
             data[key] = key === this.setting_key ? selectPortableSettings(value) : value;
         }

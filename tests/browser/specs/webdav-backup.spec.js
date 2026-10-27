@@ -25,7 +25,7 @@ for (const broken of [false, true]) {
         if (!["https://dav.example.test", "https://cdn.example.test"].includes(origin)) return original(options);
         let response;
         if (options.method === "MKCOL") response = { status: 405, responseText: "" };
-        else if (options.method === "PROPFIND") response = { status: 207, responseText: '<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/JHS/</d:href><d:propstat><d:prop><d:getcontentlength>0</d:getcontentlength></d:prop></d:propstat></d:response><d:response><d:href>/dav/JHS/backup.json</d:href><d:propstat><d:prop><d:displayname>backup.json</d:displayname><d:getcontentlength>100</d:getcontentlength></d:prop></d:propstat></d:response></d:multistatus>' };
+        else if (options.method === "PROPFIND") response = { status: 207, responseText: '<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/JHS-%E6%95%B0%E6%8D%AE%E5%A4%87%E4%BB%BD/</d:href><d:propstat><d:prop><d:getcontentlength>0</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:response><d:href>/dav/JHS-%E6%95%B0%E6%8D%AE%E5%A4%87%E4%BB%BD/backup.json</d:href><d:propstat><d:prop><d:resourcetype/><d:displayname>backup.json</d:displayname><d:getcontentlength>100</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>' };
         else {
           window.__previewProbe.downloads.push({ origin, headers: Object.keys(options.headers), anonymous: options.anonymous, redirect: options.redirect });
           response = origin === "https://dav.example.test" ? { status: 301, responseHeaders: broken ? "" : "Location: https://cdn.example.test/backup" } : { status: 200, responseText: encrypted };

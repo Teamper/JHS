@@ -57,7 +57,7 @@ export class ScreenshotService {
      * 传入 settings 时所有来源（ProviderRegistry / Integration fallback / manual provider）
      * 都必须位于 getEnabledProviders(settings) 白名单内；全部禁用时直接返回 null。
      * @param {Record<string, unknown>} movieRef
-     * @param {{ providerId?: string, scope?: unknown, settings?: Record<string, any>, allowWhenDisabled?: boolean }} [context]
+     * @param {{ providerId?: string, scope?: unknown, settings?: Record<string, any>, allowWhenDisabled?: boolean, refreshCache?: boolean }} [context]
      */
     async resolve(movieRef, context = {}) {
         // 总开关门禁：任何调用路径在设置关闭时都不得发请求。

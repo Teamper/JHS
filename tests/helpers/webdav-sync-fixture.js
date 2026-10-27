@@ -1,3 +1,4 @@
+import { memoryAtomicStorage } from "./atomic-storage.js";
 import { vi } from "vitest";
 import { StorageManager } from "../../src/core/storage.js";
 import { StateService } from "../../src/core/state-service.js";
@@ -37,6 +38,7 @@ export async function syncReplica(remote, options = {}) {
     vi.stubGlobal("clog", { log: vi.fn(), error: vi.fn() });
     StorageManager.instance = null;
     const storage = new StorageManager();
+    storage.atomicStorage = memoryAtomicStorage(values);
     const coordinator = new StorageMutationCoordinator({ lockManager: null });
     storage.mutationCoordinator = coordinator;
     const events = { emit: vi.fn(async () => {}) };

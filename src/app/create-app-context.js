@@ -34,6 +34,8 @@ import { WebDavSyncStore } from "../core/webdav-sync-store.js";
 import { PersonalPreferencesService } from "../services/personal-preferences-service.js";
 import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 import { BusImageLayoutService } from "../services/bus-image-layout-service.js";
+import { JavDbWantService } from "../services/javdb-want-service.js";
+import { bindJavDbWantService } from "../core/javdb-api.js";
 import { CredentialService } from "../services/credential-service.js";
 import { Pan123CredentialService } from "../services/pan123-credential-service.js";
 import { ClipboardService } from "../services/clipboard-service.js";
@@ -73,6 +75,7 @@ export function createAppContext(runtime) {
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
     const navigation = new NavigationService(navigationPort);
     const storage = new StorageService(storagePort);
+    if (runtime.legacyStorage) runtime.legacyStorage.atomicStorage = storage;
     const cache = new CacheService({ diagnostics, storage });
     const dialog = new DialogService(dialogPort);
     runtime.legacyUtils?.setDialogService?.(dialog);
@@ -115,6 +118,7 @@ export function createAppContext(runtime) {
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache, settings });
     diagnostics.setNetworkController(http);
     const credential = new CredentialService(storage, runtime.localStorage);
+    rootScope.addCleanup(() => credential.dispose());
     const pan123Credential = new Pan123CredentialService(storage, notifications);
     const webdav = new WebDavService(http, credential, settings);
     mutationCoordinator.diagnostics = diagnostics;
@@ -172,6 +176,10 @@ export function createAppContext(runtime) {
     const translation = new TranslationService(integrations, storage);
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations);
+    const javdbWant = new JavDbWantService({ http, credential, invalidate: id => runtime.legacyStorage?.deleteCachedRequest(`movie-detail:${id}`) });
+    account.want = javdbWant;
+    rootScope.addCleanup(bindJavDbWantService(javdbWant));
+    rootScope.addCleanup(() => javdbWant.dispose());
     const offline = new OfflineService(providers, integrations);
     const offlineSubmissionReceipts = new OfflineSubmissionReceiptService(runtime.localStorage);
     const busImageLayout = new BusImageLayoutService();

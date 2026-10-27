@@ -23,9 +23,11 @@ test("FC2 JavDB want login retries without the TOP250 contribution", async ({ co
       window.__fc2WantProbe.credentialKeys.push(key);
       window.__fc2WantProbe.token = value;
     };
+    credential.readEntry = async () => { const value = await credential.get(); return { exists: !!value, value, revision: value ? "fixture-saved-account" : null }; };
     window.credentialService = credential;
-    const request = window.GM_xmlhttpRequest;
-    window.GM_xmlhttpRequest = (options) => {
+    const port = fc2.getRuntimeService("want").deps.http.port;
+    const request = port.requestImplementation;
+    port.requestImplementation = (options) => {
       if (String(options.url).includes("/v1/movies/fixture-id/reviews")) {
         window.__fc2WantProbe.submitUrls.push(String(options.url));
         queueMicrotask(() => options.onload?.({ status: 200, response: { success: 1 }, responseText: '{"success":1}', responseHeaders: "content-type: application/json" }));
@@ -63,14 +65,16 @@ test("FC2 JavDB want remains committed after cache and success-notice failures",
     const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
     const credential = fc2.getRuntimeService("credential");
     credential.get = async () => "synthetic-javdb-token";
+    credential.readEntry = async () => { const value = await credential.get(); return { exists: !!value, value, revision: value ? "fixture-saved-account" : null }; };
     window.credentialService = credential;
     window.storageManager.deleteCachedRequest = async () => {
       window.__fc2PostCommitProbe.cacheFailures += 1;
       throw new Error("synthetic cache failure");
     };
     window.show.ok = () => { throw new Error("synthetic toast failure"); };
-    const request = window.GM_xmlhttpRequest;
-    window.GM_xmlhttpRequest = (options) => {
+    const port = fc2.getRuntimeService("want").deps.http.port;
+    const request = port.requestImplementation;
+    port.requestImplementation = (options) => {
       if (String(options.url).includes("/v1/movies/fixture-id/reviews")) {
         window.__fc2PostCommitProbe.submissions += 1;
         queueMicrotask(() => options.onload?.({ status: 200, response: { success: 1 }, responseText: '{"success":1}', responseHeaders: "content-type: application/json" }));
@@ -106,10 +110,12 @@ test("FC2 JavDB login continues after its success notice fails", async ({ contex
       window.__fc2LoginPostCommitProbe.credentialWrites += 1;
       window.__fc2LoginPostCommitProbe.token = value;
     };
+    credential.readEntry = async () => { const value = await credential.get(); return { exists: !!value, value, revision: value ? "fixture-saved-account" : null }; };
     window.credentialService = credential;
     fc2.getRuntimeService("notifications").ok = () => { throw new Error("synthetic toast failure"); };
-    const request = window.GM_xmlhttpRequest;
-    window.GM_xmlhttpRequest = (options) => {
+    const port = fc2.getRuntimeService("want").deps.http.port;
+    const request = port.requestImplementation;
+    port.requestImplementation = (options) => {
       if (String(options.url).includes("/v1/movies/fixture-id/reviews")) {
         window.__fc2LoginPostCommitProbe.submissions += 1;
         queueMicrotask(() => options.onload?.({ status: 200, response: { success: 1 }, responseText: '{"success":1}', responseHeaders: "content-type: application/json" }));

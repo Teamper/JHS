@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
 import { StateService } from "../src/core/state-service.js";
@@ -21,6 +22,7 @@ function fixture(initial = {}) {
     const forage = { getItem: vi.fn(async key => structuredClone(values.get(key) ?? null)), setItem: vi.fn(async (key, value) => { values.set(key, structuredClone(value)); }), removeItem: vi.fn(async key => values.delete(key)), keys: async () => [...values.keys()] };
     vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => forage });
     const storage = new StorageManager(), coordinator = new StorageMutationCoordinator({ lockManager: null });
+    storage.atomicStorage = memoryAtomicStorage(values);
     const tracker = new BackupChangeTracker(forage, coordinator);
     storage.mutationCoordinator = coordinator; storage.backupChanges = tracker;
     const state = new StateService(storage, { emit: vi.fn(async () => {}) }, coordinator);
@@ -64,9 +66,8 @@ describe("backup accounting at real persistence boundaries", () => {
         expect(f.values.get("setting")).toMatchObject({ webDavAutoBackupEnabled: "no", webDavAutoBackupMinutes: 30 });
     });
     it("does not count a failed import that restored all business tables", async () => {
-        const f = fixture({ car_list: [{ carNum: "ABC-101", remark: "old" }] }), original = f.forage.setItem.getMockImplementation();
-        let failed = false;
-        f.forage.setItem.mockImplementation(async (key, value) => { if (key === "favorite_actresses" && !failed) { failed = true; throw new Error("injected import failure"); } return original(key, value); });
+        const f = fixture({ car_list: [{ carNum: "ABC-101", remark: "old" }] });
+        f.storage.atomicStorage = memoryAtomicStorage(f.values, { beforeWrite: async key => { if (key === "favorite_actresses") throw new Error("injected import failure"); } });
         await expect(f.storage.importData({ data_version: 3, car_list: [{ carNum: "ABC-102" }], favorite_actresses: [{ starId: "actor" }] })).rejects.toThrow("injected");
         expect(f.values.get("car_list")).toEqual([{ carNum: "ABC-101", remark: "old" }]);
         expect((await f.tracker.read()).totalRevision).toBe(0);

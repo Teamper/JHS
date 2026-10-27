@@ -73,7 +73,7 @@ export class HttpService {
         this.diagnostics = options.diagnostics ?? null;
         this.cache = options.cache ?? null;
         this.settings = options.settings ?? null;
-        /** @type {Map<string, {promise: Promise<any>, controller: AbortController, consumers: number}>} */
+        /** @type {Map<string, {promise: Promise<any>, controller: AbortController, consumers: number, refresh: boolean}>} */
         this.inflight = new Map();
         /** @type {Map<string, {state: "closed" | "open" | "half-open", failCount: number, openTime: number, cooldownMs: number, threshold: number, probing: boolean}>} */
         this.circuitBreakers = new Map();
@@ -107,20 +107,28 @@ export class HttpService {
         scope?.assertActive();
         const serializedKey = stableSerialize(requestKey);
         const cachePolicy = { scope: cacheScope, sessionScopeId: options.sessionScopeId };
-        if (method === "GET" && cacheScope !== "none" && this.cache) {
+        const cacheAccept = (/** @type {any} */ response) => !options.cacheAccept || options.cacheAccept(response);
+        if (!options.refreshCache && this.cache) {
             const cached = await this.cache.get(cacheNamespace, serializedKey, cachePolicy);
             scope?.assertActive();
-            if (cached.hit) return cached.value;
+            if (cached.hit && cacheAccept(cached.value)) return cached.value;
         }
         const cacheGeneration = cacheScope === "public" && this.cache ? this.cache.generation(cacheNamespace) : undefined;
         const inflightKey = JSON.stringify([serializedKey, cacheGeneration ?? null]);
         let entry = this.inflight.get(inflightKey);
+        // Finish any older response/write before refreshing this exact key. Other
+        // consumers keep their request; concurrent refreshers share the new one.
+        if (options.refreshCache && entry && !entry.refresh) {
+            try { await this.consume(entry, scope); } catch { scope?.assertActive(); }
+            scope?.assertActive();
+            entry = this.inflight.get(inflightKey);
+        }
         if (!entry) {
             const controller = new AbortController();
-            entry = { controller, consumers: 0, promise: Promise.resolve() };
+            entry = { controller, consumers: 0, promise: Promise.resolve(), refresh: options.refreshCache === true };
             entry.promise = this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: controller.signal }, urlPolicy)
                 .then(async (response) => {
-                    if (this.cache && (cacheGeneration == null || cacheGeneration === this.cache.generation(cacheNamespace))) {
+                    if (this.cache && cacheAccept(response) && (cacheGeneration == null || cacheGeneration === this.cache.generation(cacheNamespace))) {
                         await this.cache.set(cacheNamespace, serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true, generation: cacheGeneration });
                     }
                     return response;
@@ -137,12 +145,14 @@ export class HttpService {
     /** @param {Record<string, any>} options @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} urlPolicy */
     async executeUnderlying(options, urlPolicy) {
         const domain = new URL(options.url).hostname, retryCount = Math.max(0, Math.min(9, Math.trunc(Number(options.retryCount ?? 0) || 0))), acceptableStatuses = new Set((options.acceptableStatuses ?? []).map((/** @type {unknown} */ status) => Number(status)).filter(Number.isFinite));
-        const state = this.ensureCircuit(domain, options);
+        // Advisory/detail reads must not prevent a user from authenticating or submitting.
+        const circuitKey = options.circuitGroup === "account-mutation" ? `${domain}#account-mutation` : domain;
+        const state = this.ensureCircuit(circuitKey, options);
         let ownsProbe = false;
         let finalError = null;
         for (let attempt = 0; attempt <= retryCount; attempt += 1) {
             if (options.signal?.aborted) { finalError = new JhsError("ABORTED", "请求已取消", { source: options.providerId }); break; }
-            const blocked = ownsProbe ? null : this.checkCircuit(domain);
+            const blocked = ownsProbe ? null : this.checkCircuit(circuitKey);
             if (blocked) {
                 finalError = new JhsError("CIRCUIT_OPEN", `站点 ${domain} 已熔断，${blocked.remaining}秒后重试`, { source: options.providerId, details: { domain, remainingSeconds: blocked.remaining } });
                 break;
@@ -157,17 +167,20 @@ export class HttpService {
                     });
                 }
                 if (acceptableStatuses.has(Number(response.status))) {
-                    this.recordSuccess(domain);
+                    this.recordSuccess(circuitKey);
                     return response;
                 }
                 if (response.status >= 400) {
                     const code = [401, 403].includes(response.status) ? "AUTH_REQUIRED" : response.status === 404 ? "NOT_FOUND" : response.status === 429 ? "RATE_LIMITED" : "NETWORK_ERROR";
-                    throw new JhsError(code, `HTTP ${response.status}`, { source: options.providerId, retryable: response.status === 429 || response.status >= 500, details: { status: response.status, domain } });
+                    const contentType = String(response.responseHeaders || "").match(/(?:^|\n)content-type:\s*([^;\r\n]+)/i)?.[1] || "";
+                    const responseClass = /json/i.test(contentType) ? "json" : /html/i.test(contentType) ? "html" : "other";
+                    throw new JhsError(code, `HTTP ${response.status}`, { source: options.providerId, retryable: response.status === 429 || response.status >= 500, details: { status: response.status, domain, transport: options.transport === "native-fetch" && !response.nativeFallbackCode && !options.onDispatch ? "native-fetch" : "gm-xhr", responseClass } });
                 }
-                this.recordSuccess(domain);
+                this.recordSuccess(circuitKey);
                 return response;
             } catch (error) {
-                const normalized = JhsError.from(error, options.providerId);
+                const original = JhsError.from(error, options.providerId);
+                const normalized = new JhsError(original.code, original.message, { source: original.source, retryable: original.retryable, cause: original, details: { ...original.details, transport: original.details?.transport ?? (options.transport === "native-fetch" && !options.onDispatch ? "native-fetch" : "gm-xhr"), responseClass: original.details?.responseClass ?? (original.code === "TIMEOUT" ? "timeout" : original.code === "ABORTED" ? "cancelled" : "no-response") } });
                 this.recordAttempt(domain, true);
                 finalError = normalized;
                 if (!normalized.retryable || attempt >= retryCount || normalized.code === "CF_BLOCKED") break;
@@ -175,7 +188,7 @@ export class HttpService {
                 catch (abortError) { finalError = JhsError.from(abortError, options.providerId); break; }
             }
         }
-        if (finalError && ["NETWORK_ERROR", "TIMEOUT", "CF_BLOCKED"].includes(finalError.code)) this.recordBreakerFailure(domain, options);
+        if (finalError && ["NETWORK_ERROR", "TIMEOUT", "CF_BLOCKED"].includes(finalError.code)) this.recordBreakerFailure(circuitKey, options);
         if (ownsProbe) state.probing = false;
         this.diagnostics?.recordError(finalError);
         throw finalError;

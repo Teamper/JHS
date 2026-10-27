@@ -1,3 +1,4 @@
+import { JavDbWantService } from "../src/services/javdb-want-service.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -58,11 +59,11 @@ function loadResolver(responseFactory) {
 
 function loadWantApi({ encryptedToken = "encrypted", response = { success: 1 } } = {}) {
     const local = new Map(encryptedToken ? [ [ "jhs_appAuthorization", encryptedToken ] ] : []), gmRequest = vi.fn(async () => response), deleteCachedRequest = vi.fn(async () => {}), context = vm.createContext({
-        storageManager: { deleteCachedRequest }, gmHttp: { gmRequest }, localStorage: { getItem: key => local.get(key) || null, setItem: (key, value) => local.set(key, value), removeItem: key => local.delete(key) }, decryptData: vi.fn(async value => `token:${value}`), md5: String,
+        legacyCredentialForTest: { get: async () => local.has("jhs_appAuthorization") ? `token:${local.get("jhs_appAuthorization")}` : "", remove: () => local.delete("jhs_appAuthorization") }, JavDbWantService, storageManager: { deleteCachedRequest }, gmHttp: { gmRequest }, localStorage: { getItem: key => local.get(key) || null, setItem: (key, value) => local.set(key, value), removeItem: key => local.delete(key) }, decryptData: vi.fn(async value => `token:${value}`), md5: String,
         normalizeCarNum: String, utils: { formatDate: String }, show: { error: vi.fn() }
     });
     const source = readTestFile(join(repoRoot, "src/core/javdb-api.js"), "utf8");
-    vm.runInContext(`${source};globalThis.markWant=markJavDbWantWatch;globalThis.getWantState=getJavDbWantWatchState`, context);
+    vm.runInContext(`${source};bindJavDbWantService(new JavDbWantService({ credential: legacyCredentialForTest, sign: O, http: { request: async options => ({data: await gmHttp.gmRequest(options.method,options.url,options.body ?? null,{},options.headers)}) }, invalidate: id => storageManager.deleteCachedRequest("movie-detail:" + id) }));globalThis.markWant=markJavDbWantWatch;globalThis.getWantState=getJavDbWantWatchState`, context);
     return { markWant: context.markWant, getWantState: context.getWantState, gmRequest, deleteCachedRequest };
 }
 
@@ -334,7 +335,7 @@ describe("FC2 owned detail workspace", () => {
 
     it("keeps JHS marks and restores a separate JavDB want action", () => {
         expect(fc2Source).toContain('data-jhs-action="javdb-want"');
-        expect(fc2Source).toContain("markJavDbWantWatch(movieId)");
+        expect(fc2Source).toContain("markJavDbWantWatch(movieId, { scope })");
         expect(fc2Source).toContain("openJavDbLoginDialog({");
         expect(fc2Source).not.toContain('this.getBean("TOP250Plugin")');
         expect(fc2Source).toContain('openJavDbLoginDialog({');
@@ -357,7 +358,7 @@ describe("FC2 owned detail workspace", () => {
     it("keeps asynchronous error variables inside their catch callbacks", () => {
         expect(fc2Source).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
         expect(fc2By123AvSource).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
-        expect(fc2Source).toMatch(/catch\(\(\/\*\* @type \{unknown\} \*\/ error\) => \{\n\s+if \(!context\.isAlive\(\) \|\| generation !== context\.otherSiteGeneration\) return;\n\s+sitesGroup\.show\(\);/);
+        expect(fc2Source).toMatch(/catch\(\(\/\*\* @type \{unknown\} \*\/ error\) => \{\r?\n\s+if \(!context\.isAlive\(\) \|\| generation !== context\.otherSiteGeneration\) return;\r?\n\s+sitesGroup\.show\(\);/);
         expect(fc2Source).toContain("renderFc2State(context.root.find('[data-jhs-role=\"other-sites\"]'), \"第三方站点加载失败\")");
         expect(fc2Source).toContain('catch((/** @type {unknown} */ error) => {');
     });

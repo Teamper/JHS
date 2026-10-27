@@ -15,6 +15,7 @@ export function taskStatusView(name, snapshot, settings = {}) {
         status = "等待重试"; nextLabel = "重试检查"; next = snapshot.nextAt > Date.now() ? format(snapshot.nextAt) : "待检查";
     } else if (snapshot.state === "due" || snapshot.nextAt > 0 && snapshot.nextAt <= Date.now()) { status = "待检查"; next = "待检查"; }
     else if (snapshot.nextAt > 0) next = format(snapshot.nextAt);
+    if (enabled && status === "正常" && snapshot?.unavailableCount > 0) status = "完成，有异常项";
     return {name:names[/** @type {keyof typeof names} */ (name)] || name, status, last:format(snapshot?.completedAt), next, nextLabel};
 }
 

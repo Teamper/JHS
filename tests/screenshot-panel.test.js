@@ -14,6 +14,34 @@ function createService(resolve) {
 
 beforeEach(() => { globalThis.$ = jquery; globalThis.showImageViewer = vi.fn(); globalThis.clog = { error: vi.fn() }; document.body.innerHTML = '<div id="target"></div>'; });
 
+it("ignores a replaced image error and makes the current failed image retryable", async () => {
+    const host = jquery("#target"), screenshot = createService(vi.fn().mockResolvedValueOnce([{url:"https://img.javstore.net/old.jpg"}]).mockResolvedValueOnce([{url:"https://img.javstore.net/current.jpg"}]));
+    await renderScreenshotPanel({target:host, carNum:"ABC-123", screenshot, settings:{}});
+    const old = host.find("img")[0];
+    await renderScreenshotPanel({target:host, carNum:"ABC-123", screenshot, settings:{}});
+    old.dispatchEvent(new Event("error"));
+    expect(host.find("img").attr("src")).toContain("current.jpg");
+    host.find("button")[0].focus();
+    host.find("img")[0].dispatchEvent(new Event("error"));
+    expect(host.text()).toContain("缩略图加载失败");
+    expect(host.find("img")).toHaveLength(0);
+    expect(document.activeElement).toBe(host.find("button")[0]);
+});
+
+it("keeps keyboard focus during retry, refreshes the source once and focuses its result", async () => {
+    let finish;
+    const resolve = vi.fn().mockRejectedValueOnce(new Error("offline")).mockImplementationOnce(() => new Promise(done => { finish = done; }));
+    const host = jquery("#target"), screenshot = createService(resolve);
+    await renderScreenshotPanel({target:host, carNum:"ABC-123", screenshot, settings:{}});
+    const retry = host.find("button")[0]; retry.focus(); retry.click(); retry.click();
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(resolve.mock.calls[1][1].refreshCache).toBe(true);
+    expect(document.activeElement).toBe(retry);
+    finish([{url:"https://img.javstore.net/recovered.jpg"}]);
+    await vi.waitFor(() => expect(host.find("img")).toHaveLength(1));
+    expect(document.activeElement).toBe(host.find("button")[0]);
+});
+
 it("renders a service-owned screenshot without legacy plugin access", async () => {
     const screenshot = createService(vi.fn(async () => [{ url: "https://img.javstore.net/test.jpg" }]));
     const host = jquery("#target");

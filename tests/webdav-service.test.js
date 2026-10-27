@@ -112,11 +112,11 @@ it("keeps uploading when the folder already exists on repeated backups", async (
 
 it("parses portable WebDAV file metadata without exposing credentials", async () => {
     const xml = `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">
-        <d:response><d:href>/dav/JHS/</d:href><d:propstat><d:prop><d:getcontentlength>0</d:getcontentlength></d:prop></d:propstat></d:response>
-        <d:response><d:href>/dav/JHS/a.json</d:href><d:propstat><d:prop><d:displayname>a.json</d:displayname><d:getcontentlength>42</d:getcontentlength><d:getlastmodified>today</d:getlastmodified></d:prop></d:propstat></d:response>
+        <d:response><d:href>/dav/JHS/</d:href><d:propstat><d:prop><d:getcontentlength>0</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+        <d:response><d:href>/dav/JHS/a.json</d:href><d:propstat><d:prop><d:resourcetype/><d:displayname>a.json</d:displayname><d:getcontentlength>42</d:getcontentlength><d:getlastmodified>today</d:getlastmodified></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
     </d:multistatus>`;
     const request = vi.fn(async options => ({ data: options.method === "PROPFIND" ? xml : "" }));
-    const client = new WebDavService({ request }).createClient({ url: "https://dav.example/base", username: "u", password: "p" });
+    const client = new WebDavService({ request }).createClient({ url: "https://dav.example/dav", username: "u", password: "p" });
     await expect(client.getBackupList("JHS")).resolves.toEqual([{ fileId: "a.json", name: "a.json", size: 42, createTime: "today" }]);
 });
 

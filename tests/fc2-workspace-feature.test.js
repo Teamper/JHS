@@ -19,7 +19,7 @@ describe("FC2 workspace Feature ownership", () => {
             .register(SERVICE.magnet, {})
             .register(SERVICE.dialog, {})
             .register(SERVICE.account, {})
-            .register(SERVICE.credential, {})
+            .register(SERVICE.credential, new EventTarget())
             .register(SERVICE.translation, {})
             .register(SERVICE.settings, {})
             .register(SERVICE.storage, {})
@@ -63,6 +63,12 @@ describe("FC2 workspace Feature ownership", () => {
         expect(consumedService.managedByFeature).toBe(true);
         expect(style.register).toHaveBeenCalledOnce();
         expect(runtime.getActiveFeatureIds()).toEqual(["fc2-workspace", "fc2-consumer-test"]);
+
+        const refreshAccounts = vi.spyOn(consumedService, "refreshWantAccounts");
+        container.resolveDeclared([SERVICE.credential])[SERVICE.credential].dispatchEvent(new CustomEvent("credentials.changed", { detail: { key: "jhs_webdav_password" } }));
+        expect(refreshAccounts).not.toHaveBeenCalled();
+        container.resolveDeclared([SERVICE.credential])[SERVICE.credential].dispatchEvent(new CustomEvent("credentials.changed", { detail: { key: "jhs_appAuthorization" } }));
+        expect(refreshAccounts).toHaveBeenCalledOnce();
 
         const active = await runtime.activate("fc2-workspace");
         active.dispose();

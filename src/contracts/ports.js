@@ -16,3 +16,10 @@ export const PORT_METHODS = Object.freeze({
     dialog: ["open", "close", "confirm", "alert"],
     style: ["register", "remove"],
 });
+
+/** Optional capability: both methods must be present for safe portable import.
+ * expected entries distinguish a missing key from an existing null value;
+ * implementations compare and write within one native transaction and resolve
+ * only after durable commit. Portable export does not require this capability.
+ * @typedef {{readAtomicSnapshot: (keys: string[]) => Promise<Record<string, {exists: boolean, value?: any}>>, commitAtomicBatch: (batch: {expected: Record<string, {exists: boolean, value?: any}>, puts: Record<string, any>, deletes: string[], signal?: AbortSignal}) => Promise<void>}} AtomicStoragePort
+ */

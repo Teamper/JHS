@@ -2,6 +2,8 @@
 
 import { normalizeCarNum } from "../../core/constants.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
+import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
+import { screenshotErrorMessage } from "../../ui/detail/screenshot-error.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 const SCREENSHOT_STYLES = `.jhs-screenshot-message{margin-top:50px;color:var(--jhs-text-muted);cursor:auto}.jhs-screenshot-message--bus{margin-top:30px}.screen-container .jhs-screenshot-open{display:block;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.screen-container .retry-link{padding:0;border:0;background:transparent;font:inherit;cursor:pointer}.screen-container .retry-link[aria-disabled="true"]{cursor:wait}`;
@@ -38,9 +40,9 @@ export class ScreenshotController {
         this.scope.addCleanup(releaseStyle);
         this.scope.listen(this.settings, "settings.changed", (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
-            if (!names?.includes("enableLoadScreenShot")) return;
+            if (!names?.some(name => ["enableLoadScreenShot", "screenshotMode", "screenshotProviders"].includes(name))) return;
+            this.unmountHosted();
             if (this.screenshot.isEnabled(this.settings.snapshot())) this.mountHosted();
-            else this.unmountHosted();
         });
         this.scope.listen(this.document, "click", (/** @type {Event} */ event) => this.handleClick(/** @type {MouseEvent} */ (event)));
         this.scope.addCleanup(() => this.dispose());
@@ -106,11 +108,11 @@ export class ScreenshotController {
     unmountHosted() {
         this.generation += 1;
         this.abortActiveRequest();
-        this.document.querySelectorAll(".screen-container, .jhs-screenshot-providers").forEach((node) => node.remove());
+        this.hostContainer?.remove();
         this.hostContainer = null;
     }
 
-    /** @param {string | null} rawCarNum @param {{allowWhenDisabled?: boolean, scope?: any}} [options] */
+    /** @param {string | null} rawCarNum @param {{allowWhenDisabled?: boolean, scope?: any, refreshCache?: boolean}} [options] */
     async getScreenshot(rawCarNum, options = {}) {
         const carNum = normalizeCarNum(rawCarNum);
         if (!carNum) throw new Error("缩略图番号不可用");
@@ -120,38 +122,36 @@ export class ScreenshotController {
             scope: options.scope ?? this.scope,
             settings,
             allowWhenDisabled: options.allowWhenDisabled === true,
+            ...(options.refreshCache ? { refreshCache: true } : {}),
         });
         const image = Array.isArray(images) ? images[0] : images;
         return image?.url || null;
     }
 
-    /** @param {Element} container @param {number} generation */
-    async loadIntoContainer(container, generation) {
-        container.setAttribute("aria-busy", "true");
-        const rawCarNum = new URL(this.window.location.href).searchParams.get("jhsCarNum")
-            ?? this.hostAdapter.readMovieRef?.()?.carNum
-            ?? null;
+    /** @param {Element} container @param {number} generation @param {boolean} [refreshCache] */
+    async loadIntoContainer(container, generation, refreshCache = false) {
+        this.abortActiveRequest();
+        const rawCarNum = new URL(this.window.location.href).searchParams.get("jhsCarNum") ?? this.hostAdapter.readMovieRef?.()?.carNum ?? null;
+        const carNum = normalizeCarNum(rawCarNum);
+        if (!carNum) return this.showErrorFallback(container, rawCarNum, null);
         const requestScope = new LifecycleScope(`detail-screenshot:${generation}`);
-        const releaseRequestScope = this.scope.addCleanup(() => requestScope.dispose());
+        this.releaseRequestScope = this.scope.addCleanup(() => requestScope.dispose());
         this.requestScope = requestScope;
-        this.releaseRequestScope = releaseRequestScope;
+        const manual = this.screenshot.getScreenshotSettings(this.settings.snapshot()).mode === "manual";
         try {
-            const url = await this.getScreenshot(rawCarNum, { scope: requestScope });
-            if (!this.isCurrent(container, generation)) return;
-            if (!url || !this.renderImage(container, "缩略图", url)) this.showErrorFallback(container, rawCarNum, null);
+            await renderScreenshotPanel({
+                target: container, carNum, screenshot: this.screenshot, settings: this.settings.snapshot(),
+                scope: requestScope, refreshCache, isActive: () => this.isCurrent(container, generation),
+                ...(!manual ? {
+                    renderImage: url => this.renderImage(container, "缩略图", url),
+                    renderError: error => { if (error) this.report(error); this.showErrorFallback(container, rawCarNum, error); },
+                    renderLoading: retry => { if (!retry) { const status = this.document.createElement("div"); status.setAttribute("role", "status"); status.textContent = "加载中…"; container.replaceChildren(status); } },
+                } : {}),
+            });
         } catch (error) {
-            if (!this.isCurrent(container, generation)) return;
-            this.report(error);
-            this.showErrorFallback(container, rawCarNum, error);
-        } finally {
-            if (generation === this.generation) container.setAttribute("aria-busy", "false");
-            releaseRequestScope();
-            requestScope.dispose();
-            if (this.requestScope === requestScope) {
-                this.requestScope = null;
-                this.releaseRequestScope = null;
-            }
+            if (this.isCurrent(container, generation)) { this.report(error); this.showErrorFallback(container, rawCarNum, error); }
         }
+        // The panel owns future manual selections and image errors until unmount.
     }
 
     /** @param {Element} container @param {number} generation */
@@ -165,7 +165,7 @@ export class ScreenshotController {
         if (!url) return false;
         const image = this.document.createElement("img");
         const generation = this.generation;
-        this.scope.listen(image,"error",() => {
+        (this.requestScope ?? this.scope).listen(image,"error",() => {
             if (!this.isCurrent(container,generation) || !container.contains(image)) return;
             const error = new Error("缩略图图片加载失败");
             this.report(error);
@@ -203,7 +203,7 @@ export class ScreenshotController {
             container.replaceChildren(message);
             return;
         }
-        message.textContent = error instanceof Error ? "缩略图加载失败" : "暂无缩略图";
+        message.textContent = error instanceof Error ? screenshotErrorMessage(error) : "暂无缩略图";
         const retry = this.document.createElement("button");
         retry.type = "button";
         retry.className = "retry-link jhs-link";
@@ -241,7 +241,7 @@ export class ScreenshotController {
             retry.textContent = "重试中…";
             retry.setAttribute("aria-disabled", "true");
             const generation = ++this.generation;
-            void this.loadIntoContainer(container, generation);
+            void this.loadIntoContainer(container, generation, true);
             return;
         }
         if (target?.closest(".check-link")) return;

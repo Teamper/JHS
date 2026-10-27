@@ -1,5 +1,6 @@
 // @ts-check
 
+import { ActorSourceHealth, isMissingActorSource } from "./actor-source-health.js";
 import { I, T, _, escapeHtml, l, normalizeCarNum } from "../../core/constants.js";
 import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
@@ -22,6 +23,7 @@ export class TaskExecutionService {
     /** @param {{runtimeServices: Record<string, any>, resolveDependency: (name: string) => any, legacyStorage: any, utilities: any, logger: any, jquery: (selector: any) => any, window: Window & typeof globalThis, notifications: any, storageQueue?: StorageQueue}} options */
     constructor(options) {
         this.runtimeServices = Object.freeze({ ...options.runtimeServices });
+        this.sourceHealth = new ActorSourceHealth(options.runtimeServices.storage, () => Date.now());
         this.resolveDependency = options.resolveDependency;
         this.legacyStorage = options.legacyStorage;
         this.utils = options.utilities;
@@ -166,7 +168,7 @@ export class TaskExecutionService {
         if (this.activeTasks.has(name)) status = "running";
         else if (state.pending && now < nextAt) status = "pending";
         else if (null == storedNext || now >= nextAt) status = "due";
-        return { name, ready: this.window.isListPage !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, pendingUntil: state.pending ? nextAt : null };
+        return { name, ready: this.window.isListPage !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, unavailableCount: name === "newVideo" && this.javDbUrl ? this.sourceHealth.list(this.javDbUrl).length : 0, pendingUntil: state.pending ? nextAt : null };
     }
     /** @param {string} name @param {string} phase */
     async emitTaskStatus(name, phase) {
@@ -431,7 +433,7 @@ export class TaskExecutionService {
     }
     /** @param {TaskResult} result @param {boolean} completed */
     renderBlacklistResult(result, completed) {
-        const retry = completed ? "" : "，5 分钟后补偿未完成项", message = `黑名单整批检测：成功 ${result.success}，解析/存储失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}，异站跳过 ${result.skippedHost}${result.aborted ? `，未执行 ${result.aborted}` : ""}${retry}`;
+        const retry = completed ? "" : "，5 分钟后补偿未完成项", message = `黑名单整批检测：成功 ${result.success}，解析/存储失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，来源不可用 ${(result.unavailable || 0) + (result.skippedUnavailable || 0)}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}，异站跳过 ${result.skippedHost}${result.aborted ? `，未执行 ${result.aborted}` : ""}${retry}`;
         this.jquery("#checkBlacklistMsg").text(message), this.logger.log(message);
     }
     async checkFavoriteActress(force = !1) {
@@ -529,7 +531,7 @@ export class TaskExecutionService {
                     },
                 });
                 Object.assign(result, {
-                    success: scan.success, parseFailed: scan.parseFailed, networkFailed: scan.networkFailed,
+                    success: scan.success, parseFailed: scan.parseFailed, networkFailed: scan.networkFailed, unavailable: scan.unavailable || 0, skippedUnavailable: scan.skippedUnavailable || 0,
                     aborted: scan.aborted, skippedInterval: scan.skippedInterval, skippedStopped: scan.skippedStopped,
                     fatal: scan.fatal,
                 });
@@ -542,7 +544,8 @@ export class TaskExecutionService {
                     order: "desc"
                 }, { key: "lastPublishTime", order: "desc" } ]), eligible = [];
                 for (const actress of sorted) {
-                    if (!force && actress.lastCheckTime && this.isUnnecessaryCheck(actress.lastCheckTime, interval)) result.skippedInterval++;
+                    if (!force && this.sourceHealth.isDeferred(this.javDbUrl, actress.starId)) result.skippedUnavailable = (result.skippedUnavailable || 0) + 1;
+                    else if (!force && actress.lastCheckTime && this.isUnnecessaryCheck(actress.lastCheckTime, interval)) result.skippedInterval++;
                     else if (shouldSkipStopped(actress.lastPublishTime, rule)) result.skippedStopped++;
                     else eligible.push(actress);
                 }
@@ -556,13 +559,16 @@ export class TaskExecutionService {
                                 this.logger.log("正在检测最新作品, 演员:", name, url), this.jquery("#checkNewVideoMsg").text(`正在检测：${name}`);
                                 const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
                                 try {
-                                    await this.storageQueue.addTask((async () => this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet))), result.success++;
+                                    await this.storageQueue.addTask((async () => this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet)));
+                                    this.sourceHealth.clear(this.javDbUrl, starId); result.success++;
                                 } catch (error) {
                                     result.parseFailed++, this.logger.error("解析或保存演员作品失败:", url, error);
                                 }
                             } catch (error) {
                                 if (this.isNetworkBlocked(error)) throw result.networkFailed++, error;
-                                result.networkFailed++, this.logger.error("检测演员信息发生网络错误:", url, error);
+                                if (isMissingActorSource(error)) { this.sourceHealth.unavailable(this.javDbUrl, { starId: String(actress.starId), name: String(actress.name || "未知演员") }); result.unavailable = (result.unavailable || 0) + 1; }
+                                else result.networkFailed++;
+                                this.logger.error("检测演员来源失败:", url, error);
                             }
                         })), await this.storageQueue.waitAllFinished();
                     } catch (error) {
@@ -575,7 +581,7 @@ export class TaskExecutionService {
             result.completed = completed, await this.finalizeTask("newVideo", completed), finalized = !0;
             try { this.logger.html('<span class="jhs-task-emphasis">检测最新作品---结束</span>'); }
             catch (error) { this.reportCompletedNoticeFailure("新作品整批检测", error); }
-            try { this.renderCheckResult(result, completed ? actressCount ? "整批检测结束" : "收藏为空，整批检测完成" : "整批检测未完成，5 分钟后补偿未完成项"); }
+            try { this.renderCheckResult(result, completed ? (result.unavailable || result.skippedUnavailable) ? "完成，有异常项；来源不可用，24 小时后重查" : actressCount ? "整批检测结束" : "收藏为空，整批检测完成" : "整批检测未完成，5 分钟后补偿未完成项"); }
             catch (error) { this.reportCompletedNoticeFailure("新作品整批检测", error); }
             if (result.success > 0) {
                 try { await this.emitNewVideoChanged("task-completed"); }
@@ -703,7 +709,9 @@ export class TaskExecutionService {
                 const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
                 await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
             }
+            this.sourceHealth.clear(this.javDbUrl, starId);
         } catch (c) {
+            if (isMissingActorSource(c)) this.sourceHealth.unavailable(this.javDbUrl, { starId: String(e.starId), name: String(e.name || "未知演员") });
             this.logger.error("检测屏蔽演员信息, 发生错误:", url, c), this.notifications.error("演员信息检测失败，请重试", { gravity: "bottom", position: "right" }),
             l.text("演员信息检测失败，请重试");
             return;

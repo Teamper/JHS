@@ -1,3 +1,4 @@
+import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
 import { runDataMigrations } from "../src/core/migration.js";
@@ -70,11 +71,25 @@ function createStorage(options = {}) {
             storage._invalidateCache(key);
         },
     });
+    storage.atomicStorage = memoryAtomicStorage(data, { beforeWrite: async key => {
+        writes.push({ key, depth: coordinator.depth });
+        if (options.failKey === key || options.failEveryWriteTo === key || options.failOnWrite?.key === key) throw new Error(`injected ${key} failure`);
+    } });
     return { storage, data, coordinator, writes };
 }
 
 describe("portable import atomicity", () => {
     afterEach(() => vi.unstubAllGlobals());
+
+    it("keeps a completed import successful when cache notification fails", async () => {
+        vi.stubGlobal("utils", { getNowStr: () => "2026-10-26 00:00:00" });
+        vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
+        const { storage, data } = createStorage();
+        storage._invalidateCache.mockImplementation(() => { if (data.get("car_list")[0]?.carNum === "NEW-123") throw new Error("cache notification failed"); });
+        await expect(storage.importData({ data_version: 3, car_list: [{ carNum: "NEW-123", url: "/v/new" }] })).resolves.toBeUndefined();
+        expect(data.get("car_list")).toEqual([expect.objectContaining({ carNum: "NEW-123" })]);
+        expect(data.get("snapshots").filter(snapshot => snapshot.source === "auto-import")).toHaveLength(1);
+    });
 
     it.each(["data_version", "car_list", "setting", "favorite_actresses"])("keeps the pre-import data when persisting %s fails", async (failKey) => {
         vi.stubGlobal("utils", { getNowStr: () => "2026-09-26 00:00:00" });
@@ -94,8 +109,7 @@ describe("portable import atomicity", () => {
         expect(data.get("setting")).toEqual({ themeMode: "light", webDavPassword: "AES:local" });
         expect(data.get("favorite_actresses")).toEqual([{ starId: "old-star", name: "Old" }]);
         expect(data.get("data_version")).toBe(version);
-        expect(data.get("snapshots")).toHaveLength(1);
-        expect(data.get("snapshots")[0]).toMatchObject({ source: "auto-import", data: { car_list: [{ carNum: "OLD-1", url: "/v/old" }] } });
+        expect(data.has("snapshots")).toBe(false);
         expect(coordinator.entries).toBe(1);
         expect(writes.every((write) => write.depth === 1)).toBe(true);
     });
@@ -114,19 +128,19 @@ describe("portable import atomicity", () => {
         expect(data.get("car_list")).toEqual([oldCar]);
         expect(data.get("activity_log")).toEqual(activity);
         expect(data.has("new_video_decisions")).toBe(false);
-        expect(data.get("snapshots")[0].data.car_list).toEqual([oldCar]);
+        expect(data.has("snapshots")).toBe(false);
     });
 
-    it("reports an incomplete rollback while keeping the pre-import snapshot", async () => {
+    it("rejects repeated write failure without needing rollback or changing snapshots", async () => {
         vi.stubGlobal("utils", { getNowStr: () => "2026-09-26 00:00:00" });
         vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
         vi.stubGlobal("navigator", {});
         const { storage, data } = createStorage({ failEveryWriteTo: "car_list" });
 
         await expect(storage.importData({ data_version: 3, car_list: [{ carNum: "NEW-1", url: "/v/new" }] }))
-            .rejects.toThrow("导入失败且自动回滚不完整");
-        expect(data.get("snapshots")).toHaveLength(1);
-        expect(data.get("snapshots")[0].data.car_list).toEqual([{ carNum: "OLD-1", url: "/v/old" }]);
+            .rejects.toThrow("injected car_list failure");
+        expect(data.has("snapshots")).toBe(false);
+        expect(data.get("car_list")).toEqual([{ carNum: "OLD-1", url: "/v/old" }]);
     });
 });
 
@@ -167,8 +181,7 @@ describe("portable migration and consistent exports", () => {
         await expect(storage.importData({ data_version: 3, setting: {} })).rejects.toThrow("injected setting failure");
         expect(data.get("data_version")).toBe(1);
         expect(data.get("car_list")).toEqual(old);
-        expect(data.get("snapshots")).toHaveLength(1);
-        expect(data.get("snapshots")[0].data.data_version).toBe(1);
+        expect(data.has("snapshots")).toBe(false);
     });
 
     it("reuses the legacy database wrappers without migrating imported settings through live services", async () => {
@@ -189,7 +202,7 @@ describe("portable migration and consistent exports", () => {
         expect(coordinator.entries).toBe(1);
     });
 
-    it("refreshes the live settings snapshot after a rolled-back v0 migration, outside the import lock", async () => {
+    it("never exposes draft settings or emits migration events when an atomic import aborts", async () => {
         const original = { enableCheckFilterActorActress: "yes", webDavPassword: "AES:local" };
         const { storage, data, coordinator } = createStorage({ initial: { data_version: 0, setting: original }, failKey: "favorite_actresses" });
         const settings = new SettingsService({ get: key => storage.forage.getItem(key), set: (key, value) => storage.forage.setItem(key, value) }, { mutationCoordinator: coordinator });
@@ -198,11 +211,10 @@ describe("portable migration and consistent exports", () => {
         settings.addEventListener("settings.changed", event => changed.push(event.detail.snapshot));
         vi.stubGlobal("settingsService", settings);
         await expect(storage.importData({ setting: { themeMode: "dark" } })).rejects.toThrow("injected favorite_actresses failure");
-        expect(changed.some(snapshot => snapshot.enableCheckBlacklist === "yes")).toBe(true);
+        expect(changed).toEqual([]);
         expect(data.get("setting")).toEqual(original);
         expect(settings.snapshot()).toEqual(original);
-        expect(changed.at(-1)).toEqual(original);
-        expect(coordinator.entries).toBe(3); // load, import, refresh; no nested acquisition.
+        expect(coordinator.entries).toBe(2); // load and import; the failed draft never touches live settings.
     });
 
     it("preserves alias-only v0 data in raw snapshots while keeping current exports canonical", async () => {

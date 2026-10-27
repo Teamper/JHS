@@ -1,3 +1,4 @@
+import { ActorSourceHealth, isMissingActorSource } from "../src/features/discovery/actor-source-health.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -69,7 +70,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     };
     const context = vm.createContext({
-        getMovieStateEligibility,
+        ActorSourceHealth, isMissingActorSource, getMovieStateEligibility,
         console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
         window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, StorageQueue,
         T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
@@ -108,6 +109,22 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
 }
 
 describe("task scheduler state machine", () => {
+    it("finishes a 404 batch and does not schedule five-minute retries for that actor", async () => {
+        const harness = createHarness();
+        harness.plugin.javDbUrl = "https://javdb.com";
+        harness.favorites.push({ starId: "gone", name: "Gone", newVideoList: [{ carNum: "OLD-123" }] });
+        harness.actressInfo.movies.mockRejectedValue(Object.assign(new Error("404"), { code: "NOT_FOUND" }));
+        const result = await harness.plugin.checkNewVideo();
+        expect(result).toMatchObject({ completed: true, networkFailed: 0, unavailable: 1 });
+        expect(harness.favorites[0].newVideoList).toEqual([{ carNum: "OLD-123" }]);
+        expect(harness.plugin.getTaskStatusSnapshot("newVideo")).toMatchObject({ unavailableCount: 1, isPending: false });
+        harness.clock.now += 300000;
+        expect(await harness.plugin.checkNewVideo()).toMatchObject({ attempted: false });
+        harness.clock.now += 12 * 3600000;
+        const next = await harness.plugin.checkNewVideo();
+        expect(next).toMatchObject({ completed: true, skippedUnavailable: 1 });
+        expect(harness.actressInfo.movies).toHaveBeenCalledOnce();
+    });
     it("preflights every page movie before filters or favorite actress replacement", async () => {
         const harness = createHarness();
         harness.plugin.javDbUrl = "https://javdb.com";

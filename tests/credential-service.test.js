@@ -13,11 +13,17 @@ function createStorage(values = {}) {
 }
 
 describe("CredentialService", () => {
+    it("checks the login owner again after encryption and before saving", async () => {
+        const storage = createStorage(), service = new CredentialService(storage, { getItem: () => null });
+        const assertActive = vi.fn().mockImplementationOnce(() => {}).mockImplementationOnce(() => { throw new DOMException("closed", "AbortError"); });
+        await expect(service.set(CREDENTIAL_KEYS.javdbToken, "synthetic", { assertActive })).rejects.toMatchObject({ name: "AbortError" });
+        expect(storage.setValue).not.toHaveBeenCalled();
+    });
     it("distinguishes missing entries from cleared entries without hiding corrupt records", async () => {
         const storage = createStorage(), service = new CredentialService(storage, { getItem: () => null });
-        await expect(service.readEntry("scoped-password")).resolves.toEqual({ exists: false, value: "" });
+        await expect(service.readEntry("scoped-password")).resolves.toEqual({ exists: false, value: "", revision: null });
         await service.set("scoped-password", "");
-        await expect(service.readEntry("scoped-password")).resolves.toEqual({ exists: true, value: "" });
+        await expect(service.readEntry("scoped-password")).resolves.toEqual({ exists: true, value: "", revision: expect.any(String) });
         storage.data.set("scoped-password", { schema: 2, id: "corrupt", ciphertext: "invalid" });
         await expect(service.readEntry("scoped-password")).rejects.toThrow();
         await expect(service.get("scoped-password")).resolves.toBe("");

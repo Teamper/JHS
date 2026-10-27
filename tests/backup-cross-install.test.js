@@ -1,3 +1,4 @@
+import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
 import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
@@ -15,6 +16,7 @@ function createStorage(initialSetting) {
         setItem: vi.fn(async (key, value) => data.set(key, value)),
         removeItem: vi.fn(async (key) => data.delete(key)),
     };
+    storage.forage.keys = async () => [...data.keys()];
     storage.getDataVersion = vi.fn(async () => data.get("data_version") || 0);
     storage.setDataVersion = vi.fn(async (value) => data.set("data_version", value));
     storage.getSetting = vi.fn(async () => data.get("setting") || {});
@@ -22,6 +24,7 @@ function createStorage(initialSetting) {
     storage._invalidateCache = vi.fn();
     storage._withCrossTabLock = vi.fn(async (_name, callback) => callback());
     storage.createSnapshot = vi.fn(async () => null);
+    storage.atomicStorage = memoryAtomicStorage(data);
     storage.data = data;
     return storage;
 }

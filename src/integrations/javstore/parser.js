@@ -99,15 +99,18 @@ export function parseJavStoreSearch($searchPage, carNum, baseUrl = "https://javs
 /** 提取 JavStore 详情页 CLICK HERE! 对应的绝对预览图地址。 */
 /** @param {any} $detailPage @param {string} detailUrl @param {unknown} [carNum] */
 export function parseJavStorePreview($detailPage, detailUrl, carNum) {
-    const previewHref = queryJavStoreElements($detailPage, "a")
-        .find(element => /^CLICK HERE!?$/.test(element.textContent?.trim() || ""))?.getAttribute("href");
-    if (previewHref) {
-        const previewUrl = normalizeJavStoreAssetUrl(previewHref, detailUrl);
-        return previewUrl ? previewUrl.replace(".th", "") : null;
-    }
     const normalizedCarNum = normalizeCarNum(carNum);
-    if (!normalizedCarNum) return null;
-    const target = javStoreIdentityKey(normalizedCarNum), candidates = new Set();
+    const target = normalizedCarNum ? javStoreIdentityKey(normalizedCarNum) : null;
+    for (const anchor of queryJavStoreElements($detailPage, "a")) {
+        if (!/^CLICK HERE!?$/.test(anchor.textContent?.trim() || "")) continue;
+        const previewHref = anchor.getAttribute("href"), previewUrl = normalizeJavStoreAssetUrl(previewHref, detailUrl);
+        if (!previewUrl) continue;
+        const tokens = javStoreIdentityTokens(javStoreUrlPath(previewHref || "", detailUrl) + " " + (anchor.getAttribute("title") || ""));
+        if (target && tokens.some(token => token !== target)) continue;
+        return previewUrl.replace(".th", "");
+    }
+    if (!target) return null;
+    const candidates = new Set();
     for (const image of queryJavStoreElements($detailPage, "main img[src]")) {
         if (image.closest("aside, nav, header, footer")) continue;
         const url = normalizeJavStoreAssetUrl(image.getAttribute("src"), detailUrl);

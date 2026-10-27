@@ -6,11 +6,13 @@ export const CREDENTIAL_KEYS = Object.freeze({
     javdbToken: "jhs_appAuthorization",
 });
 
-export class CredentialService {
-    /** @param {{getValue: (key: string, fallback?: unknown) => unknown, setValue: (key: string, value: unknown) => unknown, removeValue: (key: string) => unknown}} storage @param {Storage} [legacyStorage] */
+export class CredentialService extends EventTarget {
+    /** @param {{getValue: (key: string, fallback?: unknown) => unknown, setValue: (key: string, value: unknown) => unknown, removeValue: (key: string) => unknown, listenValue?: (key: string, callback: () => void) => any, unlistenValue?: (listener: any) => void}} storage @param {Storage} [legacyStorage] */
     constructor(storage, legacyStorage = globalThis.localStorage) {
+        super();
         this.storage = storage;
         this.legacyStorage = legacyStorage;
+        this.listener = storage.listenValue?.(CREDENTIAL_KEYS.javdbToken, () => { void this.notifyChanged(CREDENTIAL_KEYS.javdbToken); });
         /** @type {Map<string, string>} */ this.cleanupValues = new Map();
         /** @type {Map<string, string>} */ this.cleanupTargets = new Map();
     }
@@ -45,12 +47,21 @@ export class CredentialService {
         try { return await this.decode(await this.storage.getValue(key, "")); }
         catch { return ""; }
     }
-    /** Read without hiding storage/decryption failures; a tombstone is an existing empty entry. @param {string} key @returns {Promise<{exists: boolean, value: string}>} */
+    /** Read the value and its non-secret revision from the same GM record. @param {string} key @returns {Promise<{exists: boolean, value: string, revision: string | null}>} */
     async readEntry(key) {
         const record = await this.storage.getValue(key, undefined);
         if (record !== undefined && typeof record !== "string" && (!record || typeof record !== "object")) throw new Error("凭证格式无效");
-        return record === undefined ? { exists: false, value: "" } : { exists: true, value: await this.decode(record) };
+        const revision = record && typeof record === "object" && /** @type {any} */ (record).schema === 2 ? String(/** @type {any} */ (record).id || "") || null : null;
+        return record === undefined ? { exists: false, value: "", revision: null } : { exists: true, value: await this.decode(record), revision };
     }
+    /** Notifications never contain the credential value. @param {string} key */
+    async notifyChanged(key) {
+        try {
+            const record = /** @type {any} */ (await this.storage.getValue(key, undefined));
+            this.dispatchEvent(new CustomEvent("credentials.changed", { detail: { key, revision: record?.schema === 2 ? record.id : null } }));
+        } catch { /* A successful credential write must keep its result. */ }
+    }
+    dispose() { if (this.listener != null) this.storage.unlistenValue?.(this.listener); }
     /** Replace explicitly supplied credentials, restoring the protected original record if the related operation fails. Caller serializes access to this key. @template T @param {string} key @param {string} value @param {() => Promise<T>} operation @returns {Promise<T>} */
     async replaceWithRollback(key, value, operation) {
         const previous = await this.storage.getValue(key, undefined);
@@ -69,14 +80,17 @@ export class CredentialService {
         }
     }
     /** @param {string} key @param {string} value */
-    async set(key, value) {
+    async set(key, value, options = /** @type {{assertActive?: () => void}} */ ({})) {
+        options.assertActive?.();
         const plaintext = String(value || "");
         if (!plaintext) { await this.remove(key); return ""; }
         const secret = this.generateSecret();
         const record = { schema: 2, id: crypto.randomUUID(), secret, ciphertext: await encryptData(plaintext, secret) };
+        options.assertActive?.();
         await this.storage.setValue(key, record);
         const actual = await this.storage.getValue(key, "");
         if (JSON.stringify(actual) !== JSON.stringify(record) || await this.decode(actual) !== plaintext) throw new Error("凭证存储回读校验失败");
+        await this.notifyChanged(key);
         return plaintext;
     }
     /** @param {string} key */
@@ -85,6 +99,7 @@ export class CredentialService {
         await this.storage.setValue(key, record);
         const actual = await this.storage.getValue(key, "");
         if (JSON.stringify(actual) !== JSON.stringify(record) || await this.decode(actual) !== "") throw new Error("凭证删除回读校验失败");
+        await this.notifyChanged(key);
     }
 
     /** @param {any} settings @param {{deferCleanup?: boolean}} [options] */

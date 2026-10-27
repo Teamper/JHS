@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jquery from "jquery";
-import { getJavDbWantWatchState, markJavDbWantWatch } from "../src/core/javdb-api.js";
+import { bindJavDbWantService, getJavDbWantWatchState, markJavDbWantWatch } from "../src/core/javdb-api.js";
+import { JavDbWantService } from "../src/services/javdb-want-service.js";
 import { Fc2WorkspaceService } from "../src/features/detail/fc2-workspace-service.js";
 
 function installWantHarness({ cacheFailure = null, successNoticeFailure = null } = {}) {
@@ -13,12 +14,13 @@ function installWantHarness({ cacheFailure = null, successNoticeFailure = null }
         ok: vi.fn(() => { if (successNoticeFailure) throw successNoticeFailure; }),
         error: vi.fn(),
     };
-    vi.stubGlobal("credentialService", { get: vi.fn(async () => "synthetic-token") });
+    vi.stubGlobal("credentialService", { get: vi.fn(async () => "synthetic-token"), readEntry: vi.fn(async () => ({ value: "synthetic-token", revision: "synthetic-revision" })) });
     vi.stubGlobal("gmHttp", { gmRequest });
     vi.stubGlobal("storageManager", { deleteCachedRequest });
     vi.stubGlobal("md5", vi.fn(() => "synthetic-signature"));
     vi.stubGlobal("show", show);
     vi.stubGlobal("clog", { warn: vi.fn(), error: vi.fn() });
+    bindJavDbWantService(new JavDbWantService({ credential: globalThis.credentialService, http: { request: async options => ({data: await gmRequest(options)}) }, invalidate: id => deleteCachedRequest(`movie-detail:${id}`) }));
     return { gmRequest, deleteCachedRequest, show };
 }
 

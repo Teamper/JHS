@@ -157,9 +157,12 @@ describe("backup window ownership",()=>{
         root.find('[data-backup-action="import"]').trigger("click");scope.dispose();pending.resolve('{}');await Promise.resolve();await Promise.resolve();
         expect(preview).not.toHaveBeenCalled();expect(deps.closeLoading).toHaveBeenCalledOnce();if(!mobile)expect(destroy).toHaveBeenCalledOnce();
     });
-    it("drops import after its preview closes while the pre-import snapshot is pending",async()=>{
-        const scope=new LifecycleScope("settings-test"),deps=backupDependencies(scope),pending=deferred();deps.legacyStorage.createSnapshot=vi.fn(()=>pending.promise);deps.legacyStorage.importData=vi.fn();let options;
+    it("cancels before atomic commit when the import preview closes",async()=>{
+        const scope=new LifecycleScope("settings-test"),deps=backupDependencies(scope),pending=deferred();let committed=false,options;
+        deps.legacyStorage.createSnapshot=vi.fn();
+        deps.legacyStorage.importData=vi.fn(async (_data,guard)=>{await pending.promise;guard.assertActive();committed=true;});
         showDiffPreview({summary:{added:1},stores:{setting:{status:"modified",oldCount:1,newCount:1,added:[],removed:[],modified:[1]}}},{setting:{}},null,{open:value=>{options=value;return 1;},close:()=>options.end()},deps);
-        const action=options.yes(1);await options.yes(1);expect(deps.legacyStorage.createSnapshot).toHaveBeenCalledOnce();options.end();pending.resolve();await action;expect(deps.legacyStorage.importData).not.toHaveBeenCalled();expect(deps.closeLoading).toHaveBeenCalledOnce();scope.dispose();
-    });
+        const action=options.yes(1);await options.yes(1);expect(deps.legacyStorage.importData).toHaveBeenCalledOnce();options.end();pending.resolve();await action;
+        expect(committed).toBe(false);expect(deps.legacyStorage.createSnapshot).not.toHaveBeenCalled();expect(deps.closeLoading).toHaveBeenCalledOnce();scope.dispose();
+    });;
 });

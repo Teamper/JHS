@@ -1,12 +1,16 @@
+import { ScreenshotService } from "../src/services/screenshot-service.js";
+import jquery from "jquery";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ScreenshotController } from "../src/features/detail/screenshot-controller.js";
 import { normalizeJavStoreAssetUrl } from "../src/integrations/javstore/parser.js";
 
-function createHarness({ site = "javdb", route = "detail", resolve = vi.fn(async () => null), carNum = "ABC-123" } = {}) {
+function createHarness({ site = "javdb", route = "detail", resolve = vi.fn(async () => null), carNum = "ABC-123", initialSettings = {} } = {}) {
     const dom = new JSDOM("", { url: "https://javdb.com/v/test-id" });
     vi.stubGlobal("MutationObserver", dom.window.MutationObserver);
+    vi.stubGlobal("$", jquery(dom.window));
+    vi.stubGlobal("document", dom.window.document);
     const gallery = dom.window.document.createElement("div");
     gallery.className = site === "javbus" ? "row" : "preview-images";
     const firstTile = dom.window.document.createElement("a");
@@ -14,14 +18,14 @@ function createHarness({ site = "javdb", route = "detail", resolve = vi.fn(async
     gallery.append(firstTile);
     dom.window.document.body.append(gallery);
     const settings = dom.window.document.createElement("div");
-    let settingSnapshot = { enableLoadScreenShot: "yes" };
+    let settingSnapshot = { enableLoadScreenShot: "yes", ...initialSettings };
     settings.snapshot = () => settingSnapshot;
-    const screenshot = {
+    const screenshot = Object.assign(new ScreenshotService({}), {
         isEnabled: (snapshot) => snapshot.enableLoadScreenShot !== "no",
         normalizeAssetUrl: normalizeJavStoreAssetUrl,
         resolve,
         getSearchUrl: () => "https://javstore.net/search/ABC-123",
-    };
+    });
     const scope = new LifecycleScope("detail-test");
     const styles = { register: vi.fn(() => vi.fn()) };
     const ui = { openImageViewer: vi.fn() };
@@ -33,6 +37,10 @@ function createHarness({ site = "javdb", route = "detail", resolve = vi.fn(async
     });
     return {
         dom, gallery, firstTile, settings, screenshot, scope, styles, ui, controller,
+        patchSettings(values) {
+            settingSnapshot = { ...settingSnapshot, ...values };
+            settings.dispatchEvent(new dom.window.CustomEvent("settings.changed", { detail: { names: Object.keys(values) } }));
+        },
         setScreenshotEnabled(enabled) {
             settingSnapshot = { enableLoadScreenShot: enabled ? "yes" : "no" };
             settings.dispatchEvent(new dom.window.CustomEvent("settings.changed", { detail: { names: ["enableLoadScreenShot"] } }));
@@ -127,6 +135,7 @@ describe("ScreenshotController", () => {
         expect(tile.querySelector(".check-link")?.href).toBe("https://javstore.net/search/ABC-123");
         tile.querySelector(".retry-link").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
         await tick();
+        expect(resolve.mock.calls[1][1].refreshCache).toBe(true);
         expect(dom.window.document.querySelectorAll(".screen-container")).toHaveLength(1);
         expect(tile.querySelector("img")?.src).toBe("https://img.javstore.net/retry.jpg");
     });
@@ -165,4 +174,28 @@ describe("ScreenshotController", () => {
         scope.dispose();
         expect(scope.listenerCount).toBe(0);
     });
+});
+
+it("manual detail mode sends no initial request and removes disabled-source results", async () => {
+    const resolve = vi.fn(async () => [{ url: "https://img.javstore.net/current.jpg" }]);
+    const h = createHarness({ resolve, initialSettings: { screenshotMode: "manual" } });
+    h.controller.start(); await tick();
+    expect(resolve).not.toHaveBeenCalled();
+    h.dom.window.document.querySelector('[role="tab"]').click(); await tick();
+    expect(h.dom.window.document.querySelector(".screen-container img").src).toContain("current.jpg");
+    h.patchSettings({ screenshotProviders: [{ id: "javstore", enabled: false }] }); await tick();
+    expect(h.dom.window.document.querySelector(".screen-container img")).toBeNull();
+    expect(resolve).toHaveBeenCalledOnce();
+    h.scope.dispose(); h.dom.window.close();
+});
+it("switching an ordinary detail to manual cancels and ignores the old automatic response", async () => {
+    let finish; const resolve = vi.fn(() => new Promise(done => { finish = done; }));
+    const h = createHarness({ resolve }); h.controller.start(); await tick();
+    const requestScope = resolve.mock.calls[0][1].scope;
+    h.patchSettings({ screenshotMode: "manual" });
+    expect(requestScope.disposed).toBe(true);
+    finish([{ url: "https://img.javstore.net/late.jpg" }]); await tick();
+    expect(h.dom.window.document.querySelector(".screen-container img")).toBeNull();
+    expect(h.dom.window.document.querySelector('[role="tablist"]')).not.toBeNull();
+    h.scope.dispose(); h.dom.window.close();
 });

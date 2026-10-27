@@ -227,10 +227,12 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
             let o = loading();
             const releaseLoading = scope.addCleanup(() => o.close());
             try {
-                await storageManager.createSnapshot("导入前自动备份", "auto-import");
                 if (scope.disposed || dependencies.isActive?.() === false) return;
                 if (!n && !t) return;
-                await storageManager.importData(n || t);
+                await storageManager.importData(n || t, { signal: scope.signal, assertActive: () => {
+                    scope.assertActive();
+                    if (dependencies.isActive?.() === false) throw new DOMException("导入已取消", "AbortError");
+                } });
             } catch (r) {
                 if (scope.disposed || dependencies.isActive?.() === false) return;
                 try { clog.error(r); } catch { /* preserve the import error */ }

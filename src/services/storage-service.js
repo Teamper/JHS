@@ -13,6 +13,16 @@ export class StorageService {
     /** @param {string} key */
     remove(key) { return this.port.remove(key); }
     keys() { return this.port.keys(); }
+    /** @param {string[]} keys */
+    readAtomicSnapshot(keys) {
+        if (!this.port.readAtomicSnapshot) throw Object.assign(new Error("当前存储不支持安全导入，数据未修改"), { code: "ATOMIC_IMPORT_UNAVAILABLE" });
+        return this.port.readAtomicSnapshot(keys);
+    }
+    /** @param {any} batch */
+    commitAtomicBatch(batch) {
+        if (!this.port.commitAtomicBatch) throw Object.assign(new Error("当前存储不支持安全导入，数据未修改"), { code: "ATOMIC_IMPORT_UNAVAILABLE" });
+        return this.port.commitAtomicBatch(batch);
+    }
     /** @param {string} key */
     getLocal(key) { return this.preferences?.owns(key) ? this.preferences.get(key) : this.port.getLocal(key); }
     /** @param {string} key @param {string} value */
