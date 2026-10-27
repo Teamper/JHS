@@ -22,16 +22,16 @@ export class StorageMutationCoordinator {
         else await this._queue;
     }
 
-    /** @template T @param {() => Promise<T> | T} operation @returns {Promise<T>} */
+    /** Recovery evidence is valid only inside this invocation's shared lock. @template T @param {(recovery?: any) => Promise<T> | T} operation @returns {Promise<T>} */
     runExclusive(operation) {
         if (typeof operation !== "function") throw new TypeError("Storage mutation must be a function");
         const requestedAt = this.diagnostics?.performanceRecording ? performance.now() : null;
         const execute = async () => {
             const acquiredAt = requestedAt === null ? null : performance.now();
-            await this.beforeMutation?.();
+            const recovery = await this.beforeMutation?.();
             this.observer?.begin();
             let succeeded = false;
-            try { const value = await operation(); succeeded = true; return value; }
+            try { const value = await operation(recovery); succeeded = true; return value; }
             finally {
                 try { await this.observer?.finish(succeeded); }
                 finally { if (acquiredAt !== null) this.diagnostics?.recordComputation("storage.lock", { waitMs: acquiredAt - (requestedAt ?? acquiredAt), holdMs: performance.now() - acquiredAt }); }

@@ -7,7 +7,7 @@ for (const count of [3000, 10000]) for (const sync of [false, true]) test(`mark 
   test.skip(info.project.name !== "desktop-wide", "fixed persistence benchmark");
   test.setTimeout(180000);
   await fulfillHostFixtures(context); await page.goto("https://javdb.com/");
-  await injectUserscriptRuntime(page, { settingOverrides: { autoPage: "no", enableTranslation: "no" }, beforeUserscriptInjection: async page => {
+  await injectUserscriptRuntime(page, { settingOverrides: { autoPage: "no", enableTranslation: "no", enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" }, beforeUserscriptInjection: async page => {
     await page.evaluate(async count => {
       const f = window.localforage.createInstance({ name: "JAV-JHS", storeName: "appData" });
       await f.setItem("car_list", Array.from({ length: count }, (_, i) => ({ carNum: "LIB-" + i, names: "Synthetic title " + i, url: "https://javdb.com/v/fixture-" + i, stateFlags: { favorite: false } })));
@@ -25,6 +25,8 @@ for (const count of [3000, 10000]) for (const sync of [false, true]) test(`mark 
     service.deps.webdav.createClient = () => ({ ensureFolder: async () => {}, listSyncFiles: async () => [...files.values()].map(v => v.meta), readSyncFile: async n => files.get(n)?.content ?? null, writeSyncFile: async (name, content) => { const s=await service.deps.store.read();files.set(name,{content,meta:{...s.pending,schema:1,replicaId:s.replicaId}}); }, deleteSyncFile: async name => files.delete(name) });
     if (sync) { await service.check(); if (service.message) throw new Error(service.message); }
     else service.deps.store.enabled = false;
+    // Discovery scans are disabled above: this benchmark measures state writes,
+    // not incidental actor requests after the startup quiet period.
     // Measure durable foreground commits separately from actively running sync
     // (covered by responsive-sync-performance); quiet-gate timing must not
     // unpredictably start an automatic reconcile halfway through these samples.
@@ -44,9 +46,11 @@ for (const count of [3000, 10000]) for (const sync of [false, true]) test(`mark 
     const record=await state.getState("LIB-2");const history=await state.getOfflineHistory();
     const carMap = await state.getCarMap();
     const allSamplesCommitted = Array.from({length:sampleCount},(_,round)=>round).every(round => carMap.get("LIB-"+(round*3))?.stateFlags.favorite && carMap.get("LIB-"+(round*3+1))?.stateFlags.watched && carMap.get("LIB-"+(round*3+2))?.stateFlags.downloaded && history.some(item=>item.carNum==="LIB-"+(round*3+2)));
-    return { samples, downloaded:record.stateFlags.downloaded, historySaved:history.some(r=>r.carNum==="LIB-2"), journalCleared:journal==null, allSamplesCommitted };
+    const discoveryRequests = window.__jhsBrowserDiagnostics.requests.filter(request => /\/actors\/|collection_actors|blacklist/.test(new URL(request.url).pathname)).map(request => new URL(request.url).pathname);
+    return { samples, downloaded:record.stateFlags.downloaded, historySaved:history.some(r=>r.carNum==="LIB-2"), journalCleared:journal==null, allSamplesCommitted, discoveryRequests };
   }, { sync, sampleCount });
+  await info.attach("performance-gate", { body: JSON.stringify(Object.fromEntries(["favorite", "watched", "offline-history", "downloaded"].flatMap(name => [[name + "CommitMs", measurements.samples.filter(sample => sample.name === name).map(sample => sample.elapsed)], [name + "TimerGapMs", measurements.samples.filter(sample => sample.name === name).map(sample => sample.maxTimerGap)]]))), contentType: "application/json" });
   console.log(JSON.stringify({count,sync,...measurements}));
   await info.attach("operation-persistence", {body:JSON.stringify({count,sync,...measurements},null,2),contentType:"application/json"});
-  expect(measurements).toMatchObject({downloaded:true,historySaved:true,journalCleared:true,allSamplesCommitted:true});
+  expect(measurements).toMatchObject({downloaded:true,historySaved:true,journalCleared:true,allSamplesCommitted:true,discoveryRequests:[]});
 });

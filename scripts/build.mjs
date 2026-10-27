@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as esbuild from "esbuild";
@@ -77,7 +78,7 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
   const modules = Object.entries(Object.values(buildResult.metafile.outputs)[0].inputs)
     .map(([path, value]) => ({ path, unpackedBytes: value.bytesInOutput }))
     .sort((left, right) => right.unpackedBytes - left.unpackedBytes);
-  return { output, outputBytes, outputPaths, analysis: { outputBytes, unpackedBodyBytes: Buffer.byteLength(rawBundle), modules, packing: packed?.report ?? { resourceCount: 0 } } };
+  return { output, outputBytes, outputPaths, analysis: { outputBytes, sha256: createHash("sha256").update(output).digest("hex"), packStaticResources, unpackedBodyBytes: Buffer.byteLength(rawBundle), modules, packing: packed?.report ?? { resourceCount: 0 } } };
 }
 
 export { distPath, repoRoot, rootPath, srcPath };

@@ -147,11 +147,8 @@ export function getPortableDataKeys(version) {
 }
 
 export async function hasPortableUserData(/** @type {any} */ storage) {
-    for (const key of getPortableDataKeys(await storage.getDataVersion())) {
-        const value = await storage.forage.getItem(key);
-        if (Array.isArray(value) ? value.length : value && "object" == typeof value ? Object.keys(value).length : null != value) return !0;
-    }
-    return !1;
+    const values = await Promise.all(getPortableDataKeys(await storage.getDataVersion()).map(key => storage.forage.getItem(key)));
+    return values.some(value => Boolean(Array.isArray(value) ? value.length : value && "object" == typeof value ? Object.keys(value).length : null != value));
 }
 
 async function ensureV2MigrationSnapshot(/** @type {any} */ storage) {

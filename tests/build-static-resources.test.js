@@ -26,6 +26,9 @@ describe("userscript static resource build contract", () => {
         const control = await buildUserscript(transforms);
         const packed = await buildUserscript({ ...transforms, packStaticResources: true });
         expect(packed.outputBytes).toBe(Buffer.byteLength(packed.output, "utf8"));
+        expect(packed.analysis.sha256).toBe(digest(packed.output));
+        expect(packed.analysis.packStaticResources).toBe(true);
+        expect(control.analysis.packStaticResources).toBe(false);
         expect(control.outputBytes - packed.outputBytes).toBeGreaterThan(90_000);
         expect(packed.output.match(/^\/\/ ==UserScript==[\s\S]*?^\/\/ ==\/UserScript==/m)[0]).toBe(control.output.match(/^\/\/ ==UserScript==[\s\S]*?^\/\/ ==\/UserScript==/m)[0]);
         expect(packed.output).toContain("data-jhs-dev-build");

@@ -3,8 +3,8 @@
 export { applyImageMode, applyLayoutFromSettings } from "../../services/layout-settings-service.js";
 
 /** Generate the settings page CSS based on container config and site type. */
-/** @param {number | string} containerWidth @param {number} containerColumns @param {boolean} isJavBus @param {boolean} isJavDB */
-export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
+/** @param {number | string} containerWidth @param {number} containerColumns @param {boolean} isJavBus @param {boolean} isJavDB @param {boolean} [includeFull] */
+export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB, includeFull = true) {
     let base;
     if (isJavBus) {
         base = `
@@ -36,13 +36,61 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
             [data-jhs-native-recommendations]:not(.tile-images) { grid-template-columns:repeat(var(--jhs-recommendation-columns, ${containerColumns}), minmax(0,1fr)); }
         `;
     }
-    return `<style>${base}${SETTINGS_STYLES}</style>`;
+    return `<style>${base}${includeFull ? SETTINGS_STYLES : SETTING_ENTRY_STYLES}</style>`;
 }
 
-export const SETTINGS_STYLES = `
+export const SETTING_ENTRY_STYLES = `
                 .nav-btn::after {
                     content:none !important;
                 }
+
+                .simple-setting, .mini-simple-setting {
+                    display: none;
+                    background: var(--jhs-surface);
+                    position: absolute;
+                    top: calc(100% + var(--jhs-space-1));
+                    right: 0;
+                    z-index: var(--jhs-z-dropdown);
+                    border: 1px solid var(--jhs-border);
+                    border-radius: var(--jhs-radius-sm);
+                    box-shadow: var(--jhs-shadow-sm);
+                    padding: 0;
+                    margin-top: var(--jhs-space-1);
+                    color: var(--jhs-text);
+                    width: min(360px, calc(100vw - 16px));
+                    max-height: min(720px, calc(100vh - 80px));
+                }
+                .simple-setting__panel { display:flex; max-height:inherit; flex-direction:column; }
+                .jhs-quick-setting { color:var(--jhs-text); background:var(--jhs-surface); }
+                .jhs-quick-setting .simple-setting__panel { max-height:min(720px, calc(100vh - 96px)); }
+                .jhs-quick-setting-backdrop { position:fixed; inset:0; z-index:var(--jhs-z-sheet-backdrop); background:var(--jhs-overlay); backdrop-filter:blur(2px); }
+                .jhs-quick-setting-sheet { position:fixed; right:0; bottom:0; left:0; z-index:var(--jhs-z-sheet); max-height:calc(100dvh - 16px); border:1px solid var(--jhs-border); border-bottom:0; border-radius:var(--jhs-radius-lg) var(--jhs-radius-lg) 0 0; background:var(--jhs-surface); box-shadow:var(--jhs-shadow-lg); overflow:hidden; }
+                .jhs-quick-setting__header { display:flex; min-height:52px; align-items:center; justify-content:space-between; padding:0 var(--jhs-space-3) 0 var(--jhs-space-4); border-bottom:1px solid var(--jhs-border); }
+                .jhs-quick-setting__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); }
+                .jhs-quick-setting__close { min-width:var(--jhs-touch-target); padding:0; font-size:var(--jhs-icon-lg); }
+                .simple-setting__scroll { min-height:0; padding:var(--jhs-space-2) var(--jhs-space-3); overflow-y:auto; overscroll-behavior:contain; }
+                .simple-setting__footer { display:flex; justify-content:flex-end; gap:var(--jhs-space-2); padding:var(--jhs-space-3); border-top:1px solid var(--jhs-border); }
+                .simple-setting__list { display:grid; }
+                .simple-setting .jhs-setting-row, .mini-simple-setting .jhs-setting-row, .jhs-quick-setting .jhs-setting-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); min-height:48px; padding:var(--jhs-space-2) 0; border-bottom:1px solid var(--jhs-border); }
+                .simple-setting .jhs-setting-row:last-child, .mini-simple-setting .jhs-setting-row:last-child, .jhs-quick-setting .jhs-setting-row:last-child { border-bottom:0; }
+                .simple-setting .jhs-setting-row__control, .mini-simple-setting .jhs-setting-row__control, .jhs-quick-setting .jhs-setting-row__control { width:auto; justify-self:end; }
+                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-height:var(--jhs-line-height-ui); }
+                @media (max-width:767px) { .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { -webkit-line-clamp:unset; white-space:normal; } }
+                .jhs-setting-nav-item { position:relative; }
+                .jhs-nav-button { padding-right:var(--jhs-space-4) !important; }
+                .jhs-mini-setting-box { position:relative; margin-left:auto; }
+                .jhs-mini-setting-trigger { padding-left:0 !important; padding-right:0 !important; }
+                .jhs-setting-anchor { position:relative; display:flex; flex-grow:1; justify-content:flex-end; z-index:var(--jhs-z-host-nav) !important; }
+                .jhs-setting-detail-anchor { margin-top:var(--jhs-space-5); }
+                .jhs-backup-cards { padding:0 var(--jhs-space-1); }
+                .jhs-table-dialog { height:100%; overflow:hidden; }
+                .jhs-table-dialog__content { margin:auto !important; }
+                .jhs-help-title { margin:0 0 var(--jhs-space-5); padding-bottom:var(--jhs-space-3); border-bottom:1px solid var(--jhs-border); color:var(--jhs-accent); font-size:var(--jhs-font-size-xl); }
+                .jhs-list-btn-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); margin:var(--jhs-space-2) 0; }
+
+`;
+
+const SETTING_FORM_STYLES = `
 
                 #cache-data-display pre {
                     font-family: var(--jhs-font-mono);
@@ -123,50 +171,6 @@ export const SETTINGS_STYLES = `
                     margin-top:var(--jhs-space-4);
                 }
 
-
-                .simple-setting, .mini-simple-setting {
-                    display: none;
-                    background: var(--jhs-surface);
-                    position: absolute;
-                    top: calc(100% + var(--jhs-space-1));
-                    right: 0;
-                    z-index: var(--jhs-z-dropdown);
-                    border: 1px solid var(--jhs-border);
-                    border-radius: var(--jhs-radius-sm);
-                    box-shadow: var(--jhs-shadow-sm);
-                    padding: 0;
-                    margin-top: var(--jhs-space-1);
-                    color: var(--jhs-text);
-                    width: min(360px, calc(100vw - 16px));
-                    max-height: min(720px, calc(100vh - 80px));
-                }
-                .simple-setting__panel { display:flex; max-height:inherit; flex-direction:column; }
-                .jhs-quick-setting { color:var(--jhs-text); background:var(--jhs-surface); }
-                .jhs-quick-setting .simple-setting__panel { max-height:min(720px, calc(100vh - 96px)); }
-                .jhs-quick-setting-backdrop { position:fixed; inset:0; z-index:var(--jhs-z-sheet-backdrop); background:var(--jhs-overlay); backdrop-filter:blur(2px); }
-                .jhs-quick-setting-sheet { position:fixed; right:0; bottom:0; left:0; z-index:var(--jhs-z-sheet); max-height:calc(100dvh - 16px); border:1px solid var(--jhs-border); border-bottom:0; border-radius:var(--jhs-radius-lg) var(--jhs-radius-lg) 0 0; background:var(--jhs-surface); box-shadow:var(--jhs-shadow-lg); overflow:hidden; }
-                .jhs-quick-setting__header { display:flex; min-height:52px; align-items:center; justify-content:space-between; padding:0 var(--jhs-space-3) 0 var(--jhs-space-4); border-bottom:1px solid var(--jhs-border); }
-                .jhs-quick-setting__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); }
-                .jhs-quick-setting__close { min-width:var(--jhs-touch-target); padding:0; font-size:var(--jhs-icon-lg); }
-                .simple-setting__scroll { min-height:0; padding:var(--jhs-space-2) var(--jhs-space-3); overflow-y:auto; overscroll-behavior:contain; }
-                .simple-setting__footer { display:flex; justify-content:flex-end; gap:var(--jhs-space-2); padding:var(--jhs-space-3); border-top:1px solid var(--jhs-border); }
-                .simple-setting__list { display:grid; }
-                .simple-setting .jhs-setting-row, .mini-simple-setting .jhs-setting-row, .jhs-quick-setting .jhs-setting-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); min-height:48px; padding:var(--jhs-space-2) 0; border-bottom:1px solid var(--jhs-border); }
-                .simple-setting .jhs-setting-row:last-child, .mini-simple-setting .jhs-setting-row:last-child, .jhs-quick-setting .jhs-setting-row:last-child { border-bottom:0; }
-                .simple-setting .jhs-setting-row__control, .mini-simple-setting .jhs-setting-row__control, .jhs-quick-setting .jhs-setting-row__control { width:auto; justify-self:end; }
-                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-height:var(--jhs-line-height-ui); }
-                @media (max-width:767px) { .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { -webkit-line-clamp:unset; white-space:normal; } }
-                .jhs-setting-nav-item { position:relative; }
-                .jhs-nav-button { padding-right:var(--jhs-space-4) !important; }
-                .jhs-mini-setting-box { position:relative; margin-left:auto; }
-                .jhs-mini-setting-trigger { padding-left:0 !important; padding-right:0 !important; }
-                .jhs-setting-anchor { position:relative; display:flex; flex-grow:1; justify-content:flex-end; z-index:var(--jhs-z-host-nav) !important; }
-                .jhs-setting-detail-anchor { margin-top:var(--jhs-space-5); }
-                .jhs-backup-cards { padding:0 var(--jhs-space-1); }
-                .jhs-table-dialog { height:100%; overflow:hidden; }
-                .jhs-table-dialog__content { margin:auto !important; }
-                .jhs-help-title { margin:0 0 var(--jhs-space-5); padding-bottom:var(--jhs-space-3); border-bottom:1px solid var(--jhs-border); color:var(--jhs-accent); font-size:var(--jhs-font-size-xl); }
-                .jhs-list-btn-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); margin:var(--jhs-space-2) 0; }
 
                 .jhs-setting-layout {
                     display: grid;
@@ -435,3 +439,5 @@ export const SETTINGS_STYLES = `
                     cursor: not-allowed !important;
                 }
 `;
+
+export const SETTINGS_STYLES = SETTING_ENTRY_STYLES + SETTING_FORM_STYLES;

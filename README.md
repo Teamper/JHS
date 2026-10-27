@@ -30,7 +30,7 @@ JHS 将作品状态、演员收藏、新作追踪、外部检索、媒体预览�
 - **列表与弹窗交互修复**：历史跨页选择与批量目标保持一致；新作品筛选、分页和关闭重开时保留当前条件，处理迟到响应和焦点恢复。
 - **数据与凭证恢复**：同一浏览器跨站共享加密的 WebDAV 连接；备份恢复保留目标设备凭证，导出与状态事务协调；离线结果待确认时先核实再重试。
 
-完整变化见 [Unreleased](CHANGELOG.md#unreleased)。开发版仍在验证中：最近一次完整检查的脚本体积、启动性能门禁未通过，真实 WebDAV 账号及登录实站验收尚未完成。
+完整变化见 [Unreleased](CHANGELOG.md#unreleased)。2026-10-26—27 本地验证中，完整检查、脚本体积预算、Chrome 桌面/手机功能回归及六视口浅深主题视觉门禁已通过；最终候选另行通过相关功能及交互回归，原生 IndexedDB 覆盖逐写中止、页面关闭、真实配额失败、跨标签冲突、旧版本迁移和 6.5 稳定脚本回读。Edge 各 30 次冷启动 P50 均为 234.8ms，通过 JavDB 242ms、JavBus 253ms 原上限。独立串行性能已建立 30 次、45 项 P50/P95 参考；最终候选在排除其他测试进程及无关定时演员扫描后，仍未通过原参考值 10% 门槛：首次复测 8 个分位指标超限，后续复测 15 个超限，未提高参考值。安装后 Chrome 已核对运行标识，设置、历史记录、离线历史、新作品搜索及普通详情截图和评论实测通过；扩展内完整脚本哈希、真实 WebDAV 账号、云盘提交及换账号写入仍未验收。此前 JavStore 直接访问显示 500 Server Error，后续详情页成功显示截图，不代表来源已持续恢复。
 
 ## 功能概览
 
@@ -179,6 +179,12 @@ npm run check
 
 交付开发脚本时执行 `npm run build:dev:deliver`，同时生成根目录 `JHS-7.0.dev.user.js` 和 `dist/dev/JHS-7.0.dev.user.js`，两者字节一致。提交根目录 Dev 文件，`dist/` 仍只保留本地构建。普通测试构建不改写已交付的 Dev 文件。
 
+交付前运行 `npm run check:dev:delivery`：使用交付文件自身的 Dev 版本和构建标识重建当前源码，比较完整 SHA256；同一标识下的内容差异也会阻断。`node scripts/check-dev-delivery.mjs --freeze` 可将通过核验的候选保存到 `output/dev-candidates/<SHA256>.user.js`，随后将 `JHS_TEST_BUNDLE_PATH` 指向该文件运行浏览器及视觉检查，避免普通构建改变被测文件。
+
+持续浏览性能单独运行 `npm run check:performance:serial`，固定 Windows Edge、单工作进程，在已有列表、同步和持久化场景采集 30 次 P50/P95。首次使用 `node scripts/check-serial-performance.mjs --record-reference` 显式建立 `performance-reference.json`；后续环境和场景必须一致，任一 P50/P95 超过参考值 10% 即失败。命令不会覆盖已有参考值；已提交的参考上限只允许收紧。原有启动阈值和 `first-ready` 定义保持不变。
+
+Windows 下，串行门禁会在采样前后检查其他 Vitest/Playwright 进程，发现并发则拒绝将该轮作为有效结果，不停止其他项目。各轮采样保存到 `output/serial-performance/<时间与随机标识>/`，最近一轮的位置见 `output/serial-performance/latest.json`。固定环境也包含浏览器、Node、系统版本与硬件；环境不一致时应回到原环境复测，不覆盖参考值。
+
 常用命令：
 
 | 命令 | 用途 |
@@ -187,6 +193,8 @@ npm run check
 | `npm run build` | 在 `develop` 构建 `dist/dev/JHS-7.0.dev.user.js` |
 | `npm run build:dev` | 构建同一 7.0 开发版本 |
 | `npm run build:dev:deliver` | 同时更新仓库根目录的完整 Dev 安装脚本，供 develop 交付 |
+| `npm run check:dev:delivery` | 以交付文件自身元数据重建并比较完整 SHA256 |
+| `npm run check:performance:serial` | 独立串行 30 次持续浏览采样及 P50/P95 回归门禁 |
 | `npm run build:release` | 显式生成根目录及 `dist/JHS.user.js`，仅用于获授权的正式发布准备 |
 | `npm run check` | 执行单元测试、构建、类型/架构/集成检查、性能预算、发布契约和 UI 审计 |
 | `npm run check:browser` | 运行启动性能与浏览器功能回归 |

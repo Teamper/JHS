@@ -56,12 +56,18 @@ export const systemFeatureManifests = Object.freeze([
                 runtime.scope.addCleanup(() => compatibilityBean.disconnect(adapter));
             }
             try {
-                const css = await adapter?.initCss?.();
+                const css = await (adapter?.initEntryCss ? adapter.initEntryCss() : adapter?.initCss?.());
                 if (css) runtime.scope.addCleanup(deps[PORT.style].register("jhs-settings-feature", css.replace(/^\s*<style>|<\/style>\s*$/g, "")));
             } catch (error) {
                 runtime.diagnostics.recordError({ source: "settings-entry", message: error instanceof Error ? error.message : String(error) });
                 deps[SERVICE.clog].error?.("设置界面样式加载失败", error);
             }
+            let fullStylesPromise = /** @type {Promise<void> | null} */ (null);
+            if (adapter) adapter.fullSettingsStyleLoader = () => fullStylesPromise ??= (async () => {
+                const css = await adapter.initCss();
+                runtime.scope.assertActive();
+                if (css) runtime.scope.addCleanup(deps[PORT.style].register("jhs-full-settings-feature", css.replace(/^\s*<style>|<\/style>\s*$/g, "")));
+            })().catch(error => { fullStylesPromise = null; throw error; });
             const controller = new SettingsEntryController({
                 document: pageDocument, scope: runtime.scope,
                 initializeSurface: () => adapter?.activateFeatureSurface?.(runtime.scope, deps[SERVICE.profile]),

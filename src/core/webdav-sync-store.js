@@ -28,7 +28,11 @@ export class WebDavSyncStore extends EventTarget {
         this.deps = dependencies;
         this.forage = dependencies.forage;
         this.coordinator = dependencies.coordinator;
-        this.recoverBeforeMutation = () => this.recoverWithoutLock();
+        this.recoverBeforeMutation = async () => {
+            let pending = /** @type {Dict | null} */ (null);
+            await this.recoverWithoutLock(value => { pending = value; });
+            return { owner: this, pending };
+        };
         this.ledger = new SyncPendingLedger(this.forage, dependencies.clock);
         this.undoEpoch = "";
         /** @type {Set<string>} */ this.baseEligible = new Set();
@@ -79,10 +83,10 @@ export class WebDavSyncStore extends EventTarget {
         return { schema: 1, replicaId: "", counter: 0, seq: 0, localRevision: 0, publishedRevision: 0, joined: false, binding: "", model: emptySyncModel(), shadow: {}, layout: {}, dirty: false, dirtySinceAt: 0, lastLocalChangeAt: 0, pending: null, confirmed: {}, known: {}, deleting: [], lastSuccessAt: 0, retryAt: 0, failures: 0, error: "", cleanupError: "", paused: false, undoEligible: [] };
     }
     async initialize() {
-        return this.coordinator.runExclusive(async () => {
+        return this.coordinator.runExclusive(async (/** @type {any} */ recovery) => {
             // The registered hook already completed recovery inside this same lock.
-            if (this.coordinator.beforeMutation !== this.recoverBeforeMutation) await this.recoverWithoutLock();
-            const [pending, stored] = await Promise.all([this.ledger.read(), this.forage.getItem(SYNC_STATE_KEY)]);
+            if (recovery?.owner !== this) await this.recoverWithoutLock();
+            const [pending, stored] = await Promise.all([recovery?.owner === this && recovery.pending ? recovery.pending : this.ledger.read(), this.forage.getItem(SYNC_STATE_KEY)]);
             const state = this.readStateSnapshot(stored, pending);
             const needsReplica = !state.replicaId;
             if (needsReplica) {
@@ -199,11 +203,11 @@ export class WebDavSyncStore extends EventTarget {
         const values = await Promise.all(domains.map(async key => [key, await this.forage.getItem(key)]));
         return Object.fromEntries(values.map(([key, value]) => [key, value ?? (["setting", "new_video_decisions"].includes(key) ? {} : key === "activity_log" ? { entries: [] } : [])]));
     }
-    /** Must run before every subsequent writer, even after a page crash. @returns {Promise<{notificationId: string, carNums: string[], domains?: string[], changedNames?: string[]} | null>} */
-    async recoverWithoutLock() {
+    /** Must run before every subsequent writer, even after a page crash. @param {(pending: Dict) => void} [onCleanLedger] @returns {Promise<{notificationId: string, carNums: string[], domains?: string[], changedNames?: string[]} | null>} */
+    async recoverWithoutLock(onCleanLedger) {
         // Independent reads start under the caller's lock; intent validation still precedes every write.
-        let [, journal] = await Promise.all([this.ledger.read(), this.forage.getItem(SYNC_JOURNAL_KEY)]);
-        if (!journal) return null;
+        let [pending, journal] = await Promise.all([this.ledger.read(), this.forage.getItem(SYNC_JOURNAL_KEY)]);
+        if (!journal) { onCleanLedger?.(pending); return null; }
         await assertSupportedDataVersion(this.deps.storage);
         if (journal.schema !== 1 || !journal.after || journal.afterState?.schema !== 1 || !SYNC_DOMAINS.every(key => Object.hasOwn(journal.after, key))) throw new Error("同步恢复日志版本无效，已停止写入以保留本地数据");
         // Old v1 journals have no notification marker. Upgrade it before replay

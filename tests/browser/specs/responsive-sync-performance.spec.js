@@ -73,6 +73,7 @@ for (const [cards, records] of [[40, 1000], [200, 1000], [1000, 10000]]) {
     const cpu = captureCpu ? await context.newCDPSession(page) : null;
     if (cpu) { await cpu.send("Profiler.enable"); await cpu.send("Profiler.setSamplingInterval", { interval: 1000 }); }
     const rounds = Number.parseInt(process.env.JHS_PERF_ROUNDS || "0", 10) || (records === 10000 ? 3 : 2);
+    const gate = { syncMs: [], hoverPaintMs: [], maxLongTaskMs: [] };
     for (let round = 0; round < rounds; round++) {
       if (cpu) await cpu.send("Profiler.start");
       await page.evaluate(({ round, captureDiagnostics }) => {
@@ -110,11 +111,13 @@ for (const [cards, records] of [[40, 1000], [200, 1000], [1000, 10000]]) {
         console.log(JSON.stringify({ cpuRound: round, top }));
         await info.attach("cpu-profile-" + round, { body: JSON.stringify(profile), contentType: "application/json" });
       }
+      gate.syncMs.push(result.syncMs); gate.hoverPaintMs.push(Math.max(...result.hoverPaintMs)); gate.maxLongTaskMs.push(Math.max(0, ...result.longTasks));
       console.log(JSON.stringify({ baseline, cards, records, round, ...result }));
       await info.attach("mixed-sync-" + round, { body: JSON.stringify(result, null, 2), contentType: "application/json" });
       expect(result.hoverPaintMs.length).toBeGreaterThan(0);
       if (round === 2) expect(result.requestedWhileSyncLocked).toBe(true);
     }
+    await info.attach("performance-gate", { body: JSON.stringify(gate), contentType: "application/json" });
     await page.mouse.move(4, 4);
     await expect.poll(() => page.evaluate(() => document.querySelector(".image-hover-preview")?.classList.contains("active"))).toBe(false);
     await page.evaluate(() => window.mixedObserver.disconnect());

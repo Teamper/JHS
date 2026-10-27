@@ -20,6 +20,8 @@
     "build": "node scripts/build-dev.mjs",
     "build:dev": "node scripts/build-dev.mjs",
     "build:dev:deliver": "node scripts/build-dev.mjs --deliver",
+    "check:performance:serial": "node scripts/check-serial-performance.mjs",
+    "check:dev:delivery": "node scripts/check-dev-delivery.mjs",
     "analyze:bundle": "node scripts/analyze-bundle-size.mjs",
     "build:release": "node scripts/build.mjs",
     "test": "vitest run",

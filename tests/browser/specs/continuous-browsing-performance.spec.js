@@ -37,11 +37,11 @@ for (const [cards, records] of sizes) test(`JavDB continuous browsing ${cards} c
     } });
     await expect.poll(() => page.locator('.item[data-jhs-processed="true"]').count()).toBe(cards);
     const before = await raw.send("Performance.getMetrics");
-    const measurements = await page.evaluate(async () => {
+    const measurements = await page.evaluate(async sampleCount => {
         const manager = window.unsafeWindow.pluginManager, diagnostics = manager.diagnostics;
         diagnostics.startPerformanceCapture?.();
         const times = [], processed = [];
-        for (let index = 0; index < 5; index++) {
+        for (let index = 0; index < sampleCount; index++) {
             window.__jhsBrowserDiagnostics.listPhases = [];
             const started = performance.now();
             await window.jhsEventBus.emit("car-state-changed", { carNums: ["ABC-123"] }, { broadcast: false });
@@ -52,12 +52,13 @@ for (const [cards, records] of sizes) test(`JavDB continuous browsing ${cards} c
         }
         const result = { times, processed, performance: diagnostics.performanceSnapshot?.() };
         diagnostics.stopPerformanceCapture?.(); return result;
-    });
+    }, process.env.JHS_SERIAL_PERFORMANCE === "1" ? 30 : 5);
     const after = await raw.send("Performance.getMetrics");
     const metric = name => after.metrics.find(item => item.name === name).value - before.metrics.find(item => item.name === name).value;
     const report = { cards, records, baseline, nativeScroll, ...measurements, layoutSeconds: metric("LayoutDuration"), scriptSeconds: metric("ScriptDuration"), heapBytes: after.metrics.find(item => item.name === "JSHeapUsedSize").value };
     console.log(JSON.stringify(report)); await info.attach("continuous-browsing", { body: JSON.stringify(report, null, 2), contentType: "application/json" });
-    if (!baseline) expect(measurements.processed).toEqual([1, 1, 1, 1, 1]);
+    await info.attach("performance-gate", { body: JSON.stringify({ stateRefreshMs: measurements.times }), contentType: "application/json" });
+    if (!baseline) expect(measurements.processed).toEqual(Array(measurements.times.length).fill(1));
 });
 
 test("JavDB no-change sync spans two foreground poll intervals", async ({ context, page }, info) => {
@@ -126,11 +127,13 @@ test("JavDB trusted filter clicks report paint latency on a long list", async ({
             requestAnimationFrame(() => setTimeout(() => window.clickPaintSamples.push(performance.now() - event.timeStamp), 0));
         }, true);
     });
-    for (const filter of ["favorite", "all", "favorite", "all", "waitCheck"]) {
+    const filters = process.env.JHS_SERIAL_PERFORMANCE === "1" ? Array.from({length: 30}, (_, index) => index % 2 ? "all" : "favorite") : ["favorite", "all", "favorite", "all", "waitCheck"];
+    for (const filter of filters) {
         await page.locator(`#jhs-quick-filter .jhs-segmented__item[data-jhs-filter="${filter}"]`).click();
     }
-    await expect.poll(() => page.evaluate(() => window.clickPaintSamples.length)).toBe(5);
+    await expect.poll(() => page.evaluate(() => window.clickPaintSamples.length)).toBe(filters.length);
     const durations = await page.evaluate(() => window.clickPaintSamples);
+    await info.attach("performance-gate", { body: JSON.stringify({ trustedClickPaintMs: durations }), contentType: "application/json" });
     console.log(JSON.stringify({ trustedFilterPaintMilliseconds: durations }));
     await info.attach("trusted-filter-paint", { body: JSON.stringify(durations), contentType: "application/json" });
 });

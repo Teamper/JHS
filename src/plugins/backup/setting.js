@@ -128,13 +128,14 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             getScope: instance ? async () => instance.scope : this.getRuntimeService("scope"),
         });
     }
-    async initCss() {
+    async initCss(includeFull = true) {
         const e = this.getRuntimeService("settings").snapshot();
         let t = (null == e ? void 0 : e.containerWidth) ?? "100";
         this.utils.isMobileMode() && (t = "100");
         let n = this.utils.isMobileMode() ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
-        return buildSettingCss(t, n, l, r).replace("</style>", `${SHORTCUT_RECORDER_STYLES}</style>`);
+        return buildSettingCss(t, n, l, r, includeFull).replace("</style>", `${includeFull ? SHORTCUT_RECORDER_STYLES : ""}</style>`);
     }
+    initEntryCss() { return this.initCss(false); }
     /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope @param {{current: () => string}} profile */
     activateFeatureSurface(scope, profile) {
         const settings = this.getRuntimeService("settings");
@@ -302,6 +303,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         }
     }
     async openSettingDialog(e = "appearance-panel", t) {
+        await this.fullSettingsStyleLoader?.();
         if (this._settingScope?.disposed) return;
         const current = this._settingsDialog;
         if (current && !current.scope.disposed) {
