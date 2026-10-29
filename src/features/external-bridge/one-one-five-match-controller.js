@@ -5,7 +5,7 @@ import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { escapeHtml, normalizeCarNum } from "../../core/constants.js";
 import { mapLimit, parseBooleanSetting } from "../../core/feature-helpers.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
-import { format115Size, normalize115Keyword, preview115Rename } from "./one-one-five-utils.js";
+import { format115Size, matches115FileName, normalize115Keyword, preview115Rename } from "./one-one-five-utils.js";
 
 /** Own optional 115 file matching on supported list and detail surfaces. */
 export class OneOneFiveMatchController {
@@ -117,8 +117,9 @@ export class OneOneFiveMatchController {
         summary.append(block);
         try {
             const cacheMinutes = this.readCacheMinutes();
-            const matches = await this.offline.searchFiles("one115", keyword, { scope, ttlMs: cacheMinutes * 60_000 });
+            const candidates = await this.offline.searchFiles("one115", keyword, { scope, ttlMs: cacheMinutes * 60_000 });
             if (!this.isCurrent(scope)) return;
+            const matches = candidates.filter((/** @type {any} */ match) => matches115FileName(match.name, carNum));
             block.replaceChildren(label);
             if (!matches.length) {
                 block.append(this.document.createTextNode("未匹配 "), this.createRetryButton());
@@ -220,8 +221,9 @@ export class OneOneFiveMatchController {
         if (!carNum || element.getAttribute("data-jhs115-state") === "pending") return;
         try {
             element.setAttribute("data-jhs115-state", "pending");
-            const matches = await this.offline.searchFiles("one115", normalize115Keyword(carNum), { scope, ttlMs: this.cacheMinutes * 60_000, force });
+            const candidates = await this.offline.searchFiles("one115", normalize115Keyword(carNum), { scope, ttlMs: this.cacheMinutes * 60_000, force });
             if (!this.isCurrent(scope) || !element.isConnected) return;
+            const matches = candidates.filter((/** @type {any} */ match) => matches115FileName(match.name, carNum));
             element.querySelector(".jhs-115-list-match")?.remove();
             const badge = this.document.createElement("button");
             badge.type = "button";

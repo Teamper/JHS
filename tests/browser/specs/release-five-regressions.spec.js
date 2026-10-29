@@ -128,7 +128,7 @@ test("115 matching cancels late detail results and restarts once", async ({page,
     await expect.poll(()=>page.evaluate(()=>window.matchRequests.length)).toBe(1);
     await page.evaluate(()=>window.matchSettings.set("enable115Match",false));
     expect(await page.evaluate(()=>window.matchRequests[0].scope.signal.aborted)).toBe(true);
-    await page.evaluate(()=>window.matchRequests[0].resolve([{name:"late result"}]));
+    await page.evaluate(()=>window.matchRequests[0].resolve([{name:"ABC-123.mp4"}]));
     await expect(page.locator(".jhs-115-match")).toHaveCount(0);
     await page.evaluate(()=>window.matchSettings.set("enable115Match",true));
     await expect.poll(()=>page.evaluate(()=>window.matchRequests.length)).toBe(2);
@@ -143,7 +143,7 @@ for(const count of [0,1,2]) test(`115 ${count} matches isolate their card action
         const plugin=window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin"),offline=plugin.getRuntimeService("offline");
         window.matchCalls=0;window.playLinks=[];
         window.open=url=>window.playLinks.push(url);
-        offline.searchFiles=async()=>{window.matchCalls++;return Array.from({length:count},(_,id)=>({name:`result ${id}`,fileId:String(id)}));};
+        offline.searchFiles=async()=>{window.matchCalls++;return Array.from({length:count},(_,id)=>({name:`ABC-123-CD${id+1}.mp4`,fileId:String(id)}));};
         offline.getPlayUrl=(_id,match)=>`https://115.com/?fixture=${match.fileId}`;
         await plugin.getRuntimeService("settings").set("enable115Match",true);
     },count);
