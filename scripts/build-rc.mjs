@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildUserscript, repoRoot } from "./build.mjs";
+import { readReleaseNotes } from "./release-notes.mjs";
 import { createRcTransforms, rcFiles, rcNumber, sha256 } from "./rc-contract.mjs";
 
 export function cleanRcSource(cwd = repoRoot) {
@@ -23,6 +24,7 @@ export async function protectedHashes() {
 export async function buildRc(version) {
     rcNumber(version);
     const sourceSha = cleanRcSource(), before = await protectedHashes();
+    await readReleaseNotes(repoRoot, version);
     const result = await buildUserscript({ outputPaths: [], ...createRcTransforms(version, sourceSha), packStaticResources: false });
     // Local excludes must not hide an imported runtime file from the frozen commit.
     assertRcInputsTracked(result.analysis.modules);

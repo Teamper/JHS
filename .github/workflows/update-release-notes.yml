@@ -1,0 +1,25 @@
+name: Update published release notes
+on:
+  push:
+    tags: ['notes-v*']
+permissions:
+  contents: read
+jobs:
+  update-notes:
+    if: github.repository == 'Teamper/JHS'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: jhs-release-notes
+      cancel-in-progress: false
+      queue: max
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate and update only the existing release body
+        run: node scripts/update-release-notes.mjs

@@ -2,6 +2,7 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readReleaseNotes } from "./release-notes.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const STABLE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -131,8 +132,9 @@ async function main() {
     const previousVersion = options.baseRef ? readVersionAtRef(options.baseRef) : undefined;
     shouldRelease = decideRelease(contract.version, { previousVersion, forceRelease: options.forceRelease });
   }
+  contract.notes = await readReleaseNotes(repoRoot, contract.version, { required: shouldRelease, fallback: contract.notes });
   if (options.notesFile && shouldRelease) {
-    await writeFile(resolve(options.notesFile), `${contract.notes}\n`, "utf8");
+    await writeFile(resolve(options.notesFile), contract.notes.endsWith("\n") ? contract.notes : `${contract.notes}\n`, "utf8");
   }
 
   const outputs = `version=${contract.version}\ntag=v${contract.version}\nshould_release=${shouldRelease}\n`;

@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { RC_SCRIPT, RC_META, RC_CHANNEL, assertNextRc, validateRcFiles, sha256, rcNumber, advertisedRcCommit, assertValidatedRcRun } from "./rc-contract.mjs";
 import { repoRoot } from "./build.mjs";
+import { readReleaseNotes } from "./release-notes.mjs";
 import { uploadAndVerifyRcAsset } from "./rc-release-asset.mjs";
 
 const version = process.argv[2], tag = `v${version}`, repository = "Teamper/JHS";
@@ -41,10 +42,12 @@ const notes = join(sourceRoot, "release-notes", `${version}.md`);
 await readFile(notes); // Fail before publication if the reviewed notes are missing.
 const releases = JSON.parse(gh(["api", `repos/${repository}/releases`, "--paginate", "--slurp"])).flat();
 let release = releases.find(item => item.tag_name === tag);
+const releaseNotes = !release || release.draft ? await readReleaseNotes(sourceRoot, version) : null;
+if (release?.draft && release.body?.replace(/\r\n/g, "\n") !== releaseNotes) throw new Error("Draft release body differs from the reviewed version notes");
 if (!release) {
     release = JSON.parse(gh(["api", "--method", "POST", `repos/${repository}/releases`,
         "-f", `tag_name=${tag}`, "-f", `target_commitish=${artifact.sourceSha}`, "-f", `name=JHS ${version}`,
-        "-F", "draft=true", "-F", "prerelease=true", "-f", "make_latest=false", "-F", `body=@${notes}`]));
+        "-F", "draft=true", "-F", "prerelease=true", "-f", "make_latest=false", "-f", `body=${releaseNotes}`]));
 }
 if (!release.prerelease) throw new Error("Existing release is not a prerelease");
 if (release.assets.some(asset => !names.includes(asset.name))) throw new Error("Unexpected release assets");
