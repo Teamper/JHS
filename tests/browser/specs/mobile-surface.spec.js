@@ -1,3 +1,4 @@
+import { expectedBuildIdentity } from "../harness/build-identity.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -9,7 +10,8 @@ test("compact list exposes only the FAB surface", async ({ page }, testInfo) => 
   test.skip(testInfo.project.name !== "mobile", "one compact viewport covers mobile surfaces");
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await expect(page.locator("html")).toHaveAttribute("data-jhs-dev-build", /^7\.0\.0-dev\.\d{12}\|[0-9a-f]{12}(?:\.dirty)?$/);
+  const identity = expectedBuildIdentity();
+  await expect(page.locator("html")).toHaveAttribute(identity.attribute, identity.pattern);
   await expect(page.locator("#jhs-fab")).toBeVisible();
   await expect(page.locator("#jhs-fab-safe-area")).toHaveCount(1);
   await expect(page.locator("#jhs-page-commandbar, #setting-btn")).toHaveCount(0);

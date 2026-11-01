@@ -1,3 +1,4 @@
+import { expectedBuildIdentity } from "../harness/build-identity.js";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -20,15 +21,16 @@ for (const transport of ["inline", "base64"]) {
   });
 }
 
-test("byte transport executes the selected Dev file and keeps its source URL", async ({ context, page }) => {
+test("byte transport executes the selected build file and keeps its source URL", async ({ context, page }) => {
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/v/test-id");
   const path = process.env.JHS_TEST_BUNDLE_PATH || fileURLToPath(new URL("../../../dist/dev/JHS-7.0.dev.user.js", import.meta.url));
   const source = await readFile(path, "utf8");
   await injectUserscriptRuntime(page, { userscriptTransport: "base64", settingOverrides: { enableLoadReview: "no" } });
-  const injected = await page.locator("script").evaluateAll(nodes => nodes.map(node => node.textContent).find(text => text.includes("data-jhs-dev-build")));
+  const identity = expectedBuildIdentity();
+  const injected = await page.locator("script").evaluateAll((nodes, attribute) => nodes.map(node => node.textContent).find(text => text.includes(attribute)), identity.attribute);
   expect(injected).toBe(`${source}\n//# sourceURL=${path.replace(/\n/g, "")}`);
-  expect(await page.locator("html").getAttribute("data-jhs-dev-build")).toBeTruthy();
+  await expect(page.locator("html")).toHaveAttribute(identity.attribute, identity.pattern);
   expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.bootstrapPhases["feature-ready-signal"])).toBeGreaterThan(0);
   await expect(page.locator("#xunLeiSubtitleBtn")).toBeVisible();
 });

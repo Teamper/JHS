@@ -1,0 +1,82 @@
+name: JHS 7.0 RC
+on:
+  push:
+    tags: ['v7.0.0-rc.*']
+permissions:
+  contents: read
+concurrency:
+  group: jhs-7-rc
+  cancel-in-progress: false
+  queue: max
+jobs:
+  node20:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: git diff --exit-code
+  candidate:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate tag and source ancestry
+        shell: pwsh
+        run: |
+          $rcVersion = $env:GITHUB_REF_NAME.Substring(1)
+          node --input-type=module -e "import {rcNumber} from './scripts/rc-contract.mjs'; rcNumber(process.argv[1])" $rcVersion
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git merge-base --is-ancestor HEAD origin/develop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "RC_VERSION=$rcVersion" >> $env:GITHUB_ENV
+      - run: npm ci
+      - run: npm --prefix tests/browser ci
+      - run: npx playwright install chromium
+        working-directory: tests/browser
+      - name: Align visual font
+        shell: pwsh
+        run: ./tests/browser/scripts/configure-visual-font.ps1
+      - run: npm run check:rc -- $env:RC_VERSION
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: rc-evidence
+          path: output/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rc-candidate
+          path: dist/rc/
+  publish:
+    needs: [node20, candidate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: rc-candidate
+          path: dist/rc/
+      - name: Publish verified prerelease and promote channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-rc.mjs "${GITHUB_REF_NAME#v}"

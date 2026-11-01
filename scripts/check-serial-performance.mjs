@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { chromium } from "../tests/browser/node_modules/playwright-core/index.mjs";
 import { repoRoot } from "./build.mjs";
 import { freezeDevCandidate, verifyDevDelivery } from "./check-dev-delivery.mjs";
+import { freezeRcCandidate, verifyRcDelivery } from "./check-rc-delivery.mjs";
 import { summarizePerformanceSamples, assertPerformanceReference, assertReferenceTightens } from "./performance-reference.mjs";
 import { assertNoConcurrentBenchmarks } from "./benchmark-isolation.mjs";
 
@@ -13,7 +14,10 @@ const outputRoot = resolve(repoRoot, "output/serial-performance");
 const output = resolve(outputRoot, new Date().toISOString().replace(/[:.]/g, "-") + "-" + randomUUID().slice(0, 8)), referencePath = resolve(repoRoot, "performance-reference.json");
 await mkdir(output, { recursive: true });
 assertNoConcurrentBenchmarks();
-const artifact = await freezeDevCandidate(resolve(process.env.JHS_TEST_BUNDLE_PATH || resolve(repoRoot, "JHS-7.0.dev.user.js")));
+const isRc = process.env.JHS_TEST_CHANNEL === "rc";
+const freezeCandidate = isRc ? freezeRcCandidate : freezeDevCandidate;
+const verifyDelivery = isRc ? verifyRcDelivery : verifyDevDelivery;
+const artifact = await freezeCandidate(resolve(process.env.JHS_TEST_BUNDLE_PATH || resolve(repoRoot, "JHS-7.0.dev.user.js")));
 const channel = "msedge", browser = await chromium.launch({ channel, headless: true });
 const environment = { channel, browser: browser.version(), os: platform(), release: release(), cpu: cpus()[0].model, threads: cpus().length, memory: totalmem(), node: process.versions.node };
 await browser.close();
@@ -24,7 +28,7 @@ const run = spawnSync(process.execPath, ["node_modules/@playwright/test/cli.js",
 });
 if (run.status !== 0) throw new Error("串行性能场景失败，未更新参考值");
 assertNoConcurrentBenchmarks();
-await verifyDevDelivery(artifact.path);
+await verifyDelivery(artifact.path);
 const report = JSON.parse(await readFile(reportPath, "utf8")), metrics = {};
 function collect(suites, parents = []) {
     for (const suite of suites) {
