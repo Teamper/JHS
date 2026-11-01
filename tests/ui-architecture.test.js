@@ -187,7 +187,7 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
     });
 
     it("binds full-settings layout ranges idempotently after loading the form", () => {
-        expect(settingForms).toContain("bindLayoutRangeEvents(root, dependencies.host, dependencies.utilities);");
+        expect(settingForms).toContain("bindLayoutRangeEvents(root, null, dependencies.utilities);");
         expect(settingForms).toContain('.off(".jhsSetting")');
         expect(settingForms).toContain('.on("input.jhsSetting"');
         expect(settingForms).not.toContain('.on("change.jhsSetting"');
@@ -202,14 +202,14 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
         expect(quickForm).not.toContain('$("#containerWidth").on("input"');
     });
 
-    it("waits for Full settings live writes before showing save success", () => {
+    it("settles Full settings drafts and commits before showing save success", () => {
         expect(settingPlugin).toContain("const fullBinding = this._fullSettingBinding, cloudBinding = this._cloudSettingBinding;");
         expect(settingPlugin).toContain("await fullBinding?.flush?.({ throwOnFailure: true })");
         expect(settingPlugin).toContain("await cloudBinding?.flush?.({ throwOnFailure: true })");
         const flushAt = settingPlugin.indexOf("await fullBinding?.flush?.");
         const saveAt = settingPlugin.indexOf("const result = await saveSettingForm(dependencies, root);");
         expect(saveAt).toBeGreaterThan(flushAt);
-        expect(settingPlugin.indexOf('this.notifications.ok("已保存设置")', saveAt)).toBeGreaterThan(saveAt);
+        expect(settingPlugin.indexOf('this.notifications.ok(result?.requiresNavigation', saveAt)).toBeGreaterThan(saveAt);
     });
 
     it("uses semantic review and related layouts with safe external text", () => {

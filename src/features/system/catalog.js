@@ -117,6 +117,8 @@ export const systemFeatureManifests = Object.freeze([
                 profile: deps[SERVICE.profile], settings: deps[SERVICE.settings], host: deps[PORT.host],
                 state: deps[SERVICE.state], logger: deps[SERVICE.clog], notifications: deps[SERVICE.notifications], capabilities,
                 openNewVideo: () => runtime.executeCommand("new-video.open"),
+                getPageActions: () => runtime.executeCommand("list.get-page-actions"),
+                executePageAction: (action) => runtime.executeCommand("list.execute-page-action", action),
             });
             let releaseStyles = () => {};
             try {

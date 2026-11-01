@@ -31,17 +31,23 @@ export function bindWebDavSyncControls(root, dependencies) {
         const button = dependencies.jquery(event.currentTarget);
         if (button.prop("disabled")) return;
         button.prop("disabled", true).attr("aria-busy", "true");
-        try { await action(); }
+        try {
+            root.data("jhsSettingsDraft")?.refresh();
+            if (["#webdavAutoVerifyBtn", "#webdavSyncChooseBtn", "#webdavSyncHistoryBtn", "#webdavSyncRestoreBtn"].includes(selector) && ["webDavUrl", "webDavUsername", "webDavPassword"].some(key => root.data("jhsDirtyManualKeys")?.has(key))) throw new Error("请先保存连接设置");
+            await action();
+        }
         catch (error) { if (active()) dependencies.notifications.error(/** @type {Error} */ (error).message); }
         finally { if (active()) { button.prop("disabled", false).removeAttr("aria-busy"); void render(); } }
     });
     bind("#webdavAutoVerifyBtn", async () => {
-        if (root.data("jhsDirtyManualKeys")?.size) throw new Error("请先保存连接信息和版本保留设置");
+        if (["webDavSyncKeepCount", "webDavSyncHistoryDays"].some(key => root.data("jhsDirtyManualKeys")?.has(key))) throw new Error("请先保存版本保留设置");
         await service.retry();
     });
     bind("#webdavSyncPauseBtn", async () => { const status = await service.getStatus(); if (active()) await service.pause(!status.paused); });
     bind("#webdavSyncChooseBtn", async () => {
-        await dependencies.webdav.saveProfile({ url: String(root.find("#webDavUrl").val() || "").trim(), username: String(root.find("#webDavUsername").val() || ""), password: String(root.find("#webDavPassword").val() || "") });
+        const profile = await dependencies.webdav.getProfile();
+        if (!active()) return;
+        await dependencies.webdav.saveProfile(profile);
         if (active()) await service.retry();
     });
     bind("#webdavSyncHistoryBtn", async () => {

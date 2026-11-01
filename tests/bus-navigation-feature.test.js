@@ -14,7 +14,7 @@ describe("JavBus navigation Feature", () => {
         expect(controller.start(scope)).toBe(true);
         const button = document.querySelector("#search-img-btn");
         expect(button?.textContent).toBe("识图");
-        expect(button?.className).toBe("jhs-btn btn btn-default jhs-layout-638cb2c9");
+        expect(button?.className).toBe("jhs-btn btn btn-default");
         button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
         expect(openImageSearch).toHaveBeenCalledOnce();
 

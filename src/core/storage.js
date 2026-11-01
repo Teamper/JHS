@@ -376,7 +376,7 @@ export class StorageManager {
                 throw error;
             }
             for (const item of addedItems) {
-                try { clog.html(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(item.names)} ${escapeHtml(item.carNum)}</span>`); }
+                try { clog.html(`屏蔽演员番号: <span>${escapeHtml(item.names)} ${escapeHtml(item.carNum)}</span>`); }
                 catch (error) { warnAfterCommittedStorageMutation("屏蔽记录已保存，但操作提示显示失败", error); }
             }
             if (result.changed.length) {
@@ -460,9 +460,9 @@ export class StorageManager {
             i = i.replace(d, ""), s = s.map((e => e.replace(d, "")));
             let h = t.find((t => t.starId === e));
             if (h) {
-                h.avatar && h.avatar.includes("https") || o && (clog.log(o), h.avatar = o, clog.html(`<span class="jhs-layout-eeefd8c8">补全演员头像: ${escapeHtml(i)}</span>`),
-                n++), !h.actressType && c && (h.actressType = c, clog.html(`<span class="jhs-layout-eeefd8c8">补全演员类别: ${escapeHtml(i)} ${escapeHtml(c)}</span>`),
-                n++), h.name.includes(d) && (h.name = i, h.allName = s, clog.html(`<span class="jhs-layout-eeefd8c8">更正演员名字: ${escapeHtml(i)} ${escapeHtml(s)}</span>`),
+                h.avatar && h.avatar.includes("https") || o && (clog.log(o), h.avatar = o, clog.html(`<span>补全演员头像: ${escapeHtml(i)}</span>`),
+                n++), !h.actressType && c && (h.actressType = c, clog.html(`<span>补全演员类别: ${escapeHtml(i)} ${escapeHtml(c)}</span>`),
+                n++), h.name.includes(d) && (h.name = i, h.allName = s, clog.html(`<span>更正演员名字: ${escapeHtml(i)} ${escapeHtml(s)}</span>`),
                 n++);
                 continue;
             }
@@ -477,7 +477,7 @@ export class StorageManager {
                 createDate: g,
                 updateDate: g,
                 actressType: c
-            }), clog.html(`<span class="jhs-layout-eeefd8c8">同步JavDB已收藏的演员: ${escapeHtml(i)}</span>`), n++;
+            }), clog.html(`<span>同步JavDB已收藏的演员: ${escapeHtml(i)}</span>`), n++;
         }
         return n > 0 ? await this._setItemAndInvalidate(this.favorite_actresses_key, t) : clog.log("信息已记录, 无需要进行同步收藏的演员"),
         n;

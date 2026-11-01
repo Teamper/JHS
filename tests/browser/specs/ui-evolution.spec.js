@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { assertNoHorizontalOverflow, fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -24,11 +25,11 @@ test("eight settings categories retain drafts, enhance all selects and save acro
   await expect(dialog.locator("#appearance-panel")).toBeVisible();
   await dialog.locator("#highlightedTagNumber").fill("3");
   await dialog.locator("#highlightedTagNumber").dispatchEvent("change");
-  await dialog.locator('[data-panel="advanced-panel"]').click();
+  await clickSettingsCategory(dialog.locator('[data-panel="advanced-panel"]'));
   await dialog.locator("#httpTimeout").fill("7000");
   await dialog.locator("#httpTimeout").dispatchEvent("change");
   for (const group of groups) {
-    await dialog.locator(`[data-panel="${group}-panel"]`).click();
+    await clickSettingsCategory(dialog.locator(`[data-panel="${group}-panel"]`));
     await expect(dialog.locator(`#${group}-panel`)).toBeVisible();
     await expect(dialog.locator("#saveBtn")).toBeInViewport();
     await expect(dialog.locator(".jhs-btn--primary:visible,.jhs-btn--accent:visible")).toHaveCount(1);
@@ -39,7 +40,7 @@ test("eight settings categories retain drafts, enhance all selects and save acro
     expect(controls.scroll, group).toBeLessThanOrEqual(controls.width + 1);
     expect(controls.unenhanced, group).toEqual([]);
   }
-  await dialog.locator('[data-panel="appearance-panel"]').click();
+  await clickSettingsCategory(dialog.locator('[data-panel="appearance-panel"]'));
   await expect(dialog.locator("#highlightedTagNumber")).toHaveValue("3");
   await dialog.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(() => {
@@ -60,6 +61,11 @@ test("legacy settings entry points locate their group and keyboard navigation ke
   }
   const dialog = await openSettings(page);
   const first = dialog.locator('[data-panel="appearance-panel"]');
+  if (!await first.isVisible()) {
+    const category = dialog.locator("#jhs-settings-category").locator("..").getByRole("combobox");
+    await category.click(); await page.keyboard.press("End"); await page.keyboard.press("Enter");
+    await expect(dialog.locator("#advanced-panel")).toBeVisible(); return;
+  }
   await first.focus();
   await page.keyboard.press("End");
   await expect(dialog.locator('[data-panel="advanced-panel"]')).toBeFocused();

@@ -274,7 +274,8 @@ describe("List FeatureRuntime ownership", () => {
             legacyPlugin: { publishListSummary: publishSummary },
             hostAdapter, scope: new LifecycleScope("feature:list"), window,
         });
-        controller.cardStatePresenter = { collectSummary };
+        const disposePresenter = vi.fn();
+        controller.cardStatePresenter = { collectSummary, dispose: disposePresenter };
 
         controller.scheduleRecount();
         controller.scheduleRecount();
@@ -286,6 +287,7 @@ describe("List FeatureRuntime ownership", () => {
         controller.scheduleRecount();
         controller.dispose();
         callbacks[1](0);
+        expect(disposePresenter).toHaveBeenCalledOnce();
         expect(window.cancelAnimationFrame).toHaveBeenCalledWith(2);
         expect(publishSummary).toHaveBeenCalledOnce();
     });

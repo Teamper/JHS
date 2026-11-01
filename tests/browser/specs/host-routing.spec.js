@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import budget from "../../../performance-budget.json" with { type: "json" };
 import { assertNoHorizontalOverflow, fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
@@ -236,7 +237,7 @@ test("Settings opens when optional CoverButton and Blacklist contributions are d
   expect(coverCompatibility).toEqual({ listMounted: true, legacyDescriptor: true });
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await page.locator('.layui-layer .side-menu-item[data-panel="browse-panel"]').click();
+  await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="browse-panel"]'));
   await page.locator(".layui-layer #reviewCount").selectOption("30", { force: true });
   await page.locator(".layui-layer #saveBtn").click();
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().reviewCount)).toBe("30");
@@ -251,9 +252,9 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   await page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.recordError({ source: "feature-runtime", featureId: "list", message: "synthetic feature failure" }));
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await page.locator('.layui-layer .side-menu-item[data-panel="appearance-panel"]').click();
+  await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="appearance-panel"]'));
   await expect(page.locator(".layui-layer #base-panel")).toBeVisible();
-  await page.locator('.layui-layer .side-menu-item[data-panel="advanced-panel"]').click();
+  await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="advanced-panel"]'));
   const externalSitesToggle = page.locator('.layui-layer .pm-toggle[data-plugin="OtherSitePlugin"]');
   await expect(externalSitesToggle).toBeVisible();
   await expect(externalSitesToggle).not.toBeChecked();
@@ -270,24 +271,28 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   await expect(page.locator(".layui-layer #pm-total")).toHaveText(String(total));
   await expect(page.locator(".layui-layer #pm-enabled")).toHaveText(String(total));
   await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("0");
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).not.toContain("OtherSitePlugin");
+  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).toContain("detail.external-sites");
+  await page.locator(".layui-layer #saveBtn").click();
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).not.toContain("detail.external-sites");
   await page.evaluate(() => {
     const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
     window.__jhsSettingsUpdate = settings.update.bind(settings);
     settings.update = async () => { throw new Error("synthetic disabledPlugins write failure"); };
   });
   await externalSitesToggle.click();
-  await expect(externalSitesToggle).toBeChecked();
+  await page.locator(".layui-layer #saveBtn").click();
+  await expect(externalSitesToggle).not.toBeChecked();
   await expect(page.locator(".layui-layer #pm-total")).toHaveText(String(total));
-  await expect(page.locator(".layui-layer #pm-enabled")).toHaveText(String(total));
-  await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("0");
+  await expect(page.locator(".layui-layer #pm-enabled")).toHaveText(String(total - 1));
+  await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("1");
+  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).not.toContain("detail.external-sites");
 
   await page.evaluate(() => {
     const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
     plugin.getRuntimeService("settings").update = window.__jhsSettingsUpdate;
     plugin.notifications.ok = () => { throw new Error("synthetic notification failure"); };
   });
-  await externalSitesToggle.click();
+  await page.locator(".layui-layer #saveBtn").click();
   await expect(externalSitesToggle).not.toBeChecked();
   await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("1");
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).toContain("detail.external-sites");

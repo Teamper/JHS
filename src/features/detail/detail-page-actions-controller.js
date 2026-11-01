@@ -230,7 +230,7 @@ export class DetailPageActionsController {
             if (scope.disposed) return;
             if (!results?.length) return void this.notifications.error("未找到该番号的迅雷字幕");
             index = this.dialog.open({
-                type: 1, title: "迅雷字幕", content: '<div class="jhs-layout-8ddc7c91"><div id="xunlei-table-container" class="jhs-layout-583c2485"></div></div>',
+                type: 1, title: "迅雷字幕", content: '<div><div id="xunlei-table-container" class="jhs-layout-583c2485"></div></div>',
                 ui: { body: "table" },
                 scrollbar: false, area: this.ui.getResponsiveArea(["60%", "70%"]), anim: -1,
                 success: (/** @type {any} */ _element, /** @type {number} */ layerIndex) => {

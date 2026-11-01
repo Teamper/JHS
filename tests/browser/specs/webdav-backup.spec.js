@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { encryptPortableBackup } from "../../../src/core/credential-crypto.js";
@@ -38,7 +39,7 @@ for (const broken of [false, true]) {
     }, { encrypted, broken });
     const settings = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
     await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-    await settings.locator('.side-menu-item[data-panel="data-panel"]').click();
+    await clickSettingsCategory(settings.locator('.side-menu-item[data-panel="data-panel"]'));
     await settings.locator("#webdavBackupListBtn").click();
     const restore = info.project.name === "mobile" ? page.locator('.jhs-backup-btn[data-action="import"]') : page.locator(".backup-import");
     await restore.click();
@@ -93,7 +94,7 @@ test("Chrome settings backup keeps WebDAV's 10-second deadline and records safe 
   });
   const dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupBtn") });
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="data-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
   await dialog.locator("#webdavBackupBtn").click();
   await expect.poll(() => page.evaluate(() => window.__webdavStages.some((stage) => stage.stage === "合计" && stage.result === "success"))).toBe(true);
   const result = await page.evaluate(() => ({ requests: window.__webdavRequests, stages: window.__webdavStages, loading: Boolean(document.querySelector(".loading-container")) }));
@@ -124,7 +125,7 @@ test("WebDAV delete confirmation renders an external filename as text on desktop
   }, fileName);
   const settings = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
   await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await settings.locator('.side-menu-item[data-panel="data-panel"]').click();
+  await clickSettingsCategory(settings.locator('.side-menu-item[data-panel="data-panel"]'));
   await settings.locator("#webdavBackupListBtn").click();
   const deleteButton = testInfo.project.name === "mobile" ? page.locator(".jhs-backup-btn-danger") : page.locator(".backup-delete");
   await expect(deleteButton).toBeVisible();

@@ -101,7 +101,7 @@ export class JavBusPreviewController {
         if (!galleryElement) return;
         this.mounted = true;
         const gallery = $(galleryElement), imageSource = gallery.find(".sample-box .photo-frame img").first().attr("src");
-        const button = $(`<button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65"><div class="photo-frame jhs-layout-87db2275"><img class="video-cover" alt=""><span class="play-icon jhs-play-overlay" aria-hidden="true">${getIcon("play")}</span></div></button>`);
+        const button = $(`<button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65"><div class="photo-frame"><img class="video-cover" alt=""><span class="play-icon jhs-play-overlay" aria-hidden="true">${getIcon("play")}</span></div></button>`);
         if (imageSource) button.find("img.video-cover").attr("src", imageSource);
         button.on("click.jhsBusPreview", (/** @type {MouseEvent} */ event) => {
             event.preventDefault();

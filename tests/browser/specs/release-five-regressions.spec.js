@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { test, expect } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { injectRealLayer } from "../harness/real-layer.js";
@@ -32,7 +33,7 @@ test("resource source and rule deletion confirmations render external names as t
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     const settings=page.locator(".layui-layer").filter({has:page.locator("#resource-sources-panel")});
     await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
-    await settings.locator('.side-menu-item[data-panel="resources-panel"]').click();
+    await clickSettingsCategory(settings.locator('.side-menu-item[data-panel="resources-panel"]'));
     const name='<img src="data:," onerror="document.documentElement.dataset.auditExecuted=String(1)"> & <b>fixture</b>';
     await page.evaluate(name=>{
         const plugin=window.unsafeWindow.pluginManager.getBean("SettingPlugin");
@@ -59,7 +60,7 @@ test("setting keyword removal confirmation renders the saved text literally", as
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     const settings=page.locator(".layui-layer").filter({has:page.locator("#filter-panel")});
     await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
-    await settings.locator('.side-menu-item[data-panel="filtering-panel"]').click();
+    await clickSettingsCategory(settings.locator('.side-menu-item[data-panel="filtering-panel"]'));
     const keyword="<b>fixture</b>";
     await settings.locator("#reviewKeywordContainer .keyword-input").fill(keyword);
     await settings.locator("#reviewKeywordContainer .add-tag-btn").click();
@@ -79,8 +80,10 @@ test("cloud OFF controls persist booleans and exclude both providers", async ({p
     await fulfillHostFixtures(context);await boot(page,{enable123Offline:true,enable115Offline:true});
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
-    await page.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+    await clickSettingsCategory(page.locator('.side-menu-item[data-panel="cloud-panel"]'));
     await page.locator("#enable123Offline").uncheck();await page.locator("#enable115Offline").uncheck();
+    expect(await page.evaluate(() => { const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings"); return [settings.snapshot().enable123Offline, settings.snapshot().enable115Offline]; })).toEqual([true,true]);
+    await page.locator("#saveBtn").click();
     const result=await page.evaluate(async()=>{
         const plugin=window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"),settings=plugin.getRuntimeService("settings");await settings.waitForIdle();
         plugin.registry.providers.get("123").getAvailability=async()=>({available:true,authState:"ready"});
@@ -91,7 +94,7 @@ test("cloud OFF controls persist booleans and exclude both providers", async ({p
     await expect(page.locator("#enable123Offline")).toHaveCount(0);
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
-    await page.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+    await clickSettingsCategory(page.locator('.side-menu-item[data-panel="cloud-panel"]'));
     await expect(page.locator("#enable123Offline")).not.toBeChecked();
     await expect(page.locator("#enable115Offline")).not.toBeChecked();
 });

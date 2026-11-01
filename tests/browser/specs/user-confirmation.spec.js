@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { injectRealLayer } from "../harness/real-layer.js";
@@ -58,9 +59,9 @@ test("Escape ends the WebDAV authorization save without persisting the profile, 
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   const settings = page.locator(".layui-layer").filter({ has: page.locator("#saveBtn") });
   await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await settings.locator('[data-panel="browse-panel"]').click();
+  await clickSettingsCategory(settings.locator('[data-panel="browse-panel"]'));
   await settings.locator("#reviewCount").selectOption("40", { force: true });
-  await settings.locator('[data-panel="data-panel"]').click();
+  await clickSettingsCategory(settings.locator('[data-panel="data-panel"]'));
   await settings.locator("#webDavUrl").fill("https://authorization.example.test/dav");
   await settings.locator("#webDavUsername").fill("synthetic-user");
   await settings.locator("#webDavPassword").fill("synthetic-password");

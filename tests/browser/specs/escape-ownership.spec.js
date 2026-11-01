@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import {test,expect} from "@playwright/test";
 import {fileURLToPath} from "node:url";
 import {fulfillHostFixtures,injectUserscriptRuntime} from "../harness/runtime.js";
@@ -14,7 +15,7 @@ test("settings dropdown consumes first Escape and restores focus before parent c
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
-    await page.locator('[data-panel="appearance-panel"]').click();
+    await clickSettingsCategory(page.locator('[data-panel="appearance-panel"]'));
     const trigger=page.locator("#base-panel .jhs-select-trigger").first();
     await trigger.click();
     await expect(trigger).toBeFocused();

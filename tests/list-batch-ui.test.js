@@ -24,6 +24,14 @@ afterEach(() => {
 });
 
 describe("ListBatchUi", () => {
+    it("disables projected actions without touching host controls with similar attributes", () => {
+        const { document } = setup();
+        document.body.insertAdjacentHTML("beforeend", '<button id="host-action" data-page-action="host"></button><div id="jhs-fab-menu"><button data-page-action="batch-favorite"></button></div>');
+        ui.setButtonsDisabled(true);
+        expect(document.querySelector("#host-action").disabled).toBe(false);
+        expect(document.querySelector("#jhs-fab-menu button").disabled).toBe(true);
+        ui.setButtonsDisabled(false); expect(document.querySelector("#jhs-fab-menu button").disabled).toBe(false);
+    });
     it("resolves confirmation only on accept and treats dialog dismissal as cancel", async () => {
         const { dialog } = setup();
         let options;

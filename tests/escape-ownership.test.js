@@ -11,6 +11,14 @@ function mount() {
     utils.setupEscClose(1);
     return {utils,frame:document.querySelector("iframe").contentDocument};
 }
+it("routes Escape through an optional instance close guard without popping the layer",()=>{
+    const {utils}=mount(), requestClose=vi.fn();
+    utils.setupEscClose(1,{requestClose});
+    document.body.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
+    expect(requestClose).toHaveBeenCalledOnce(); expect(utils.layerIndexStack).toContain(1);
+    expect(document.querySelector("#layui-layer1")).not.toBeNull();
+    layer.close(1); expect(utils.escCloseRequests.size).toBe(0);
+});
 it("respects an Escape event already consumed by a child",()=>{
     const {utils}=mount(),event=jquery.Event("keydown",{key:"Escape"});event.preventDefault();
     utils._handleGlobalEscKey(event);

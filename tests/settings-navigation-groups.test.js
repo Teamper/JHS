@@ -10,6 +10,7 @@ import { SettingsService } from "../src/services/settings-service.js";
 import { Utils } from "../src/core/utils.js";
 import * as templates from "../src/plugins/backup/setting-templates.js";
 
+import { FullSettingsSession } from "../src/ui/settings/full-settings-session.js";
 const $ = jquery;
 let bindings = [];
 beforeEach(() => { vi.stubGlobal("$", $); initializeRuntimeConstants(new URL("https://javdb.com/")); });
@@ -34,6 +35,10 @@ async function fixture(initial = {}) {
     document.body.innerHTML = templates.buildSettingDialogHtml(undefined, [], registry);
     const root = $(document.body);
     templates.injectHealthPanel($, root); templates.injectPluginMgmtPanel($, root); templates.injectSnapshotPanel($, root); templates.injectNetworkPanel($, root); templates.injectResourceSourcesPanel($, root);
+    const session = new FullSettingsSession(settings);
+    plugin._settingsDialog = { session, root, scope: { disposed: false } };
+    root.data("jhsFullSettingsSession", session);
+    bindings.push({ dispose: () => session.dispose() });
     const binding = plugin.hydrateLiveSettings(root); bindings.push(binding);
     await loadSettingForm(plugin.getFormDependencies(), root);
     plugin.bindClick(root);
@@ -72,7 +77,7 @@ describe("settings business navigation", () => {
         expect(root.find("#reviewCount")[0]).toBe(count);
         expect(root.find("#reviewCount").val()).toBe("40");
         expect(stored.setting.reviewCount).toBe("20");
-        expect(stored.setting.autoPage).toBe("yes");
+        expect(stored.setting.autoPage).toBe("no");
         await saveSettingForm(plugin.getFormDependencies(), root);
         expect(stored.setting).toMatchObject({ reviewCount: "40", checkConcurrencyCount: "3", autoPage: "yes" });
         expect(webdav.saveProfile).not.toHaveBeenCalled();

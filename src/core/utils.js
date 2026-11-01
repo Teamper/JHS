@@ -110,9 +110,16 @@ export class Utils {
                 clog.warn("无法检查跨域 iframe 内的预览容器");
             }
         }
-        if (!a) { e.preventDefault(); e.stopImmediatePropagation(); this.layerIndexStack.pop(); layer.close(t); }
+        if (!a) {
+            e.preventDefault(); e.stopImmediatePropagation();
+            const requestClose = this.escCloseRequests?.get(t);
+            if (requestClose) void requestClose();
+            else { this.layerIndexStack.pop(); layer.close(t); }
+        }
     }
-    setupEscClose(e) {
+    setupEscClose(e, { requestClose = null } = {}) {
+        this.escCloseRequests ??= new Map();
+        if (requestClose) this.escCloseRequests.set(e, requestClose);
         this._boundHandler || (this._boundHandler = this._handleGlobalEscKey.bind(this),
         $(document).off("keydown.globalLayerEsc"), $(document).on("keydown.globalLayerEsc", this._boundHandler)),
         -1 === this.layerIndexStack.indexOf(e) && this.layerIndexStack.push(e);
@@ -162,6 +169,7 @@ export class Utils {
         const t = null == e ? this.layerIndexStack[this.layerIndexStack.length - 1] : e;
         if (null == t) return;
         this.layerIndexStack = this.layerIndexStack.filter((n => n !== t));
+        this.escCloseRequests?.delete(t);
         const binding = this.iframeEscBindings.get(t);
         binding && this.releaseIframeEscBinding(t, binding);
     }

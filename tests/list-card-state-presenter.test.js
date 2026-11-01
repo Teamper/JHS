@@ -23,6 +23,16 @@ const evaluation = (overrides = {}) => ({
 
 describe("ListCardStatePresenter", () => {
     afterEach(() => vi.unstubAllGlobals());
+    it("opens text-only rule reasons outside the host link and cleans up when the card is redrawn", () => {
+        const { dom, presenter } = createHarness("javdb", '<div class="movie-list"><article class="item"><a href="/v/test">详情</a><div class="tags"></div></article></div>');
+        const item = dom.window.document.querySelector(".item"), context = { titleKeywords: ["ABC"], actorCarNumToNameMap: new Map([["ABC-123", "<img src=x>"]]), actressCarNumToNameMap: new Map() };
+        presenter.presentCard({ item, carNum: "ABC-123", title: "ABC", evaluation: evaluation(), context });
+        const trigger = item.querySelector(".jhs-card-reason"); expect(trigger.closest("a")).toBeNull(); trigger.click();
+        const panel = dom.window.document.querySelector('[role="dialog"]'); expect(panel.textContent).toContain("<img src=x>"); expect(panel.querySelector("img")).toBeNull();
+        expect(trigger.getAttribute("aria-expanded")).toBe("true");
+        presenter.presentCard({ item, carNum: "ABC-123", title: "ABC", evaluation: evaluation({ flags: {}, visibilityReasons: {} }), context });
+        expect(dom.window.document.querySelector('[role="dialog"]')).toBeNull(); expect(item.querySelector(".jhs-card-reason")).toBeNull(); presenter.dispose(); dom.window.close();
+    });
 
     it("keeps JavDB badge placement, state attributes, and renders external names as text", () => {
         const { dom, adapter, presenter } = createHarness("javdb", '<div class="movie-list"><article class="item"><div class="tags"></div></article></div>');

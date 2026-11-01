@@ -20,7 +20,7 @@ export class BusNavigationController {
         for (const target of targets) {
             const button = this.document.createElement("button");
             button.type = "button";
-            button.className = "jhs-btn btn btn-default jhs-layout-638cb2c9";
+            button.className = "jhs-btn btn btn-default";
             button.id = "search-img-btn";
             button.textContent = "识图";
             button.addEventListener("click", this.handleClick);

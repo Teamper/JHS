@@ -326,6 +326,8 @@ requireMatch(settingPlugin, /previousFocus[\s\S]*isConnected[\s\S]*previousFocus
 requireMatch(settingPlugin, /"Tab"[\s\S]*focusable[\s\S]*shiftKey/, "quick settings must trap focus in both directions");
 
 const sourceFiles = await listJavaScriptFiles(srcRoot);
+const layoutDefinitions = new Set();
+const layoutReferences = new Map();
 const zIndexBody = theme.match(/const JHS_Z_INDEX = Object\.freeze\(\{([\s\S]*?)\}\);/)?.[1] || "";
 const zIndexKeys = new Set([...zIndexBody.matchAll(/^\s*([A-Za-z][\w]*)\s*:/gm)].map((match => match[1])));
 const toKebab = value => value.replace(/[A-Z]/g, (letter => `-${letter.toLowerCase()}`));
@@ -337,6 +339,8 @@ for (const file of sourceFiles) {
   const count = source.match(/\sstyle\s*=\s*["'`]/g)?.length ?? 0;
   inlineStyleCount += count;
   const path = relative(repoRoot, file).replaceAll("\\", "/");
+  for (const match of source.matchAll(/\.(jhs-layout-[a-f0-9]{8})\s*\{/g)) layoutDefinitions.add(match[1]);
+  for (const match of source.matchAll(/\bjhs-layout-[a-f0-9]{8}\b/g)) layoutReferences.set(match[0], path);
   const selects = source.match(/<select\b[^>]*>/g) || [];
   selectCount += selects.length;
   for (const select of selects) if (!/\bjhs-select-source\b/.test(select)) failures.push(`${path} contains an unenhanced select`);
@@ -374,6 +378,7 @@ for (const file of sourceFiles) {
     `${path} contains a forbidden bounce animation or negative menu offset`);
   forbidMatch(source, /(?:search|searchstr)[^\n]{0,80}undefined(?:\.html)?/i, `${path} can construct an undefined search URL`);
 }
+for (const [name, path] of layoutReferences) if (!layoutDefinitions.has(name)) failures.push(`${path} references undefined layout utility ${name}`);
 requireMatch(settingRenderer, /descriptor\.type === "select"[\s\S]*<select class="jhs-select-source"/, "descriptor selects must use the enhanced source class");
 const settingController = await readFile(join(srcRoot, "plugins", "backup", "setting.js"), "utf8");
 requireMatch(settingController, /JhsSelect\.refreshAll\(e\)/, "all rendered settings selects must be enhanced after hydration");

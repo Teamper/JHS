@@ -36,6 +36,8 @@ export function buildCarNumCell(carNum, documentRuntime = document) {
     button.type = "button";
     button.className = "jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param";
     button.textContent = value.substring(0, i + 1);
+    button.setAttribute("aria-label", `按此前缀筛选：${button.textContent}`);
+    button.title = `按此前缀筛选：${button.textContent}`;
     wrapper.className = "jhs-history-car-number";
     wrapper.appendChild(button), wrapper.appendChild(documentRuntime.createTextNode(value.substring(i + 1)));
     return wrapper;

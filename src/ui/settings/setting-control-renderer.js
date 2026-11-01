@@ -16,7 +16,7 @@ function normalizeBooleanValue(key, value) {
     return parseBooleanSetting(value, false);
 }
 
-/** @typedef {{ value?: unknown, onChange?: ((value: unknown) => void) | null }} ControlOptions */
+/** @typedef {{ value?: unknown, onChange?: ((value: unknown) => void) | null, deferred?: boolean }} ControlOptions */
 
 /** Build the raw control element for a descriptor. @param {Record<string, any>} descriptor @param {ControlOptions} [options] */
 export function renderSettingControl(descriptor, options = {}) {
@@ -25,7 +25,7 @@ export function renderSettingControl(descriptor, options = {}) {
     const onChange = options.onChange ?? null;
     /** @type {any} */ let control;
     if (descriptor.type === "boolean") {
-        control = jq('<input type="checkbox" class="mini-switch" role="switch">').prop("checked", normalizeBooleanValue(descriptor.key, value));
+        control = jq(options.deferred ? '<input type="checkbox" class="jhs-checkbox">' : '<input type="checkbox" class="mini-switch" role="switch">').prop("checked", normalizeBooleanValue(descriptor.key, value));
         control.on("change", () => { onChange?.(control.is(":checked") ? "yes" : "no"); });
         return { root: control, getValue: () => control.is(":checked") ? "yes" : "no", setValue: /** @param {unknown} next */ (next) => control.prop("checked", normalizeBooleanValue(descriptor.key, next)) };
     }
@@ -54,12 +54,13 @@ export function renderSettingControl(descriptor, options = {}) {
 /** Build a canonical jhs-setting-row for a descriptor. @param {Record<string, any>} descriptor @param {ControlOptions & { value?: unknown, layout?: "compact" | "stacked" | "action" }} [options] */
 export function renderSettingRow(descriptor, options = {}) {
     const jq = /** @type {any} */ (globalThis).$;
-    const rendered = renderSettingControl(descriptor, { value: options.value, onChange: options.onChange });
+    const rendered = renderSettingControl(descriptor, { value: options.value, onChange: options.onChange, deferred: options.deferred });
     const id = `jhs-setting-control-${++nextControlId}`;
     const copy = jq('<span class="jhs-setting-row__copy"></span>')
         .append(jq('<span class="jhs-setting-row__label"></span>').attr("id", `${id}-label`).text(descriptor.label));
     rendered.root.attr({ id, "aria-labelledby": `${id}-label` });
-    if (descriptor.description) {
+    const redundantFullHelp = ["hoverBigImg", "enableVerticalModel", "needClosePage", "enableMagnetsFilter", "offlineProviderMode", "enable115Match", "translateTitle", "enableLoadOtherSite"];
+    if (descriptor.description && !(options.deferred && redundantFullHelp.includes(descriptor.key))) {
         copy.append(jq('<span class="jhs-setting-row__description"></span>').attr("id", `${id}-description`).text(descriptor.description));
         rendered.root.attr("aria-describedby", `${id}-description`);
     }

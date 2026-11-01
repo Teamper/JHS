@@ -131,7 +131,7 @@ export function registerDefaultSettings(registry) {
     // ---- 资源/高级（完整设置面板自行管理交互，仅注册 descriptor） ----
     registry.register({ key: "screenshotMode", owner: "ScreenshotFeature", label: "截图来源模式", type: "select", defaultValue: "auto", effect: "manual", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动选择" }, { value: "manual", label: "手动选择" }]) });
     registry.register({ key: "screenshotProviders", owner: "ScreenshotFeature", label: "截图来源", type: "json", defaultValue: [], effect: "manual", surfaces: ["full"] });
-    registry.register({ key: "enableClog", owner: "CoreFeature", label: "日志", type: "select", defaultValue: yes, effect: "live", surfaces: ["full"], options: Object.freeze([{ value: yes, label: "开启" }, { value: no, label: "关闭" }]) });
+    registry.register({ key: "enableClog", owner: "CoreFeature", label: "日志", type: "boolean", defaultValue: yes, effect: "live", surfaces: ["full"], options: Object.freeze([{ value: yes, label: "开启" }, { value: no, label: "关闭" }]) });
     registry.register({ key: "videoMuted", owner: "PreviewVideoFeature", label: "视频默认静音", type: "boolean", defaultValue: true, effect: "live", surfaces: [] });
 
     // ---- 云盘服务（与完整设置的云盘面板共用 Catalog / Binding） ----
@@ -158,12 +158,12 @@ export function registerDefaultSettings(registry) {
         surfaces: ["full"], section: "cloud", defaultValue: false, normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, false),
     });
     registry.register({
-        key: "oneOneFiveConcurrency", owner: "OfflineFeature", label: "匹配并发数", description: "范围 1–10，立即生效",
+        key: "oneOneFiveConcurrency", owner: "OfflineFeature", label: "匹配并发数", description: "范围 1–10",
         type: "number", defaultValue: 4, effect: "live", surfaces: ["full"], section: "cloud",
         min: 1, max: 10, step: 1, normalize: (/** @type {unknown} */ value) => normalizeInteger(value, 4, 1, 10),
     });
     registry.register({
-        key: "oneOneFiveCacheMinutes", owner: "OfflineFeature", label: "匹配缓存（分钟）", description: "范围 1–1440 分钟，立即生效",
+        key: "oneOneFiveCacheMinutes", owner: "OfflineFeature", label: "匹配缓存（分钟）", description: "范围 1–1440 分钟",
         type: "number", defaultValue: 60, effect: "live", surfaces: ["full"], section: "cloud",
         min: 1, max: 1440, step: 1, normalize: (/** @type {unknown} */ value) => normalizeInteger(value, 60, 1, 1440),
     });

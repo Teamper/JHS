@@ -15,7 +15,7 @@ export async function seed(page){
 }
 export async function boot(page,context,theme,options={}){
   await page.clock.setFixedTime(new Date("2026-10-04T08:00:00Z"));
-  await fulfillHostFixtures(context); await context.route("https://images.example.test/**",route=>route.fulfill({contentType:"image/svg+xml",body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#63768c"/><text x="30" y="220" fill="white" font-size="44">JHS cover fixture</text></svg>'})); await page.goto("https://javdb.com/");
+  await fulfillHostFixtures(context); await context.route("https://images.example.test/**",route=>route.fulfill({contentType:"image/svg+xml",body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#63768c"/><text x="30" y="220" fill="white" font-size="44">JHS cover fixture</text></svg>'})); await page.goto(options.url || "https://javdb.com/");
   await injectUserscriptRuntime(page,{...options,hostStyles:true,realFeedback:true,beforeUserscriptInjection:async page=>{await injectRealLayer(page);await seed(page);},settingOverrides:{themeMode:theme,enableCheckBlacklist:"yes",enableCheckFavoriteActress:"yes",enableCheckNewVideo:"yes",enableLoadPreviewVideo:"no",enableLoadReview:"no",enableLoadOtherSite:"no",defaultQuickFilterTab:"all",magnetTagRules:JSON.stringify([{id:"ui-tag",name:"字幕优先",type:"contains",pattern:"中字",tag:"字幕",weight:20}]),magnetFilterRules:JSON.stringify([{id:"ui-filter",name:"排除低质量资源",type:"contains",pattern:"低清",action:"hide"}])}});
   await page.waitForFunction(()=>window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.service);
 }

@@ -14,7 +14,7 @@ export const HISTORY_BASE_STYLES = `                .jhs-history-layout { displa
                 textarea.jhs-history-edit-field { min-height:60px; overflow-y:hidden; }
             `;
 
-export const HISTORY_DETAIL_STYLES = `.jhs-history-car-number { display:inline-flex; align-items:center; white-space:nowrap; }
+export const HISTORY_DETAIL_STYLES = `.jhs-history-car-number { display:inline-flex; align-items:center; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .jhs-table .tabulator-responsive-collapse { background:inherit!important; border-top:1px solid var(--jhs-border); border-bottom:1px solid var(--jhs-border); color:var(--jhs-text); }
 .jhs-history-more-icon { display:none; }
 .jhs-history-dialog .jhs-table .jhs-history-choice-cell { padding:0; justify-content:center; }

@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -232,7 +233,7 @@ test("cloud settings dependency status belongs only to the 115 sibling section",
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     const root = page.locator(".layui-layer");
     await expect(root.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-    await root.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+    await clickSettingsCategory(root.locator('.side-menu-item[data-panel="cloud-panel"]'));
     return root;
   })();
   await expect(dialog.locator("#one-one-five-state")).toBeVisible();
@@ -252,12 +253,13 @@ test("cloud settings save and reopen retains the canonical provider value", asyn
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     const root = page.locator(".layui-layer");
     await expect(root.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-    await root.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+    await clickSettingsCategory(root.locator('.side-menu-item[data-panel="cloud-panel"]'));
     await expect(root.locator("#cloud-settings-catalog")).toBeVisible();
     return root;
   };
   let dialog = await openCloud();
   await dialog.locator("#offlineProviderMode").selectOption("115", { force: true });
+  await dialog.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().offlineProviderMode)).toBe("115");
   await page.evaluate(() => window.layer.closeAll());
   dialog = await openCloud();
@@ -268,20 +270,22 @@ test("cloud settings reject invalid numeric input by persisting the normalized f
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers settings normalization");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
-  await injectUserscriptRuntime(page);
+  await injectUserscriptRuntime(page, { settingOverrides: { oneOneFiveCacheMinutes: 30 } });
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   const dialog = page.locator(".layui-layer");
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
+  await expect(dialog.locator("#oneOneFiveCacheMinutes")).toHaveValue("30");
   await dialog.locator("#oneOneFiveCacheMinutes").evaluate((input) => {
     input.value = "";
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  await dialog.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(60);
   await expect(dialog.locator("#oneOneFiveCacheMinutes")).toHaveValue("60");
 });
 
-test("cloud settings restore the saved value when persistence fails", async ({ context, page }, testInfo) => {
+test("cloud settings retain the draft and committed value when saving fails", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers cloud settings rollback");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
@@ -289,21 +293,22 @@ test("cloud settings restore the saved value when persistence fails", async ({ c
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   const dialog = page.locator(".layui-layer");
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
   const input = dialog.locator("#oneOneFiveConcurrency");
   await expect(input).toHaveValue("4");
   await page.evaluate(() => {
     const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
-    const originalSet = settings.set.bind(settings);
-    settings.set = (key, value) => key === "oneOneFiveConcurrency" ? Promise.reject(new Error("synthetic storage failure")) : originalSet(key, value);
+    settings.update = () => Promise.reject(new Error("synthetic storage failure"));
   });
   await input.fill("8");
   await input.dispatchEvent("change");
-  await expect(input).toHaveValue("4");
+  await dialog.locator("#saveBtn").click();
+  await expect(input).toHaveValue("8");
+  await expect(dialog.locator("#settings-draft-status")).toContainText("未保存");
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(4);
   await page.evaluate(() => window.layer.closeAll());
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
   await expect(dialog.locator("#oneOneFiveConcurrency")).toHaveValue("4");
 });

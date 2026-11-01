@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { injectRealLayer } from "../harness/real-layer.js";
@@ -18,11 +19,13 @@ for (const defaultQuickFilterTab of ["blockedItems", "filter"]) test(`blocked de
     await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").waitForIdle();
   });
   await expect(select).toHaveValue("undownloaded");
+  await page.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().defaultQuickFilterTab)).toBe("undownloaded");
   await page.evaluate(async () => {
     window.jQuery("#defaultQuickFilterTab").val("blockedItems").trigger("change");
     await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").waitForIdle();
   });
+  await page.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().defaultQuickFilterTab)).toBe("blockedItems");
 });
 
@@ -579,16 +582,20 @@ test("cloud settings use the canonical catalog and persist normalized numeric va
   const openCloud = async () => {
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
     await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-    await page.locator('.layui-layer .side-menu-item[data-panel="cloud-panel"]').click();
+    await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="cloud-panel"]'));
     await expect(page.locator(".layui-layer #cloud-settings-catalog")).toBeVisible();
   };
   await openCloud();
   await expect(page.locator(".layui-layer #cloud-settings-catalog .jhs-setting-row")).toHaveCount(7);
   await page.locator(".layui-layer #oneOneFiveConcurrency").fill("99");
   await page.locator(".layui-layer #oneOneFiveConcurrency").press("Tab");
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(10);
+  await expect(page.locator(".layui-layer #oneOneFiveConcurrency")).toHaveValue("10");
+  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).not.toBe(10);
   await page.locator(".layui-layer #oneOneFiveCacheMinutes").fill("4.8");
   await page.locator(".layui-layer #oneOneFiveCacheMinutes").press("Tab");
+  await expect(page.locator(".layui-layer #oneOneFiveCacheMinutes")).toHaveValue("5");
+  await page.locator(".layui-layer #saveBtn").click();
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(10);
   await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(5);
   await page.evaluate(() => window.layer.closeAll());
   await expect(page.locator(".layui-layer")).toHaveCount(0);

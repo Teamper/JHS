@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -70,7 +71,7 @@ for (const theme of ["light", "dark"]) {
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     const reports = [];
     for (const group of groups) {
-      await dialog.locator(`[data-panel="${group}-panel"]`).click();
+      await clickSettingsCategory(dialog.locator(`[data-panel="${group}-panel"]`));
       const panel = dialog.locator(`#${group}-panel`);
       await expect(panel).toBeVisible();
       await page.mouse.move(0, 0);
@@ -98,8 +99,11 @@ for (const theme of ["light", "dark"]) {
     const normal = reports.filter(report => report.state === "normal");
     expect(normal.flatMap(report => report.fields).filter(field => field.trigger).length).toBeGreaterThan(0);
     expect(normal.flatMap(report => report.fields).filter(field => !field.trigger).length).toBeGreaterThan(0);
-    expect(normal.flatMap(report => report.switches).filter(control => control.checked).length).toBeGreaterThan(0);
-    expect(normal.flatMap(report => report.switches).filter(control => !control.checked).length).toBeGreaterThan(0);
+    const choices = dialog.locator('input[type="checkbox"]');
+    expect(await choices.count()).toBeGreaterThan(0);
+    await expect(dialog.locator('input[role="switch"]')).toHaveCount(0);
+    const states = await choices.evaluateAll(nodes => nodes.map(node => node.checked));
+    expect(states.includes(true)).toBe(true); expect(states.includes(false)).toBe(true);
     await info.attach(`computed-control-contrast-${theme}.json`, { body: JSON.stringify(reports, null, 2), contentType: "application/json" });
   });
 }

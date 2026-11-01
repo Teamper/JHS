@@ -169,6 +169,7 @@ export class ListController {
         const presenter = this.cardStatePresenter, detachCardStatePresenter = this.detachCardStatePresenter;
         this.scope.addCleanup(() => {
             detachCardStatePresenter?.();
+            presenter?.dispose();
             if (this.cardStatePresenter === presenter) this.cardStatePresenter = null;
             if (this.detachCardStatePresenter === detachCardStatePresenter) this.detachCardStatePresenter = null;
         });
@@ -448,6 +449,7 @@ export class ListController {
         this.filterContextProvider = null;
         this.detachCardStatePresenter?.();
         this.detachCardStatePresenter = null;
+        this.cardStatePresenter?.dispose();
         this.cardStatePresenter = null;
         this.legacyPlugin.setSortController?.(null);
         this.styleRelease?.();

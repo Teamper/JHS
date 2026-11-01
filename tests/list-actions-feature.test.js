@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ListActionsController } from "../src/features/list/list-actions-controller.js";
 import { ListSortController } from "../src/features/list/list-sort-controller.js";
+import { tryBeginBatchRun, endBatchRun } from "../src/features/list/batch-coordinator.js";
 
 function createHarness({
     url = "https://javdb.com/",
@@ -54,6 +55,21 @@ function createDeferredSortHarness() {
 describe("native list actions controller", () => {
     let harness;
     afterEach(() => { harness?.scope.dispose(); harness = null; });
+    it("shares native and projected actions, validates async actor context and blocks duplicate batches", async () => {
+        harness = createHarness({ url: "https://javdb.com/actors/a", html: '<div class="toolbar"></div><div class="actor-section-name">Actor</div>', blacklist: { getActressPageInfo: async () => ({ starId: "a", name: "Actor" }), addBlacklist: vi.fn() }, records: [{ starId: "a" }] });
+        await harness.controller.start();
+        expect(harness.$("#addBlacklistBtn").text()).toBe("已加入黑名单");
+        const actions = await harness.controller.getPageActions();
+        expect(actions.map(action => action.id)).toEqual(["batch-favorite", "batch-downloaded", "batch-block", "blacklist-add"]);
+        const execute = vi.spyOn(harness.controller, "executePageAction"); harness.$("#favoriteAllVideo").trigger("click");
+        await vi.waitFor(() => expect(harness.controller.list.batchSaveAllVideos).toHaveBeenCalledOnce()); expect(execute).toHaveBeenCalledWith("batch-favorite");
+        expect(harness.controller.list.batchSaveAllVideos).toHaveBeenCalledWith({ kind: "actor", displayName: "Actor", recordName: "Actor" }, "favorite");
+        const run = tryBeginBatchRun();
+        try {
+            expect((await harness.controller.getPageActions()).every(action => !action.enabled)).toBe(true);
+            await harness.controller.executePageAction("batch-downloaded"); expect(harness.controller.list.batchSaveAllVideos).toHaveBeenCalledOnce();
+        } finally { endBatchRun(run); }
+    });
 
     it("mounts capability-dependent actions and routes batch operations through List Feature", async () => {
         harness = createHarness({

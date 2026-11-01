@@ -7,7 +7,7 @@ export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.clog, SERVICE.titleKeywords, SERVICE.state, SERVICE.settings, SERVICE.storageMutation, SERVICE.notifications, SERVICE.dialog, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clipboard, SERVICE.navigation, SERVICE.screenshot, SERVICE.movie],
     contributes: ["list.core", "list.auto-page", "detail.fc2-navigation", "list.fold-category", "list.actions", "detail.javbus-images", "detail.cover-state-actions"],
-    providesCommands: ["list.current-page-summary", "list.set-quick-filter"],
+    providesCommands: ["list.current-page-summary", "list.set-quick-filter", "list.get-page-actions", "list.execute-page-action"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const [
             { ListActionsController },
@@ -216,6 +216,8 @@ export default defineFeature({
         return {
             activeContributions,
             commands: {
+                "list.get-page-actions": () => listActionsController?.getPageActions() ?? [],
+                "list.execute-page-action": (/** @type {string} */ action, /** @type {any} */ event) => listActionsController?.executePageAction(action, event),
                 "list.current-page-summary": () => listCompatibilityService?.getCurrentPageSummary?.() ?? { blockedItems: 0 },
                 "list.set-quick-filter": (/** @type {string} */ filter) => listCompatibilityService?.setQuickFilter?.(filter),
             },

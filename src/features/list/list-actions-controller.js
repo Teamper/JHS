@@ -4,6 +4,7 @@ import { OwnedPopover } from "../../core/owned-popover.js";
 import { _, d, g, h } from "../../core/constants.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { isHardHidden } from "./list-filters.js";
+import { isBatchRunActive } from "./batch-coordinator.js";
 
 /** @typedef {import("../../core/lifecycle-scope.js").LifecycleScope} LifecycleScope */
 /** @typedef {{ starId?: string }} BlacklistRecord */
@@ -131,7 +132,7 @@ export class ListActionsController {
         const actorInfo = () => this.blacklist?.getActressPageInfo?.() ?? this.list?.getActressPageInfo?.() ?? {};
         let blacklistLabel = "加入黑名单", blacklistClass = "jhs-btn--filter";
         if (isActorPage && hasBlacklist) {
-            const info = actorInfo();
+            const info = await actorInfo();
             if (await this.isBlacklisted(info.starId)) {
                 blacklistLabel = "已加入黑名单";
                 blacklistClass = "jhs-btn--muted";
@@ -147,7 +148,7 @@ export class ListActionsController {
             const sortTitle = `当前排序方式: ${initialSort === "rateCount" ? "评价人数" : initialSort === "date" ? "时间" : "默认"}`;
             const suppressSort = this.sortController?.isRestrictedContext?.() ?? (pageUrl.href.includes("/search?q") || pageUrl.pathname.includes("/search/") || pageUrl.pathname.includes("/users/"));
             const actorActions = isActorPage && hasBlacklist
-                ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${blacklistClass}" data-tip="屏蔽此演员及其后续影片"><span>${blacklistLabel}</span></button><button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="屏蔽当前分类的影片"><span>批量屏蔽</span></button>`
+                ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${blacklistClass}" data-tip="屏蔽此演员及其后续影片"><span>${blacklistLabel}</span></button><button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--filter" data-tip="屏蔽当前分类的影片"><span>批量屏蔽</span></button>`
                 : "";
             const batchActions = hasList
                 ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button><button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button>`
@@ -161,7 +162,7 @@ export class ListActionsController {
         } else {
             const initialSort = this.activeSortMethod();
             const actorActions = isActorPage && hasBlacklist
-                ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${blacklistClass}" data-tip="屏蔽此演员及其后续影片"><span>${blacklistLabel}</span></button><button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="屏蔽当前分类的影片"><span>批量屏蔽</span></button>`
+                ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${blacklistClass}" data-tip="屏蔽此演员及其后续影片"><span>${blacklistLabel}</span></button><button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--filter" data-tip="屏蔽当前分类的影片"><span>批量屏蔽</span></button>`
                 : "";
             const batchActions = hasList
                 ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button><button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button>`
@@ -227,17 +228,51 @@ export class ListActionsController {
         $("#blacklistBtn").on("click.jhsListActions", () => this.blacklist?.openBlacklistDialog?.());
         this.bindSortMenu();
         $("#addBlacklistBtn").on("click.jhsListActions", (/** @type {any} */ event) => {
-            void Promise.resolve(this.blacklist?.addBlacklist?.(event)).catch((error) => this.recordError("加入黑名单失败", error));
+            void this.executePageAction("blacklist-add", event).catch((error) => this.recordError("加入黑名单失败", error));
         });
-        $("#filterAllVideo").on("click.jhsListActions", async () => {
+        for (const [selector, action] of [["#filterAllVideo", "batch-block"], ["#favoriteAllVideo", "batch-favorite"], ["#hasDownAllVideo", "batch-downloaded"]]) {
+            $(selector).on("click.jhsListActions", () => { void this.executePageAction(action).catch(error => this.recordError("批量操作失败", error)); });
+        }
+    }
+
+    /** The Feature owns availability; every surface executes these same actions. */
+    async getPageActions() {
+        if (this.disposed || this.scope.disposed) return [];
+        const path = new URL(this.hostAdapter.location.href).pathname;
+        const actor = this.hostAdapter.site === "javdb" ? path.includes("/actors/") : path.includes("/star/");
+        const tag = this.hostAdapter.site === "javdb" && path.includes("/tags");
+        const busy = isBatchRunActive();
+        const actions = [];
+        if (this.list) actions.push(
+            { id: "batch-favorite", label: "批量收藏", group: "batch", enabled: !busy },
+            { id: "batch-downloaded", label: "批量标记已下载", group: "batch", enabled: !busy },
+        );
+        if (actor && this.blacklist) actions.push({ id: "batch-block", label: "批量屏蔽", group: "batch", enabled: !busy });
+        if ((actor || tag) && this.blacklist) {
+            const info = await this.blacklist.getActressPageInfo?.() ?? {};
+            const added = await this.isBlacklisted(info.starId);
+            actions.push({ id: "blacklist-add", label: added ? "已加入黑名单" : "加入黑名单", group: "context", enabled: !busy });
+        }
+        return this.disposed || this.scope.disposed ? [] : actions.map(action => ({ ...action, enabled: !isBatchRunActive() }));
+    }
+
+    /** @param {string} action @param {any} [event] */
+    async executePageAction(action, event = null) {
+        const available = (await this.getPageActions()).find(item => item.id === action);
+        if (!available?.enabled || this.disposed || this.scope.disposed || isBatchRunActive()) return;
+        if (action === "blacklist-add") return this.blacklist?.addBlacklist?.(event);
+        if (action === "batch-block") {
             const name = this.getActorName();
             if (!name) return this.notifications.error("获取演员名称失败");
-            /** @type {{kind: "actor", displayName: string, recordName: string}} */
-            const batchScope = { kind: "actor", displayName: String(name), recordName: String(name) };
-            await this.runBatch(d, "批量屏蔽失败", batchScope);
-        });
-        $("#favoriteAllVideo").on("click.jhsListActions", () => { void this.runBatch(h); });
-        $("#hasDownAllVideo").on("click.jhsListActions", () => { void this.runBatch(g); });
+            return this.runBatch(d, "批量屏蔽失败", { kind: "actor", displayName: name, recordName: name });
+        }
+        const batchScope = this.buildBatchScope();
+        if (batchScope.kind === "actor") {
+            const info = await this.blacklist?.getActressPageInfo?.() ?? this.list?.getActressPageInfo?.() ?? {};
+            batchScope.displayName = batchScope.recordName = info.name || this.getActorName();
+            if (this.disposed || this.scope.disposed) return;
+        }
+        return this.runBatch(action === "batch-favorite" ? h : g, "批量列表操作失败", batchScope);
     }
 
     /** @param {string} flag @param {string} [errorMessage] @param {{kind?: "actor" | "search", displayName?: string, recordName?: string}} [batchScope] */
@@ -315,6 +350,7 @@ export class ListActionsController {
         return this.$(selector).text().trim().split(",")[0].replace("(無碼)", "");
     }
 
+    /** @returns {{kind: "actor" | "search", displayName: string, recordName: string}} */
     buildBatchScope() {
         const path = this.hostAdapter.location.pathname;
         const isActorPage = this.hostAdapter.site === "javdb" ? path.includes("/actors/") : path.includes("/star/");

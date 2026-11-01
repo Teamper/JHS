@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import {test,expect} from "@playwright/test";
 import {boot} from "../harness/ui-root-scenes.js";
 import {mkdir} from "node:fs/promises";
@@ -6,7 +7,7 @@ import {resolve} from "node:path";
 async function capture(page,info,name){
   const folder=resolve("../../output/ui-root-fix",info.project.name); await mkdir(folder,{recursive:true});
   await page.screenshot({path:resolve(folder,`${name}.png`)});
-  if(process.env.JHS_VISUAL_REGRESSION==="1" && ["desktop-wide","mobile"].includes(info.project.name)) await expect(page).toHaveScreenshot(`root-${name}.png`,{maxDiffPixelRatio:.02});
+  if(process.env.JHS_VISUAL_REGRESSION==="1" && ["desktop-wide","mobile"].includes(info.project.name)) await expect.soft(page).toHaveScreenshot(`root-${name}.png`,{maxDiffPixelRatio:.02});
 }
 async function contained(locator){
   const bad=await locator.evaluate(root=>[...root.querySelectorAll('.jhs-field,.jhs-select-trigger,.jhs-choice,.jhs-metric,.nv-card,.jhs-record-card')].filter(node=>node.getBoundingClientRect().width && node.scrollWidth>node.clientWidth+2).map(node=>node.className));
@@ -17,15 +18,15 @@ for(const theme of ["light","dark"]){
     await boot(page,context,theme);
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("car-number-import-panel"));
     const dialog=page.locator('.layui-layer').last(); await expect(dialog.locator('#saveBtn')).toHaveAttribute('data-jhs-settings-ready','true');
-    await dialog.locator('[data-panel="data-panel"]').click();
+    await clickSettingsCategory(dialog.locator('[data-panel="data-panel"]'));
     const textarea=dialog.locator('textarea').filter({visible:true}).last(); await textarea.scrollIntoViewIfNeeded();
     const geometry=await textarea.evaluate(node=>({input:node.getBoundingClientRect().width,row:node.closest('.jhs-setting-row').getBoundingClientRect().width}));
     expect(geometry.input).toBeGreaterThan(geometry.row*.9); await contained(dialog); await capture(page,info,`settings-data-${theme}`);
-    await dialog.locator('[data-panel="resources-panel"]').click();
+    await clickSettingsCategory(dialog.locator('[data-panel="resources-panel"]'));
     const source=dialog.locator('.jhs-resource-card').first(); await source.scrollIntoViewIfNeeded();
     const alignment=await source.evaluate(node=>{const toggle=node.querySelector('input[type=checkbox]').getBoundingClientRect(),test=node.querySelector('.jhs-source-test').getBoundingClientRect();return Math.abs((toggle.top+toggle.bottom)/2-(test.top+test.bottom)/2);});
     expect(alignment).toBeLessThan(4); await capture(page,info,`settings-sources-${theme}`);
-    await dialog.locator('[data-panel="browse-panel"]').click();
+    await clickSettingsCategory(dialog.locator('[data-panel="browse-panel"]'));
     const trigger=dialog.locator('.jhs-select-trigger:visible').last(); await trigger.scrollIntoViewIfNeeded(); await trigger.click();
     const menu=page.locator('body > .jhs-owned-popover'); await expect(menu).toBeVisible();
     const bounds=await menu.boundingBox(), viewport=page.viewportSize();
@@ -36,6 +37,7 @@ for(const theme of ["light","dark"]){
     await page.setViewportSize(viewport);
     await page.keyboard.press('End'); await page.keyboard.press('Home'); await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0); await expect(trigger).toBeFocused(); await expect(dialog).toBeVisible();
+    await expect(dialog.locator('#saveBtn')).toHaveAttribute('data-jhs-dirty-count','0');
     await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0);
   });
   test(`rich new works and actor editing ${theme}`,async({page,context},info)=>{

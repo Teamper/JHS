@@ -2,7 +2,7 @@
 
 import { requestCancelBatchRun } from "./batch-coordinator.js";
 
-export const LIST_BATCH_UI_STYLES = `.jhs-batch-progress{position:fixed;right:16px;bottom:16px;z-index:var(--jhs-z-modal);display:flex;align-items:center;gap:var(--jhs-space-2);padding:var(--jhs-space-2) var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md);background:var(--jhs-surface);color:var(--jhs-text);box-shadow:var(--jhs-shadow-md)}.jhs-btn.jhs-batch-busy{opacity:.55;cursor:not-allowed}`;
+export const LIST_BATCH_UI_STYLES = `.jhs-batch-progress{position:fixed;right:16px;bottom:16px;max-width:calc(100vw - 32px);box-sizing:border-box;z-index:var(--jhs-z-modal);display:flex;align-items:center;gap:var(--jhs-space-2);padding:var(--jhs-space-2) var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md);background:var(--jhs-surface);color:var(--jhs-text);box-shadow:var(--jhs-shadow-md)}.jhs-batch-progress__label{min-width:0;overflow-wrap:anywhere}.jhs-batch-progress .jhs-btn{flex:none}html.jhs-fab-mounted .jhs-batch-progress{bottom:calc(92px + env(safe-area-inset-bottom,0px))}.jhs-btn.jhs-batch-busy{opacity:.55;cursor:not-allowed}`;
 
 /** Native Feature-owned confirmation and progress presentation for cross-page batch work. */
 export class ListBatchUi {
@@ -15,6 +15,7 @@ export class ListBatchUi {
         /** @type {Map<HTMLElement, () => void>} */ this.progressCleanups = new Map();
         /** @type {Map<HTMLElement, ReturnType<typeof setTimeout>>} */ this.progressTimers = new Map();
         /** @type {Set<() => void>} */ this.confirmClosers = new Set();
+        /** @type {ResizeObserver | null} */ this.progressObserver = null;
         this.disposed = false;
     }
 
@@ -80,6 +81,10 @@ export class ListBatchUi {
         cancel.addEventListener("click", onCancel);
         progress.append(label, cancel);
         this.document.body.append(progress);
+        const measure = () => this.document.documentElement.style.setProperty("--jhs-batch-clearance", `${Math.ceil(progress.getBoundingClientRect().height) + 12}px`);
+        const Observer = this.document.defaultView?.ResizeObserver;
+        if (Observer) { this.progressObserver = new Observer(measure); this.progressObserver.observe(progress); }
+        measure();
         this.progressCleanups.set(progress, () => cancel.removeEventListener("click", onCancel));
         return progress;
     }
@@ -124,6 +129,8 @@ export class ListBatchUi {
     /** @param {any} progress */
     removeProgress(progress) {
         if (!progress) return;
+        this.progressObserver?.disconnect(); this.progressObserver = null;
+        this.document.documentElement.style.removeProperty("--jhs-batch-clearance");
         const element = /** @type {HTMLElement} */ (progress);
         const timer = this.progressTimers.get(element);
         if (timer != null) clearTimeout(timer);
@@ -135,8 +142,9 @@ export class ListBatchUi {
 
     /** @param {boolean} disabled */
     setButtonsDisabled(disabled) {
-        this.document.querySelectorAll("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").forEach((element) => {
+        this.document.querySelectorAll("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo, #jhs-fab-menu [data-page-action]").forEach((element) => {
             element.setAttribute("aria-disabled", String(disabled));
+            if (element instanceof (/** @type {Window & typeof globalThis} */ (this.document.defaultView)).HTMLButtonElement) element.disabled = disabled;
             element.classList.toggle("jhs-batch-busy", disabled);
         });
     }

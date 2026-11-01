@@ -232,7 +232,7 @@ export class ListCategoryFoldController {
     createFoldButton(sectionButton) {
         const button = this.document.createElement("button");
         button.type = "button";
-        button.className = `jhs-btn jhs-btn--ghost ${sectionButton ? "jhs-layout-2100e73d" : "jhs-layout-3a1fc324"} jhs-fold-category-btn`;
+        button.className = `jhs-btn jhs-btn--ghost ${sectionButton ? "jhs-layout-2100e73d" : ""} jhs-fold-category-btn`;
         button.setAttribute("aria-label", "折叠已选分类");
         const label = this.document.createElement("span"), icon = this.document.createElement("i");
         button.append(label, icon);

@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { isolatedDav, sharedUserscriptInstallation } from "../harness/sync-dav.js";
@@ -7,7 +8,7 @@ async function openSettings(page) {
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("data-panel"));
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavAutoVerifyBtn") });
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-    await dialog.locator('.side-menu-item[data-panel="data-panel"]').click();
+    await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
     return dialog;
 }
 async function configure(page, url) {
@@ -39,7 +40,7 @@ test("isolated DAV automatically converges across devices and sites, including p
         await expect.poll(async () => (await carList(b))?.[0]?.stateFlags.favorite).toBe(true);
         expect(await b.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().containerColumns)).toBe(2);
         await expect(b.locator("html")).toHaveAttribute("data-jhs-theme", "dark");
-        const dialog = await openSettings(b); await dialog.locator('.side-menu-item[data-panel="browse-panel"]').click(); await dialog.locator("#waitCheckCount").fill("11");
+        const dialog = await openSettings(b); await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="browse-panel"]')); await dialog.locator("#waitCheckCount").fill("11");
         await page.evaluate(async () => {
             await window.stateService.patch(["SYNC-101"], { watched: true });
             await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("waitCheckCount", "10");

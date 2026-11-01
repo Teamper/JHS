@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
@@ -58,6 +59,8 @@ test.describe("详情鉴定快捷键", () => {
         await blocked.focus(); await page.keyboard.press("Alt+f");
         await expect(dialog.locator('[data-shortcut-status="blocked"]')).toContainText("已被");
         await page.keyboard.press("Escape"); await expect(dialog).toBeVisible();
+        await expect(page.locator("#favoriteBtn kbd")).toHaveCount(0);
+        await dialog.locator("#saveBtn").click();
         await page.keyboard.press("Escape"); await expect(dialog).toHaveCount(0);
         await expect(page.locator("#favoriteBtn kbd")).toHaveText("Alt+F");
         await page.keyboard.press("Alt+f"); await expect(page.locator("#favoriteBtn")).toHaveAttribute("aria-pressed", "true");
@@ -66,7 +69,7 @@ test.describe("详情鉴定快捷键", () => {
         await expect(reopened.locator('[data-shortcut-action="favorite"]')).toHaveValue("");
         await reopened.locator('[data-shortcut-manage]').click();
         await reopened.locator('.pm-toggle[data-plugin="DetailShortcutPlugin"]').uncheck();
-        await reopened.locator('[data-panel="browse-panel"]').click();
+        await clickSettingsCategory(reopened.locator('[data-panel="browse-panel"]'));
         await expect(reopened.locator('[data-shortcut-disabled]')).toBeVisible();
         await expect(reopened.locator('[data-shortcut-action="favorite"]')).toBeDisabled();
     });

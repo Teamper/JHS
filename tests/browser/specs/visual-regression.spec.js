@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -70,7 +71,7 @@ test("Settings cloud panel visual baseline", async ({ context, page }, testInfo)
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   const dialog = page.locator(".layui-layer");
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="cloud-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
   const panel = dialog.locator("#cloud-services-panel");
   await expect(panel).toBeVisible();
   await expect(panel.locator("#cloud-settings-catalog .jhs-setting-row")).toHaveCount(7);

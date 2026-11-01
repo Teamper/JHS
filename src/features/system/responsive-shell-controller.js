@@ -74,10 +74,10 @@ const RESPONSIVE_SHELL_STYLES = `
             /* FAB 菜单 */
             .jhs-fab-menu {
                 position: fixed;
-                bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+                bottom: calc(92px + env(safe-area-inset-bottom, 0px) + var(--jhs-batch-clearance, 0px));
                 right: 16px;
-                max-height: calc(100vh - 108px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-                max-height: calc(100dvh - 108px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+                max-height: calc(100vh - 108px - var(--jhs-batch-clearance, 0px) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+                max-height: calc(100dvh - 108px - var(--jhs-batch-clearance, 0px) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
                 max-width: calc(100vw - 32px);
                 overflow-y: auto;
                 overflow-x: hidden;
@@ -197,6 +197,12 @@ const RESPONSIVE_SHELL_STYLES = `
             @media (max-width: 767px) {
                 .jhs-page-commandbar { display: none; }
             }
+            .jhs-fab-menu-item[hidden] { display:none; }
+            .jhs-mobile-batch-menu { display:none; min-width:220px; padding:var(--jhs-space-2); background:var(--jhs-surface); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); }
+            .jhs-mobile-batch-menu .jhs-btn { width:100%; justify-content:flex-start; }
+            .jhs-fab-menu.jhs-fab-batch-open > .jhs-fab-group, .jhs-fab-menu.jhs-fab-batch-open > .jhs-fab-divider { display:none; }
+            .jhs-fab-menu.jhs-fab-batch-open > .jhs-mobile-batch-menu { display:grid; gap:var(--jhs-space-1); }
+            html.jhs-fab-mounted .console-logger-container { display:none!important; }
         `;
 
 export const RESPONSIVE_SHELL_CAPABILITIES = Object.freeze([
@@ -205,7 +211,7 @@ export const RESPONSIVE_SHELL_CAPABILITIES = Object.freeze([
 ]);
 
 export class ResponsiveShellController {
-    /** @param {{jquery: (value: any) => any, window: Window & typeof globalThis, document: Document, profile: any, settings: any, host: any, state: any, logger: any, notifications: any, capabilities?: Record<string, any>, openNewVideo?: () => Promise<unknown>}} dependencies */
+    /** @param {{jquery: (value: any) => any, window: Window & typeof globalThis, document: Document, profile: any, settings: any, host: any, state: any, logger: any, notifications: any, capabilities?: Record<string, any>, openNewVideo?: () => Promise<unknown>, getPageActions?: () => Promise<any>, executePageAction?: (action: string) => Promise<any>}} dependencies */
     constructor(dependencies) {
         if (typeof dependencies.jquery !== "function") throw new TypeError("Responsive shell requires the injected jQuery UI boundary");
         this.jquery = dependencies.jquery;
@@ -225,6 +231,8 @@ export class ResponsiveShellController {
         }
         this.capabilities = Object.freeze(capabilities);
         this.openNewVideo = dependencies.openNewVideo ?? null;
+        this.getPageActions = dependencies.getPageActions ?? null;
+        this.executePageAction = dependencies.executePageAction ?? null;
         this._fabGeneration = 0;
         this._animationTimers = new Set();
         this._commandBarPopovers = new Set();
@@ -480,28 +488,34 @@ export class ResponsiveShellController {
                 filterOptions = quickFilters ? [ ...quickFilters.primary, ...quickFilters.secondary ].map(((filter, index) => `${index === quickFilters.primary.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${quickFilters.labels[filter]}</button>`)).join("") : "",
                 sortOptions = Object.entries(SORT_LABELS).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
             items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序：${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${quickFilters.labels[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
+            if (this.getPageActions && hasListPageButton) items += group(item("batch", "批量操作", 'hidden aria-haspopup="menu" aria-expanded="false"')) + '<div class="jhs-fab-group jhs-fab-context"></div><div class="jhs-mobile-batch-menu" role="menu" aria-label="批量操作"></div>';
         } else if (this.window.isDetailPage) {
             const statusDefs = [ { action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" } ];
             items = group(hasDetailPageButton ? statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("") : "") + divider + group((hasHighlightMagnet ? item("magnetFilter", "磁力过滤") : "") + (hasMagnetHub ? item("magnet", "磁力搜索") : "") + (hasDetailPageButton ? item("subtitle", "字幕") : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
         } else items = group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
-        return this.jquery(`<div id="jhs-fab-menu" class="jhs-fab-menu jhs-ui" role="menu" aria-hidden="true" inert>${items}</div>`);
+        const menu = this.jquery(`<div id="jhs-fab-menu" class="jhs-fab-menu jhs-ui" role="menu" aria-hidden="true" inert>${items}</div>`);
+        menu.find(".jhs-fab-status-dot").each((/** @type {number} */ _, /** @type {HTMLElement} */ element) => {
+            this.jquery(element).closest(".jhs-fab-menu-item").addClass(`jhs-state-action jhs-btn--${element.dataset.statusKey}`);
+        });
+        return menu;
     }
     currentSort() {
         const value = this.getCapability("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.services.settings.snapshot().sortMethod;
         return /** @type {keyof typeof SORT_LABELS} */ (Object.hasOwn(SORT_LABELS, value) ? value : "default");
     }
     /** 刷新详情页菜单的状态指示 */
-    async refreshDetailStatus() {
+    async refreshDetailStatus(menu = this.jquery(".jhs-fab-menu"), generation = this._fabGeneration) {
         try {
             const carNum = this.getCarNum();
             if (!carNum) return;
             const car = await this.services.state.getState(carNum);
-            const menu = this.jquery(".jhs-fab-menu");
+            if (this._disposed || generation !== this._fabGeneration || !menu[0]?.isConnected) return;
             const colors = { filter: "var(--jhs-status-filter)", fav: "var(--jhs-status-fav)", down: "var(--jhs-status-down)", watch: "var(--jhs-status-watch)" };
             const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set();
             flags.blocked && activeKeys.add("filter"), flags.favorite && activeKeys.add("fav"), flags.downloaded && activeKeys.add("down"), flags.watched && activeKeys.add("watch");
             menu.find(".jhs-fab-status-dot").each(((/** @type {number} */ index, /** @type {HTMLElement} */ element) => {
                 const key = String(this.jquery(element).data("status-key") || ""), item = this.jquery(element).closest(".jhs-fab-menu-item");
+                item.addClass(`jhs-state-action jhs-btn--${key}`);
                 if (activeKeys.has(key)) {
                     this.jquery(element).css({ background: colors[/** @type {keyof typeof colors} */ (key)] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
                 } else {
@@ -509,6 +523,25 @@ export class ResponsiveShellController {
                 }
             }));
         } catch (e) { this.services.logger.warn("移动端详情状态刷新失败", e); }
+    }
+    /** Query only the current open menu; late results never rebuild a closed surface. */
+    /** @param {any} menu @param {number} generation */
+    async refreshPageActions(menu, generation) {
+        if (!this.getPageActions) return;
+        menu.find(".jhs-mobile-batch-menu,.jhs-fab-context").empty();
+        menu.find('[data-action="batch"]').prop("hidden", true);
+        try {
+            const actions = await this.getPageActions();
+            if (this._disposed || generation !== this._fabGeneration || !menu[0]?.isConnected) return;
+            const batch = menu.find(".jhs-mobile-batch-menu").empty(), context = menu.find(".jhs-fab-context").empty();
+            for (const action of actions || []) {
+                const button = this.jquery('<button type="button" class="jhs-btn" role="menuitem" tabindex="-1"></button>')
+                    .attr("data-page-action", action.id).text(action.label).prop("disabled", !action.enabled);
+                if (action.group === "batch") batch.append(button.attr("data-jhs-batch-action", ""));
+                else context.append(button.addClass("jhs-fab-menu-item jhs-fab-item-visible"));
+            }
+            menu.find('[data-action="batch"]').prop("hidden", !batch.children().length);
+        } catch (error) { this.services.logger.warn("移动端列表操作加载失败", error); }
     }
     /** @param {any} fab @param {any} backdrop */
     bindEvents(fab, backdrop) {
@@ -523,10 +556,15 @@ export class ResponsiveShellController {
             menu.find('[data-action="sort"]').text(`排序：${SORT_LABELS[value]}`);
             sortMenu.find(".jhs-mobile-sort-option").each((/** @type {number} */ _index, /** @type {HTMLElement} */ item) => item.setAttribute("aria-checked", String(item.dataset.jhsSort === value)));
         };
+        const batchMenu = menu.find(".jhs-mobile-batch-menu"), batchTrigger = menu.find('[data-action="batch"]');
+        const closeBatchMenu = (focus = false) => {
+            menu.removeClass("jhs-fab-batch-open"); batchTrigger.attr("aria-expanded", "false");
+            if (focus) batchTrigger.trigger("focus");
+        };
         const closeMenu = (returnFocus = !1) => {
             this._fabGeneration++;
             if (returnFocus || menu[0].contains(this.document.activeElement)) fab.trigger("focus");
-            closeFilterMenu(), closeSortMenu();
+            closeFilterMenu(), closeSortMenu(), closeBatchMenu();
             fab.removeClass("jhs-fab-open").attr("aria-expanded", "false");
             menu.removeClass("jhs-fab-menu-open").attr({ "aria-hidden": "true", inert: "" });
             backdrop.removeClass("jhs-fab-backdrop-visible");
@@ -545,10 +583,11 @@ export class ResponsiveShellController {
                     syncSort();
                     this.getCapability("ListPagePlugin")?.syncQuickFilterUi?.();
                 }
-                // 刷新详情页状态
-                if (this.window.isDetailPage) void this.refreshDetailStatus().catch((error => this.services.logger.warn("移动端详情状态刷新失败", error)));
-                // stagger 动画：依次显示菜单项（generation counter 防竞态）
                 const gen = ++this._fabGeneration;
+                if (this.window.isListPage) void this.refreshPageActions(menu, gen);
+                // 刷新详情页状态
+                if (this.window.isDetailPage) void this.refreshDetailStatus(menu, gen).catch((error => this.services.logger.warn("移动端详情状态刷新失败", error)));
+                // stagger 动画：依次显示菜单项（generation counter 防竞态）
                 const self = this;
                 const items = menu.find(".jhs-fab-menu-item");
                 items.first().trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
@@ -568,7 +607,7 @@ export class ResponsiveShellController {
         // 遮罩点击关闭
         backdrop.on("click", (() => closeMenu(!0)));
         const bindKeys = (/** @type {any} */ root, /** @type {string} */ selector, /** @type {(focus: boolean) => void} */ close) => root.on("keydown", selector, (/** @type {any} */ event) => {
-            const items = root.find(selector), index = items.index(event.currentTarget);
+            const items = root.find(selector).filter(":not([hidden]):not(:disabled)"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), close(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
@@ -576,6 +615,14 @@ export class ResponsiveShellController {
             items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
         });
         bindKeys(menu, ".jhs-fab-menu-item", closeMenu);
+        bindKeys(batchMenu, "[data-page-action]", closeBatchMenu);
+        menu.on("click", "[data-page-action]", (/** @type {any} */ event) => {
+            event.preventDefault(); event.stopImmediatePropagation();
+            const action = this.jquery(event.currentTarget).attr("data-page-action");
+            if (event.currentTarget.disabled) return;
+            closeMenu(true);
+            void this.executePageAction?.(action).catch(error => this.services.logger.error("移动端列表操作失败", error));
+        });
         bindKeys(filterMenu, ".jhs-mobile-filter-option", closeFilterMenu).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             event.stopPropagation(), this.getCapability("ListPagePlugin")?.setQuickFilter?.(this.jquery(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
@@ -598,6 +645,10 @@ export class ResponsiveShellController {
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (/** @type {any} */ e) => {
             const action = this.jquery(e.currentTarget).data("action");
+            if ("batch" === action) {
+                e.stopPropagation(); menu.addClass("jhs-fab-batch-open"); batchTrigger.attr("aria-expanded", "true");
+                batchMenu.find("button:not(:disabled)").first().trigger("focus"); return;
+            }
             if ("quickFilter" === action) {
                 e.stopPropagation(), menu.addClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "true");
                 const selected = filterMenu.find('[aria-checked="true"]');

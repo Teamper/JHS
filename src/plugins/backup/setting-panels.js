@@ -13,7 +13,7 @@ import { formatUiDateTime } from "../../core/ui-date-time.js";
 /** @typedef {{ state?: string, cooldownMs?: number, openTime?: number, failCount?: number }} CircuitBreakerRecord */
 /** @typedef {{ count: number, errors: number, lastUsed?: number }} DomainStatsRecord */
 /** @typedef {{ message: string, count: number }} HealthIssue */
-/** @typedef {{ jquery: (value: any) => any, legacyStorage: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window, root?: any, scope?: LifecycleScope, isActive?: () => boolean }} SettingsUiDependencies */
+/** @typedef {{ jquery: (value: any) => any, legacyStorage: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window, root?: any, draftSettings?: any, scope?: LifecycleScope, isActive?: () => boolean }} SettingsUiDependencies */
 
 /** Restrict panel selectors to the settings instance that requested them. @param {SettingsUiDependencies} dependencies */
 function panelQuery(dependencies) {
@@ -251,7 +251,7 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
 export async function renderPluginMgmtPanel(diagnostics, settings, dependencies) {
     const { legacyStorage: storageManager, notifications: show, logger: clog } = dependencies, $ = panelQuery(dependencies);
     const diagnosticSnapshot = diagnostics.exportSnapshot();
-    const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
+    const disabled = parseDisabledPlugins(settings.snapshot().disabledPlugins ?? "[]");
     if (dependencies.isActive?.() === false) return;
     const configuredNames = (diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string}} */ item) => item.name);
     const allNames = [...new Set([...configuredNames, ...(diagnosticSnapshot.legacyPlugins || [])])];
@@ -277,7 +277,7 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
             if (isCore) {
                 html += '<span class="jhs-badge jhs-badge--neutral">核心</span>';
             } else {
-                html += `<input type="checkbox" class="mini-switch pm-toggle" role="switch" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
+                html += `<input type="checkbox" class="jhs-checkbox pm-toggle" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
             }
             html += `</div>`;
         }
@@ -319,7 +319,7 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
             return;
         } finally { target.prop("disabled", false).removeAttr("aria-busy"); }
         try {
-            show.ok(`功能已${nextEnabled ? "开启" : "关闭"}，刷新后生效`);
+            if (!dependencies.draftSettings) show.ok(`功能已${nextEnabled ? "开启" : "关闭"}，刷新后生效`);
         } catch (error) {
             clog.error("插件状态已保存，但通知显示失败", error);
         }

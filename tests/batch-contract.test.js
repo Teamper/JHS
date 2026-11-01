@@ -39,8 +39,10 @@ describe("batch action contract (筛选后批量语义)", () => {
     it("keeps the button entry points on the scope-based batch API with per-filter confirmation", () => {
         expect(listButtons).toContain("this.batchController.run(batchScope, flag)");
         expect(listButtons).toContain("this.list?.batchSaveAllVideos?.(batchScope, flag)");
-        expect(listButtons).toContain("void this.runBatch(h)");
-        expect(listButtons).toContain("void this.runBatch(g)");
+        expect(listButtons).toContain('["#favoriteAllVideo", "batch-favorite"]');
+        expect(listButtons).toContain('["#hasDownAllVideo", "batch-downloaded"]');
+        expect(listButtons).toContain("this.executePageAction(action)");
+        expect(listButtons).toContain('this.runBatch(action === "batch-favorite" ? h : g,');
         expect(listButtons).toContain("buildBatchScope()");
         expect(listButtons).toContain('const displayName = this.isOwnedRankingPage() ? "当前榜单页面" : this.isExternalFc2CatalogPage() ? "当前片库页面" : "当前搜索条件"');
         expect(listButtons).toContain('this.getBatchActionTip("favorite")');
@@ -70,7 +72,7 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listBatch).toContain("已有批量任务正在执行");
         expect(listBatch).toContain("this.ui.setButtonsDisabled(true)");
         expect(listBatch).toContain("this.ui.setButtonsDisabled(false)");
-        expect(listBatchUi).toContain('"#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo"');
+        expect(listBatchUi).toContain('"#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo, #jhs-fab-menu [data-page-action]"');
         const compatibilityBatch = blacklist.slice(blacklist.indexOf("filterAllVideo(name"), blacklist.indexOf("\n}"));
         expect(compatibilityBatch).not.toContain("tryBeginBatchRun");
         expect(compatibilityBatch).not.toContain("endBatchRun");

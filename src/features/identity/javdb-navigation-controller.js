@@ -7,7 +7,7 @@ const SEARCH_TYPES = Object.freeze([
     ["director", "导演"], ["code", "番号"], ["list", "清单"],
 ]);
 
-export const JAVDB_NAVIGATION_CSS = ".highlight-red { color: var(--jhs-status-filter) !important; font-weight:var(--jhs-font-weight-semibold); }";
+export const JAVDB_NAVIGATION_CSS = ".highlight-red { color: var(--jhs-accent) !important; font-weight:var(--jhs-font-weight-semibold); }";
 
 /** Own JavDB search controls and navigation embellishments for the page lifetime. */
 export class JavDbNavigationController {

@@ -1,3 +1,4 @@
+import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -21,7 +22,7 @@ test("saving the WebDAV password keeps it available after reopening settings and
   });
   let dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="data-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
   await dialog.locator("#webDavPassword").fill("synthetic-webdav-password");
   await dialog.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(async () => {
@@ -33,7 +34,7 @@ test("saving the WebDAV password keeps it available after reopening settings and
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="data-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
   await expect(dialog.locator("#webDavPassword")).toHaveValue(/\S/);
   await dialog.locator("#webdavBackupListBtn").click();
   await expect.poll(() => page.evaluate(() => window.__webdavListCalls)).toBe(1);
@@ -42,7 +43,7 @@ test("saving the WebDAV password keeps it available after reopening settings and
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="data-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
   await expect(dialog.locator("#webDavPassword")).toHaveValue(/\S/);
 });
 
@@ -62,7 +63,7 @@ test("an autofilled WebDAV password is saved even without a change event", async
   });
   const dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await dialog.locator('.side-menu-item[data-panel="data-panel"]').click();
+  await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
   await dialog.locator("#webDavPassword").evaluate(input => { input.value = "synthetic-autofilled-password"; });
   await expect(dialog.locator("#webDavPassword")).toHaveValue("synthetic-autofilled-password");
   expect(await page.evaluate(() => {

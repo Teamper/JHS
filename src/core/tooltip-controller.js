@@ -36,7 +36,7 @@ export function initializeTooltips(scope, doc) {
     const candidate = (/** @type {EventTarget | null} */ target, focused = false) => {
         const element = target instanceof view.Element ? /** @type {HTMLElement | null} */ (target.closest(selector)) : null;
         if (focused && element !== target && !(element instanceof view.HTMLLabelElement && element.control === target)) return null;
-        if (!element?.closest(".jhs-ui,.jhs-dialog,.jhs-btn,.jhs-field,.jhs-switch,.mini-switch,.card-btn,.jhs-icon-btn,.jhs-link")) return null;
+        if (!element?.closest(".jhs-ui,.jhs-dialog,.jhs-btn,.jhs-field,.jhs-switch,.mini-switch,.card-btn,.jhs-icon-btn,.jhs-link,.jhs-status-tags")) return null;
         const title = element.getAttribute("title");
         if (title) {
             if (!element.textContent?.trim() && !element.hasAttribute("aria-label") && !element.hasAttribute("aria-labelledby")) element.setAttribute("aria-label", title);

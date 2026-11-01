@@ -23,7 +23,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.body.repla
 function settingsHarness() {
     const options=[], registry=new SettingsRegistry(); registerDefaultSettings(registry);
     const settings=new SettingsService({get:async()=>({}),set:async()=>{}});
-    const plugin=new SettingPlugin({runtimeServices:{settings, settingsRegistry:registry,dialog:{open:vi.fn(value=>{options.push(value);return options.length;}),close:vi.fn(id=>options[id-1]?.end())}},capabilities:{},jquery,utilities:{getDialogArea:()=>["700px","600px"],trapFocus:vi.fn(()=>vi.fn()),setupEscClose:vi.fn()},notifications:{},logger:{},legacyStorage:{},events:{on:vi.fn(()=>vi.fn())},document,window});
+    const plugin=new SettingPlugin({runtimeServices:{settings, settingsRegistry:registry,dialog:{open:vi.fn(value=>{options.push(value);return options.length;}),close:vi.fn(id=>options[id-1]?.end())}},capabilities:{},jquery,utilities:{getDialogArea:()=>["700px","600px"],trapFocus:vi.fn(()=>vi.fn()),setupEscClose:vi.fn(),releaseEscClose:vi.fn()},notifications:{},logger:{},legacyStorage:{},events:{on:vi.fn(()=>vi.fn())},document,window});
     plugin.renderTaskStatuses=plugin.bindClick=vi.fn(); plugin.activateSettingPanel=vi.fn();
     plugin.hydrateSettingForm=plugin.loadResourceSettings=vi.fn(async()=>{});
     plugin.hydrateLiveSettings=vi.fn(()=>({dispose:vi.fn()}));
