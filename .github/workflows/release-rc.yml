@@ -42,7 +42,7 @@ jobs:
           "RC_VERSION=$rcVersion" >> $env:GITHUB_ENV
       - run: npm ci
       - run: npm --prefix tests/browser ci
-      - run: npx playwright install chromium
+      - run: npx playwright install chromium firefox
         working-directory: tests/browser
       - name: Align visual font
         shell: pwsh
