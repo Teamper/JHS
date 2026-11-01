@@ -6,11 +6,14 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { RC_SCRIPT, RC_META, RC_CHANNEL, assertNextRc, validateRcFiles, sha256, rcNumber, advertisedRcCommit, assertValidatedRcRun } from "./rc-contract.mjs";
 import { repoRoot } from "./build.mjs";
+import { uploadAndVerifyRcAsset } from "./rc-release-asset.mjs";
 
 const version = process.argv[2], tag = `v${version}`, repository = "Teamper/JHS";
 rcNumber(version);
 const retryRun = process.env.JHS_RC_RETRY_RUN;
-const retry = /^[1-9]\d*$/.test(retryRun || "") && process.env.GITHUB_REF === `refs/tags/rc-publish-retry-${version}-${retryRun}`;
+const retryBase = `refs/tags/rc-publish-retry-${version}-${retryRun}`;
+const retryRef = process.env.GITHUB_REF || "";
+const retry = /^[1-9]\d*$/.test(retryRun || "") && (retryRef === retryBase || (retryRef.startsWith(retryBase + "-") && /^[1-9]\d*$/.test(retryRef.slice(retryBase.length + 1))));
 if (process.env.GITHUB_ACTIONS !== "true" || process.env.GITHUB_REPOSITORY !== repository || (!retry && process.env.GITHUB_REF !== `refs/tags/${tag}`)) throw new Error("Publication requires the matching Teamper/JHS RC tag workflow");
 const sourceRoot = resolve(process.env.JHS_RC_SOURCE_ROOT || repoRoot);
 const { verifyRcDelivery } = await import(pathToFileURL(join(sourceRoot, "scripts/check-rc-delivery.mjs")).href);
@@ -39,22 +42,19 @@ await readFile(notes); // Fail before publication if the reviewed notes are miss
 const releases = JSON.parse(gh(["api", `repos/${repository}/releases`, "--paginate", "--slurp"])).flat();
 let release = releases.find(item => item.tag_name === tag);
 if (!release) {
-    gh(["release", "create", tag, "--repo", repository, "--verify-tag", "--draft", "--prerelease", "--latest=false", "--title", `JHS ${version}`, "--notes-file", notes]);
-    release = JSON.parse(gh(["api", `repos/${repository}/releases/tags/${tag}`]));
+    release = JSON.parse(gh(["api", "--method", "POST", `repos/${repository}/releases`,
+        "-f", `tag_name=${tag}`, "-f", `target_commitish=${artifact.sourceSha}`, "-f", `name=JHS ${version}`,
+        "-F", "draft=true", "-F", "prerelease=true", "-f", "make_latest=false", "-F", `body=@${notes}`]));
 }
 if (!release.prerelease) throw new Error("Existing release is not a prerelease");
 if (release.assets.some(asset => !names.includes(asset.name))) throw new Error("Unexpected release assets");
 const downloaded = await mkdtemp(join(tmpdir(), "jhs-rc-assets-"));
 for (const name of names) {
-    const existing = release.assets.find(asset => asset.name === name);
-    if (!existing) {
-        if (!release.draft) throw new Error("Published RC has missing assets; refusing to mutate it");
-        gh(["release", "upload", tag, join(folder, name), "--repo", repository]);
-    }
-    gh(["release", "download", tag, "--repo", repository, "--pattern", name, "--dir", downloaded]);
-    if (!(await readFile(join(downloaded, name))).equals(await readFile(join(folder, name)))) throw new Error(`Existing RC asset differs: ${name}`);
+    const bytes = await readFile(join(folder, name));
+    const verified = await uploadAndVerifyRcAsset({ release, asset: release.assets.find(asset => asset.name === name), name, bytes, token: process.env.GH_TOKEN });
+    await writeFile(join(downloaded, name), verified, { flag: "wx" });
 }
-if (release.draft) gh(["release", "edit", tag, "--repo", repository, "--draft=false", "--prerelease", "--latest=false"]);
+if (release.draft) gh(["api", "--method", "PATCH", `repos/${repository}/releases/${release.id}`, "-F", "draft=false", "-F", "prerelease=true", "-f", "make_latest=false"]);
 
 // The distribution branch is not a source branch. Both update files move in one commit.
 const channel = await mkdtemp(join(tmpdir(), "jhs-rc-channel-"));
