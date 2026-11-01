@@ -2,24 +2,39 @@
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { verifyRcDelivery } from "./check-rc-delivery.mjs";
-import { RC_SCRIPT, RC_META, RC_CHANNEL, assertNextRc, validateRcFiles, sha256 } from "./rc-contract.mjs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { RC_SCRIPT, RC_META, RC_CHANNEL, assertNextRc, validateRcFiles, sha256, rcNumber, advertisedRcCommit, assertValidatedRcRun } from "./rc-contract.mjs";
 import { repoRoot } from "./build.mjs";
 
 const version = process.argv[2], tag = `v${version}`, repository = "Teamper/JHS";
-if (process.env.GITHUB_ACTIONS !== "true" || process.env.GITHUB_REPOSITORY !== repository || process.env.GITHUB_REF !== `refs/tags/${tag}`) throw new Error("Publication requires the matching Teamper/JHS RC tag workflow");
-const folder = join(repoRoot, "dist/rc", version);
+rcNumber(version);
+const retryRun = process.env.JHS_RC_RETRY_RUN;
+const retry = /^[1-9]\d*$/.test(retryRun || "") && process.env.GITHUB_REF === `refs/tags/rc-publish-retry-${version}-${retryRun}`;
+if (process.env.GITHUB_ACTIONS !== "true" || process.env.GITHUB_REPOSITORY !== repository || (!retry && process.env.GITHUB_REF !== `refs/tags/${tag}`)) throw new Error("Publication requires the matching Teamper/JHS RC tag workflow");
+const sourceRoot = resolve(process.env.JHS_RC_SOURCE_ROOT || repoRoot);
+const { verifyRcDelivery } = await import(pathToFileURL(join(sourceRoot, "scripts/check-rc-delivery.mjs")).href);
+const folder = join(sourceRoot, "dist/rc", version);
 const artifact = await verifyRcDelivery(join(folder, RC_SCRIPT));
 if (artifact.version !== version) throw new Error("RC folder version differs from artifact");
-const git = (args, cwd = repoRoot) => execFileSync("git", args, { cwd, encoding: "utf8", timeout: 120000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "credential.helper", GIT_CONFIG_VALUE_0: "!gh auth git-credential" } }).trim();
-const gh = args => execFileSync("gh", args, { cwd: repoRoot, encoding: "utf8", timeout: 120000 });
-git(["fetch", "origin", "develop", "--tags"]);
+const git = (args, cwd = sourceRoot) => execFileSync("git", args, { cwd, encoding: "utf8", timeout: 120000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "credential.helper", GIT_CONFIG_VALUE_0: "!gh auth git-credential" } }).trim();
+const gh = args => execFileSync("gh", args, { cwd: sourceRoot, encoding: "utf8", timeout: 120000 });
+if (retry) {
+    const run = JSON.parse(gh(["api", `repos/${repository}/actions/runs/${retryRun}`]));
+    const jobs = JSON.parse(gh(["api", `repos/${repository}/actions/runs/${retryRun}/jobs?per_page=100`])).jobs;
+    assertValidatedRcRun(run, jobs, artifact.sourceSha);
+}
+// checkout may flatten annotated tags; compare peeled remote identity without replacing local tags.
+git(["fetch", "--no-tags", "origin", "+refs/heads/develop:refs/remotes/origin/develop"]);
+if (advertisedRcCommit(git(["ls-remote", "--tags", "origin", `refs/tags/${tag}`, `refs/tags/${tag}^{}`]), tag) !== artifact.sourceSha) throw new Error("Remote RC tag points to different source");
 git(["merge-base", "--is-ancestor", artifact.sourceSha, "origin/develop"]);
 if (git(["rev-list", "-n", "1", tag]) !== artifact.sourceSha) throw new Error("RC tag points to different source");
-for (const ref of git(["tag", "--list", "v7.0.0-rc.*"]).split("\n").filter(ref => ref && ref !== tag)) assertNextRc(version, ref.slice(1));
+for (const line of git(["ls-remote", "--tags", "--refs", "origin", "refs/tags/v7.0.0-rc.*"]).split("\n").filter(Boolean)) {
+    const ref = line.split(/\s+/)[1].replace("refs/tags/", "");
+    if (ref !== tag) assertNextRc(version, ref.slice(1));
+}
 const names = [RC_SCRIPT, RC_META, "release-manifest.json", "SHA256SUMS"];
-const notes = join(repoRoot, "release-notes", `${version}.md`);
+const notes = join(sourceRoot, "release-notes", `${version}.md`);
 await readFile(notes); // Fail before publication if the reviewed notes are missing.
 const releases = JSON.parse(gh(["api", `repos/${repository}/releases`, "--paginate", "--slurp"])).flat();
 let release = releases.find(item => item.tag_name === tag);

@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve, basename } from "node:path";
-import { createRcTransforms, readRcIdentity, rcFiles, validateRcFiles, assertNextRc, rcNumber, rcChecksPassed, RC_SCRIPT, RC_META } from "../scripts/rc-contract.mjs";
+import { createRcTransforms, readRcIdentity, rcFiles, validateRcFiles, assertNextRc, rcNumber, rcChecksPassed, advertisedRcCommit, assertValidatedRcRun, RC_SCRIPT, RC_META } from "../scripts/rc-contract.mjs";
 import { cleanRcSource, assertRcInputsTracked } from "../scripts/build-rc.mjs";
 import { buildUserscript } from "../scripts/build.mjs";
 import { expectedBuildIdentity } from "./browser/harness/build-identity.js";
@@ -15,6 +15,20 @@ function script(version = "7.0.0-rc.1") {
     return transforms.transformMetadata(header) + "\n\n" + transforms.transformBundle("console.log('fixture');\n");
 }
 describe("RC delivery contract", () => {
+    it("compares annotated and lightweight remote tags by their source commit", () => {
+        const tag = "v7.0.0-rc.1", object = "b".repeat(40);
+        expect(advertisedRcCommit(`${object}\trefs/tags/${tag}\n${sourceSha}\trefs/tags/${tag}^{}\n`, tag)).toBe(sourceSha);
+        expect(advertisedRcCommit(`${sourceSha}\trefs/tags/${tag}\n`, tag)).toBe(sourceSha);
+        expect(() => advertisedRcCommit("", tag)).toThrow();
+    });
+    it("requires successful prior candidate and compatibility jobs for the exact RC source", () => {
+        const run = { repository: { full_name: "Teamper/JHS" }, head_sha: sourceSha, path: ".github/workflows/release-rc.yml", event: "push", status: "completed" };
+        const jobs = [{ name: "node20", conclusion: "success" }, { name: "candidate", conclusion: "success" }, { name: "publish", conclusion: "failure" }];
+        expect(() => assertValidatedRcRun(run, jobs, sourceSha)).not.toThrow();
+        for (const bad of [{ ...run, head_sha: "b".repeat(40) }, { ...run, status: "in_progress" }, { ...run, path: "other.yml" }, { ...run, repository: { full_name: "other/JHS" } }]) expect(() => assertValidatedRcRun(bad, jobs, sourceSha)).toThrow();
+        expect(() => assertValidatedRcRun(run, jobs.filter(job => job.name !== "candidate"), sourceSha)).toThrow();
+        expect(() => assertValidatedRcRun(run, jobs.map(job => ({ ...job, conclusion: "failure" })), sourceSha)).toThrow();
+    });
     it("reports serial performance failures without bypassing required checks", () => {
         const required = ["check", "functional", "visual"].map(name => ({ name, status: 0 }));
         expect(rcChecksPassed([...required, { name: "serial", status: 1 }, { name: "startup", status: 1 }])).toBe(true);

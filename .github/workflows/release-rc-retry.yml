@@ -1,0 +1,60 @@
+name: Retry validated JHS RC publication
+on:
+  push:
+    tags: ['rc-publish-retry-*']
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: jhs-7-rc-publish
+      cancel-in-progress: false
+      queue: max
+    env:
+      RC_VERSION: 7.0.0-rc.1
+      VALIDATED_RUN: '41303579731'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: publisher
+      - uses: actions/checkout@v4
+        with:
+          ref: v7.0.0-rc.1
+          fetch-depth: 0
+          path: candidate-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: publisher
+      - run: npm ci
+        working-directory: candidate-source
+      - name: Verify prior validation before downloading candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VALIDATED_RUN}" > /tmp/rc-run.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VALIDATED_RUN}/jobs?per_page=100" > /tmp/rc-jobs.json
+          node --input-type=module -e '
+            import {readFileSync} from "node:fs";
+            import {execFileSync} from "node:child_process";
+            import {assertValidatedRcRun} from "./publisher/scripts/rc-contract.mjs";
+            const sha=execFileSync("git",["rev-parse","HEAD"],{cwd:"candidate-source",encoding:"utf8"}).trim();
+            assertValidatedRcRun(JSON.parse(readFileSync("/tmp/rc-run.json")),JSON.parse(readFileSync("/tmp/rc-jobs.json")).jobs,sha);
+          '
+      - uses: actions/download-artifact@v4
+        with:
+          name: rc-candidate
+          run-id: ${{ env.VALIDATED_RUN }}
+          github-token: ${{ github.token }}
+          path: candidate-source/dist/rc/
+      - name: Publish the unchanged validated artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JHS_RC_RETRY_RUN: ${{ env.VALIDATED_RUN }}
+          JHS_RC_SOURCE_ROOT: ${{ github.workspace }}/candidate-source
+        run: node publisher/scripts/publish-rc.mjs "$RC_VERSION"

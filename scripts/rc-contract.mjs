@@ -14,6 +14,22 @@ export function rcNumber(version) {
 export function assertNextRc(version, previous) {
     if (rcNumber(version) <= rcNumber(previous)) throw new Error("RC version must increase");
 }
+export function advertisedRcCommit(output, tag) {
+    const refs = new Map(output.trim().split(/\r?\n/).filter(Boolean).map(line => {
+        const [sha, ref] = line.split(/\s+/);
+        return [ref, sha];
+    }));
+    const commit = refs.get(`refs/tags/${tag}^{}`) || refs.get(`refs/tags/${tag}`);
+    if (!/^[a-f0-9]{40}$/.test(commit || "")) throw new Error("Missing advertised RC tag");
+    return commit;
+}
+export function assertValidatedRcRun(run, jobs, sourceSha) {
+    if (run.repository?.full_name !== "Teamper/JHS" || run.head_sha !== sourceSha || run.path !== ".github/workflows/release-rc.yml" || run.event !== "push" || run.status !== "completed") throw new Error("Retry does not reference a completed RC validation for this source");
+    for (const name of ["node20", "candidate"]) {
+        const matching = jobs.filter(job => job.name === name);
+        if (matching.length !== 1 || matching[0].conclusion !== "success") throw new Error(`Required RC validation did not pass: ${name}`);
+    }
+}
 export function rcChecksPassed(results) {
     return ["check", "functional", "visual"].every(name => results.some(result => result.name === name && result.status === 0))
         && results.every(result => ["startup", "serial"].includes(result.name) || result.status === 0);
