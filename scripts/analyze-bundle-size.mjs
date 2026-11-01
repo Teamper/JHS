@@ -24,6 +24,7 @@ export async function analyzeBundleSize({ outputDirectory = join(repoRoot, "outp
     const report = {
         version, buildId: commit + dirty, node: process.version,
         unpackedPath, packedPath, unpackedBytes: unpacked.outputBytes, packedBytes: packed.outputBytes,
+        unpackedSha256: unpacked.analysis.sha256, packedSha256: packed.analysis.sha256,
         savedBytes, savedPercent: Number((savedBytes / unpacked.outputBytes * 100).toFixed(2)),
         softLimitBytes: budget.bundle.softLimitBytes, hardLimitBytes: budget.bundle.hardLimitBytes,
         unpackedBudget, packedBudget,

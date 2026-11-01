@@ -29,7 +29,8 @@ for (const [label, url] of [
     const cold = process.env.JHS_STARTUP_MODE !== "warm";
     if (!cold) await fulfillHostFixtures(context);
     const samples = [], phaseSamples = [], featureSamples = [], pluginSamples = [];
-    for (let index = 0; index < SAMPLE_COUNT; index += 1) {
+    // Warm runs seed/migrate once, then keep the persisted state across measured pages.
+    for (let index = cold ? 0 : -1; index < SAMPLE_COUNT; index += 1) {
       const sampleContext = cold ? await browser.newContext({ viewport: testInfo.project.use.viewport, hasTouch: testInfo.project.use.hasTouch, isMobile: testInfo.project.use.isMobile, serviceWorkers: "block" }) : context;
       if (cold) await fulfillHostFixtures(sampleContext);
       const page = await sampleContext.newPage();
@@ -38,9 +39,11 @@ for (const [label, url] of [
       // 保持启动基准只测核心引导；评论默认开启的请求不纳入启动预算。
       // Reading, encoding, transport and decoding all remain inside the timed interval.
       const userscriptSource = process.env.JHS_STARTUP_BUNDLE ? await readFile(process.env.JHS_STARTUP_BUNDLE, "utf8") : undefined;
-      await injectUserscriptRuntime(page, { userscriptSource, userscriptTransport: "base64", settingOverrides: { enableLoadReview: "no" } });
-      samples.push(performance.now() - startedAt);
+      await injectUserscriptRuntime(page, { userscriptSource, userscriptTransport: "base64", settingOverrides: { enableLoadReview: "no" }, preserveStorage: !cold && index >= 0 });
+      const elapsed = performance.now() - startedAt;
       await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]))).toBe(true);
+      if (index < 0) { await page.close(); continue; }
+      samples.push(elapsed);
       phaseSamples.push(await page.evaluate(() => window.__jhsBrowserDiagnostics.bootstrapPhases));
       featureSamples.push(await page.evaluate(() => window.unsafeWindow.pluginManager?.diagnostics?.exportSnapshot?.().startupTimings ?? {}));
       pluginSamples.push(await page.evaluate(() => ({
@@ -60,7 +63,7 @@ for (const [label, url] of [
     const maximum = baseline * (1 + budget.browserFixture.startupRegressionRatio);
     const actualP95 = percentile(samples, 0.95);
     const environment = process.env.CI ? "GitHub Ubuntu Chromium" : "Windows Edge";
-    const report = `${label} fixture startup P50 ${actualMedian.toFixed(1)}ms P95 ${actualP95.toFixed(1)}ms; ${environment} baseline ${baseline}ms; samples ${samples.map((value) => value.toFixed(1)).join(", ")}`;
+    const report = `${label} fixture startup P50 ${actualMedian.toFixed(1)}ms P95 ${actualP95.toFixed(1)}ms; ${environment} baseline ${baseline}ms; mode ${cold ? "cold" : "warm"}; samples ${samples.map((value) => value.toFixed(1)).join(", ")}`;
     const harnessPhases = Object.keys(phaseSamples[0]?.harness || {}).map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample.harness?.[phase] || 0)).toFixed(1)}ms`).join(", ");
     const bootstrapPhases = Object.keys(phaseSamples[0] || {}).filter((phase) => phase !== "harness").map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample[phase] || 0)).toFixed(1)}ms`).join(", ");
     const featurePhases = Object.keys(featureSamples[0] || {}).map((feature) => `${feature}=${median(featureSamples.map((sample) => sample[feature] || 0)).toFixed(1)}ms`).join(", ");

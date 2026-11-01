@@ -45,6 +45,18 @@ describe("build-time static resource packing", () => {
         expect(register(source).has(html)).toBe(true);
     });
 
+    it("includes reviewed settings headers, history selects and host-scoped static CSS", () => {
+        for (const tag of ["header", "select"]) {
+            const value = `<${tag} class="jhs-ui">${"演员 &amp; 影片 ".repeat(20)}</${tag}>`;
+            expect(register(`const value=${JSON.stringify(value)};`).has(value)).toBe(true);
+            expect(register(`const value=${JSON.stringify(value.replace('class=', 'onclick='))};`).size).toBe(0);
+        }
+        const style = ':is([data-jhs-primary-list], [data-jhs-native-recommendations]) .cover{padding-top:67%;object-fit:contain;object-position:50% 50%}';
+        const source = `const fixed=${JSON.stringify(style)};const dynamic=\`${style}\${position}\`;`;
+        expect([...collectStaticResources("src/services/layout-settings-service.js", source).keys()]).toEqual([style]);
+        expect(collectStaticResources("src/services/unknown-service.js", source).size).toBe(0);
+    });
+
     it("keeps literal expressions inside tagged and interpolated templates untouched", () => {
         const source = `const plain=${JSON.stringify(css)};const tagged=String.raw\`value=\${${JSON.stringify(css)}}\`;const interpolated=\`value=\${${JSON.stringify(css)}}\`;`;
         const replaced = replaceResourceLiterals(source, register(source));

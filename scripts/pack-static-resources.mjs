@@ -29,6 +29,7 @@ const resourceOwners = new Set([
     "src/plugins/backup/setting.js", "src/plugins/backup/setting-panels.js",
     "src/plugins/backup/setting-styles.js", "src/plugins/backup/setting-templates.js",
     "src/plugins/new-video/new-video.js",
+    "src/services/layout-settings-service.js",
     "src/ui/detail/fc2-workspace-styles.js", "src/ui/detail/panel-styles.js",
     "src/ui/detail/related-panel.js", "src/ui/detail/review-panel.js", "src/ui/settings/shortcut-recorder.js",
 ]);
@@ -52,8 +53,8 @@ function isValuePosition(node) {
 
 function isResourceText(value) {
     if (Buffer.byteLength(value, "utf8") < 128 || /<script\b|\son[a-z]+\s*=|javascript:/i.test(value)) return false;
-    if (/^\s*<(?:style|div|section|table|form|span|button|article|nav|p|ul|dialog|input|label)\b/i.test(value)) return true;
-    return /^\s*[.#:@\[]/.test(value) && /\{[^{}]*[\w-]+\s*:[^{}]+[;}]/.test(value) && /--jhs-|\.jhs-/.test(value);
+    if (/^\s*<(?:style|div|section|table|form|span|button|article|nav|p|ul|dialog|input|label|header|select)\b/i.test(value)) return true;
+    return /^\s*[.#:@\[]/.test(value) && /\{[^{}]*[\w-]+\s*:[^{}]+[;}]/.test(value) && /--jhs-|\.jhs-|\[data-jhs-/.test(value);
 }
 
 function staticValue(node) {
