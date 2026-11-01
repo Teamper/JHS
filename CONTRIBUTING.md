@@ -1,5 +1,7 @@
 # 贡献指南
 
+发行说明遵循 [固定规范与贡献核对流程](release-notes/README.md)，从 [版本模板](release-notes/TEMPLATE.md) 起草。正式版、补丁版与预发布均使用对应版本说明文件。
+
 分支、构建和验收流程以 [开发与发布说明](docs/development.md) 及当前分支的 `package.json`、构建脚本和 CI 为准。
 
 ## 开发约束
