@@ -5,6 +5,7 @@ import jquery from "jquery";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { FavoriteActressesController } from "../src/features/library/favorite-actresses-controller.js";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
+import { BrowserStyleAdapter } from "../src/platform/browser/browser-style-adapter.js";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -24,11 +25,55 @@ function createController({ html, url, actresses = [], add = vi.fn(async () => 1
     const controller = new FavoriteActressesController({
         document, location: new URL(url), hostAdapter: new JavDbHostAdapter(document, new URL(url)), jquery: $, state, settings, scope,
         diagnostics: { recordError: vi.fn() }, isDetailPage: detail,
+        styles: new BrowserStyleAdapter(document),
     });
     return { controller, scope, settings, state, add, remove, $ };
 }
 
 describe("Library Feature favorite actresses", () => {
+    it("owns visible borders, updates committed settings and releases styles on disable and disposal", async () => {
+        vi.stubGlobal("requestIdleCallback", vi.fn(() => 1));
+        const loaded = createController({ html: '<a id="actor" class="actor-female" title="Original" href="/actors/a">演员甲</a><a class="highlighted" id="other">Other</a>', url: "https://javdb.com/v/test", actresses: [{ starId: "a" }], detail: true });
+        loaded.controller.start();
+        loaded.settings.value = { enableFavoriteActresses: "yes", highlightedTagNumber: 2, highlightedTagColor: "#ce2222" };
+        await loaded.controller.highlightActress();
+        const actor = document.querySelector("#actor");
+        expect(getComputedStyle(actor).borderTopWidth).toBe("2px");
+        expect(getComputedStyle(actor).borderTopStyle).toBe("solid");
+        expect(getComputedStyle(document.querySelector("#other")).borderTopWidth).toBe("");
+        loaded.settings.value = { enableFavoriteActresses: "yes", highlightedTagNumber: 3, highlightedTagColor: "#123456" };
+        loaded.settings.dispatchEvent(new CustomEvent("settings.changed", { detail: { names: ["highlightedTagNumber", "highlightedTagColor"] } }));
+        await vi.waitFor(() => expect(getComputedStyle(actor).borderTopWidth).toBe("3px"));
+        expect(getComputedStyle(actor).borderTopColor).toBe("rgb(18, 52, 86)");
+        loaded.settings.value.enableFavoriteActresses = "no";
+        await loaded.controller.highlightActress();
+        expect(document.querySelector("#jhs-favorite-actresses-feature")).toBeNull();
+        expect(actor.title).toBe("Original");
+        expect(actor.classList.contains("jhs-favorite-actress-highlight")).toBe(false);
+        loaded.settings.value.enableFavoriteActresses = "yes";
+        await loaded.controller.highlightActress();
+        expect(actor.classList.contains("highlighted")).toBe(true);
+        loaded.scope.dispose();
+        expect(document.querySelector("#jhs-favorite-actresses-feature")).toBeNull();
+        expect(actor.title).toBe("Original");
+    });
+
+    it.each(["disable", "dispose", "refresh"])("rejects late favorite reads after %s", async (action) => {
+        const loaded = createController({ html: '<a class="actor-female" href="/actors/a">演员甲</a>', url: "https://javdb.com/v/test", detail: true });
+        let resolve;
+        loaded.state.getFavoriteActressList.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        const pending = loaded.controller.highlightActress();
+        if (action === "dispose") loaded.controller.dispose();
+        else {
+            if (action === "disable") loaded.settings.value.enableFavoriteActresses = "no";
+            await loaded.controller.highlightActress();
+        }
+        resolve([{ starId: "a" }]);
+        await pending;
+        expect(document.querySelector(".jhs-favorite-actress-highlight")).toBeNull();
+        loaded.controller.dispose();
+    });
+
     it("highlights canonical modern actresses only and restores their original title", async () => {
         const loaded = createController({
             html: '<div class="panel-block"><strong>演员:</strong><a id="female" class="actor-female" title="Original" href="/actors/a/?locale=zh">演员甲</a><a id="male" class="actor-male" href="/actors/a">演员乙</a><a id="unknown" href="/actors/a">未知</a></div>',

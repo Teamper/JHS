@@ -1,5 +1,41 @@
 import { test, expect } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { openFavoriteActressDetail } from "../harness/favorite-actresses.js";
+
+for (const theme of ["light", "dark"]) {
+  test(`favorite actress borders on direct detail ${theme}`, async ({ page, context }, info) => {
+    test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop/mobile matrix");
+    await openFavoriteActressDetail(context, page, theme);
+    const actor = page.locator("#saved-actor");
+    await expect(actor).toHaveCSS("border-top-width", "2px");
+    await expect(actor).toHaveCSS("border-top-style", "solid");
+    await expect(actor).toHaveCSS("border-top-color", "rgb(206, 34, 34)");
+    await expect(page.locator("#legacy-actor")).toHaveCSS("border-top-width", "2px");
+    await expect(page.locator("#jhs-list-category-fold-feature")).toHaveCount(0);
+    for (const id of ["unsaved-actor", "male-actor", "unknown-actor"]) {
+      await expect(page.locator(`#${id}`)).toHaveCSS("border-top-width", "0px");
+    }
+    await actor.focus();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#unsaved-actor")).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(actor).toBeFocused();
+    expect(await actor.evaluate(node => getComputedStyle(node).outlineStyle)).not.toBe("none");
+    await page.evaluate(async () => {
+      const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+      await settings.set("highlightedTagNumber", 3);
+      await settings.set("highlightedTagColor", "#123456");
+    });
+    await expect(actor).toHaveCSS("border-top-width", "3px");
+    await expect(actor).toHaveCSS("border-top-color", "rgb(18, 52, 86)");
+    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableFavoriteActresses", "no"));
+    await expect(actor).toHaveCSS("border-top-width", "0px");
+    await expect(actor).toHaveAttribute("title", "原提示");
+    await expect(page.locator("#jhs-favorite-actresses-feature")).toHaveCount(0);
+    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableFavoriteActresses", "yes"));
+    await expect(actor).toHaveCSS("border-top-width", "3px");
+  });
+}
 
 const actorPage = `
   <main>

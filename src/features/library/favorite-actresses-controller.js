@@ -5,10 +5,11 @@ import { _ } from "../../core/constants.js";
 const CONFIRM_SELECTOR = 'a[href*="/actors/"][href*="/uncollect"]';
 const ACTOR_ACTION = /\/actors\/(\w+)\/(collect|uncollect)/u;
 const HIGHLIGHT_TITLE = "已收藏演员，前往设置调整高亮";
+const HIGHLIGHT_CLASS = "jhs-favorite-actress-highlight";
 
 /** Own JavDB actress decoration and collection events while preserving the 6.5.1 storage contract. */
 export class FavoriteActressesController {
-    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, jquery: any, state: any, settings: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, isDetailPage: boolean}} options */
+    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, jquery: any, state: any, settings: any, styles: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, isDetailPage: boolean}} options */
     constructor(options) {
         this.document = options.document;
         this.location = options.location;
@@ -16,6 +17,9 @@ export class FavoriteActressesController {
         this.$ = options.jquery;
         this.state = options.state;
         this.settings = options.settings;
+        this.styles = options.styles;
+        this.releaseHighlightStyle = () => {};
+        this.highlightGeneration = 0;
         this.scope = options.scope;
         this.diagnostics = options.diagnostics;
         this.isDetailPage = options.isDetailPage;
@@ -76,14 +80,23 @@ export class FavoriteActressesController {
     }
 
     async highlightActress() {
-        if (!this.isDetailPage) return;
-        const enabled = this.settings.snapshot().enableFavoriteActresses ?? _;
-        if (enabled !== _) return this.clearHighlights();
+        if (!this.isDetailPage || this.disposed || this.scope.disposed) return;
+        const generation = ++this.highlightGeneration;
+        const settings = this.settings.snapshot();
+        this.releaseHighlightStyle();
+        this.releaseHighlightStyle = () => {};
+        if ((settings.enableFavoriteActresses ?? _) !== _) return this.clearHighlights();
+        const rawWidth = Number(settings.highlightedTagNumber);
+        const width = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1;
+        const rawColor = typeof settings.highlightedTagColor === "string" ? settings.highlightedTagColor : "";
+        const color = /^#[\da-f]{3,8}$/iu.test(rawColor) ? rawColor : "var(--jhs-status-filter)";
+        this.releaseHighlightStyle = this.styles.register("jhs-favorite-actresses-feature", `a.${HIGHLIGHT_CLASS}.highlighted{border:${width}px solid ${color}}`);
         const actresses = await this.state.getFavoriteActressList();
-        if (this.scope.disposed) return;
+        if (this.disposed || this.scope.disposed || generation !== this.highlightGeneration) return;
         const starIds = new Set(actresses.map((/** @type {{starId?: unknown}} */ actress) => String(actress.starId || "").trim()).filter(Boolean));
         const view = this.document.defaultView;
         if (!view) return;
+        this.clearHighlights();
         for (const actor of this.hostAdapter.readMovieActors().actors) {
             if (actor.role !== "actress") continue;
             const anchor = actor.link;
@@ -91,14 +104,14 @@ export class FavoriteActressesController {
             const starId = actor.starId;
             if (!starId || !starIds.has(starId)) continue;
             if (!this.highlightedAnchors.has(anchor)) this.highlightedAnchors.set(anchor, anchor.getAttribute("title"));
-            anchor.classList.add("highlighted");
+            anchor.classList.add("highlighted", HIGHLIGHT_CLASS);
             anchor.setAttribute("title", HIGHLIGHT_TITLE);
         }
     }
 
     clearHighlights() {
         for (const [anchor, previousTitle] of this.highlightedAnchors) {
-            anchor.classList.remove("highlighted");
+            anchor.classList.remove("highlighted", HIGHLIGHT_CLASS);
             if (anchor.getAttribute("title") === HIGHLIGHT_TITLE) {
                 if (previousTitle === null) anchor.removeAttribute("title");
                 else anchor.setAttribute("title", previousTitle);
@@ -206,7 +219,7 @@ export class FavoriteActressesController {
 
     /** @param {any} event */
     handleSettingsChanged = (event) => {
-        if (!event.detail?.names?.includes("enableFavoriteActresses")) return;
+        if (!event.detail?.names?.some((/** @type {string} */ name) => ["enableFavoriteActresses", "highlightedTagNumber", "highlightedTagColor"].includes(name))) return;
         void this.highlightActress().catch((error) => this.reportError(error));
     };
 
@@ -227,6 +240,8 @@ export class FavoriteActressesController {
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
+        this.highlightGeneration += 1;
+        this.releaseHighlightStyle();
         this.clearHighlights();
         for (const [avatar, styles] of this.avatarStyles) {
             avatar.style.backgroundImage = styles.backgroundImage;

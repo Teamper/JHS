@@ -1,6 +1,7 @@
 import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { openFavoriteActressDetail } from "../harness/favorite-actresses.js";
 
 /**
  * 视觉回归（第一阶段核心页面）。
@@ -10,6 +11,16 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
  */
 const ENABLED = process.env.JHS_VISUAL_REGRESSION === "1";
 const VISUAL_PROJECTS = new Set(["desktop-wide", "mobile"]);
+
+for (const theme of ["light", "dark"]) {
+  test(`favorite actress border ${theme} baseline`, async ({ context, page }, info) => {
+    test.skip(!ENABLED || !VISUAL_PROJECTS.has(info.project.name), "visual desktop/mobile matrix");
+    await openFavoriteActressDetail(context, page, theme);
+    await expect(page.locator("#saved-actor")).toHaveCSS("border-top-width", "2px");
+    await expect(page.locator("html")).toHaveAttribute("data-jhs-theme", theme);
+    await expect(page.locator("#favorite-cast")).toHaveScreenshot(`favorite-actress-${theme}.png`);
+  });
+}
 
 const pages = [
   ["JavDB List", "https://javdb.com/", ".movie-list"],
