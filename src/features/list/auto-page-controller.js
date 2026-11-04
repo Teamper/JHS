@@ -133,13 +133,13 @@ export class AutoPageController {
         if (!scope || !this.isCurrent(generation, scope) || await this.shouldDisablePaging()) return;
         if (!this.isCurrent(generation, scope)) return;
         const selectors = this.getSelector();
-        const container = /** @type {HTMLElement | null} */ (this.document.querySelector(selectors.boxSelector));
+        const container = /** @type {HTMLElement | null} */ (this.hostAdapter.resolveListBoundary ? this.hostAdapter.locateListRoot() : this.document.querySelector(selectors.boxSelector));
         if (!container || !container.parentNode) return this.log("error", "没有找到容器节点,停止瀑布流!");
         if (this.container !== container || !this.pageItems.length) {
             this.currentPage = this.getInitialPageNumber();
             this.loadedPage = this.currentPage;
             this.pageItems = [{ page: this.currentPage, top: 0, url: this.window.location.href, items: [...container.querySelectorAll(selectors.requestDomItemSelector)] }];
-            const next = /** @type {HTMLAnchorElement | null} */ (this.document.querySelector(selectors.nextPageSelector));
+            const next = /** @type {HTMLAnchorElement | null} */ (this.hostAdapter.resolveListBoundary ? this.hostAdapter.resolveListBoundary()?.nextLink : this.document.querySelector(selectors.nextPageSelector));
             this.nextUrl = next?.href ?? null;
             this.hasMore = Boolean(this.nextUrl);
         }
@@ -231,6 +231,7 @@ export class AutoPageController {
         const selectors = this.getSelector();
         const generation = this.generation;
         const scope = this.liveScope;
+        const expectedContainer = this.container;
         try {
             if (!this.isCurrent(generation, scope)) return;
             const html = await requestHostPage(this.http, this.nextUrl, scope ?? undefined);
@@ -239,25 +240,32 @@ export class AutoPageController {
             const parsedDocument = new this.window.DOMParser().parseFromString(html, "text/html");
             const page = this.ui.jquery(parsedDocument);
             if (this.hostAdapter.site === "javbus" && page.find(".avatar-box").length > 0) page.find(".avatar-box").parent().remove();
-            const cards = page.find(selectors.requestDomItemSelector);
-            if (this.hasRepeatedCarNumbers(this.readCarNumbers(this.ui.jquery(selectors.itemSelector)), this.readCarNumbers(cards))) {
+            const boundary = this.hostAdapter.resolveListBoundary?.(parsedDocument);
+            if (this.hostAdapter.resolveListBoundary && !boundary) throw new Error("下一页正式影片列表无法确定");
+            const cards = boundary ? this.ui.jquery(boundary.root).children(".item") : page.find(selectors.requestDomItemSelector);
+            if (this.hasRepeatedCarNumbers(this.readCarNumbers(this.hostAdapter.resolveListBoundary ? this.ui.jquery(this.container).children(".item") : this.ui.jquery(selectors.itemSelector)), this.readCarNumbers(cards))) {
                 this.nextUrl = null;
                 this.hasMore = false;
                 return this.setState("waterfall-stopped", "下一页包含重复内容，已停止自动翻页");
             }
             if (!this.isCurrent(generation, scope)) return;
             const container = this.container;
-            if (!container) return;
+            if (!container || container !== expectedContainer || !container.isConnected || (this.hostAdapter.resolveListBoundary && this.hostAdapter.locateListRoot() !== container)) return;
             const pageUrl = new URL(this.nextUrl, this.window.location.href).href;
             const pageTop = container.getBoundingClientRect().top + this.window.scrollY + container.scrollHeight;
-            this.list.replaceCoverImages?.(page.find(selectors.coverImgSelector).toArray());
+            this.list.replaceCoverImages?.(cards.find(selectors.coverImgSelector).toArray());
             this.ui.jquery(container).append(cards);
             this.loadedPage++;
             this.pageItems.push({ page: this.loadedPage, top: pageTop, url: pageUrl, items: cards.toArray() });
             this.invalidatePagePositions();
-            this.nextUrl = page.find(selectors.nextPageSelector).first().attr("href") ?? null;
+            this.nextUrl = boundary ? boundary.nextLink?.getAttribute("href") ?? null : page.find(selectors.nextPageSelector).first().attr("href") ?? null;
+            if (boundary && this.nextUrl) this.nextUrl = new URL(this.nextUrl, pageUrl).href;
             this.hasMore = Boolean(this.nextUrl);
-            this.ui.jquery(".pagination").replaceWith(page.find(".pagination"));
+            if (this.hostAdapter.resolveListBoundary) {
+                const currentPagination = this.hostAdapter.resolveListBoundary()?.pagination;
+                if (currentPagination && boundary?.pagination) currentPagination.replaceWith(boundary.pagination);
+                else currentPagination?.remove();
+            } else this.ui.jquery(".pagination").replaceWith(page.find(".pagination"));
             this.setState("waterfall-loading", "");
             if (!this.hasMore) this.setState("waterfall-no-more", "已经到底了");
         } catch (error) {

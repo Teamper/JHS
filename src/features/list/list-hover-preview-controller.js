@@ -38,7 +38,7 @@ export class ListHoverPreviewController {
         if (this.enabled === nextEnabled && (nextEnabled === "no" || this.window.imageHoverPreviewObj === this.instance)) return;
         this.destroyInstance();
         if (nextEnabled === "yes") {
-            const selector = this.hostAdapter.getListSelectors?.()?.coverImgSelector;
+            const selector = (this.hostAdapter.getLiveListSelectors?.() ?? this.hostAdapter.getListSelectors?.())?.coverImgSelector;
             if (!selector) return;
             this.instance = this.ui.createImageHoverPreview({ selector });
             this.window.imageHoverPreviewObj = this.instance;

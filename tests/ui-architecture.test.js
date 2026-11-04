@@ -342,7 +342,7 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
 
     it("resets host cover animation without touching hover preview lifecycle", () => {
         expect(injection).toContain('.item > a[data-jhs-fc2-primary="true"] .cover img');
-        expect(injection).toMatch(/\.movie-list \.item \.cover img[\s\S]*transform:none!important[\s\S]*transition:none!important/);
+        expect(injection).toMatch(/:is\(\[data-jhs-primary-list\],\[data-jhs-native-recommendations\]\) \.item \.cover img[\s\S]*transform:none!important[\s\S]*transition:none!important/);
         expect(injection).not.toMatch(/scale\(1\.04\)|\.masonry \.item:hover/);
     });
 });

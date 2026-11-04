@@ -166,7 +166,8 @@ export class ListPageCompatibilityService {
         return "ListPagePlugin";
     }
     getSelector() {
-        return this.getRuntimeService("host").getListSelectors();
+        const host = this.getRuntimeService("host");
+        return host.getLiveListSelectors?.() ?? host.getListSelectors();
     }
     /** @param {string} name */
     getRuntimeService(name) {

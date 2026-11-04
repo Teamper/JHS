@@ -15,7 +15,7 @@ if (!existsSync(executablePath)) {
   console.error("Install it with: cd tests/browser && npx playwright install chromium");
   process.exit(1);
 }
-const result = spawnSync(npx, [ "playwright", "test", "specs/visual-regression.spec.js", "specs/ui-evolution.spec.js", "specs/ui-root-fix.spec.js", "--project=desktop-wide", "--project=mobile", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
+const result = spawnSync(npx, [ "playwright", "test", "specs/visual-regression.spec.js", "specs/home-list-boundary.spec.js", "specs/ui-evolution.spec.js", "specs/ui-root-fix.spec.js", "--project=desktop-wide", "--project=mobile", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
 if (result.status !== 0) process.exit(result.status ?? 1);
 const shortcutResult = spawnSync(npx, [ "playwright", "test", "specs/detail-shortcuts.spec.js", "--grep=鉴定快捷键布局", "--project=desktop-wide", "--project=mobile", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
 if (shortcutResult.status !== 0) process.exit(shortcutResult.status ?? 1);

@@ -28,6 +28,7 @@ test("JavDB want/watch import is mounted and completed through the Library featu
       const list = document.createElement("div");
       list.className = "movie-list";
       list.append(item);
+      document.querySelector(".movie-list")?.remove();
       document.querySelector("main")?.append(list);
     }),
   });

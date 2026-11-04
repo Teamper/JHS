@@ -555,7 +555,7 @@ test("batch actions are single-flight while a batch is running", async ({ contex
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => window.__httpCalls)).toBe(1);
   // 释放第一个任务，进度浮层消失、按钮恢复。
-  await page.evaluate(() => window.__releaseBatch?.({ data: "" }));
+  await page.evaluate(() => window.__releaseBatch?.({ data: '<div class="movie-list"></div>' }));
   await expect(page.locator("#jhs-batch-progress")).toHaveCount(0, { timeout: 5000 });
   await expect(page.locator("#favoriteAllVideo")).not.toHaveAttribute("aria-disabled", "true");
 });

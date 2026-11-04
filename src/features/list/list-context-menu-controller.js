@@ -23,8 +23,8 @@ export class ListContextMenuController {
         if (this.started || !this.state?.patch || !this.ui?.confirm || !this.list?.findCarNumAndHref) return false;
         this.scope.assertActive();
         const root = this.hostAdapter.locateListRoot?.()
-            ?? this.hostAdapter.document?.querySelector?.(this.hostAdapter.getListSelectors?.()?.boxSelector ?? "")
-            ?? (typeof document === "undefined" ? null : document.querySelector(this.hostAdapter.getListSelectors?.()?.boxSelector ?? ""));
+            ?? this.hostAdapter.document?.querySelector?.((this.hostAdapter.getLiveListSelectors?.() ?? this.hostAdapter.getListSelectors?.())?.boxSelector ?? "")
+            ?? (typeof document === "undefined" ? null : document.querySelector((this.hostAdapter.getLiveListSelectors?.() ?? this.hostAdapter.getListSelectors?.())?.boxSelector ?? ""));
         if (!root) return false;
         this.started = true;
         this.releaseListener = this.scope.listen(root, "contextmenu", (/** @type {Event} */ event) => this.onContextMenu(event));

@@ -38,11 +38,11 @@ function buildJavDbCss() { return `
     [data-jhs-primary-list] { display:grid; gap:var(--jhs-space-3); min-width:0; }
     [data-jhs-primary-list] > .item { min-width:0; width:100%; }
     @media(max-width:767px) { [data-jhs-native-recommendations] { grid-template-columns:repeat(2,minmax(0,1fr))!important; } }
-    .movie-list .item { position:relative!important; }
+    :is([data-jhs-primary-list],[data-jhs-native-recommendations]) .item { position:relative!important; }
     .item > a[data-jhs-fc2-primary="true"], .item > a[data-jhs-fc2-primary="true"] .cover, .item > a[data-jhs-fc2-primary="true"] .cover img { display:block!important; width:100%!important; }
-    .movie-list .item .cover img { transform:none!important; transition:none!important; }
-    .movie-list .video-title { min-width:0; overflow:hidden; overflow-wrap:anywhere; clip-path:inset(0 0 max(0px,calc(100% - 3lh)) 0); }
-    .video-title { display:-webkit-box; height:80px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+    :is([data-jhs-primary-list],[data-jhs-native-recommendations]) .item .cover img { transform:none!important; transition:none!important; }
+    :is([data-jhs-primary-list],[data-jhs-native-recommendations]) .video-title { min-width:0; overflow:hidden; overflow-wrap:anywhere; clip-path:inset(0 0 max(0px,calc(100% - 3lh)) 0); }
+    :is([data-jhs-primary-list],[data-jhs-native-recommendations]) .video-title { display:-webkit-box; height:80px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
     .main-tabs, .tabs { overflow-x:hidden; flex-wrap:wrap; justify-content:flex-start; }
     .main-tabs ul, .tabs ul { flex-wrap:wrap; flex-grow:0; }
     .toolbar { display:flex; }

@@ -12,6 +12,7 @@ import { isSamePageUrl } from "./batch-scope.js";
 /** @param {any} options */
 export async function scanAllPages({
     startDom,
+    resolvePage = null,
     itemSelector,
     nextPageSelector,
     fetchHtml,
@@ -38,7 +39,8 @@ export async function scanAllPages({
     while (dom && dom.length) {
         if (isCancelled()) break;
         onProgress({ page, scanned, matched: records.length });
-        const items = dom.find(itemSelector).toArray();
+        const resolved = resolvePage?.(dom);
+        const items = resolved ? resolved.items : dom.find(itemSelector).toArray();
         for (const element of items) {
             if (isCancelled()) break;
             let item = null;
@@ -51,7 +53,7 @@ export async function scanAllPages({
                 records.push({ ...item, flags: evaluated.flags, visibilityReasons: evaluated.visibilityReasons, hardHidden: evaluated.hardHidden });
             }
         }
-        const nextUrl = dom.find(nextPageSelector).attr("href");
+        const nextUrl = resolved ? resolved.nextUrl : dom.find(nextPageSelector).attr("href");
         if (!nextUrl) break;
         if (isCancelled() || page >= maxPages) break;
         if (pageDelayMs) await new Promise((resolve) => setTimeout(resolve, pageDelayMs));

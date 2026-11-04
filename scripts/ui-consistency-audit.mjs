@@ -233,7 +233,7 @@ requireMatch(coverButtons, /jhs-card-menu__dot[^}]*width:8px/, "card status menu
 for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Escape"])
   requireMatch(coverButtons, new RegExp(key), `card menus are missing ${key} keyboard behavior`);
 forbidMatch(coverButtons, /elastic|jelly|right:\s*-/, "card menus must not use bounce animation or negative offsets");
-requireMatch(injection, /\.movie-list \.item \.cover img[\s\S]*transform:none!important[\s\S]*transition:none!important/, "JavDB cover reset is missing");
+requireMatch(injection, /:is\(\[data-jhs-primary-list\],\[data-jhs-native-recommendations\]\) \.item \.cover img[\s\S]*transform:none!important[\s\S]*transition:none!important/, "JavDB cover reset is missing");
 forbidMatch(injection, /scale\(1\.04\)|\.masonry \.item:hover/, "JavBus cover hover effects must remain removed");
 
 requireMatch(magnet, /class="magnet-copy"[\s\S]*copy-btn[\s\S]*jhs-offline-btn/, "resource row must directly contain copy and unified offline buttons");

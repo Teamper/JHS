@@ -46,8 +46,9 @@ export class ListPaginationController {
 
     mountIfAvailable() {
         const document = this.document;
-        if (!document || this.root?.isConnected || document.getElementById("gemini-jump-page-control") || !document.querySelector(".pagination-link.is-current")) return false;
-        const pagination = document.querySelector(".pagination-list");
+        const region = this.hostAdapter.resolveListBoundary ? this.hostAdapter.resolveListBoundary()?.pagination : document;
+        if (!document || !region || this.root?.isConnected || document.getElementById("gemini-jump-page-control") || !region.querySelector(".pagination-link.is-current")) return false;
+        const pagination = region.matches?.(".pagination-list") ? region : region.querySelector(".pagination-list");
         if (!pagination) return false;
 
         const currentUrl = new URL(this.hostAdapter.location.href);

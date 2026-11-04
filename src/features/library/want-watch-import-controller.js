@@ -97,7 +97,9 @@ export class WantWatchImportController {
             visited.add(pageUrl);
             result.pages += 1;
             this.notifications.info(`正在导入第 ${result.pages} 页`);
-            const items = [...pageRoot.querySelectorAll(selectors.itemSelector)];
+            const boundary = this.hostAdapter.resolveListBoundary?.(pageRoot);
+            if (this.hostAdapter.resolveListBoundary && !boundary) throw new Error("\u65e0\u6cd5\u552f\u4e00\u786e\u5b9a\u6b63\u5f0f\u5f71\u7247\u5217\u8868");
+            const items = boundary ? [...boundary.root.querySelectorAll(":scope > .item")] : [...pageRoot.querySelectorAll(selectors.itemSelector)];
             for (const item of items) {
                 if (this.scope.disposed) break;
                 try {
@@ -122,7 +124,7 @@ export class WantWatchImportController {
                 }
             }
             if (this.scope.disposed) break;
-            const nextHref = pageRoot.querySelector(".pagination-next")?.getAttribute("href");
+            const nextHref = boundary ? boundary.nextLink?.getAttribute("href") : pageRoot.querySelector(".pagination-next")?.getAttribute("href");
             if (!nextHref) break;
             const nextUrl = new URL(nextHref, pageUrl).href;
             if (visited.has(nextUrl)) break;

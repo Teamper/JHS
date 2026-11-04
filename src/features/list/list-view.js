@@ -28,7 +28,7 @@ export class ListView {
     /** @param {{hostAdapter: any, selectors: Record<string, string>, logger?: Pick<Console, "error">, onFilterChange?: (filter: unknown, options?: any) => any, onOpenMovieDetail?: (item: any, options?: any) => any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
-        this.selectors = Object.freeze({ ...options.selectors });
+        this.selectors = Object.freeze({ ...(options.hostAdapter?.getLiveListSelectors?.() ?? options.selectors) });
         this.logger = options.logger ?? console;
         this.onFilterChange = options.onFilterChange ?? (() => {});
         this.onOpenMovieDetail = options.onOpenMovieDetail ?? (() => {});

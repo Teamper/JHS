@@ -65,6 +65,8 @@ export class JavDbHostAdapter {
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
     constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) {
         this.site = "javdb";
+        /** @type {WeakSet<Element>} */ this.ownedListRoots = new WeakSet();
+        /** @type {Element | null} */ this.markedListRoot = null;
         this.document = documentRuntime;
         this.location = locationRuntime;
         this.blacklistParser = blacklistParser;
@@ -185,10 +187,54 @@ export class JavDbHostAdapter {
         const publishTime = dateLabel?.parentElement?.querySelector(".value")?.textContent?.trim() ?? "";
         return Object.freeze({ ...ref, actress: actors.filter(actor => actor.role === "actress").map(actor => actor.name).join(" "), actors: actors.filter(actor => actor.role === "actor").map(actor => actor.name).join(" "), publishTime });
     }
+    /** Resolve native result ownership equally for live and fetched documents. @param {Document | Element} [sourceRoot] */
+    resolveListBoundary(sourceRoot = this.document) {
+        const candidates = [...sourceRoot.querySelectorAll(".movie-list")].filter(root => !root.closest('.layui-layer,[data-jhs-native-recommendations],[data-jhs-native-gallery]'));
+        if (sourceRoot.nodeType === 1 && /** @type {Element} */ (sourceRoot).matches(".movie-list")) candidates.unshift(/** @type {Element} */ (sourceRoot));
+        const owned = candidates.filter(root => this.ownedListRoots?.has(root));
+        const after = (/** @type {Element} */ anchor) => {
+            for (let node = anchor.nextElementSibling; node; node = node.nextElementSibling) if (candidates.includes(node)) return node;
+            return null;
+        };
+        const anchored = candidates.length === 1 ? [] : [...sourceRoot.querySelectorAll(".toolbar,.main-tabs-wrap,.main-tabs")]
+            .filter(anchor => !anchor.closest('.movie-list,.layui-layer') && !anchor.parentElement?.closest('.main-tabs-wrap'))
+            .map(after).filter(Boolean);
+        const paged = candidates.length === 1 ? [] : [...sourceRoot.querySelectorAll(".pagination,.pagination-list")].map(pagination => {
+            for (let node = pagination.previousElementSibling; node; node = node.previousElementSibling) if (candidates.includes(node)) return node;
+            return null;
+        }).filter(Boolean);
+        const unique = (/** @type {Array<Element | null>} */ roots) => [...new Set(roots)];
+        const choices = unique(owned.length ? owned : anchored.length ? anchored : paged.length ? paged : candidates);
+        const root = choices.length === 1 ? choices[0] : null;
+        if (!root) return null;
+        const container = root.parentElement;
+        let pagination = null, nextLink = null;
+        for (let node = root.nextElementSibling; node; node = node.nextElementSibling) {
+            if (candidates.includes(node)) break;
+            if (node.matches(".pagination,.pagination-list")) pagination = node;
+            nextLink ||= node.matches(".pagination-next") ? node : node.querySelector(".pagination-next");
+            if (pagination) break;
+        }
+        // Older host layouts place the only pagination outside the list container.
+        if (candidates.length === 1) {
+            const regions = [...sourceRoot.querySelectorAll(".pagination")];
+            const standalone = [...sourceRoot.querySelectorAll(".pagination-list")];
+            pagination ||= regions.length === 1 ? regions[0] : !regions.length && standalone.length === 1 ? standalone[0] : null;
+            const links = [...sourceRoot.querySelectorAll(".pagination-next")];
+            nextLink ||= links.length === 1 ? links[0] : null;
+        }
+        return { root, container, pagination, nextLink };
+    }
     locateListRoot() {
-        if (/^\/v\//.test(this.location.pathname)) return null;
-        const root = this.document.querySelector(".movie-list");
-        root?.setAttribute("data-jhs-primary-list", "true");
+        if (/^\/(?:v|movies)\//.test(this.location.pathname)) return null;
+        const root = this.resolveListBoundary()?.root ?? null;
+        if (this.markedListRoot && this.markedListRoot !== root) this.markedListRoot.removeAttribute("data-jhs-primary-list");
+        this.markedListRoot = root;
+        if (root && root.getAttribute("data-jhs-primary-list") !== "true") root.setAttribute("data-jhs-primary-list", "true");
+        if (!root && this.document.querySelectorAll('.movie-list').length > 1 && !this.reportedAmbiguousList) {
+            this.reportedAmbiguousList = true;
+            (/** @type {any} */ (globalThis)).clog?.warn?.("JHS：无法唯一确定正式影片列表，已跳过列表增强");
+        }
         return root;
     }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item") ?? [])]; }
@@ -199,10 +245,15 @@ export class JavDbHostAdapter {
             requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next",
         });
     }
-    getListLayoutContainer() { return /^\/v\//.test(this.location.pathname) ? null : this.document.querySelector("section .container"); }
+    getLiveListSelectors() {
+        this.locateListRoot();
+        return Object.freeze({ ...this.getListSelectors(), boxSelector: '[data-jhs-primary-list]', itemSelector: '[data-jhs-primary-list] > .item', coverImgSelector: '[data-jhs-primary-list] > .item .cover img' });
+    }
+    getListLayoutContainer() { return this.locateListRoot()?.closest("section .container") ?? null; }
     /** @param {string[]} [classes] */
     createOwnedListRoot(classes = []) {
         const root = this.document.createElement("div");
+        this.ownedListRoots.add(root);
         root.classList.add("movie-list", "h", "cols-4", "vcols-8", ...classes);
         return root;
     }

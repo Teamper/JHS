@@ -363,7 +363,7 @@ export class ListActionsController {
     }
 
     async openWaitCheck() {
-        const selectors = this.hostAdapter.getListSelectors?.() ?? this.list?.getSelector?.();
+        const selectors = (this.hostAdapter.getLiveListSelectors?.() ?? this.hostAdapter.getListSelectors?.()) ?? this.list?.getSelector?.();
         if (!this.list || !selectors?.itemSelector) return this.notifications.info("列表功能已禁用");
         const requestedCount = Number(this.settings.snapshot().waitCheckCount ?? 5);
         const limit = Number.isFinite(requestedCount) && requestedCount > 0 ? Math.floor(requestedCount) : 5;

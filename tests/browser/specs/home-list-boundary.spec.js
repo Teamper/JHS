@@ -1,0 +1,26 @@
+import { readFile } from "node:fs/promises";
+import { test, expect } from "@playwright/test";
+import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+const fixture = await readFile(new URL("../fixtures/javdb-home-multiple-lists.html", import.meta.url), "utf8");
+for (const theme of ["light", "dark"]) test(`home list ownership ${theme}`, async ({context,page}, info) => {
+ test.skip(!["desktop-wide","mobile"].includes(info.project.name));
+ await fulfillHostFixtures(context);
+ await context.route("https://javdb.com/", route=>route.fulfill({contentType:"text/html",body:fixture}));
+ await page.goto("https://javdb.com/");
+ const original = await page.locator("#weekly").innerHTML();
+ await injectUserscriptRuntime(page,{settingOverrides:{enableLoadReview:"no",autoPage:"no",sortMethod:"rateCount",defaultQuickFilterTab:"all",themeMode:theme}});
+ await expect(page.locator('#results')).toHaveAttribute('data-jhs-primary-list','true');
+ await expect(page.locator('#weekly')).not.toHaveAttribute('data-jhs-primary-list','true');
+ await expect(page.locator('#weekly .item')).toHaveCount(1);
+ await expect(page.locator('#results .video-title strong')).toHaveText(['ABC-002','ABC-001']);
+ expect(await page.locator('#weekly').innerHTML()).toBe(original);
+ if (info.project.name === 'desktop-wide') expect(await page.locator('#jhs-page-commandbar').evaluate(e=>e.nextElementSibling.id)).toBe('results');
+ else await expect(page.locator('#jhs-fab')).toBeVisible();
+ await expect(page.locator('#weekly .jhs-status-tags,#weekly .jhs-cover-tools')).toHaveCount(0);
+ if (process.env.JHS_VISUAL_REGRESSION === '1') await expect(page.locator('section > .container')).toHaveScreenshot(`home-boundary-${theme}.png`);
+ if (info.project.name === "desktop-wide") await page.locator('[data-jhs-filter="favorite"]').first().click();
+ else await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter("favorite"));
+ await expect(page.locator('#results > .item:visible')).toHaveCount(0);
+ await expect(page.locator('#weekly > .item')).toBeVisible();
+ expect(await page.locator('#weekly').innerHTML()).toBe(original);
+});

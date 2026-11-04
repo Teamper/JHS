@@ -56,11 +56,11 @@ export class ListSortController {
         if (autoPage === "yes" && !live && methodOverride !== "default") return;
         const method = methodOverride || this.activeSortMethod();
         if (!method) return;
-        const selectors = this.hostAdapter?.getListSelectors?.();
+        const selectors = (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.());
         if (!selectors?.boxSelector || !selectors?.itemSelector) return;
         const container = this.document.querySelector(selectors.boxSelector);
         if (!container) return;
-        const elements = [...this.document.querySelectorAll(selectors.itemSelector)];
+        const elements = [...container.children].filter(element => element.matches(selectors.itemSelector));
         elements.forEach((element, index) => {
             if (!element.hasAttribute("data-original-index")) element.setAttribute("data-original-index", String(index));
         });
@@ -84,8 +84,8 @@ export class ListSortController {
             : right.key - left.key || left.originalIndex - right.originalIndex || left.index - right.index);
         const sorted = items.map((item) => item.element);
         if (sorted.every((element, index) => element === elements[index])) return;
-        if (method === "default") sorted.forEach((element) => container.append(element));
-        else container.replaceChildren(...sorted);
+        const slots = elements.map(element => { const slot = this.document.createComment("jhs-sort-slot"); element.replaceWith(slot); return slot; });
+        slots.forEach((slot, index) => slot.replaceWith(sorted[index]));
     }
 
     dispose() {

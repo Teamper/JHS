@@ -23,6 +23,8 @@ export class ListController {
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin;
         this.hostAdapter = options.hostAdapter;
+        /** @type {Element | null} */ this.boundListRoot = null;
+        /** @type {MutationObserver | null} */ this.rootBoundaryObserver = null;
         this.scope = options.scope;
         this.styles = options.styles ?? null;
         this.state = options.state ?? null;
@@ -189,8 +191,16 @@ export class ListController {
         }
         this.legacyPlugin.setSortController?.(this.sortController);
         this.hostMarkupController.normalizeInitialMarkup();
-        const selectors = this.hostAdapter?.getListSelectors?.() ?? this.legacyPlugin.getSelector?.();
+        const selectors = (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.()) ?? this.legacyPlugin.getSelector?.();
         if (!selectors) return Promise.reject(new Error("List Feature requires host list selectors"));
+        if (this.hostAdapter?.resolveListBoundary) {
+            const root = this.hostAdapter.locateListRoot();
+            if (!root) return Promise.resolve(false);
+            this.boundListRoot = root;
+            if (root.parentElement) this.rootBoundaryObserver = this.scope.observe(root.parentElement, () => {
+                if (this.hostAdapter.locateListRoot() !== root || !root.isConnected) this.scope.dispose();
+            }, { childList: true });
+        }
         const initialItems = this.hostAdapter?.document?.querySelectorAll?.(selectors.itemSelector);
         if (initialItems) this.hostMarkupController.normalizeCards([ ...initialItems ]);
         this.coverImageController.replace();
@@ -278,13 +288,13 @@ export class ListController {
     /** @param {Element[] | null} items @param {string} revision */
     async filterListItems(items, revision) {
         const document = this.hostAdapter?.document;
-        const selectors = this.view?.selectors ?? this.hostAdapter?.getListSelectors?.();
+        const selectors = this.view?.selectors ?? (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.());
         if (!document || !selectors) return false;
         const cards = items ? items.filter((item) => item.isConnected) : [ ...document.querySelectorAll(selectors.itemSelector) ];
         if (!items) this.cardStatePresenter?.resetSummary();
         if (!cards.length) return true;
         this.legacyPlugin.recordListPhase?.("doFilter-start", cards.length);
-        const isCurrent = () => !this.listRefreshController.disposed && (this.legacyPlugin.isCurrentListGeneration?.(revision) ?? revision === (this.legacyPlugin.captureListRevision?.() ?? "0"));
+        const isCurrent = () => (!this.boundListRoot || this.boundListRoot.isConnected && this.boundListRoot.hasAttribute("data-jhs-primary-list")) && !this.listRefreshController.disposed && (this.legacyPlugin.isCurrentListGeneration?.(revision) ?? revision === (this.legacyPlugin.captureListRevision?.() ?? "0"));
         if (!isCurrent()) return false;
         const context = await (this.filterContextProvider?.get()
             ?? Promise.reject(new Error("List Feature filter context is unavailable")));
@@ -436,6 +446,9 @@ export class ListController {
     }
 
     dispose() {
+        if (this.rootBoundaryObserver) this.scope.releaseObserver(this.rootBoundaryObserver);
+        this.rootBoundaryObserver = null;
+        this.boundListRoot = null;
         this.cancelScheduledRecount();
         this.view?.dispose();
         this.view = null;

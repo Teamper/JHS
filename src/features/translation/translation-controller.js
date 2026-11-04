@@ -102,7 +102,7 @@ export class ExternalBridgeTranslationController {
 
     async translateList() {
         if (!this.window.isListPage) return;
-        const selectors = this.hostAdapter?.getListSelectors?.();
+        const selectors = (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.());
         if (!selectors?.itemSelector) return;
         const items = [...this.document.querySelectorAll(selectors.itemSelector)];
         await this.translateListItems(items);
@@ -170,7 +170,7 @@ export class ExternalBridgeTranslationController {
     }
 
     revertListTranslations() {
-        const selector = this.hostAdapter?.getListSelectors?.()?.itemSelector;
+        const selector = (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.())?.itemSelector;
         if (!selector) return;
         for (const item of this.document.querySelectorAll(selector)) {
             if (!item.hasAttribute("data-jhs-original-title") && !item.hasAttribute("data-jhs-translation-key")) continue;

@@ -86,6 +86,11 @@ export class ListBatchController {
             const firstPageUrl = isPageScopedList || root ? null : (this.hostAdapter?.resolveFirstPageUrl?.(pageUrl) ?? pageUrl);
             const scannedRecords = await scanAllPages({
                 startDom: root ? $(root) : $(this.document),
+                resolvePage: this.hostAdapter.resolveListBoundary ? (/** @type {any} */ dom) => {
+                    const boundary = this.hostAdapter.resolveListBoundary(dom[0]);
+                    if (!boundary) throw new Error("无法唯一确定正式影片列表，已停止批量扫描");
+                    return { items: [...boundary.root.querySelectorAll(":scope > .item")], nextUrl: root ? null : boundary.nextLink?.getAttribute("href") ?? null };
+                } : null,
                 currentUrl: isPageScopedList || root ? null : pageUrl,
                 firstPageUrl,
                 itemSelector: selectors.requestDomItemSelector,
