@@ -11,13 +11,13 @@ for (const transport of ["inline", "base64"]) {
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/v/test-id");
     const text = "中文 🚀 café </script>\u2028\u2029";
-    const source = `\uFEFFwindow.__transport = { text: ${JSON.stringify(text)}, source: document.currentScript.textContent, hook: window.__beforeTransport, complete: false };
+    const source = `\uFEFFwindow.__transport = { text: ${JSON.stringify(text)}, source: document.currentScript.textContent, dependencies: [typeof window.jQuery, typeof window.localforage?.createInstance, typeof window.Tabulator], hook: window.__beforeTransport, complete: false };
       setTimeout(() => { window.__transport.complete = true; window.__jhsBrowserDiagnostics.bootstrapPhases = { "first-ready": performance.now() }; }, 75);`;
     await injectUserscriptRuntime(page, {
       userscriptSource: source, userscriptTransport: transport,
       beforeUserscriptInjection: hostPage => hostPage.evaluate(() => { window.__beforeTransport = true; }),
     });
-    expect(await page.evaluate(() => window.__transport)).toEqual({ text, source, hook: true, complete: true });
+    expect(await page.evaluate(() => window.__transport)).toEqual({ text, source, dependencies: ["function", "function", "function"], hook: true, complete: true });
   });
 }
 

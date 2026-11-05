@@ -63,14 +63,18 @@ export async function injectUserscriptRuntime(page, options = {}) {
   hostPage.on("console", (message) => {
     if (message.type() === "error") startupErrors.push(message.text());
   });
-  await page.addScriptTag({ path: join(browserRoot, "node_modules", "jquery", "dist", "jquery.min.js") });
-  markPhase("jquery");
-  await page.addScriptTag({ path: join(browserRoot, "node_modules", "localforage", "dist", "localforage.min.js") });
-  markPhase("localforage");
-  await page.addScriptTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "js", "tabulator.min.js") });
-  markPhase("tabulator");
-  await page.addStyleTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "css", "tabulator_semanticui.min.css") });
-  markPhase("vendor-style");
+  // These vendor globals and the table stylesheet have no mutual dependencies.
+  // Await every load before configuring the fixture or executing the userscript.
+  await Promise.all([
+    page.addScriptTag({ path: join(browserRoot, "node_modules", "jquery", "dist", "jquery.min.js") })
+      .then(() => markPhase("jquery")),
+    page.addScriptTag({ path: join(browserRoot, "node_modules", "localforage", "dist", "localforage.min.js") })
+      .then(() => markPhase("localforage")),
+    page.addScriptTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "js", "tabulator.min.js") })
+      .then(() => markPhase("tabulator")),
+    page.addStyleTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "css", "tabulator_semanticui.min.css") })
+      .then(() => markPhase("vendor-style")),
+  ]);
   await page.evaluate(async ({ disabledPlugins, settingOverrides, preserveStorage }) => {
     const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
     if (!preserveStorage) await forage.setItem("setting", {
