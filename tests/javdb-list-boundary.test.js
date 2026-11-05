@@ -64,3 +64,36 @@ describe("dual-list remote paging", () => {
   finally {scope.dispose();dom.window.close();}
  });
 });
+
+
+describe("supplementary card ownership", () => {
+ it("decorates native cards without widening result selectors or accepting overlays",()=>{
+  const {dom,host,doc}=setup();
+  const overlay=doc.createElement("div");overlay.className="layui-layer";overlay.append(doc.querySelector("#weekly").cloneNode(true));doc.body.append(overlay);
+  expect(host.locateCardEnhancementRoots().map(root=>root.id)).toEqual(["weekly","results"]);
+  expect(doc.querySelectorAll(host.getCardEnhancementSelectors().itemSelector)).toHaveLength(3);
+  expect(doc.querySelectorAll(host.getLiveListSelectors().itemSelector)).toHaveLength(2);
+  expect(overlay.querySelector("[data-jhs-card-list]")).toBeNull();
+  doc.querySelector(".toolbar").remove();doc.querySelector(".main-tabs-wrap").remove();doc.querySelector(".pagination").remove();
+  expect(host.locateCardEnhancementRoots()).toEqual([]);expect(doc.querySelector("[data-jhs-card-list]")).toBeNull();dom.window.close();
+ });
+ it("updates supplementary state independently, handles late lists, and refuses late writes",async()=>{
+  const { SupplementaryCardsController }=await import("../src/features/list/supplementary-cards-controller.js");
+  const {dom,host,doc}=setup();const $=jquery(dom.window);vi.stubGlobal("$",$);vi.stubGlobal("document",doc);vi.stubGlobal("MutationObserver",dom.window.MutationObserver);
+  const scope=new LifecycleScope("supplementary");const sources={carMap:new Map(),settings:{},titleKeywords:[]};
+  const owner={hostAdapter:host,boundListRoot:host.locateListRoot(),scope,readCardIdentity:item=>({carNum:item.querySelector("strong").textContent,title:"test"}),readFilterSources:async()=>sources,logger:console,listNavigationController:{openMovieDetail(){}},legacyPlugin:{translateListItems:vi.fn()},coverImageController:{replace:vi.fn()},coverButtons:{addSvgBtn:vi.fn()}};
+  const controller=new SupplementaryCardsController({owner,ui:{},notifications:{},diagnostics:null});
+  try {
+   await controller.start();expect(controller.index.get(["ABC-001"])).toEqual([doc.querySelector("#weekly .item")]);
+   sources.carMap.set("ABC-001",{stateFlags:{favorite:true}});controller.context.invalidate();await controller.refresh();
+   expect(doc.querySelectorAll("#weekly .jhs-status-tags")).toHaveLength(1);expect(doc.querySelector("#results .jhs-status-tags")).toBeNull();
+   expect(controller.presenter.getSummary().total).toBe(1);
+   const late=doc.querySelector("#weekly").cloneNode(true);late.id="late";doc.querySelector(".container").prepend(late);
+   await vi.waitFor(()=>expect(controller.roots.size).toBe(2));
+   late.remove();await vi.waitFor(()=>expect(controller.roots.size).toBe(1));
+   let finish;controller.context.invalidate();owner.readFilterSources=()=>new Promise(resolve=>{finish=resolve;});const pending=controller.refresh();await new Promise(resolve=>setTimeout(resolve,0));
+   const before=doc.querySelector("#weekly").innerHTML;scope.dispose();finish(sources);await pending;
+   expect(doc.querySelector("#weekly").innerHTML).toBe(before);expect(controller.roots.size).toBe(0);
+  }finally{scope.dispose();dom.window.close();}
+ });
+});

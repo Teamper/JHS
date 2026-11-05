@@ -1,5 +1,6 @@
 // @ts-check
 
+import { SupplementaryCardsController } from "./supplementary-cards-controller.js";
 import { ListView } from "./list-view.js";
 import { ListItemIndex } from "./list-item-index.js";
 import { ListDomObserver } from "./list-dom-observer.js";
@@ -151,6 +152,7 @@ export class ListController {
         /** @type {ListDomObserver | null} */ this.domObserver = null;
         /** @type {ListBatchController | null} */ this.batchController = null;
         /** @type {number | ReturnType<typeof setTimeout> | null} */ this.recountFrame = null;
+        this.supplementaryCards = new SupplementaryCardsController({ owner: this, ui: options.ui, notifications: options.notifications, diagnostics: options.diagnostics });
         this.started = false;
         this.scope.addCleanup(() => this.cancelScheduledRecount());
     }
@@ -278,6 +280,7 @@ export class ListController {
             .then(() => this.registerStyles())
             .then(() => { this.legacyPlugin.stateRefreshReady = false; return this.legacyPlugin.handle({ scope: this.scope, view, itemIndex, observer: domObserver, batchController, featureOwnsStartup: true }); })
             .then(() => this.initializeListRuntime())
+            .then(() => this.supplementaryCards.start())
             .catch((error) => {
                 this.dispose();
                 throw error;
@@ -479,6 +482,7 @@ export class ListController {
         this.detachHoverPreviewAdapter?.();
         this.detachContextMenuAdapter?.();
         this.detachCoverImageAdapter?.();
+        this.supplementaryCards.dispose();
         this.started = false;
     }
 }

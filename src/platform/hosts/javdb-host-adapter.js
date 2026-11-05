@@ -245,6 +245,26 @@ export class JavDbHostAdapter {
             requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next",
         });
     }
+    /** Card decoration includes supplementary native lists; result operations keep their own boundary. */
+    locateCardEnhancementRoots() {
+        const primary = this.locateListRoot();
+        if (!primary) {
+            for (const root of this.document.querySelectorAll("[data-jhs-card-list]")) root.removeAttribute("data-jhs-card-list");
+            return [];
+        }
+        const roots = [...this.document.querySelectorAll(".movie-list")].filter(root =>
+            !root.closest('.layui-layer,[data-jhs-native-recommendations],[data-jhs-native-gallery]') &&
+            (root === primary || [...root.querySelectorAll(":scope > .item a[href]")].some(link => {
+                try { const url = new URL(link.getAttribute("href") || "", this.location.href); return url.origin === this.location.origin && /^\/v\/[^/]+/.test(url.pathname); } catch { return false; }
+            })));
+        for (const root of this.document.querySelectorAll('[data-jhs-card-list]')) if (!roots.includes(root)) root.removeAttribute("data-jhs-card-list");
+        for (const root of roots) if (!root.hasAttribute("data-jhs-card-list")) root.setAttribute("data-jhs-card-list", "true");
+        return roots;
+    }
+    getCardEnhancementSelectors() {
+        this.locateCardEnhancementRoots();
+        return Object.freeze({ ...this.getListSelectors(), boxSelector: '[data-jhs-card-list]', itemSelector: '[data-jhs-card-list] > .item', coverImgSelector: '[data-jhs-card-list] > .item .cover img' });
+    }
     getLiveListSelectors() {
         this.locateListRoot();
         return Object.freeze({ ...this.getListSelectors(), boxSelector: '[data-jhs-primary-list]', itemSelector: '[data-jhs-primary-list] > .item', coverImgSelector: '[data-jhs-primary-list] > .item .cover img' });

@@ -179,7 +179,7 @@ export class ListPageCompatibilityService {
     getOptionalDependency(name) { return this.resolveDependency(name); }
     getCoverButtonCapability() {
         return Object.freeze({
-            getSelector: () => this.getSelector(),
+            getSelector: () => this.getRuntimeService("host").getCardEnhancementSelectors?.() ?? this.getSelector(),
             findCarNumAndHref: (/** @type {any} */ item) => this.findCarNumAndHref(item),
             parseActressName: (/** @type {string} */ url, /** @type {import("../../core/lifecycle-scope.js").LifecycleScope | undefined} */ scope = undefined) => this.parseActressName(url, scope),
         });
