@@ -75,6 +75,7 @@ test("a closed actor retry cannot move focus in a later workspace", async ({ pag
     await root.getByRole("button", { name: /^重试 / }).click();
     await expect.poll(() => page.evaluate(() => typeof window.releaseActorRetry)).toBe("function");
     await page.locator(".layui-layer-close").click();
+    await expect(root).toHaveCount(0);
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").openDialog());
     await root.locator("#nvViewList").click();
     await root.locator("#nvSearch").focus();

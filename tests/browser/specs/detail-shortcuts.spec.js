@@ -61,6 +61,8 @@ test.describe("详情鉴定快捷键", () => {
         await page.keyboard.press("Escape"); await expect(dialog).toBeVisible();
         await expect(page.locator("#favoriteBtn kbd")).toHaveCount(0);
         await dialog.locator("#saveBtn").click();
+        await expect(dialog.locator("#saveBtn")).toBeEnabled();
+        await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-dirty-count", "0");
         await page.keyboard.press("Escape"); await expect(dialog).toHaveCount(0);
         await expect(page.locator("#favoriteBtn kbd")).toHaveText("Alt+F");
         await page.keyboard.press("Alt+f"); await expect(page.locator("#favoriteBtn")).toHaveAttribute("aria-pressed", "true");
