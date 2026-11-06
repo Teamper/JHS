@@ -64,6 +64,7 @@ for (const action of ["close", "disable", "manual"]) test(`FC2 screenshot cancel
 });
 
 for (const movie of [
+  { name: "English title before publication date", carNum: "SNOS-439", fixture: "search-title-date.html", imageUrl: "https://img2.javstore.net/images/2026/11/05/ENGSUB-FHD-SNOS-439_s.jpg", article: "/596549-[ENGSUB]SNOS-439-fixture-pn.html" },
   { name: "public JavStore article IDs", carNum: "IPZZ-479", fixture: "search-article-ids.html", imageUrl: "https://img.javstore.net/images/2025/02/13/MOSAIC-ARCHIVE-ipzz-479_s.jpg", article: "/455954-reducing-mosaic-ipzz479-fixture-pn.html" },
   { name: "DMM maker prefixes", carNum: "NHDTC-262", fixture: "search-dmm-prefix.html", imageUrl: "https://img2.javstore.net/images/2026/10/23/NHDTC-262.1080p_s.jpg", article: "/594423-[FHD/SD]-NHDTC-262-Fixture-pn.html" },
 ]) for (const theme of ["light", "dark"]) {

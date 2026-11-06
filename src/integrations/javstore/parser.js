@@ -90,7 +90,10 @@ export function parseJavStoreSearch($searchPage, carNum, baseUrl = "https://javs
     for (const anchor of queryJavStoreElements($searchPage, "a[href]")) {
         const url = javStoreDetailUrl(anchor.getAttribute("href") || "", baseUrl);
         if (!url || !(/-pn\.html$/i.test(url.pathname) || anchor.matches("main .grid a"))) continue;
-        const evidence = [javStoreUrlPath(url.href, baseUrl), anchor.textContent || "", anchor.getAttribute("title") || ""];
+        // Publication dates are card metadata. Otherwise an English title tail
+        // and its day ("Yuka\n05/11/2026") become the false movie code YUKA05.
+        const text = (anchor.textContent || "").replace(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g, " ");
+        const evidence = [javStoreUrlPath(url.href, baseUrl), text, anchor.getAttribute("title") || ""];
         for (const image of anchor.querySelectorAll("img")) evidence.push(image.getAttribute("alt") || "", image.getAttribute("title") || "", javStoreCoverPath(image.getAttribute("src") || "", baseUrl, target));
         if (matchesJavStoreIdentity(evidence, target)) candidates.add(url.href);
     }
