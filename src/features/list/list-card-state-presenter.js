@@ -171,7 +171,7 @@ export class ListCardStatePresenter {
     /** Collect the same current-page state and debug counters exposed by the 6.5.1 compatibility surface. */
     /** @param {Iterable<Element> | null} [items] */
     collectSummary(items = null) {
-        const selectors = (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.());
+        const selectors = items === null ? (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.()) : null;
         const cards = items ?? (selectors?.itemSelector && this.document ? this.document.querySelectorAll(selectors.itemSelector) : []);
         const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
         for (const item of cards) {

@@ -13,6 +13,14 @@ function createImage(html, site, windowRuntime = {}) {
 }
 
 describe("ListCoverImageController", () => {
+    it("processes explicit images without resolving host selectors", () => {
+        const { dom, image, controller } = createImage('<img class="cover" src="https://jdbstatic.com/thumbs/abc.jpg">', "javdb");
+        const resolve = vi.spyOn(controller.hostAdapter, "getListSelectors");
+        controller.replace([image]);
+        controller.replace([]);
+        expect(resolve).not.toHaveBeenCalled();
+        controller.dispose(); dom.window.close();
+    });
     it("upgrades JavDB thumbnails to covers and falls back when the cover fails", () => {
         const { dom, image, controller } = createImage('<img class="cover" src="https://jdbstatic.com/thumbs/abc.jpg" title="Movie">', "javdb");
         Object.defineProperty(image, "complete", { configurable: true, value: true });

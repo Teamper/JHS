@@ -58,7 +58,7 @@ export class ListCoverImageController {
     /** Observe a collection of host cover images or resolve the current list covers. @param {any} [images] */
     replace(images = null) {
         if (this.disposed || !this.document) return 0;
-        const selector = (this.hostAdapter?.getCardEnhancementSelectors?.() ?? this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.())?.coverImgSelector;
+        const selector = images === null ? (this.hostAdapter?.getCardEnhancementSelectors?.() ?? this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.())?.coverImgSelector : null;
         const candidates = images?.jquery && typeof images.toArray === "function"
             ? images.toArray()
             : images ? Array.from(images) : selector ? [...this.document.querySelectorAll(selector)] : [];

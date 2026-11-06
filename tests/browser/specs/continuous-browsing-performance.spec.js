@@ -122,18 +122,40 @@ test("JavDB trusted filter clicks report paint latency on a long list", async ({
     await expect.poll(() => page.locator('.item[data-jhs-processed="true"]').count()).toBe(1000);
     await page.evaluate(() => {
         window.clickPaintSamples = [];
+        window.filterCompleteSamples = [];
+        window.filterClickStarted = null;
+        const events = window.unsafeWindow.pluginManager.getBean("ListPagePlugin").getRuntimeService("events");
+        window.releaseFilterMeasurement = events.on("list-visibility-changed", snapshot => {
+            const started = window.filterClickStarted;
+            if (started === null || !snapshot) return;
+            window.filterClickStarted = null;
+            requestAnimationFrame(() => setTimeout(() => window.filterCompleteSamples.push({ ...snapshot, milliseconds: performance.now() - started }), 0));
+        });
         document.querySelector("#jhs-quick-filter").addEventListener("click", event => {
             if (!event.isTrusted) return;
+            window.filterClickStarted = event.timeStamp;
             requestAnimationFrame(() => setTimeout(() => window.clickPaintSamples.push(performance.now() - event.timeStamp), 0));
         }, true);
     });
     const filters = process.env.JHS_SERIAL_PERFORMANCE === "1" ? Array.from({length: 30}, (_, index) => index % 2 ? "all" : "favorite") : ["favorite", "all", "favorite", "all", "waitCheck"];
+    const cpu = process.env.JHS_PERF_CPU === "1" ? await context.newCDPSession(page) : null;
+    if (cpu) { await cpu.send("Profiler.enable"); await cpu.send("Profiler.start"); }
     for (const filter of filters) {
         await page.locator(`#jhs-quick-filter .jhs-segmented__item[data-jhs-filter="${filter}"]`).click();
     }
     await expect.poll(() => page.evaluate(() => window.clickPaintSamples.length)).toBe(filters.length);
+    await expect.poll(() => page.evaluate(() => window.filterCompleteSamples.length)).toBe(filters.length);
+    if (cpu) {
+        const { profile } = await cpu.send("Profiler.stop");
+        await info.attach("filter-cpu-profile", { body: JSON.stringify(profile), contentType: "application/json" });
+        await cpu.detach();
+    }
     const durations = await page.evaluate(() => window.clickPaintSamples);
     await info.attach("performance-gate", { body: JSON.stringify({ trustedClickPaintMs: durations }), contentType: "application/json" });
     console.log(JSON.stringify({ trustedFilterPaintMilliseconds: durations }));
     await info.attach("trusted-filter-paint", { body: JSON.stringify(durations), contentType: "application/json" });
+    const complete = await page.evaluate(() => { window.releaseFilterMeasurement(); return window.filterCompleteSamples; });
+    expect(complete.map(sample => sample.filter)).toEqual(filters);
+    expect(complete.every(sample => sample.total === 1000)).toBe(true);
+    await info.attach("trusted-filter-completion", { body: JSON.stringify(complete), contentType: "application/json" });
 });

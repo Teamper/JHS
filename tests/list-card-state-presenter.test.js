@@ -22,6 +22,16 @@ const evaluation = (overrides = {}) => ({
 });
 
 describe("ListCardStatePresenter", () => {
+    it("collects explicit cards without resolving the page boundary", () => {
+        const { dom, adapter, presenter } = createHarness("javdb", '<div class="movie-list"><article class="item"></article></div>');
+        const resolve = vi.spyOn(adapter, "getLiveListSelectors");
+        const item = dom.window.document.querySelector(".item");
+        presenter.updateSummary(item);
+        expect(presenter.collectSummary([]).total).toBe(0);
+        expect(presenter.getSummary().total).toBe(1);
+        expect(resolve).not.toHaveBeenCalled();
+        dom.window.close();
+    });
     afterEach(() => vi.unstubAllGlobals());
     it("opens text-only rule reasons outside the host link and cleans up when the card is redrawn", () => {
         const { dom, presenter } = createHarness("javdb", '<div class="movie-list"><article class="item"><a href="/v/test">详情</a><div class="tags"></div></article></div>');

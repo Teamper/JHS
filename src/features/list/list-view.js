@@ -38,6 +38,7 @@ export class ListView {
         /** @type {any} */ this.navigationRoot = null;
         /** @type {any} */ this.videoRoot = null;
         /** @type {WeakMap<Element, string>} */ this.cardDisplays = new WeakMap();
+        /** @type {WeakMap<Element, {flagsText: string, visibilityText: string, flags: any, visibilityReasons: any}>} */ this.cardStates = new WeakMap();
     }
 
     /** @param {Element[] | null} items @param {unknown} filter @param {(element: Element, visible: boolean) => void} [onVisibility] */
@@ -46,8 +47,13 @@ export class ListView {
         // Read attributes before writing styles. jQuery show() can force layout
         // for every previously hidden card while restoring its display value.
         const changes = elements.map((/** @type {Element} */ element) => {
-            const flags = normalizeStateFlags(parseData(element.getAttribute("data-jhs-flags") || "{}", {}));
-            const visibilityReasons = parseData(element.getAttribute("data-jhs-visibility") || "{}", {}), recent = element.getAttribute("data-jhs-recent") === "yes";
+            const flagsText = element.getAttribute("data-jhs-flags") || "{}", visibilityText = element.getAttribute("data-jhs-visibility") || "{}";
+            let cached = this.cardStates.get(element);
+            if (!cached || cached.flagsText !== flagsText || cached.visibilityText !== visibilityText) {
+                cached = { flagsText, visibilityText, flags: normalizeStateFlags(parseData(flagsText, {})), visibilityReasons: parseData(visibilityText, {}) };
+                this.cardStates.set(element, cached);
+            }
+            const { flags, visibilityReasons } = cached, recent = element.getAttribute("data-jhs-recent") === "yes";
             const visible = shouldShowItem({ filter: normalizedFilter, flags, visibilityReasons, recent });
             const style = /** @type {HTMLElement} */ (element).style;
             if (style.display !== "none") this.cardDisplays.set(element, style.display);

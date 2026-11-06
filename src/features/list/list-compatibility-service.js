@@ -160,7 +160,7 @@ export class ListPageCompatibilityService {
         /** @type {any} */ this.featureListHoverPreviewAdapter = null;
         /** @type {any} */ this.featureListTagExpansionAdapter = null;
         /** @type {any} */ this.featureListNavigationAdapter = null;
-        /** @type {{processAddedItems: (items: Element[], revision?: string) => Promise<any>, getVisibilitySnapshot?: () => any} | null} */ this.featureListAddedItemsAdapter = null;
+        /** @type {{processAddedItems: (items: Element[], revision?: string) => Promise<any>, getVisibilitySnapshot?: () => any, getBoundItemCount?: () => number | null} | null} */ this.featureListAddedItemsAdapter = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -342,7 +342,8 @@ export class ListPageCompatibilityService {
         const diagnostics = /** @type {any} */ (globalThis).__jhsBrowserDiagnostics;
         if (!diagnostics) return;
         const phases = diagnostics.listPhases ||= [];
-        phases.push({ phase, generation: this.listGeneration, filterRevision: this.filterRevision, activeQuickFilter: this.activeQuickFilter || "waitCheck", itemCount: itemCount ?? $(this.getSelector().itemSelector).length });
+        const count = itemCount ?? this.featureListAddedItemsAdapter?.getBoundItemCount?.() ?? $(this.getSelector().itemSelector).length;
+        phases.push({ phase, generation: this.listGeneration, filterRevision: this.filterRevision, activeQuickFilter: this.activeQuickFilter || "waitCheck", itemCount: count });
         phases.length > 200 && phases.splice(0, phases.length - 200);
     }
     /** @param {Element[] | null} items @param {string} revision */

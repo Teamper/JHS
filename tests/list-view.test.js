@@ -27,6 +27,18 @@ function createHarness() {
 }
 
 describe("ListView", () => {
+    it("reuses parsed state until a card data attribute changes", () => {
+        const { $, view } = createHarness();
+        const item = $("#favorite")[0];
+        view.applyVisibility([item], "favorite");
+        const cached = view.cardStates.get(item);
+        view.applyVisibility([item], "all");
+        expect(view.cardStates.get(item)).toBe(cached);
+        item.setAttribute("data-jhs-flags", JSON.stringify({ favorite: false }));
+        view.applyVisibility([item], "favorite");
+        expect(view.cardStates.get(item)).not.toBe(cached);
+        expect(item.style.display).toBe("none");
+    });
     afterEach(() => vi.unstubAllGlobals());
 
     it("uses host selectors and applies the release quick-filter semantics", () => {

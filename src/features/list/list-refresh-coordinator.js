@@ -11,6 +11,7 @@ export class ListRefreshCoordinator {
         this.refreshVisibilityRequested = false;
         /** @type {Set<Element>} */ this.refreshItems = new Set();
         /** @type {Promise<boolean> | null} */ this.refreshPromise = null;
+        /** @type {(() => void) | null} */ this.cancelVisibilityFrame = null;
         this.disposed = false;
     }
 
@@ -30,6 +31,15 @@ export class ListRefreshCoordinator {
         this.refreshRunning = true;
         const run = async () => {
             try {
+                if (visibilityOnly) {
+                    if (typeof globalThis.requestAnimationFrame === "function" && !globalThis.document?.hidden) {
+                        await new Promise(resolve => {
+                            const finish = () => { this.cancelVisibilityFrame = null; resolve(undefined); };
+                            const frame = globalThis.requestAnimationFrame(finish);
+                            this.cancelVisibilityFrame = () => { globalThis.cancelAnimationFrame?.(frame); finish(); };
+                        });
+                    } else await Promise.resolve();
+                }
                 while (this.refreshDirty && !this.disposed) {
                     const fullRefresh = this.refreshAllRequested;
                     const visibilityRefresh = this.refreshVisibilityRequested && !fullRefresh;
@@ -71,6 +81,7 @@ export class ListRefreshCoordinator {
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
+        this.cancelVisibilityFrame?.();
         this.refreshDirty = false;
         this.refreshAllRequested = false;
         this.refreshVisibilityRequested = false;

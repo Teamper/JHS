@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ListRefreshCoordinator } from "../src/features/list/list-refresh-coordinator.js";
+
+afterEach(() => vi.unstubAllGlobals());
 
 function setup() {
     let generation = 0;
@@ -19,6 +21,39 @@ function setup() {
 }
 
 describe("ListRefreshCoordinator", () => {
+    it("coalesces selections across tasks before the next visible frame", async () => {
+        let frame;
+        vi.stubGlobal("document", { hidden: false });
+        vi.stubGlobal("requestAnimationFrame", callback => { frame = callback; return 7; });
+        const { coordinator, options } = setup();
+        const first = coordinator.request({ visibilityOnly: true });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const last = coordinator.request({ visibilityOnly: true });
+        expect(options.reconcile).not.toHaveBeenCalled();
+        frame();
+        await Promise.all([first, last]);
+        expect(options.reconcile).toHaveBeenCalledOnce();
+    });
+    it("releases a queued visibility frame when disposed", async () => {
+        vi.stubGlobal("document", { hidden: false });
+        vi.stubGlobal("requestAnimationFrame", () => 7);
+        const cancel = vi.fn(); vi.stubGlobal("cancelAnimationFrame", cancel);
+        const { coordinator, options } = setup();
+        const result = coordinator.request({ visibilityOnly: true });
+        coordinator.dispose();
+        await expect(result).resolves.toBe(false);
+        expect(cancel).toHaveBeenCalledWith(7);
+        expect(options.reconcile).not.toHaveBeenCalled();
+    });
+    it("coalesces same-task visibility selections into a single final pass", async () => {
+        const { coordinator, options } = setup();
+        const first = coordinator.request({ visibilityOnly: true });
+        const last = coordinator.request({ visibilityOnly: true });
+        await Promise.all([first, last]);
+        expect(options.reconcile).toHaveBeenCalledOnce();
+        expect(options.filterAll).not.toHaveBeenCalled();
+        expect(options.filterItems).not.toHaveBeenCalled();
+    });
     it("coalesces an in-flight stale pass into one current full refresh", async () => {
         const { coordinator, options } = setup();
         let release;

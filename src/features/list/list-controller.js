@@ -407,6 +407,11 @@ export class ListController {
         this.recountFrame = null;
     }
 
+    getBoundItemCount() {
+        return this.boundListRoot?.isConnected && this.view
+            ? this.boundListRoot.querySelectorAll(this.view.selectors.itemSelector).length : null;
+    }
+
     /** Keep the active quick filter in the Feature and notify the temporary legacy evaluator adapter. */
     /** @param {unknown} filter @param {{syncUi?: boolean}} [options] */
     setQuickFilter(filter, { syncUi = true } = {}) {
