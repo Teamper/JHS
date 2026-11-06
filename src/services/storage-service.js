@@ -23,6 +23,8 @@ export class StorageService {
         if (!this.port.commitAtomicBatch) throw Object.assign(new Error("当前存储不支持安全导入，数据未修改"), { code: "ATOMIC_IMPORT_UNAVAILABLE" });
         return this.port.commitAtomicBatch(batch);
     }
+    /** Optional native transaction, called while the shared mutation lock is held. @param {any} batch */
+    commitLockedBatch(batch) { return this.port.commitLockedBatch?.(batch) ?? Promise.resolve(false); }
     /** @param {string} key */
     getLocal(key) { return this.preferences?.owns(key) ? this.preferences.get(key) : this.port.getLocal(key); }
     /** @param {string} key @param {string} value */

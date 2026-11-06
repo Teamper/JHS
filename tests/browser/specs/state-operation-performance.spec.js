@@ -3,7 +3,7 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
 
 test.use({ trace: "off", screenshot: "off" });
 const sampleCount = Math.min(30, Math.max(1, Number.parseInt(process.env.JHS_STATE_PERF_SAMPLES || "1", 10) || 1));
-for (const count of [3000, 10000]) for (const sync of [false, true]) test(`mark and offline persistence ${count} movies sync=${sync}`, async ({ page, context }, info) => {
+for (const count of process.env.JHS_PERF_STRESS === "1" ? [50000] : [3000, 10000]) for (const sync of [false, true]) test(`mark and offline persistence ${count} movies sync=${sync}`, async ({ page, context }, info) => {
   test.skip(info.project.name !== "desktop-wide", "fixed persistence benchmark");
   test.setTimeout(180000);
   await fulfillHostFixtures(context); await page.goto("https://javdb.com/");

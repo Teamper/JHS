@@ -311,6 +311,7 @@ export class StateService {
         const clone = (/** @type {any} */ value) => this.computation ? this.computation.run("state.clone", jsonCloneSteps(value)) : Promise.resolve(cloneStateValue(value));
         const pendingActivity = await clone(activity), pendingLog = this._prepareActivity({ ...domains.activity, entries: [ ...domains.activity.entries, pendingActivity ] });
         const touched = [ ...new Set([ ...touchedDomains, "activity" ]) ];
+        if (await this._commitAtomic(next, activity, pendingLog, touched)) return;
         const select = async (/** @type {StateRecord} */ source, includePendingActivity = false) => {
             /** @type {StateRecord} */ const result = {};
             for (const key of touched) result[key] = await clone(key === "activity" && includePendingActivity ? pendingLog : source[key]);
@@ -338,6 +339,25 @@ export class StateService {
         try { this.storage._invalidateCache(); } catch { /* Cache cleanup is post-commit. */ }
         if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
         this.storage.backupChanges?.primary(activity.changes.map((/** @type {any} */ change) => change.carNum));
+    }
+    /** Use detached domain snapshots prepared under the shared mutation lock.
+     * @param {StateRecord} next @param {StateRecord} activity @param {StateRecord} log @param {string[]} touched */
+    async _commitAtomic(next, activity, log, touched) {
+        if (!this.mutationCoordinator || !this.storage.atomicStorage?.commitLockedBatch) return false;
+        const committed = { ...activity, commitState: "committed" };
+        const committedLog = { ...log, entries: log.entries.map((/** @type {StateRecord} */ entry) => entry.id === activity.id ? committed : entry) };
+        const puts = Object.fromEntries(touched.map(key => [this.domains[key].storageKey, key === "activity" ? committedLog : next[key]]));
+        const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), committed, committedLog.entries);
+        const backup = await this.storage.backupChanges?.prepareCommittedMutation?.(activity.changes.map((/** @type {StateRecord} */ change) => change.carNum));
+        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts, ...backup?.puts }, deletes: [] })) return false;
+        activity.commitState = "committed";
+        // Post-commit bookkeeping cannot turn a durable toggle into a retry.
+        for (const receipt of [sync, backup]) {
+            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch {} }
+        }
+        try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
+        if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
+        return true;
     }
     /** @param {StateRecord} journal */
     async _recoverJournal(journal) {

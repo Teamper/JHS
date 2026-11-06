@@ -29,10 +29,12 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
 
   const metadata = transformMetadata(sourceMetadata);
   const resourceRegistry = new Map();
+  const worker = await esbuild.build({ entryPoints: [join(repoRoot, "src/platform/userscript/sync-computation-worker.js")], bundle: true, format: "iife", target: "es2020", minify: true, write: false, logLevel: "silent" });
   const buildResult = await esbuild.build({
     entryPoints: [srcPath],
     absWorkingDir: repoRoot,
     bundle: true,
+    define: { __JHS_SYNC_WORKER_SOURCE__: JSON.stringify(worker.outputFiles[0].text) },
     format: "iife",
     target: "es2020",
     charset: "utf8",

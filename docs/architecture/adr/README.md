@@ -17,3 +17,4 @@ ADR-001 至 ADR-012 保留 v6.5 已冻结的架构决策历史，7.0 `develop` �
 11. [Vendor Bridge](011-vendor-bridge.md)
 12. [Browser 与发布门禁](012-browser-release-gate.md)
 13. [WebDAV 多端同步与恢复](013-webdav-sync-recovery.md)
+14. [原子状态保存与同步计算](014-atomic-state-and-sync-computation.md)

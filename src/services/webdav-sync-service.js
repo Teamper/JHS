@@ -47,7 +47,10 @@ export class WebDavSyncService extends EventTarget {
         this.schedule(1000);
     }
     notify() { this.dispatchEvent(new Event("status")); }
-    cancel() { this.scheduleGeneration++; this.window?.clearTimeout(this.timer); this.timer = 0; this.nextDueAt = 0; this.operation?.dispose(); }
+    cancel() {
+        this.scheduleGeneration++; this.window?.clearTimeout(this.timer); this.timer = 0; this.nextDueAt = 0;
+        this.operation?.dispose(); this.deps.computation?.cancel?.(); this.deps.store.releaseSnapshots?.();
+    }
     /** @param {number} delay @param {boolean} [force] @param {boolean} [manual] */
     schedule(delay, force = false, manual = false) {
         if (this.suspended || this.owner?.disposed) return;
@@ -60,7 +63,7 @@ export class WebDavSyncService extends EventTarget {
         const generation = ++this.scheduleGeneration;
         let delay = this.document?.hidden ? 120000 : 30000;
         try {
-            const state = await this.deps.store.read(), snapshot = await this.deps.shared.snapshot();
+            const state = await (this.deps.store.readMetadata?.() ?? this.deps.store.read()), snapshot = await this.deps.shared.snapshot();
             const locallyPaused = await this.deps.shared.paused();
             if (generation !== this.scheduleGeneration || this.suspended || this.owner?.disposed) return;
             const profile = snapshot.profile;
@@ -72,7 +75,7 @@ export class WebDavSyncService extends EventTarget {
         if (generation === this.scheduleGeneration) this.schedule(delay);
     }
     async getStatus() {
-        const state = await this.deps.store.read();
+        const state = await (this.deps.store.readMetadata?.() ?? this.deps.store.read());
         let configured = false, profileMessage = "", profileConflict = false;
         try { const { profile } = await this.deps.shared.snapshot(); configured = !!(profile.url && profile.username && profile.password); } catch (error) { profileMessage = /** @type {Error} */ (error).message; profileConflict = /** @type {any} */ (error).code === "SYNC_PROFILE_CONFLICT"; }
         const locallyPaused = await this.deps.shared.paused();
@@ -117,12 +120,12 @@ export class WebDavSyncService extends EventTarget {
                 finally { this.waitingForBackground = false; }
             }
             scope.assertActive();
-            await this.deps.store.initialize();
+            await (this.deps.store.ensureInitialized?.() ?? this.deps.store.initialize());
             await this.deps.shared.migrate();
             const snapshot = await this.deps.shared.snapshot(), profile = snapshot.profile; revision = snapshot.revision;
             if (!profile.url || !profile.username || !profile.password || await this.deps.shared.paused()) return;
             if (!this.locks?.request) { this.message = "当前浏览器不支持可靠的同源互斥，自动同步已暂停"; return; }
-            const current = await this.deps.store.read();
+            const current = await (this.deps.store.readForRound?.() ?? this.deps.store.read());
             if (current.paused && current.errorRevision === revision || current.retryAt > this.clock() && current.errorRevision === revision) return;
             await this.locks.request(SYNC_NETWORK_LOCK, { ifAvailable: true }, async (/** @type {any} */ lock) => {
                 if (!lock) { lockMiss = true; return; }
@@ -131,7 +134,7 @@ export class WebDavSyncService extends EventTarget {
                 round.binding = binding;
                 // The same origin shares one poll window even when tabs wake at
                 // different times. Local edits and explicit checks can run sooner.
-                let latest = await this.deps.store.read();
+                let latest = await (this.deps.store.readForRound?.() ?? this.deps.store.read());
                 const now = this.clock();
                 if (latest.errorRevision === revision && (latest.paused || latest.retryAt > now)) return;
                 // A reopened page repairs the previous page's metadata crash gap
@@ -148,17 +151,20 @@ export class WebDavSyncService extends EventTarget {
                 const files = await client.listSyncFiles();
                 const remote = await this.pull(client, files, scope, revision, binding);
                 await this.deps.store.merge(remote.models, binding, () => this.assertCurrent(scope, revision), remote.confirmed, { signal: scope.signal, round, lastSuccessAt: remote.models.length ? this.clock() : undefined });
-                let state = await this.deps.store.read();
+                let state = await (this.deps.store.readForRound?.() ?? this.deps.store.read());
                 let published = false;
                 if ((state.dirty || state.pending) && (!options.scheduled || this.manualRequested || options.force || syncPublishDueAt(state, this.clock()) <= this.clock())) {
                     if (!state.pending) await this.preparePending(scope, revision, round);
                     await this.publish(client, scope, revision);
                     published = true;
-                    state = await this.deps.store.read();
+                    state = await (this.deps.store.readForRound?.() ?? this.deps.store.read());
                 }
                 if ((published || state.cleanupError || state.deleting?.length) && !(state.cleanupRetryAt > this.clock())) await this.attemptCleanup(client, scope, revision);
                 await this.assertCurrent(scope, revision);
-                await this.deps.store.update(async (/** @type {any} */ value) => {
+                if (this.deps.store.recordCheck) {
+                    const checkedAt = this.clock();
+                    await this.deps.store.recordCheck(revision, checkedAt, checkedAt + (this.document?.hidden ? 120000 : 30000), () => this.assertCurrent(scope, revision));
+                } else await this.deps.store.update(async (/** @type {any} */ value) => {
                     await this.assertCurrent(scope, revision);
                     value.retryAt = 0; value.failures = 0; value.error = ""; value.paused = false;
                     value.checkedRevision = revision; value.lastCheckAt = this.clock(); value.nextCheckAt = value.lastCheckAt + (this.document?.hidden ? 120000 : 30000);
@@ -182,7 +188,7 @@ export class WebDavSyncService extends EventTarget {
     }
     /** @param {any} client @param {any[]} files @param {any} scope @param {string} revision @param {string} binding */
     async pull(client, files, scope, revision, binding) {
-        const state = await this.deps.store.read(), confirmed = state.binding === binding ? state.confirmed : {};
+        const state = await (this.deps.store.readForRound?.() ?? this.deps.store.read()), confirmed = state.binding === binding ? state.confirmed : {};
         /** @type {Map<string, any>} */ const newest = new Map();
         for (const file of files) {
             if (file.schema !== 1) throw Object.assign(new Error("同步目录含更新协议，请更新 JHS"), { code: "SYNC_FUTURE_VERSION" });
@@ -202,13 +208,18 @@ export class WebDavSyncService extends EventTarget {
         }
         return { models, confirmed: { ...confirmed, ...updates } };
     }
+    /** @param {string} content @param {ComputationBudget} work */
+    async parseEnvelopeContent(content, work) {
+        const text = await decryptPortableBackup(content, work);
+        return this.deps.computation?.run("parse", text, { signal: work.signal, work }) ?? JSON.parse(text);
+    }
     /** @param {any} client @param {any} file @param {any} [scope] */
     async readEnvelope(client, file, scope = this.operation) {
         if (file.schema !== 1) throw Object.assign(new Error("同步数据来自不支持的协议，请更新 JHS"), { code: "SYNC_FUTURE_VERSION" });
         const content = await client.readSyncFile(file.name);
         if (await syncHash(content) !== file.hash) throw new Error("同步快照哈希不一致，未应用或清理任何数据");
         const work = new ComputationBudget({ signal: scope?.signal, diagnostics: this.deps.diagnostics });
-        const envelope = await validateSyncEnvelopeAsync(JSON.parse(await decryptPortableBackup(content, work)), this.deps.validateSetting, work);
+        const envelope = await validateSyncEnvelopeAsync(await this.parseEnvelopeContent(content, work), this.deps.validateSetting, work);
         if (envelope.replicaId !== file.replicaId || envelope.seq !== file.seq || envelope.createdAt !== file.createdAt) throw new Error("同步文件名与内容不一致");
         return envelope;
     }
@@ -219,7 +230,7 @@ export class WebDavSyncService extends EventTarget {
         const seq = state.seq + 1, createdAt = new Date(this.clock()).toISOString();
         const envelope = { schema: 1, dataVersion: CURRENT_DATA_VERSION, replicaId: state.replicaId, seq, createdAt, state: state.model, recovery: { layout: state.layout } };
         const work = new ComputationBudget({ signal: scope.signal, diagnostics: this.deps.diagnostics });
-        const content = await encryptPortableBackup(await stringifySyncDataAsync(envelope, work), work), hash = await syncHash(content);
+        const content = await encryptPortableBackup(await (this.deps.computation?.run("stringify", envelope, { signal: scope.signal, work }) ?? stringifySyncDataAsync(envelope, work)), work), hash = await syncHash(content);
         const pending = { name: syncFileName(state.replicaId, seq, createdAt, hash), content, hash, seq, coveredRevision: state.localRevision || 0, createdAt };
         await this.assertCurrent(scope, revision);
         await this.deps.store.update(async (/** @type {any} */ value) => {
@@ -229,7 +240,7 @@ export class WebDavSyncService extends EventTarget {
     }
     /** @param {any} client @param {any} scope @param {string} revision */
     async publish(client, scope, revision) {
-        const state = await this.deps.store.read(), pending = state.pending;
+        const state = await (this.deps.store.readForRound?.() ?? this.deps.store.read()), pending = state.pending;
         await this.assertCurrent(scope, revision);
         const existing = await client.readSyncFile(pending.name, true);
         if (existing == null) await client.writeSyncFile(pending.name, pending.content);
@@ -275,7 +286,7 @@ export class WebDavSyncService extends EventTarget {
     }
     /** @param {any} client @param {any} scope @param {string} revision */
     async cleanup(client, scope, revision) {
-        const files = await client.listSyncFiles(), state = await this.deps.store.read();
+        const files = await client.listSyncFiles(), state = await (this.deps.store.readForRound?.() ?? this.deps.store.read());
         this.assertCleanupListing(files, state);
         const { count, days } = syncRetention((await this.deps.store.readData(["setting"])).setting);
         const keep = retainedSyncFiles(files, state.replicaId, count, days, this.clock());
@@ -292,7 +303,7 @@ export class WebDavSyncService extends EventTarget {
             if (content != null) {
                 await this.readEnvelope(client, file, scope);
                 await this.deps.store.update(async (/** @type {any} */ value) => { await this.assertCurrent(scope, revision); if (!value.deleting.includes(name)) value.deleting.push(name); });
-                const latestFiles = await client.listSyncFiles(), latestState = await this.deps.store.read();
+                const latestFiles = await client.listSyncFiles(), latestState = await (this.deps.store.readForRound?.() ?? this.deps.store.read());
                 this.assertCleanupListing(latestFiles, latestState);
                 const retention = syncRetention((await this.deps.store.readData(["setting"])).setting);
                 if (retainedSyncFiles(latestFiles, state.replicaId, retention.count, retention.days, this.clock()).has(name)) {

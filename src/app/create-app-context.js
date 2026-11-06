@@ -52,6 +52,8 @@ import { IntegrationRegistry } from "./integration-registry.js";
 import { SettingsRegistry } from "./settings-registry.js";
 import { registerDefaultSettings } from "./settings-catalog.js";
 import { ComputationBudget } from "../core/cooperative-work.js";
+import { SyncComputation } from "../services/sync-computation-service.js";
+import { createSyncWorker } from "../platform/userscript/sync-worker-factory.js";
 import { BackgroundWork } from "../core/background-work.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { parseDetailPage } from "../integrations/host-list/parser.js";
@@ -123,7 +125,9 @@ export function createAppContext(runtime) {
     const webdav = new WebDavService(http, credential, settings);
     mutationCoordinator.diagnostics = diagnostics;
     if (runtime.stateService) runtime.stateService.computation = new ComputationBudget({ diagnostics });
-    const syncState = new WebDavSyncStore({ forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting, diagnostics, backgroundWork });
+    const computation = new SyncComputation({ createWorker: createSyncWorker, diagnostics });
+    rootScope.addCleanup(() => computation.dispose());
+    const syncState = new WebDavSyncStore({ computation, forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting, diagnostics, backgroundWork });
     rootScope.addCleanup(() => syncState.dispose());
     for (const type of ["car-state-changed", "offline-history-changed", "actress-changed", "settings-changed"]) {
         const unsubscribe = runtime.eventBus?.on?.(type, () => syncState.requestReconciliation());
@@ -138,7 +142,7 @@ export function createAppContext(runtime) {
     const preferences = new PersonalPreferencesService(settings, runtime.localStorage, message => notifications.error(message));
     storage.preferences = preferences;
     /** @type {import("../contracts/webdav-sync.js").WebDavSync} */
-    const webdavSync = new WebDavSyncService({ diagnostics, backgroundWork, webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
+    const webdavSync = new WebDavSyncService({ computation, diagnostics, backgroundWork, webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;

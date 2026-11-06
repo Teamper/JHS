@@ -17,3 +17,4 @@ interface Window {
     isDetailPage: boolean;
     isListPage: boolean;
 }
+declare const __JHS_SYNC_WORKER_SOURCE__: string;

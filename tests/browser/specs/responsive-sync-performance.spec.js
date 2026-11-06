@@ -1,12 +1,13 @@
 import { test, expect } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { retainedMemory, sampleMemory } from "../harness/performance-memory.js";
 
 // Tracing snapshots traverse the full DOM on each input and would contaminate latency.
 test.use({ trace: "off", screenshot: "off" });
 const baseline = process.env.JHS_PERF_BASELINE === "1";
 const captureCpu = process.env.JHS_PERF_CPU === "1";
 const captureDiagnostics = process.env.JHS_PERF_DIAGNOSTICS === "1";
-for (const [cards, records] of [[40, 1000], [200, 1000], [1000, 10000]]) {
+for (const [cards, records] of process.env.JHS_PERF_STRESS === "1" ? [[1000, 50000]] : [[40, 1000], [200, 1000], [1000, 10000]]) {
   test("hover and state persistence during mixed sync " + cards + " cards / " + records + " records", async ({ page, context }, info) => {
     test.skip(info.project.name !== "desktop-wide", "one fixed mouse environment");
     test.setTimeout(180000);
@@ -74,6 +75,10 @@ for (const [cards, records] of [[40, 1000], [200, 1000], [1000, 10000]]) {
     if (cpu) { await cpu.send("Profiler.enable"); await cpu.send("Profiler.setSamplingInterval", { interval: 1000 }); }
     const rounds = Number.parseInt(process.env.JHS_PERF_ROUNDS || "0", 10) || (records === 10000 ? 3 : 2);
     const gate = { syncMs: [], hoverPaintMs: [], maxLongTaskMs: [] };
+    const memory = [];
+    const profilingMemory = process.env.JHS_PERF_MEMORY === "1";
+    const sampler = profilingMemory ? sampleMemory(page, context) : null;
+    try {
     for (let round = 0; round < rounds; round++) {
       if (cpu) await cpu.send("Profiler.start");
       await page.evaluate(({ round, captureDiagnostics }) => {
@@ -114,12 +119,23 @@ for (const [cards, records] of [[40, 1000], [200, 1000], [1000, 10000]]) {
       gate.syncMs.push(result.syncMs); gate.hoverPaintMs.push(Math.max(...result.hoverPaintMs)); gate.maxLongTaskMs.push(Math.max(0, ...result.longTasks));
       console.log(JSON.stringify({ baseline, cards, records, round, ...result }));
       await info.attach("mixed-sync-" + round, { body: JSON.stringify(result, null, 2), contentType: "application/json" });
+      if (profilingMemory) memory.push(await retainedMemory(page, context));
       expect(result.hoverPaintMs.length).toBeGreaterThan(0);
       if (round === 2) expect(result.requestedWhileSyncLocked).toBe(true);
+    }
+    } finally {
+      if (sampler) await info.attach("sampled-peak-memory", { body: JSON.stringify(await sampler.stop()), contentType: "application/json" });
     }
     await info.attach("performance-gate", { body: JSON.stringify(gate), contentType: "application/json" });
     await page.mouse.move(4, 4);
     await expect.poll(() => page.evaluate(() => document.querySelector(".image-hover-preview")?.classList.contains("active"))).toBe(false);
+    if (memory.length) {
+      await info.attach("retained-memory", { body: JSON.stringify(memory), contentType: "application/json" });
+      expect(memory.every(sample => sample.workers === (baseline ? 0 : 1))).toBe(true);
+      const stable = memory.slice(3).map(sample => sample.totalHeapBytes);
+      expect(stable.length).toBeGreaterThanOrEqual(7);
+      expect(Math.max(...stable)).toBeLessThan(Math.min(...stable) * 1.25);
+    }
     await page.evaluate(() => window.mixedObserver.disconnect());
   });
 }

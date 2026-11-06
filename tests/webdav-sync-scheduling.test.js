@@ -166,8 +166,8 @@ describe("durable publication deadlines", () => {
 
     it("does not recreate a timer after cancellation while a scheduling read is pending", async () => {
         const a = await syncReplica(memoryDav()), gate = deferred(), entered = deferred();
-        const timers = recordTimers(a.service), original = a.store.read.bind(a.store);
-        vi.spyOn(a.store, "read").mockImplementationOnce(async () => { entered.resolve(); await gate.promise; return original(); });
+        const timers = recordTimers(a.service), original = a.store.readMetadata.bind(a.store);
+        vi.spyOn(a.store, "readMetadata").mockImplementationOnce(async () => { entered.resolve(); await gate.promise; return original(); });
         const scheduling = a.service.reschedule(); await entered.promise; a.service.cancel(); gate.resolve(); await scheduling;
         expect(timers).toEqual([]); expect(a.service.nextDueAt).toBe(0);
     });

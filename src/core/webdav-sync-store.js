@@ -1,11 +1,12 @@
 // @ts-check
 
+import { runSyncJob } from "./sync-computation-jobs.js";
 import { ComputationBudget } from "./cooperative-work.js";
 import { changedSyncKeysAsync, equalSyncValuesAsync, syncRecordMapAsync, needsHistoryPruneAsync } from "./webdav-sync-model.js";
 import { assertSupportedDataVersion } from "./migration.js";
 import { normalizeCarNum } from "./constants.js";
-import { SyncPendingLedger } from "./sync-pending-ledger.js";
-import { SYNC_DOMAINS, SYNC_LEGACY_DEFAULTS, emptySyncModel, historyRank, joinSyncModelsAsync, materializeSyncDataAsync, maximumClockAsync, projectSyncDataAsync, pruneSyncHistoryAsync, syncCloneAsync, syncJsonAsync, syncLayout, validateSyncStateAsync, versionSyncDiffAsync, visibleSyncRecordsAsync, withSyncRetentionDefaults } from "./webdav-sync-model.js";
+import { SyncPendingLedger, SYNC_PENDING_KEY } from "./sync-pending-ledger.js";
+import { SYNC_DOMAINS, SYNC_LEGACY_DEFAULTS, emptySyncModel, historyRank, maximumClockAsync, pruneSyncHistoryAsync, syncCloneAsync, syncLayout, validateSyncStateAsync, versionSyncDiffAsync, visibleSyncRecordsAsync, withSyncRetentionDefaults } from "./webdav-sync-model.js";
 
 /** @typedef {Record<string, any>} Dict */
 export const SYNC_STATE_KEY = "jhs_webdav_sync_state_v1";
@@ -19,6 +20,15 @@ function compactSyncMetadata(state) {
 }
 /** @param {Dict} a @param {Dict} b */
 function sameSyncRevision(a, b) { return ["generation", "metadataRevision", "epoch", "replicaId"].every(key => a[key] === b[key]); }
+
+/** A poll receipt applies only to the sidecar revision it successfully checked.
+ * @param {Dict} state @param {Dict} pending */
+function applyCheckWindow(state, pending) {
+    const check = pending.check;
+    if (check?.baseMetadataRevision !== pending.metadataRevision) return state;
+    return Object.assign(state, { retryAt: 0, failures: 0, error: "", paused: false,
+        checkedRevision: check.checkedRevision, lastCheckAt: check.lastCheckAt, nextCheckAt: check.nextCheckAt });
+}
 
 /** Durable local sidecar. All *WithoutLock methods require the business lock. */
 export class WebDavSyncStore extends EventTarget {
@@ -52,33 +62,86 @@ export class WebDavSyncStore extends EventTarget {
         this.notificationError = "";
         this.notificationRetryAt = 0;
         /** @type {Promise<void> | null} */ this.notificationDrain = null;
+        /** @type {{revision: Dict, value: Dict} | null} */ this.metadata = null;
+        /** Private, database-owned record graphs. Round readers copy writable containers.
+         * @type {{revision: Dict, state: Dict} | null} */ this.roundState = null;
+        /** @type {Dict | null} */ this.initializedRevision = null;
+        this.snapshotGeneration = 0;
         this.coordinator.afterRelease = () => { this.scheduleNotifications(); this.scheduleReconciliation(); };
     }
-    /** @returns {Promise<Dict>} */
-    async read() {
+    /** Public reads never seed reusable graphs outside the mutation lock.
+     * @param {number} [generation] @param {boolean} [cache] @returns {Promise<Dict>} */
+    async read(generation = this.snapshotGeneration, cache = false) {
         for (;;) {
         const before = await this.ledger.read();
         const state = await this.forage.getItem(SYNC_STATE_KEY);
         const pending = await this.ledger.read();
         if (before.epoch !== pending.epoch) continue;
-        return this.readStateSnapshot(state, pending);
+        return this.readStateSnapshot(state, pending, cache && generation === this.snapshotGeneration);
         }
     }
-    /** Interpret an epoch-verified read, or a snapshot owned by the shared lock. @param {Dict | null} state @param {Dict} pending @returns {Dict} */
-    readStateSnapshot(state, pending) {
+    /** Status and scheduling use a small revision-verified projection. */
+    async readMetadata() {
+        const revision = await this.ledger.read();
+        if (!this.metadata || !sameSyncRevision(revision, this.metadata.revision)) {
+            const generation = this.snapshotGeneration;
+            return this.coordinator.runExclusive(async () => {
+                const { model, shadow, ...value } = await this.read(generation, true);
+                return value;
+            });
+        }
+        const value = structuredClone(this.metadata?.value ?? {});
+        if (Object.keys(revision.domains).length) {
+            value.dirty = true;
+            value.dirtySinceAt = Math.min(value.dirtySinceAt || Infinity, revision.firstPendingAt || this.deps.clock?.() || Date.now());
+            value.lastLocalChangeAt = Math.max(value.lastLocalChangeAt || 0, revision.lastPendingAt || value.dirtySinceAt);
+        }
+        return applyCheckWindow(value, revision);
+    }
+    /** Internal computation snapshots share immutable records, never caller-owned writes.
+     * Business domains are still freshly read for every full missed-write check.
+     * @param {boolean} [locked] @param {number} [generation] @returns {Promise<Dict>} */
+    async readForRound(locked = false, generation = this.snapshotGeneration) {
+        let revision = await this.ledger.read();
+        if (generation !== this.snapshotGeneration) return this.read(generation);
+        const cached = this.roundState;
+        if (!cached || !["metadataRevision", "epoch", "replicaId"].every(key => cached.revision[key] === revision[key])) {
+            // Ledger advancement precedes the sidecar write. A stable ledger
+            // alone cannot prove the corresponding graph has finished writing.
+            if (!locked) return this.coordinator.runExclusive(() => this.readForRound(true, generation));
+            const state = await this.read(generation, true);
+            const after = await this.ledger.read();
+            if (generation !== this.snapshotGeneration || this.backgroundAbort.signal.aborted) return state;
+            this.roundState = { revision: after, state: { ...state, ...this.metadata?.value, model: state.model, shadow: state.shadow, pending: state.pending } };
+            revision = after;
+        }
+        const snapshot = /** @type {{revision: Dict, state: Dict}} */ (this.roundState);
+        const { model, shadow, ...metadata } = snapshot.state;
+        const state = { ...structuredClone(metadata), model: { records: { ...model.records }, frontiers: { ...model.frontiers } }, shadow: { ...shadow } };
+        return this.readStateSnapshot(state, revision, generation === this.snapshotGeneration);
+    }
+    /** @param {Dict} state @param {Dict} revision */
+    rememberMetadata(state, revision) {
+        const { model, shadow, pending, ...value } = state;
+        this.metadata = { revision: { ...revision }, value: structuredClone({ ...value, pending: pending ? { name: pending.name, seq: pending.seq, createdAt: pending.createdAt, coveredRevision: pending.coveredRevision } : null }) };
+    }
+    /** Interpret an epoch-verified read, or a snapshot owned by the shared lock. @param {Dict | null} state @param {Dict} pending @param {boolean} [cache] @returns {Dict} */
+    readStateSnapshot(state, pending, cache = true) {
         if (state && (state.schema !== 1 || !state.model?.records || !state.shadow || !Array.isArray(state.undoEligible))) throw new Error("同步状态损坏或版本不受支持，请保留数据并使用恢复入口");
         // A crashed reset may leave a new ledger epoch beside an old sidecar.
         // Fail closed until initialization repairs it; never spin on storage.
         if (state?.undoEpoch && state.undoEpoch !== pending.epoch) state.undoEligible = [];
         if (state) {
             this.replicaId = state.replicaId; this.installUndo(state.undoEligible, pending);
+            compactSyncMetadata(state);
+            if (cache && !this.backgroundAbort.signal.aborted) this.rememberMetadata(state, pending);
             if (Object.keys(pending.domains).length) {
                 state.dirty = true;
                 state.dirtySinceAt = Math.min(state.dirtySinceAt || Infinity, pending.firstPendingAt || this.deps.clock?.() || Date.now());
                 state.lastLocalChangeAt = Math.max(state.lastLocalChangeAt || 0, pending.lastPendingAt || state.dirtySinceAt);
                 this.hasDeferred = true;
             }
-            return compactSyncMetadata(state);
+            return applyCheckWindow(state, pending);
         }
         return { schema: 1, replicaId: "", counter: 0, seq: 0, localRevision: 0, publishedRevision: 0, joined: false, binding: "", model: emptySyncModel(), shadow: {}, layout: {}, dirty: false, dirtySinceAt: 0, lastLocalChangeAt: 0, pending: null, confirmed: {}, known: {}, deleting: [], lastSuccessAt: 0, retryAt: 0, failures: 0, error: "", cleanupError: "", paused: false, undoEligible: [] };
     }
@@ -97,8 +160,20 @@ export class WebDavSyncStore extends EventTarget {
             // First creation, legacy adoption and interrupted resets persist ledger before sidecar.
             // All reads here remain under this same shared lock; public read() still verifies epochs.
             if (needsReplica || state.undoEpoch !== pending.epoch) await this.writeWithoutLock(state, pending);
+            this.initializedRevision = { ...pending };
             return state;
         });
+    }
+    /** Revalidate recovery and metadata without rereading an unchanged large sidecar. */
+    async ensureInitialized() {
+        const ready = await this.coordinator.runExclusive(async () => {
+            if (this.deps.storage) await assertSupportedDataVersion(this.deps.storage);
+            const pending = await this.ledger.read();
+            if (!this.initializedRevision || !["metadataRevision", "epoch", "replicaId"].every(key => pending[key] === this.initializedRevision?.[key])) return false;
+            this.installUndo(null, pending);
+            return true;
+        });
+        if (!ready) await this.initialize();
     }
     /** @param {Dict} state @param {Dict | null} [pending] */
     async writeWithoutLock(state, pending = null) {
@@ -110,11 +185,48 @@ export class WebDavSyncStore extends EventTarget {
         await this.ledger.write(current);
         this.deps.diagnostics?.recordWork("sync.metadataWrites");
         await this.forage.setItem(SYNC_STATE_KEY, compactSyncMetadata(state));
+        this.initializedRevision = state.schema === 1 && state.model?.records && state.undoEpoch === current.epoch ? { ...current } : null;
+        this.roundState = null;
+        this.rememberMetadata(state, current);
         this.replicaId = state.replicaId; this.installUndo(state.undoEligible, current);
     }
     /** @param {(state: Dict) => void | Promise<void>} change */
     update(change) { return this.coordinator.runExclusive(async () => { const state = await this.read(); await change(state); await this.writeWithoutLock(state); return state; }); }
+    /** Successful polling advances only its small receipt, not the model graph.
+     * @param {string} checkedRevision @param {number} lastCheckAt @param {number} nextCheckAt @param {() => Promise<void>} assertCurrent */
+    recordCheck(checkedRevision, lastCheckAt, nextCheckAt, assertCurrent) {
+        return this.coordinator.runExclusive(async () => {
+            await assertCurrent();
+            const pending = await this.ledger.read();
+            pending.check = { baseMetadataRevision: pending.metadataRevision, checkedRevision, lastCheckAt, nextCheckAt };
+            await assertCurrent();
+            await this.ledger.write(pending);
+        });
+    }
     begin() { this.current = this.enabled ? { touched: new Set(), pruned: {} } : null; }
+    /** Prepare a receipt in the same native transaction as the business values.
+     * @param {string[]} keys @param {Dict} activity @param {Dict[]} entries */
+    async prepareCommittedMutation(keys, activity, entries) {
+        if (!this.current) return null;
+        const pending = structuredClone(await this.ledger.read());
+        for (const key of keys.filter(key => SYNC_DOMAINS.includes(key))) {
+            if (!Number.isSafeInteger(pending.generation + 1)) throw new Error("同步待处理记录版本已超出安全范围");
+            pending.domains[key] = ++pending.generation;
+            const floor = this.current.pruned[key];
+            if (floor) pending.candidates[key] = [pending.candidates[key] || "", floor].sort().at(-1);
+        }
+        pending.firstPendingAt ||= this.deps.clock?.() ?? Date.now();
+        pending.lastPendingAt = this.deps.clock?.() ?? Date.now();
+        if (activity.originReplicaId && pending.replicaId === activity.originReplicaId) {
+            const present = new Set(entries.map(entry => entry.id));
+            pending.localUndoIds = [...new Set([...pending.localUndoIds, activity.id])].filter(id => present.has(id));
+        }
+        return { puts: { [SYNC_PENDING_KEY]: pending }, committed: () => {
+            this.hasDeferred = true;
+            this.installUndo(null, pending);
+            this.current = null;
+        } };
+    }
     /** @param {string} key */
     async capture(key) {
         if (!SYNC_DOMAINS.includes(key) || !this.current) return;
@@ -190,7 +302,8 @@ export class WebDavSyncStore extends EventTarget {
             })().catch(error => { if (error?.name !== "AbortError") this.error = "业务数据已保存，同步进度待修复；稍后将重新核对完整数据"; });
         }, 250);
     }
-    dispose() { this.backgroundAbort.abort(); if (this.reconciliationTimer) clearTimeout(this.reconciliationTimer); this.reconciliationTimer = null; }
+    releaseSnapshots() { this.snapshotGeneration++; this.roundState = null; this.verifiedMerge = null; this.metadata = null; this.initializedRevision = null; }
+    dispose() { this.backgroundAbort.abort(); if (this.reconciliationTimer) clearTimeout(this.reconciliationTimer); this.reconciliationTimer = null; this.releaseSnapshots(); }
     /** Wait outside the lock after each time slice, so a user save in another frame/tab can finish first. @param {ComputationBudget} work */
     idleBudget(work) {
         if (this.idleBudgets.has(work)) return work;
@@ -273,62 +386,28 @@ export class WebDavSyncStore extends EventTarget {
         await assertSupportedDataVersion(this.deps.storage);
         await this.deps.storage?.stateService?.recoverPendingTransactionWithoutLock?.();
         const snapshot = await this.captureReconciliation(touched);
-        const result = await this.computeReconciliation(snapshot.state, snapshot.data, { ...snapshot.pruned, ...pruned }, snapshot.domains, work, snapshot.pending.lastPendingAt);
+        const result = await this.computeReconciliation(snapshot.state, snapshot.data, { ...snapshot.pruned, ...pruned }, snapshot.domains, work, snapshot.pending.lastPendingAt, snapshot.pending);
         if (result.changed || snapshot.eligibilityChanged) await this.writeWithoutLock(result.state);
         await this.acknowledgeReconciliation(snapshot.pending, result.state, snapshot.domains);
         return result.state;
     }
     /** Pure computation over a detached snapshot; never holds the storage lock in the background path. */
-    /** @param {Dict} state @param {Dict} data @param {Dict} pruned @param {Set<string> | null} touched @param {ComputationBudget} work @param {number} [lastPendingAt] */
-    async computeReconciliation(state, data, pruned, touched, work, lastPendingAt = 0) {
-        if (!state.joined) {
-            return { state, changed: false };
-        }
-        const domains = new Set(touched ? [...touched, ...Object.keys(pruned)].filter(key => SYNC_DOMAINS.includes(key)) : SYNC_DOMAINS);
-        const selected = (/** @type {string} */ key) => domains.has(key.split("/")[0]);
-        this.deps.diagnostics?.recordWork("sync.reconcileDomains", domains.size);
-        const model = touched ? { records: Object.fromEntries(Object.entries(state.model.records).filter(([key]) => selected(key))), frontiers: { ...state.model.frontiers } } : state.model;
-        const beforeFrontiers = (await syncJsonAsync(model.frontiers, work));
-        for (const [domain, frontier] of Object.entries(pruned)) model.frontiers[domain] = [model.frontiers[domain] || "", frontier].sort().at(-1);
-        const next = (await projectSyncDataAsync(data, model.frontiers, work));
-        const before = Object.fromEntries(Object.entries(state.shadow).filter(([key, fields]) => {
-            const domain = key.split("/")[0];
-            return selected(key) && (!["activity_log", "offline_history"].includes(domain) || historyRank(/** @type {Dict} */ (fields).value) > (model.frontiers[domain] || ""));
-        }));
-        const clock = Math.max(state.counter, (await maximumClockAsync(model, work))) + 1;
-        if (!Number.isSafeInteger(clock)) throw new Error("同步逻辑版本已超出安全范围");
-        const difference = (await versionSyncDiffAsync(model, before, next, [clock, state.replicaId], work, true));
-        const beforeCount = Object.keys(difference.model.records).length;
-        const result = (domains.has("activity_log") || domains.has("offline_history")) && await needsHistoryPruneAsync(difference.model, work) ? (await pruneSyncHistoryAsync(difference.model, data, this.deps.clock?.() ?? Date.now(), work)) : difference.model;
-        const layout = domains.has("setting") ? syncLayout(data.setting) : state.layout;
-        const prunedProjection = beforeFrontiers === (await syncJsonAsync(result.frontiers, work)) ? next : (await projectSyncDataAsync(data, result.frontiers, work));
-        const changed = difference.changed || (await syncJsonAsync(layout, work)) !== (await syncJsonAsync(state.layout, work)) || beforeFrontiers !== (await syncJsonAsync(result.frontiers, work)) || beforeCount !== Object.keys(result.records).length;
-        if (changed) {
-            state.counter = difference.changed ? clock : state.counter;
-            if (touched) {
-                for (const key of Object.keys(state.model.records)) if (selected(key)) delete state.model.records[key];
-                Object.assign(state.model.records, result.records); state.model.frontiers = result.frontiers;
-                for (const key of Object.keys(state.shadow)) if (selected(key)) delete state.shadow[key];
-                Object.assign(state.shadow, prunedProjection);
-            } else { state.model = result; state.shadow = prunedProjection; }
-            state.layout = layout;
-            const alreadyDirty = state.dirty || !!state.pending;
-            state.dirty = true;
-            const changedAt = lastPendingAt || this.deps.clock?.() || Date.now();
-            state.dirtySinceAt ||= touched && !alreadyDirty ? changedAt : changedAt - 30000;
-            state.lastLocalChangeAt = changedAt;
-            state.localRevision = (state.localRevision || 0) + 1;
-            if (domains.has("activity_log")) {
-                const eligible = new Set(state.undoEligible);
-                const present = new Set(data.activity_log.entries.map((/** @type {any} */ entry) => entry.id));
-                state.undoEligible = [...eligible].filter(id => present.has(id));
-            }
-        }
-        return { state, changed };
+    /** @param {Dict} state @param {Dict} data @param {Dict} pruned @param {Set<string> | null} touched @param {ComputationBudget} work @param {number} [lastPendingAt] @param {Dict} [revision] */
+    async computeReconciliation(state, data, pruned, touched, work, lastPendingAt = 0, revision) {
+        // Generation covers fresh business values, which are always sent. The
+        // immutable model/shadow change only with sidecar metadata or epoch.
+        const proofKey = revision ? JSON.stringify([revision.metadataRevision, revision.epoch, revision.replicaId]) : null;
+        const payload = { state, data, pruned, touched, lastPendingAt, proofKey, now: this.deps.clock?.() ?? Date.now() };
+        return this.computeJob("reconcile", payload, work);
+    }
+
+    /** @param {string} job @param {any} payload @param {ComputationBudget} work */
+    computeJob(job, payload, work) {
+        return this.deps.computation?.run(job, payload, { signal: work.signal, revision: payload.proofKey, work }) ?? runSyncJob(job, payload, work);
     }
     /** Caller owns the shared lock. @param {Set<string> | null} touched */
     async captureReconciliation(touched) {
-        const pending = await this.ledger.read(), state = await this.read();
+        const pending = await this.ledger.read(), state = await this.readForRound(true);
         const domains = touched ? new Set([...touched, ...Object.keys(pending.domains), ...Object.keys(pending.candidates)]) : null;
         const data = await this.readData(domains ? [...domains] : SYNC_DOMAINS);
         const present = data.activity_log ? new Set(data.activity_log.entries.filter((/** @type {any} */ entry) => entry.commitState === "committed").map((/** @type {any} */ entry) => entry.id)) : null;
@@ -397,7 +476,7 @@ export class WebDavSyncStore extends EventTarget {
                     return this.captureReconciliation(full ? null : new Set(Object.keys(pending.domains)));
                 });
                 if (!snapshot) return null;
-                const result = await this.computeReconciliation(snapshot.state, snapshot.data, snapshot.pruned, snapshot.domains, work, snapshot.pending.lastPendingAt);
+                const result = await this.computeReconciliation(snapshot.state, snapshot.data, snapshot.pruned, snapshot.domains, work, snapshot.pending.lastPendingAt, snapshot.pending);
                 work.assertActive();
                 const committed = await this.coordinator.runExclusive(async () => {
                     const current = await this.ledger.read(), before = snapshot.pending;
@@ -431,7 +510,7 @@ export class WebDavSyncStore extends EventTarget {
                 if (reusable) return reusable;
                 const recovered = await this.recoverWithoutLock(), pending = await this.ledger.read();
                 if (Object.keys(pending.domains).length) return null;
-                return { recovered, pending, state: await this.read(), local: await this.readData() };
+                return { recovered, pending, state: await this.readForRound(true), local: await this.readData() };
             });
             if (!snapshot) { await this.flushPending({ full: true, work, round }); continue; }
             const { local, recovered } = snapshot;
@@ -444,8 +523,8 @@ export class WebDavSyncStore extends EventTarget {
             // Any model/data change, restart, recovery or maintenance boundary falls back.
             if (!first && !remote.length && !recovered && !this.notificationPending && !state.pending && state.retentionPolicyInitialized
                 && verified?.binding === binding && now < verified.maintenanceAt) {
-                if (await equalSyncValuesAsync(state.model, verified.model, work) && await equalSyncValuesAsync(local, verified.data, work)
-                    && await equalSyncValuesAsync(state.undoEligible, verified.eligibility, work)) {
+                const proofKey = JSON.stringify([snapshot.pending.generation, snapshot.pending.metadataRevision, snapshot.pending.epoch, snapshot.pending.replicaId, binding]);
+                if (await this.computeJob("verified", { proofKey, model: state.model, verifiedModel: verified.model, data: local, verifiedData: verified.data, eligible: state.undoEligible, verifiedEligible: verified.eligibility }, work)) {
                     await this.coordinator.runExclusive(() => this.rememberRound(round, state, local, snapshot.pending));
                     return;
                 }
@@ -454,9 +533,9 @@ export class WebDavSyncStore extends EventTarget {
                 if (state.binding && state.binding !== binding) state = { ...state, replicaId: crypto.randomUUID(), seq: 0, counter: 0, pending: null, confirmed: {}, known: {}, deleting: [], model: emptySyncModel(), shadow: {}, joined: false };
             }
             let cloud = emptySyncModel();
-            for (const model of remote) cloud = (await joinSyncModelsAsync(cloud, model, work));
+            for (const model of remote) cloud = await this.computeJob("join", { left: cloud, right: model }, work);
             if (first) {
-                const localProjection = (await projectSyncDataAsync(local, cloud.frontiers, work));
+                const localProjection = await this.computeJob("project", { data: local, frontiers: cloud.frontiers }, work);
                 const before = (await visibleSyncRecordsAsync(cloud, work)), combined = (await syncCloneAsync(before, work));
                 for (const [key, fields] of Object.entries(localProjection)) {
                     if (!Object.hasOwn(cloud.records, key)) combined[key] = fields;
@@ -474,7 +553,7 @@ export class WebDavSyncStore extends EventTarget {
                 state.joined = true; state.binding = binding; state.dirty = true; state.localRevision = (state.localRevision || 0) + 1;
                 state.dirtySinceAt = (this.deps.clock?.() ?? Date.now()) - 30000;
                 state.lastLocalChangeAt = this.deps.clock?.() ?? Date.now();
-            } else if (remote.length) state.model = (await joinSyncModelsAsync(state.model, cloud, work));
+            } else if (remote.length) state.model = await this.computeJob("join", { left: state.model, right: cloud }, work);
             else state.model = { ...state.model, frontiers: { ...state.model.frontiers, activity_log: state.model.frontiers.activity_log || "", offline_history: state.model.frontiers.offline_history || "" } };
             if (!first && !state.retentionPolicyInitialized) {
                 const before = (await visibleSyncRecordsAsync(state.model, work)), after = (await syncCloneAsync(before, work));
@@ -494,11 +573,11 @@ export class WebDavSyncStore extends EventTarget {
             state.counter = Math.max(state.counter, (await maximumClockAsync(state.model, work)));
             Object.assign(state.confirmed, confirmed);
             if (remote.length && options.lastSuccessAt !== undefined) state.lastSuccessAt = options.lastSuccessAt;
-            const after = (await materializeSyncDataAsync(state.model, local, state.undoEligible, work));
+            const after = await this.computeJob("materialize", { model: state.model, local, undoEligible: state.undoEligible }, work);
             const beforeCars = await syncRecordMapAsync(local.car_list, "carNum", work);
             const afterCars = await syncRecordMapAsync(after.car_list, "carNum", work);
             carNums = [...new Set([...beforeCars.keys(), ...afterCars.keys()])].filter(id => beforeCars.get(id) !== afterCars.get(id));
-            state.shadow = (await projectSyncDataAsync(after, state.model.frontiers, work));
+            state.shadow = await this.computeJob("project", { data: after, frontiers: state.model.frontiers }, work);
             state.layout = syncLayout(after.setting);
             const domains = /** @type {string[]} */ ([]);
             for (const key of SYNC_DOMAINS) {

@@ -190,6 +190,9 @@ for (const scenario of [
       await forage.setItem("favorite_actresses", actresses);
       await forage.setItem("new_video_decisions", decisions);
       window.storageManager._invalidateCache();
+      // Exercise the retained journal fallback when native atomic storage is
+      // unavailable. Native transaction abort/retry is covered by atomic-state.
+      window.storageManager.atomicStorage = null;
       const persist = forage.setItem.bind(forage);
       forage.setItem = (key, value) => {
         if (key === "activity_log" && value?.entries?.some((entry) => entry.type === "interrupted-v7")) {

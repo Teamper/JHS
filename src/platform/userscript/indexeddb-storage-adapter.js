@@ -16,6 +16,15 @@ export class IndexedDbStorageAdapter {
     readAtomicSnapshot(keys) { return readAtomicSnapshot(this.forage, keys); }
     /** @param {Parameters<typeof commitAtomicBatch>[1]} batch */
     commitAtomicBatch(batch) { return commitAtomicBatch(this.forage, batch); }
+    /** Caller holds the shared mutation lock. False means no write was attempted.
+     * @param {{puts: Record<string, any>, deletes?: string[], signal?: AbortSignal}} batch */
+    async commitLockedBatch(batch) {
+        try { await commitAtomicBatch(this.forage, { ...batch, deletes: batch.deletes ?? [], expected: {} }); return true; }
+        catch (error) {
+            if (/** @type {any} */ (error)?.code === "ATOMIC_IMPORT_UNAVAILABLE") return false;
+            throw error;
+        }
+    }
     /** @param {string} key */
     getLocal(key) { return this.localStore.getItem(key); }
     /** @param {string} key @param {string} value */

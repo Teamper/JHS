@@ -46,6 +46,16 @@ export class BackupChangeTracker extends EventTarget {
     }
     /** StateService supplies the primary records; derived side effects do not count again. @param {string[]} ids */
     primary(ids) { if (this.current) this.current.primary = new Set(ids); }
+    /** Prepare the exact primary-record count under the shared lock. @param {string[]} ids */
+    async prepareCommittedMutation(ids) {
+        if (!this.current) return null;
+        const state = { ...await this.read() };
+        state.totalRevision += new Set(ids).size;
+        return { puts: { [AUTO_BACKUP_STATE_KEY]: state }, committed: () => {
+            this.current = null;
+            this.dispatchEvent(new Event("changes"));
+        } };
+    }
     /** @param {boolean} succeeded */
     async finish(succeeded) {
         const current = this.current;

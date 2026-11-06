@@ -10,6 +10,10 @@ export class SyncPendingLedger {
     constructor(forage, clock = () => Date.now()) { this.forage = forage; this.clock = clock; this.initialEpoch = crypto.randomUUID(); }
     async read() {
         const value = await this.forage.getItem(SYNC_PENDING_KEY);
+        const check = value?.check;
+        if (check != null && (typeof check !== "object" || Array.isArray(check) || typeof check.checkedRevision !== "string"
+            || !Number.isSafeInteger(check.baseMetadataRevision) || check.baseMetadataRevision < 0 || check.baseMetadataRevision > value.metadataRevision
+            || !Number.isFinite(check.lastCheckAt) || !Number.isFinite(check.nextCheckAt))) throw new Error("同步检查窗口损坏或来自未来版本，已停止写入以保留数据");
         if (value && (value.schema !== 1 || !Number.isSafeInteger(value.generation) || !Number.isSafeInteger(value.metadataRevision)
             || value.generation < 0 || value.metadataRevision < 0 || !value.domains || !value.candidates || !Array.isArray(value.localUndoIds)
             || !value.localUndoIds.every((/** @type {any} */ id) => typeof id === "string") || typeof value.epoch !== "string" || !value.epoch || typeof value.replicaId !== "string"
