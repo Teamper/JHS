@@ -21,3 +21,12 @@ it.each([{}, [], "ok", { task_id: "unconfirmed" }, { state: null }])("rejects an
     await expect(createOne115Adapter({ request }).submit("magnet:?xt=urn:btih:abc")).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
     expect(request).toHaveBeenCalledTimes(2);
 });
+
+it("rejects an unconfirmed identity and a rename bound to another account", async () => {
+    const missing = createOne115Adapter({ request: async () => ({ data: { sign: "fixture" } }) });
+    await expect(missing.getAccountIdentity()).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
+    const request = vi.fn(async () => ({ data: { sign: "fixture", uid: 2 } }));
+    await expect(createOne115Adapter({ request }).renameFile("1", "ABC-123.mp4", { expectedAccountId: "1" })).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls.every(([options]) => options.method === "GET")).toBe(true);
+});

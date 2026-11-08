@@ -13,6 +13,7 @@ import { DEFAULT_QUICK_FILTER_OPTIONS } from "../features/list/list-filters.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
 import { SYNC_DEFAULTS } from "../core/webdav-sync-model.js";
 import { stringList, booleanMap, resourceValidators } from "./settings-sync-validation.js";
+import { DEFAULT_TRANSLATION_PROMPT, normalizeTranslationPrompt } from "../core/translation-model.js";
 
 /** @param {import("./settings-registry.js").SettingsRegistry} registry */
 export function registerDefaultSettings(registry) {
@@ -47,6 +48,7 @@ export function registerDefaultSettings(registry) {
         return Math.min(max, Math.max(min, Math.round(parsed)));
     };
 
+    registry.register({ key: "enableSubtitle115Upload", owner: "SubtitleFeature", label: "115 字幕直传", section: "cloud", type: "boolean", defaultValue: true, effect: "live", surfaces: ["full"], normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, true) });
     // ---- Screenshot（列表按钮与详情自动加载独立开关） ----
     toggle("enableScreenSvg", "ScreenshotFeature", "列表长缩略图", {
         description: "在列表卡片显示长缩略图入口",
@@ -83,6 +85,10 @@ export function registerDefaultSettings(registry) {
         description: "翻译列表与详情页标题",
         surfaces: ["full", "quick"],
     });
+    registry.register({key:"translationPrompt",owner:"TranslateFeature",label:"翻译提示模板",type:"text",defaultValue:DEFAULT_TRANSLATION_PROMPT,effect:"live",surfaces:[],normalize:normalizeTranslationPrompt,validateSync:(/** @type {any} */ value) => typeof value === "string" && value.includes("{text}") && value.length <= 16000 && !value.includes("\0")});
+    for (const [key,label,defaultValue,min,max] of /** @type {Array<[string,string,number,number,number]>} */ ([
+        ["translationConcurrency","翻译并发",2,1,10],
+    ])) registry.register({key,owner:"TranslateFeature",label,type:"number",defaultValue,min,max,step:1,effect:"live",surfaces:[],normalize:(/** @type {unknown} */ value) => normalizeInteger(value,defaultValue,min,max),validateSync:(/** @type {any} */ value) => Number.isSafeInteger(value) && value >= min && value <= max});
     toggle("hoverBigImg", "ListImageFeature", "悬浮大图", {
         description: "悬停封面时显示大图",
         surfaces: ["full", "quick"],
@@ -113,6 +119,9 @@ export function registerDefaultSettings(registry) {
         surfaces: ["full"],
     });
 
+    registry.register({ key: "privacyTargets", owner: "PrivacyFeature", label: "隐私遮罩目标", type: "json", defaultValue: ["title", "code", "actors", "images", "video"], effect: "live", surfaces: [], validateSync: (/** @type {any} */ value) => Array.isArray(value) && value.every(item => ["title", "code", "actors", "images", "video"].includes(item)) });
+    registry.register({ key: "privacyShortcut", owner: "PrivacyFeature", label: "隐私遮罩快捷键", type: "json", defaultValue: null, effect: "live", surfaces: [], validateSync: (/** @type {any} */ value) => value === null || Boolean(value && resourceValidators.detailShortcuts({ favorite: value })) });
+
     // ---- 界面/布局 ----
     toggle("needClosePage", "WorkflowFeature", "鉴定后关闭详情页", {
         description: "鉴定完成后自动关闭",
@@ -127,6 +136,8 @@ export function registerDefaultSettings(registry) {
     registry.register({ key: "themeMode", owner: "ThemeFeature", label: "主题", type: "select", defaultValue: "light", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }, { value: "auto", label: "跟随系统" }]) });
     registry.register({ key: "containerColumns", owner: "LayoutFeature", label: "列表列数", type: "number", defaultValue: 5, effect: "live", surfaces: ["full"] });
     registry.register({ key: "containerWidth", owner: "LayoutFeature", label: "列表宽度", type: "number", defaultValue: 100, effect: "live", surfaces: ["full"] });
+
+    registry.register({ key: "enableMediaLibrary", owner: "MediaLibraryFeature", label: "媒体库联动", type: "boolean", defaultValue: false, effect: "live", surfaces: [], normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, false) });
 
     // ---- 资源/高级（完整设置面板自行管理交互，仅注册 descriptor） ----
     registry.register({ key: "screenshotMode", owner: "ScreenshotFeature", label: "截图来源模式", type: "select", defaultValue: "auto", effect: "manual", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动选择" }, { value: "manual", label: "手动选择" }]) });

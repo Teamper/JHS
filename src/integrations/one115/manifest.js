@@ -2,6 +2,7 @@
 
 import { defineIntegration } from "../../contracts/manifests.js";
 import { SERVICE } from "../../contracts/tokens.js";
+import { list115Directory, upload115Subtitle } from "./file-transfers.js";
 import { JhsError } from "../../core/jhs-error.js";
 
 const HOME_URL = "https://115.com";
@@ -28,7 +29,7 @@ export function normalize115SearchResults(payload) {
     if (!value || !Array.isArray(value.data)) throw new JhsError("INVALID_RESPONSE", "115 文件搜索响应无效", { source: "one115" });
     return Object.freeze(value.data.map((/** @type {any} */ item) => {
         const name = String(item.n || item.file_name || "");
-        return Object.freeze({ folderId: String(item.pid || item.cid || ""), fileId: item.fid ? String(item.fid) : null, videoId: String(item.pc || item.pick_code || ""), name, size: Number(item.s || item.size) || 0, createTime: String(item.t || item.create_time || ""), isVideo: /\.(mp4|mkv|avi|mov|flv|wmv|ts|m2ts)$/i.test(name) });
+        return Object.freeze({ folderId: String(item.pid ?? item.cid ?? ""), fileId: item.fid ? String(item.fid) : null, videoId: String(item.pc || item.pick_code || ""), name, size: Number(item.s || item.size) || 0, createTime: String(item.t || item.create_time || ""), isVideo: /\.(mp4|mkv|avi|mov|flv|wmv|ts|m2ts)$/i.test(name) });
     }).filter((/** @type {{isVideo: boolean}} */ item) => item.isVideo));
 }
 
@@ -42,19 +43,47 @@ export function createOne115Adapter(http) {
     return Object.freeze({
         contracts: ["AccountStatus", "CloudFile", "OfflineSubmission"],
         homeUrl: HOME_URL,
+        /** @param {string} folderId @param {any} [options] */
+        listDirectory(folderId, options) { return list115Directory(http, folderId, options); },
+        /** @param {any} file @param {any} [options] */
+        uploadSubtitle(file, options) { return upload115Subtitle(http, context => this.getAccountIdentity(context), file, options); },
         /** @param {{scope?: any}} [options] */
         async checkAccount(options = {}) {
             const response = await request("https://webapi.115.com/offine/downpath", { capability: "account.status", scope: options.scope });
             const payload = /** @type {any} */ (response.data);
             return Object.freeze({ authenticated: Boolean(payload?.state && payload?.data?.length) });
         },
-        /** @param {string} keyword @param {{scope?: any, offset?: number, limit?: number, ttlMs?: number, force?: boolean}} [options] */
-        async searchFiles(keyword, options = {}) {
-            const url = new URL("https://webapi.115.com/files/search");
-            url.searchParams.set("search_value", keyword), url.searchParams.set("offset", String(options.offset ?? 0)), url.searchParams.set("limit", String(options.limit ?? 50));
-            const response = await request(url.href, { capability: "file.search", scope: options.scope, force: options.force });
-            return normalize115SearchResults(response.data);
+        /** @param {{scope?: any}} [options] */
+        async getAccountIdentity(options = {}) {
+            const response = await request(`https://115.com/?ct=offline&ac=space&_=${Date.now()}`, { capability: "account.status", scope: options.scope });
+            const payload = /** @type {any} */ (parsePayload(response.data));
+            const accountId = String(payload?.uid || "");
+            if (!payload?.sign || !/^\d+$/.test(accountId)) throw new JhsError("AUTH_REQUIRED", "115 账号身份尚未确认，请登录后重试", { source: "one115" });
+            return Object.freeze({ accountId });
         },
+        /** @param {string} keyword @param {{scope?: any, offset?: number, limit?: number, ttlMs?: number, force?: boolean}} [options] */
+        async searchFilePage(keyword, options = {}) {
+            const offset = Math.max(0, Math.trunc(Number(options.offset) || 0));
+            const limit = Math.max(1, Math.min(100, Math.trunc(Number(options.limit) || 50)));
+            const url = new URL("https://webapi.115.com/files/search");
+            url.searchParams.set("search_value", keyword);
+            url.searchParams.set("offset", String(offset));
+            url.searchParams.set("limit", String(limit));
+            url.searchParams.set("type", "4");
+            const response = await request(url.href, { capability: "file.search", scope: options.scope });
+            const payload = /** @type {any} */ (parsePayload(response.data));
+            if (payload?.state === false || payload?.state === 0) throw new JhsError(classify115OfflineError(payload.error || payload.error_msg || ""), "115 文件查询失败", { source: "one115" });
+            const items = normalize115SearchResults(payload);
+            if (payload.data.length > limit) throw new JhsError("INVALID_RESPONSE", "115 返回条目超过请求分页上限", { source: "one115" });
+            const count = payload.count == null ? null : Number(payload.count);
+            const total = count !== null && Number.isSafeInteger(count) && count >= 0 ? count : null;
+            const nextOffset = offset + payload.data.length;
+            const hasMore = total === null ? payload.data.length === limit : nextOffset < total;
+            if (hasMore && !payload.data.length) throw new JhsError("INVALID_RESPONSE", "115 分页未推进", { source: "one115" });
+            return Object.freeze({ items, total, nextOffset, hasMore, scanned: payload.data.length });
+        },
+        /** @param {string} keyword @param {{scope?: any, offset?: number, limit?: number, ttlMs?: number, force?: boolean}} [options] */
+        async searchFiles(keyword, options = {}) { return (await this.searchFilePage(keyword, options)).items; },
         /** @param {string} resource @param {{scope?: any, folderId?: string, onMutationDispatch?: () => void}} [options] */
         async submit(resource, options = {}) {
             if (!/^magnet:/i.test(resource) && !/^ed2k:/i.test(resource)) throw new JhsError("UNSUPPORTED", "Unsupported offline URL", { source: "one115" });
@@ -71,12 +100,16 @@ export function createOne115Adapter(http) {
             if (payload.state !== true && payload.state !== 1) throw new JhsError("INVALID_RESPONSE", "115 未返回明确的离线任务创建成功状态", { source: "one115" });
             return Object.freeze({ success: true, taskId: String(payload.task_id || payload.info_hash || "") });
         },
-        /** @param {string} fileId @param {string} newName @param {{scope?: any}} [options] */
+        /** @param {string} fileId @param {string} newName @param {{scope?: any, expectedAccountId?: string}} [options] */
         async renameFile(fileId, newName, options = {}) {
+            if (options.expectedAccountId && (await this.getAccountIdentity(options)).accountId !== options.expectedAccountId) {
+                throw new JhsError("AUTH_REQUIRED", "115 账号已切换，请重新匹配后操作", { source: "one115" });
+            }
             const body = new URLSearchParams({ fid: fileId, file_name: newName }).toString();
             const response = await request("https://webapi.115.com/files/edit", { capability: "file.rename", scope: options.scope, method: "POST", body, responseType: "json", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
             const payload = /** @type {any} */ (response.data);
             if (!payload || payload.state === false || payload.state === 0) throw new JhsError("OPERATION_FAILED", String(payload?.error || payload?.error_msg || "115 重命名失败"), { source: "one115" });
+            if (payload.state !== true && payload.state !== 1) throw new JhsError("INVALID_RESPONSE", "115 重命名结果待确认，请刷新匹配", { source: "one115" });
             return Object.freeze({ success: true });
         },
         /** @param {Record<string, any>} match */
@@ -85,9 +118,9 @@ export function createOne115Adapter(http) {
 }
 
 export default defineIntegration({
-    id: "one115", trustClass: "builtin-public", hosts: ["115.com"],
-    capabilities: ["account.status", "file.search", "file.rename", "offline.submit"], requires: [SERVICE.http],
+    id: "one115", trustClass: "builtin-public", hosts: ["115.com", "aliyuncs.com"],
+    capabilities: ["account.status", "file.search", "file.rename", "file.list", "file.upload", "offline.submit"], requires: [SERVICE.http],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }),
     createAdapter: (/** @type {any} */ client) => createOne115Adapter(client.http), createHostAdapter: null,
-    cachePolicy: { "account.status": "none", "file.search": "none", "file.rename": "none", "offline.submit": "none" }, quality: "silver",
+    cachePolicy: { "account.status": "none", "file.search": "none", "file.rename": "none", "file.list": "none", "file.upload": "none", "offline.submit": "none" }, quality: "silver",
 });

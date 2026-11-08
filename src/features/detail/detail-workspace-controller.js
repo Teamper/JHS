@@ -42,6 +42,7 @@ export class DetailWorkspaceController {
             .jhs-offline-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-2); margin-left:var(--jhs-space-2); vertical-align:middle; }
             [data-jhs-workspace-site="javdb"] [data-jhs-magnets] { container:jhs-magnets / inline-size; min-width:0; }
             [data-jhs-workspace-site="javdb"] [data-jhs-host-region="resources"] { margin:0; min-width:0; }
+            [data-jhs-workspace-site="javdb"] [data-jhs-host-region="summary"] > .columns { margin-inline:0; min-width:0; }
             [data-jhs-workspace-site="javdb"] [data-jhs-host-region="resources"] > .column { padding:0; min-width:0; }
             [data-jhs-workspace-site="javdb"] [data-jhs-resource-surface] { margin:0; padding:var(--jhs-space-4); box-sizing:border-box; min-width:0; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); color:var(--jhs-text); }
             [data-jhs-workspace-site="javdb"] [data-jhs-resource-body] { padding:0; border:0; background:transparent; color:inherit; }

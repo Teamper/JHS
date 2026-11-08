@@ -21,28 +21,34 @@ export function readCardNames(item) {
 /** Read one JavDB/JavBus list card without depending on ListPagePlugin. @param {any} item @param {any} [jquery] */
 export function readListItem(item, jquery = /** @type {any} */ (globalThis).$) {
     const jq = jquery, element = item?.jquery ? item : jq(item);
-    const anchor = element.find("a"), url = element.attr("data-jhs-original-url") || anchor.attr("href"), titleNode = element.find(".video-title");
+    const anchor = element.is("a[href]") ? element : element.find("a"), url = element.attr("data-jhs-original-url") || anchor.attr("href"), titleNode = element.find(".video-title");
     let carNum, title, publishTime;
     /** @type {string[]} */
     let nativeNumbers = [];
+    if (element.is("a.tile-item")) {
+        nativeNumbers = element.find(".video-number").map((/** @type {number} */ _, /** @type {Element} */ node) => normalizeMovieCarNum(node.textContent)).get().filter(Boolean);
+        carNum = nativeNumbers[0];
+        title = element.find(".video-title,.title").text().trim();
+    }
     if (titleNode.length) {
         const strong = titleNode.find("strong");
         if (strong.length) {
             nativeNumbers = strong.map((/** @type {number} */ _, /** @type {Element} */ node) => normalizeMovieCarNum(node.textContent)).get().filter(Boolean);
             carNum = nativeNumbers[0];
         }
-        title = anchor.attr("title") ? anchor.attr("title").trim() : carNum ? titleNode.text().replace(carNum, "").trim() : titleNode.text().trim();
+        title = (anchor.attr("title") || anchor.attr("data-jhs-privacy-original-title")) ? (anchor.attr("title") || anchor.attr("data-jhs-privacy-original-title")).trim() : carNum ? titleNode.text().replace(carNum, "").trim() : titleNode.text().trim();
         publishTime = element.find(".meta").text().trim();
     }
     if (!carNum) {
         const image = element.find("img");
-        if (image.length) title = image.attr("title")?.trim() || image.attr("data-title")?.trim() || title;
+        if (image.length) title = (image.attr("title") || image.attr("data-jhs-privacy-original-title"))?.trim() || image.attr("data-title")?.trim() || title;
         const dates = element.find("date").map((/** @type {number} */ _index, /** @type {Element} */ node) => jq(node).text().trim()).get();
         publishTime = dates.find((/** @type {string} */ value) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
         nativeNumbers = dates.filter((/** @type {string} */ value) => !/^\d{4}-\d{1,2}-\d{1,2}$/.test(value)).map(normalizeMovieCarNum).filter(Boolean);
         carNum = nativeNumbers[0];
     }
     const normalized = normalizeMovieCarNum(carNum) ?? "";
+    title = element.attr("data-jhs-original-title") || title;
     return Object.freeze({
         carNum: normalized, aHref: url, url, title, publishTime,
         stateEligibility: nativeNumbers.some(value => value !== normalized) ? {eligible: false, reason: /** @type {const} */ ("conflicting")} : getMovieStateEligibility(normalized),

@@ -63,6 +63,27 @@ function createController({ enabled = false, route = "detail", carNum = "ABC-123
 }
 
 describe("115 domain", () => {
+    it("restores focus after continuation without stealing focus moved during the request", async () => {
+        const h = createController(), matching = new LifecycleScope("matching");
+        h.controller.lifecycleScope = matching;
+        const first = { name: "ABC-123.mp4", fileId: "one", accountId: "1" };
+        let resolve;
+        h.controller.match = { matchMovie: vi.fn().mockResolvedValueOnce({ matches: [first], complete: false, continuation: { offset: 1000 } }).mockImplementation(() => new Promise(done => { resolve = done; })) };
+        await h.controller.mountDetailMatching(matching);
+        const more = [...h.summary.querySelectorAll("button")].find(button => button.textContent.includes("继续加载"));
+        more.focus();
+        const loading = h.controller.mountDetailMatching(matching, { offset: 1000 });
+        resolve({ matches: [first], complete: true, continuation: null });
+        await loading;
+        expect(document.activeElement.textContent).toBe("预览与批量重命名");
+        const next = h.controller.mountDetailMatching(matching, { offset: 1000 });
+        const elsewhere = document.createElement("button");
+        document.body.append(elsewhere); elsewhere.focus();
+        resolve({ matches: [first], complete: true, continuation: null });
+        await next;
+        expect(document.activeElement).toBe(elsewhere);
+        matching.dispose(); h.scope.dispose();
+    });
     it("normalizes FC2 keywords and sizes", () => {
         expect(normalize115Keyword("FC2-123456")).toBe("123456");
         expect(normalize115Keyword("FC2-PPV-123456")).toBe("123456");

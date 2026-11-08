@@ -55,13 +55,18 @@ export async function fulfillHostFixtures(context) {
 
 export async function injectUserscriptRuntime(page, options = {}) {
   const startupErrors = [];
+  let resolveExpectedError;
+  const expectedError = options.expectBootstrapError ? new Promise(resolve => { resolveExpectedError = resolve; }) : null;
   const hostPage = typeof page.context === "function" ? page : page.page();
   const browserVersion = hostPage.context().browser()?.version() || "unknown";
   const phaseStartedAt = performance.now(), bootstrapPhases = {};
   const markPhase = (name) => { bootstrapPhases[name] = performance.now() - phaseStartedAt; };
   hostPage.on("pageerror", (error) => startupErrors.push(error.stack || error.message));
   hostPage.on("console", (message) => {
-    if (message.type() === "error") startupErrors.push(message.text());
+    if (message.type() === "error") {
+      startupErrors.push(message.text());
+      if (options.expectBootstrapError && message.text().includes("[JHS] bootstrap failed:") && message.text().includes(options.expectBootstrapError)) resolveExpectedError(message.text());
+    }
   });
   // These vendor globals and the table stylesheet have no mutual dependencies.
   // Await every load before configuring the fixture or executing the userscript.
@@ -96,6 +101,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
     };
     window.GM_setValue = (key, value) => window.localStorage.setItem(`__jhs_fixture_gm_${key}`, JSON.stringify(value));
     window.GM_deleteValue = (key) => window.localStorage.removeItem(`__jhs_fixture_gm_${key}`);
+    window.GM_listValues = () => Object.keys(window.localStorage).filter(key => key.startsWith("__jhs_fixture_gm_")).map(key => key.slice("__jhs_fixture_gm_".length));
     window.GM_openInTab = () => ({ close() {} });
     window.GM_xmlhttpRequest = (options) => {
       window.__jhsBrowserDiagnostics.requests.push({ method: options.method || "GET", url: String(options.url || "") });
@@ -227,11 +233,24 @@ export async function injectUserscriptRuntime(page, options = {}) {
   }
   await addUserscript(page, options);
   markPhase("userscript-eval");
+  if (options.expectBootstrapError) {
+    let timer;
+    try {
+      const startupError = await Promise.race([expectedError,new Promise((_,reject) => { timer = setTimeout(() => reject(new Error("Expected bootstrap rejection was not observed")),15_000); })]);
+      if (await page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]))) throw new Error("An incompatible client reached first-ready");
+      return {startupError};
+    } finally { clearTimeout(timer); }
+  }
   try {
     await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]), null, { timeout: 15_000 });
     markPhase("startup-ready");
     await page.evaluate((phases) => { window.__jhsBrowserDiagnostics.bootstrapPhases = { ...(window.__jhsBrowserDiagnostics.bootstrapPhases || {}), harness: phases }; }, bootstrapPhases);
   } catch (error) {
+    const state = await page.evaluate(() => {
+      const snapshot = window.unsafeWindow?.pluginManager?.diagnostics?.exportSnapshot?.();
+      return { phases: window.__jhsBrowserDiagnostics?.bootstrapPhases, activeFeatures: snapshot?.activeFeatures, featureTimings: snapshot?.startupTimings };
+    }).catch(() => null);
+    console.error("JHS fixture startup state", JSON.stringify(state));
     throw new Error(`JHS fixture bootstrap failed: ${startupErrors.join("\n") || error.message}`);
   }
 }

@@ -5,8 +5,15 @@ export class SelectionModel extends EventTarget {
     constructor(keyOf) { super(); this.keyOf = keyOf; this.mode = "explicit"; this.selected = new Set(); this.excluded = new Set(); }
     /** @param {any} item @param {boolean} selected */
     set(item, selected) {
-        const key = this.keyOf(item), target = this.mode === "all-filtered" ? this.excluded : this.selected;
-        this.mode === "all-filtered" ? selected ? target.delete(key) : target.add(key) : selected ? target.add(key) : target.delete(key);
+        this.setMany([item], selected);
+    }
+    /** @param {any[]} items @param {boolean} selected */
+    setMany(items, selected) {
+        const target = this.mode === "all-filtered" ? this.excluded : this.selected;
+        for (const item of items) {
+            const key = this.keyOf(item);
+            this.mode === "all-filtered" ? selected ? target.delete(key) : target.add(key) : selected ? target.add(key) : target.delete(key);
+        }
         this.emit();
     }
     selectAllFiltered() { this.mode = "all-filtered"; this.selected.clear(); this.excluded.clear(); this.emit(); }

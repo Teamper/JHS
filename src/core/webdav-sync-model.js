@@ -21,7 +21,7 @@ export function syncRetention(values) {
     return { count, days };
 }
 export const SYNC_LAYOUT_KEYS = Object.freeze(["mobileMode", "containerColumns", "containerWidth"]);
-export const SYNC_DOMAINS = Object.freeze(["car_list", "favorite_actresses", "blacklist", "blacklist_car_list", "filter_keyword_title", "filter_keyword_review", "highlighted_tags", "new_video_decisions", "activity_log", "offline_history", "setting"]);
+export const SYNC_DOMAINS = Object.freeze(["car_list", "favorite_actresses", "blacklist", "blacklist_car_list", "filter_keyword_title", "filter_keyword_review", "highlighted_tags", "new_video_decisions", "activity_log", "offline_history", "setting", "personal_ratings"]);
 const LOCAL_SETTINGS = new Set([...LOCAL_ONLY_SETTING_KEYS, ...SYNC_LAYOUT_KEYS, "localOriginTrustNoticeV1"]);
 const HISTORY = new Set(["activity_log", "offline_history"]);
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
@@ -54,7 +54,7 @@ function identity(domain, item) {
 }
 /** Flatten only explicitly independently editable fields. @param {string} domain @param {any} item @returns {Dict} */
 function fields(domain, item) {
-    if (["setting", "new_video_decisions", "filter_keyword_title", "filter_keyword_review", "highlighted_tags"].includes(domain)) return { value: syncClone(item) };
+    if (["setting", "new_video_decisions", "personal_ratings", "filter_keyword_title", "filter_keyword_review", "highlighted_tags"].includes(domain)) return { value: syncClone(item) };
     if (domain === "activity_log") return { value: { id: item.id, type: item.type, createdAt: item.createdAt, commitState: "committed", originReplicaId: item.originReplicaId, undoAttemptedAt: item.undoAttemptedAt ?? null, changes: (item.changes || []).map((/** @type {any} */ change) => ({ carNum: change.carNum, operation: change.operation, fields: change.fields, undoState: change.undoState })) } };
     if (domain === "offline_history") return { value: syncClone(item) };
     /** @type {Dict} */ const result = {};
@@ -215,7 +215,7 @@ function* checkedEqualValueSteps(left, right, ignoreUpdateDate = false) {
 }
 /** @param {string} domain @param {any} item @returns {Generator<void, any, unknown>} */
 function* fieldSteps(domain, item) {
-    if (["setting", "new_video_decisions", "filter_keyword_title", "filter_keyword_review", "highlighted_tags"].includes(domain)) return { value: yield* cloneSteps(item) };
+    if (["setting", "new_video_decisions", "personal_ratings", "filter_keyword_title", "filter_keyword_review", "highlighted_tags"].includes(domain)) return { value: yield* cloneSteps(item) };
     if (domain === "activity_log") {
         const changes = [];
         for (const change of item.changes || []) { changes.push({ carNum: change.carNum, operation: change.operation, fields: change.fields, undoState: change.undoState }); yield; }
@@ -256,7 +256,7 @@ function* projectSyncDataSteps(data, frontiers) {
             raw = [];
             for (const group of groups.values()) { raw.push(group.length > 1 ? mergeCanonicalCarRecords(group).list[0] : group[0]); yield; }
         }
-        const entries = domain === "setting" || domain === "new_video_decisions" ? Object.entries(raw || {}) : (domain === "activity_log" ? raw?.entries || [] : raw || []).map((/** @type {any} */ item) => [identity(domain, item), item]);
+        const entries = ["setting", "new_video_decisions", "personal_ratings"].includes(domain) ? Object.entries(raw || {}) : (domain === "activity_log" ? raw?.entries || [] : raw || []).map((/** @type {any} */ item) => [identity(domain, item), item]);
         for (const [id, item] of entries) {
             yield;
             if (domain === "setting" && !isSharedSetting(id)) continue;
@@ -340,7 +340,7 @@ function* visibleSyncRecordsSteps(model) {
 
 /** @param {Dict} model @param {Dict} local @param {string[]} undoEligible @returns {Generator<void, any, unknown>} */
 function* materializeSyncDataSteps(model, local, undoEligible) {
-    /** @type {Dict} */ const result = Object.fromEntries(SYNC_DOMAINS.map(domain => [domain, ["setting", "new_video_decisions"].includes(domain) ? {} : domain === "activity_log" ? { ...(local.activity_log || {}), entries: [] } : []]));
+    /** @type {Dict} */ const result = Object.fromEntries(SYNC_DOMAINS.map(domain => [domain, ["setting", "new_video_decisions", "personal_ratings"].includes(domain) ? {} : domain === "activity_log" ? { ...(local.activity_log || {}), entries: [] } : []]));
     result.setting = Object.fromEntries(Object.entries(local.setting || {}).filter(([key]) => !isSharedSetting(key)));
     const eligibleIds = new Set(undoEligible);
     const localActivities = new Map((local.activity_log?.entries || []).map((/** @type {any} */ entry) => [entry.id, entry]));
@@ -348,7 +348,7 @@ function* materializeSyncDataSteps(model, local, undoEligible) {
     for (const [key, value] of Object.entries(yield* visibleSyncRecordsSteps(model))) {
         yield;
         const slash = key.indexOf("/"), domain = key.slice(0, slash), id = decodeURIComponent(key.slice(slash + 1));
-        if (["setting", "new_video_decisions"].includes(domain)) { Object.defineProperty(result[domain], id, { value: value.value, enumerable: true, configurable: true, writable: true }); continue; }
+        if (["setting", "new_video_decisions", "personal_ratings"].includes(domain)) { Object.defineProperty(result[domain], id, { value: value.value, enumerable: true, configurable: true, writable: true }); continue; }
         if (domain === "activity_log") { result.activity_log.entries.push(eligibleIds.has(id) && localActivities.has(id) ? yield* cloneSteps(localActivities.get(id)) : value.value); continue; }
         if (Object.hasOwn(value, "value")) { result[domain].push(value.value); continue; }
         const item = Object.fromEntries(Object.entries(value).filter(([name]) => name.startsWith("f:")).map(([name, field]) => [name.slice(2), field]));

@@ -425,7 +425,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
                 dependencies.logger?.error?.(`设置保存后 ${name} 刷新失败（已忽略）`, error);
             }
         }
-        const requiresNavigation = Object.keys(patch).some(key => key === "disabledPlugins" || dependencies.settingsRegistry?.get(key)?.effect === "nextNavigation");
+        const requiresNavigation = Object.keys(patch).some(key => dependencies.settingsRegistry?.get(key)?.effect === "nextNavigation");
         return requiresNavigation ? { ok: true, requiresNavigation: true } : { ok: true };
     } finally { session?.release(); draft?.release(); }
 }

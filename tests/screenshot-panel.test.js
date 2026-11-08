@@ -115,11 +115,11 @@ it("shows an empty state without rendering unsafe screenshot URLs", async () => 
     expect(jquery("#target").text()).toBe("暂无缩略图");
 });
 
-it("resolves the long-thumbnail only through javstore", async () => {
+it("lets the screenshot service select the enabled automatic source", async () => {
     const resolve = vi.fn(async () => [ { url: "https://img.javstore.net/test.jpg", providerId: "javstore" } ]);
     const screenshot = createService(resolve);
     await renderScreenshotPanel({ target: jquery("#target"), carNum: "ABC-123", screenshot, settings: {} });
-    expect(resolve).toHaveBeenCalledWith({ carNum: "ABC-123" }, { providerId: "javstore", scope: undefined, settings: {} });
+    expect(resolve).toHaveBeenCalledWith({ carNum: "ABC-123" }, { scope: undefined, settings: {} });
 });
 
 it("skips a screenshot that duplicates a gallery image", async () => {

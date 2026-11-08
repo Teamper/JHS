@@ -43,12 +43,13 @@ function renderImage(host, url, alt, scope, onError) {
  */
 export async function renderScreenshotPanel(options) {
     const jq = /** @type {any} */ (globalThis).$;
-    const host = jq(options.target), isActive = () => !options.scope?.disposed && (options.isActive?.() ?? true), providerId = options.providerId ?? "javstore";
+    const host = jq(options.target), isActive = () => !options.scope?.disposed && (options.isActive?.() ?? true), providerId = options.providerId;
     if (!host.length || !options.screenshot.isEnabled(options.settings)) return host.empty(), null;
     const { mode } = options.screenshot.getScreenshotSettings(options.settings);
+    host.attr("data-jhs-screenshot-mode", mode);
     const enabledProviders = options.screenshot.getEnabledProviders(options.settings);
     if (!enabledProviders.length) return host.empty().append(createPanelEmpty("暂无可用截图来源")), host;
-    if (mode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
+    if (mode !== "manual" && providerId && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
     const load = async (resultHost = host, selectedProviderId = providerId, refreshCache = false) => {
         if (!isActive() || refreshCache && resultHost.attr("aria-busy") === "true") return null;
         const request = {};
@@ -65,13 +66,17 @@ export async function renderScreenshotPanel(options) {
         else if (refreshCache) resultHost.find("button").attr("aria-disabled", "true").text("重试中…");
         else replaceResult(resultHost, createPanelLoading());
         try {
-            const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope, settings: options.settings, ...(refreshCache ? { refreshCache: true } : {}) });
+            const images = await options.screenshot.resolve({ carNum: options.carNum }, { ...(selectedProviderId ? { providerId: selectedProviderId } : {}), scope: options.scope, settings: options.settings, ...(refreshCache ? { refreshCache: true } : {}) });
             if (!isActive() || resultHost.data("jhs-screenshot-request") !== request) return null;
             const image = Array.isArray(images) ? images[0] : images;
             if (!image?.url) { if (options.renderError) options.renderError(null); else replaceResult(resultHost, createPanelEmpty("暂无缩略图")); return null; }
             if (options.isDuplicate?.(image.url)) return resultHost.empty(), null;
             const imageUrl = options.renderImage ? options.renderImage(image.url) ? image.url : null : renderImage(resultHost, image.url, "缩略图", options.scope, showError);
             if (!imageUrl) replaceResult(resultHost, createPanelEmpty("暂无缩略图"));
+            else {
+                const source = enabledProviders.find(provider => provider.id === image.providerId);
+                if (source) resultHost.prepend(jq('<div class="jhs-panel-state jhs-screenshot-source"></div>').text(`来源 ${source.name}`));
+            }
             return imageUrl;
         } catch (error) {
             if (!isActive() || resultHost.data("jhs-screenshot-request") !== request) return null;

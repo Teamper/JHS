@@ -55,7 +55,7 @@ export const compatibilityContributionCatalog = Object.freeze([
     manifest("library.keyword-filter", "library", null, ["javdb", "javbus"], { javdb: 21, javbus: 14 }, [SERVICE.settings, SERVICE.titleKeywords, SERVICE.domUi, SERVICE.events], { executionOwner: "feature", legacyPluginId: "FilterTitleKeywordPlugin", routes: ["list", "detail", "owned-detail"], surfaces: ["list-page", "detail-page"] }),
     manifest("identity.actress-info", "actress-info", null, ["javdb"], { javdb: 22 }, [], { executionOwner: "feature", legacyPluginId: "ActressInfoPlugin" }),
     manifest("detail.external-sites", "external-sites", null, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [], { executionOwner: "feature", legacyPluginId: "OtherSitePlugin", routes: ["detail", "owned-detail"], surfaces: ["detail-page"] }),
-    manifest("external-bridge.translation", "translation", null, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [], { executionOwner: "feature", legacyPluginId: "TranslatePlugin", routes: ["list", "detail"], surfaces: ["list-page", "detail-page"] }),
+    manifest("external-bridge.translation", "translation", null, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [], { executionOwner: "feature", legacyPluginId: "TranslatePlugin", routes: [], surfaces: [] }),
     manifest("library.state-actions", "library", null, ["javdb"], { javdb: 25 }, [], { executionOwner: "feature", legacyPluginId: "WantAndWatchedVideosPlugin", routes: ["list"], surfaces: ["list-page"] }),
     manifest("detail.external-magnets", "external-bridge", null, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [], { executionOwner: "feature", legacyPluginId: "MagnetHubPlugin", routes: [], surfaces: [] }),
     manifest("detail.screenshot", "detail", null, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [], { executionOwner: "feature", legacyPluginId: "ScreenShotPlugin", routes: ["list", "detail"], surfaces: ["list-page", "detail-page"] }),
@@ -88,24 +88,26 @@ for (const contribution of compatibilityContributionCatalog) {
 
 /** Register only compatibility lookup beans; FeatureRuntime owns all behavior. @param {import("../../core/compatibility-bean-registry.js").CompatibilityBeanRegistry} compatibilityBeans @param {import("../../app/feature-runtime.js").FeatureRuntime} featureRuntime @param {string} site */
 export function registerSiteCompatibility(compatibilityBeans, featureRuntime, site) {
+    featureRuntime.compatibilityRefresh = () => registerSiteCompatibility(compatibilityBeans, featureRuntime, site);
+    const register = (/** @type {string} */ name, /** @type {any} */ bean) => { if (!compatibilityBeans.lookupCompatibilityBean(name)) compatibilityBeans.registerCompatibilityBean(name, bean); };
     featureRuntime.setContributionCatalog?.(compatibilityContributionCatalog);
     featureRuntime.setCompatibilityBeanResolver?.((name) => compatibilityBeans.lookupCompatibilityBean(name));
     featureRuntime.setCompatibilityBeanRegistrar?.((name, bean) => {
         compatibilityBeans.registerCompatibilityBean(name, bean);
         return () => compatibilityBeans.unregisterCompatibilityBean(name, bean);
     });
-    compatibilityBeans.registerCompatibilityBean("MobileBottomBarPlugin", new ResponsiveShellBridge());
+    register("MobileBottomBarPlugin", new ResponsiveShellBridge());
     if (featureRuntime.isContributionEnabled("list", "list.core", "ListPagePlugin")) {
-        compatibilityBeans.registerCompatibilityBean("ListPagePlugin", new ListPagePluginAdapter());
+        register("ListPagePlugin", new ListPagePluginAdapter());
     }
     if (featureRuntime.isContributionEnabled("scheduler", "discovery.scheduler", "TaskPlugin")) {
-        compatibilityBeans.registerCompatibilityBean("TaskPlugin", new TaskCompatibilityBean());
+        register("TaskPlugin", new TaskCompatibilityBean());
     }
     if (featureRuntime.isContributionEnabled("library", "library.history", "HistoryPlugin")) {
-        compatibilityBeans.registerCompatibilityBean("HistoryPlugin", new HistoryCompatibilityBean((command, ...args) => featureRuntime.commands.execute(command, ...args)));
+        register("HistoryPlugin", new HistoryCompatibilityBean((command, ...args) => featureRuntime.commands.execute(command, ...args)));
     }
     if (featureRuntime.route === "list" && featureRuntime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin")) {
-        compatibilityBeans.registerCompatibilityBean("BlacklistPlugin", new BlacklistCompatibilityBean({
+        register("BlacklistPlugin", new BlacklistCompatibilityBean({
             executeCommand: (command, ...args) => featureRuntime.commands.execute(command, ...args),
             getSubjectInfo: () => featureRuntime.commands.execute("library.blacklist.subject-info"),
             batchAllVideos: (name, options = {}) => {
@@ -116,12 +118,12 @@ export function registerSiteCompatibility(compatibilityBeans, featureRuntime, si
         }));
     }
     if (featureRuntime.isContributionEnabled("settings-entry", "settings.core", "SettingPlugin")) {
-        compatibilityBeans.registerCompatibilityBean("SettingPlugin", new SettingsCompatibilityBean(
+        register("SettingPlugin", new SettingsCompatibilityBean(
             (options) => new SettingPlugin(options),
         ));
     }
     if (featureRuntime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin")) {
-        compatibilityBeans.registerCompatibilityBean("NewVideoPlugin", new NewVideoCompatibilityBean(
+        register("NewVideoPlugin", new NewVideoCompatibilityBean(
             (command, ...args) => featureRuntime.commands.execute(command, ...args),
             (options) => import("../../plugins/new-video/new-video.js").then(({ NewVideoWorkspaceService }) => new NewVideoWorkspaceService(/** @type {ConstructorParameters<typeof NewVideoWorkspaceService>[0]} */ (options))),
         ));
@@ -133,7 +135,7 @@ export function registerSiteCompatibility(compatibilityBeans, featureRuntime, si
         const dependencies = featureRuntime.resolveDeclaredDependencies([PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]);
         const ui = featureRuntime.resolveDeclaredDependencies([SERVICE.domUi])[SERVICE.domUi];
         const support = featureRuntime.resolveDeclaredDependencies([SERVICE.clipboard, SERVICE.notifications, SERVICE.diagnostics]);
-        compatibilityBeans.registerCompatibilityBean("ReviewPlugin", new ReviewCompatibilityBean({
+        register("ReviewPlugin", new ReviewCompatibilityBean({
             host: dependencies[PORT.host], review: dependencies[SERVICE.review], movie: dependencies[SERVICE.movie],
             settings: dependencies[SERVICE.settings], storage: dependencies[SERVICE.storage],
             getScope: () => featureRuntime.getScope("detail"),
@@ -148,7 +150,7 @@ export function registerSiteCompatibility(compatibilityBeans, featureRuntime, si
     if (featureRuntime.isContributionEnabled("detail", "detail.related", "RelatedPlugin")) {
         const dependencies = featureRuntime.resolveDeclaredDependencies([PORT.host, SERVICE.related, SERVICE.settings, SERVICE.notifications, SERVICE.diagnostics]);
         const ui = featureRuntime.resolveDeclaredDependencies([SERVICE.domUi])[SERVICE.domUi];
-        compatibilityBeans.registerCompatibilityBean("RelatedPlugin", new RelatedCompatibilityBean({
+        register("RelatedPlugin", new RelatedCompatibilityBean({
             host: dependencies[PORT.host], related: dependencies[SERVICE.related], settings: dependencies[SERVICE.settings],
             getScope: () => featureRuntime.getScope("detail"), jquery: ui.jquery,
             showPanel: (target, movieId, options) => new RelatedPanel({

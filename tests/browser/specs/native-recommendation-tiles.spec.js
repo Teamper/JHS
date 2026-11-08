@@ -34,6 +34,7 @@ for(const path of ['direct','iframe'])test(`recommendation title replacement and
  else{await page.goto('https://javdb.com/');await injectUserscriptRuntime(page,options('dark'));const navigation=page.waitForEvent('framenavigated',{predicate:f=>f.url().includes('/v/native-tiles')});await page.evaluate(()=>window.utils.openPage('https://javdb.com/v/native-tiles','ABC-123'));frame=await navigation;await frame.waitForLoadState('domcontentloaded');await injectUserscriptRuntime(frame,config);}
  const lists=frame.locator('.tile-small');await expect(lists).toHaveCount(2);
  for(const [index,list] of (await lists.all()).entries()){
+  await list.locator('a.tile-item').first().scrollIntoViewIfNeeded();
   await expect(list.locator('.video-title').first()).toHaveText('推荐标题译文');
   await expect(list.locator('.video-number').first()).toHaveText(index===0?'REC-101':'MORE-101');
   await expect(list.locator('a').first()).toHaveAttribute('href',index===0?'/v/rec-1':'/v/more-1');
@@ -46,6 +47,7 @@ for(const path of ['direct','iframe'])test(`recommendation title replacement and
  expect(htmlBefore).toEqual({node:'DIV',number:'REC-101'});
  await frame.evaluate(()=>{const list=document.querySelector('.tile-small'),card=list.firstElementChild.cloneNode(true);card.querySelector('.video-number').textContent='NEW-789';card.querySelector('.video-title').textContent='动态推荐标题';list.append(card);});
  await frame.evaluate(()=>window.unsafeWindow.settingsService.set('translateTitle','yes'));
+ await lists.first().locator('.video-title').last().scrollIntoViewIfNeeded();
  await expect(lists.first().locator('.video-title').last()).toHaveText('推荐标题译文');
  if(path==='iframe'){await page.keyboard.press('Escape');await expect(page.locator('.layui-layer')).toHaveCount(0);}
 });

@@ -6,6 +6,7 @@ import { OwnedPopover } from "../../core/owned-popover.js";
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 
 const ACTIVITY_LABELS = Object.freeze({
+    "personal-rating": "更新个人评分",
     "record-delete": "移除记录", "new-video-decision": "更新新作品处理状态", "new-video-remove": "移除新作品",
     "history-state": "更新影片状态", "history-batch-state": "批量更新状态", "history-edit": "编辑记录",
     "javdb-list-import": "导入影片", "list-card-state": "更新影片状态", "list-batch-state": "批量更新状态",
@@ -80,6 +81,7 @@ export function buildActionButtons(record, documentRuntime = document) {
     /** @type {Array<[string, string, string]>} */
     const menuItems = [ [ "history-editBtn", "编辑", "" ], [ "history-deleteBtn", "移除", "jhs-btn--danger" ], [ "history-hasWatchBtn", k, "" ], [ "history-hasDownBtn", y, "" ], [ "history-favoriteBtn", v, "" ], [ "history-filterBtn", m, "" ] ];
     for (const [ cls, label, extra ] of menuItems) {
+        if (record.ratingOnly && cls === "history-deleteBtn") continue;
         const item = /** @type {HTMLButtonElement} */ (documentRuntime.createElement("button"));
         item.type = "button", item.className = `jhs-btn jhs-btn--ghost ${cls}`, item.setAttribute("role", "menuitem");
         extra && item.classList.add(extra);
@@ -96,7 +98,7 @@ export function buildEditRecordForm(flags) {
 }
 
 export class HistoryDialogController {
-    /** @param {{document: Document, window: Window & typeof globalThis, jquery: (value: any) => any, domUi: any, dialog: any, notifications: any, logger: any, clipboard: any, movie: any, settings: any, storage: any, state: any, repository?: HistoryRepository, selectionModel?: HistorySelectionModel, site: string, resolveLegacy?: (name: string) => any, fc2WorkspaceAvailable?: boolean, getFc2Workspace?: () => Promise<any>}} options */
+    /** @param {{document: Document, window: Window & typeof globalThis, jquery: (value: any) => any, domUi: any, dialog: any, notifications: any, logger: any, clipboard: any, movie: any, settings: any, storage: any, state: any, repository?: HistoryRepository, selectionModel?: HistorySelectionModel, site: string, resolveLegacy?: (name: string) => any, fc2WorkspaceAvailable?: boolean, getFc2Workspace?: () => Promise<any>, isAvailable?: (command: string) => boolean, onRate?: (movies: any[]) => any, onLists?: (movies: any[]) => any}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -110,6 +112,9 @@ export class HistoryDialogController {
         this.settings = options.settings;
         this.storage = options.storage;
         this.state = options.state;
+        this.isAvailable = options.isAvailable ?? (() => true);
+        this.onRate = options.onRate;
+        this.onLists = options.onLists;
         this.site = options.site;
         this.resolveLegacy = options.resolveLegacy ?? (() => null);
         this.fc2WorkspaceAvailable = options.fc2WorkspaceAvailable ?? false;
@@ -176,9 +181,28 @@ export class HistoryDialogController {
                 if (this.disposed || generation !== this.historyDialogGeneration) return;
                 const root = this.jquery(e);
                 this.historyViewGeneration++;
+                root.find("#dataType").append('<option value="rated">已评分</option><option value="unrated">未评分</option>');
                 this.historyRoot = root, root.find("#allSelectBox").prepend('<span id="historySelectionSummary" class="jhs-history-selection-summary" role="status" aria-live="polite"></span>'),
                 root.find("#filterBox").append('<select id="historySort" class="jhs-select-source" aria-label="记录排序"><option value="">按表头排序</option><option value="updateDate:desc">更新时间 新→旧</option><option value="updateDate:asc">更新时间 旧→新</option><option value="createDate:desc">创建时间 新→旧</option><option value="createDate:asc">创建时间 旧→新</option><option value="publishTime:desc">发行时间 新→旧</option><option value="publishTime:asc">发行时间 旧→新</option><option value="carNum:asc">番号 A→Z</option><option value="carNum:desc">番号 Z→A</option><option value="names:asc">演员 A→Z</option><option value="names:desc">演员 Z→A</option><option value="url:asc">来源 A→Z</option><option value="url:desc">来源 Z→A</option><option value="remark:asc">备注 A→Z</option><option value="remark:desc">备注 Z→A</option></select>');
                 root.on("change.jhsHistory", "#historySort", (/** @type {any} */ event) => { const [field,dir]=String(this.jquery(event.currentTarget).val()).split(":"); if (field) this.tableObj?.setSort(field,dir); });
+                root.find("#historySort").append('<option value="personalRating:desc">评分 高→低</option><option value="personalRating:asc">评分 低→高</option>');
+                for (const [label, callback] of /** @type {Array<[string, ((movies: any[]) => any) | undefined]>} */ ([["批量评分", this.onRate], ["管理清单", this.onLists]])) {
+                    if (!callback) continue;
+                    const button = this.document.createElement("button");
+                    button.type = "button";
+                    button.className = "jhs-btn jhs-btn--secondary";
+                    button.textContent = label;
+                    button.dataset.enhancementCommand = label === "批量评分" ? "library.rating.open" : "library.lists.open";
+                    button.addEventListener("click", async () => {
+                        const viewGeneration = this.historyViewGeneration;
+                        try {
+                            const movies = await this.getHistoryBatchSelection();
+                            if (this.isCurrentHistoryView(root, viewGeneration)) await callback(movies);
+                        } catch (error) { this.notifications.error(error instanceof Error ? error.message : String(error)); }
+                    });
+                    root.find("#allSelectBox").append(button);
+                }
+                this.syncEnhancementAvailability();
                 this.resetHistorySelection(!1), this.domUi.enhanceSelect(root);
                 await this.loadTableData();
                 if (this.disposed || root !== this.historyRoot || generation !== this.historyDialogGeneration) return;
@@ -410,6 +434,8 @@ export class HistoryDialogController {
                 let e = this.domUi.loading();
                 try {
                     if ("delete" === i) {
+                        n = n.filter(record => !record.ratingOnly);
+                        if (!n.length) return void this.notifications.info("所选影片只有个人评分，可在评分控件中清除");
                         const e = n.map((/** @type {HistoryRecord} */ e) => e.carNum), t = await this.historyRepository.remove(e);
                         if (!t.changed.length) return void this.notifications.error("所选记录已不存在");
                         this.notifications.ok(`已移除 ${t.changed.length} 条记录`);
@@ -435,6 +461,7 @@ export class HistoryDialogController {
         /** @type {HistoryRecord[]} */
         let a = await this.historyRepository.list();
         if (!this.isCurrentHistoryView(root, generation)) return [];
+        if (!this.isAvailable("library.rating.open")) a = a.filter(record => !record.ratingOnly);
         this.allCount = a.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0,
         this.hasWatchCount = 0, this.waitCheckCount = 0, a.forEach((/** @type {HistoryRecord} */ e) => {
             const flags = normalizeStateFlags(e.stateFlags);
@@ -448,6 +475,8 @@ export class HistoryDialogController {
         const flagByFilter = { filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" };
         const selectedFlag = flagByFilter[i];
         let s = "all" === i ? a : "waitCheck" === i ? a.filter((e => !hasAnyState(e.stateFlags))) : selectedFlag ? a.filter((e => normalizeStateFlags(e.stateFlags)[selectedFlag])) : a;
+        if (i === "rated") s = s.filter(record => record.personalRating != null);
+        if (i === "unrated") s = s.filter(record => record.personalRating == null);
         const o = String(root.find("#searchCarNum").val() || "").trim();
         if (o) {
             let e = o.toLowerCase().replace("-c", "").replace("-uc", "").replace("-4k", "");
@@ -498,7 +527,47 @@ export class HistoryDialogController {
         if (!row.getTable().getColumn("names")?.isVisible()) fields.unshift(["演员",record.names]);
         if (!row.getTable().getColumn("updateDate")?.isVisible()) fields.push(["更新时间",formatUiDateTime(record.updateDate)]);
         for (const [label,value] of fields) { if (!value) continue; const pair=this.document.createElement("div"), dt=this.document.createElement("dt"), dd=this.document.createElement("dd"); dt.textContent=label; dd.textContent=String(value); pair.append(dt,dd); details.append(pair); }
+        if (this.isAvailable("library.rating.open") && row.getTable().getColumn("personalRating")?.isVisible() === false) {
+            const pair = this.document.createElement("div"), label = this.document.createElement("dt"), value = this.document.createElement("dd");
+            label.textContent = "个人评分";
+            value.append(this.buildRatingButton(record));
+            pair.append(label,value);
+            details.append(pair);
+        }
         target.replaceChildren(details);
+    }
+    /** @param {HistoryRecord} record */
+    buildRatingButton(record) {
+        const button = this.document.createElement("button");
+        button.type = "button";
+        button.className = "jhs-btn jhs-btn--ghost jhs-btn--sm";
+        button.textContent = record.personalRating ? `${record.personalRating} 星` : "未评分";
+        button.setAttribute("aria-label", `设置 ${record.carNum} 的个人评分`);
+        button.disabled = !this.onRate || !this.isAvailable("library.rating.open");
+        button.addEventListener("click", () => Promise.resolve(this.onRate?.([record])).catch(error => this.notifications.error(error.message)));
+        return button;
+    }
+    syncEnhancementAvailability() {
+        const root = this.historyRoot;
+        if (!root || this.disposed) return;
+        const ratings = this.isAvailable("library.rating.open");
+        const filter = root.find("#dataType"), sort = root.find("#historySort"), filterValue = filter.val(), sortValue = sort.val();
+        root.find('#dataType option[value="rated"],#dataType option[value="unrated"],#historySort option[value^="personalRating:"]').remove();
+        if (ratings) {
+            filter.append('<option value="rated">已评分</option><option value="unrated">未评分</option>').val(filterValue);
+            sort.append('<option value="personalRating:desc">评分 高→低</option><option value="personalRating:asc">评分 低→高</option>').val(sortValue);
+        }
+        this.domUi.refreshSelect?.(filter);
+        this.domUi.refreshSelect?.(sort);
+        root.find("[data-enhancement-command]").each((/** @type {number} */ _index, /** @type {HTMLElement} */ node) => { node.hidden = !this.isAvailable(node.dataset.enhancementCommand || ""); });
+        if (!ratings && ["rated", "unrated"].includes(String(filterValue))) this.domUi.setSelectValue(root.find("#dataType"), "all");
+        if (!ratings && String(sortValue).startsWith("personalRating:")) {
+            this.domUi.setSelectValue(root.find("#historySort"), "");
+            this.tableObj?.clearSort();
+        }
+        const column = this.tableObj?.getColumn("personalRating");
+        if (column) ratings ? column.show() : column.hide();
+        if (this.tableObj) void this.refresh();
     }
     async loadTableData() {
         const root = this.historyRoot, generation = this.historyViewGeneration;
@@ -569,6 +638,9 @@ export class HistoryDialogController {
                 responsive: 5,
                 headerSort: !0,
                 formatter: (/** @type {TableHandle} */ e) => buildNamesCell(e.getData().names, this.document)
+            }, {
+                title: "个人评分", field: "personalRating", visible: this.isAvailable("library.rating.open"), width: 110, responsive: 2, sorter: "number",
+                formatter: (/** @type {TableHandle} */ cell) => this.buildRatingButton(cell.getData())
             }, {
                 title: "创建时间",
                 field: "createDate",

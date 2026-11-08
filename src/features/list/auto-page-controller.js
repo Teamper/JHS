@@ -1,4 +1,5 @@
 // @ts-check
+import { PRIVACY_DOCUMENT_TITLE_ATTRIBUTE } from "../../contracts/privacy-targets.js";
 
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { readListItem } from "../../core/list-item-reader.js";
@@ -365,7 +366,12 @@ export class AutoPageController {
     /** @param {string} url */
     updatePageUrl(url) {
         this.window.history.replaceState({}, "", url);
-        if (this.hostAdapter.site === "javbus") this.document.title = this.document.title.replace(/第\d+頁/, `第${this.currentPage}頁`);
+        if (this.hostAdapter.site === "javbus") {
+            const root = this.document.documentElement, original = root.getAttribute(PRIVACY_DOCUMENT_TITLE_ATTRIBUTE);
+            const next = (original ?? this.document.title).replace(/第\d+頁/, `第${this.currentPage}頁`);
+            if (original === null) this.document.title = next;
+            else root.setAttribute(PRIVACY_DOCUMENT_TITLE_ATTRIBUTE, next);
+        }
     }
 
     /** @param {string} state @param {string} text */

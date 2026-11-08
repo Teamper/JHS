@@ -54,6 +54,9 @@ export default defineFeature({
                     resolveLegacy: (name) => runtime.resolveCompatibilityBean(name),
                     fc2WorkspaceAvailable: runtime.isContributionEnabled("fc2-workspace", "detail.fc2-owned", "Fc2Plugin"),
                     getFc2Workspace: () => runtime.executeCommand("detail.fc2.workspace"),
+                    isAvailable: command => runtime.isCommandAvailable(command),
+                    onRate: movies => runtime.executeCommand("library.rating.open", movies),
+                    onLists: movies => runtime.executeCommand("library.lists.open", movies),
                 });
                 if (featureDisposed) {
                     controller.dispose();
@@ -86,6 +89,8 @@ export default defineFeature({
                 })),
             });
             entry.start();
+            runtime.scope.addCleanup(deps[SERVICE.events].on("personal-rating-changed", () => historyDialog?.refresh()));
+            runtime.scope.listen(document, "jhs-feature-availability-changed", () => historyDialog?.syncEnhancementAvailability());
             disposers.push(() => {
                 featureDisposed = true;
                 entry.dispose();

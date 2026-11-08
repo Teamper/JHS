@@ -1,7 +1,8 @@
 // @ts-check
 
 import { CACHE_TTL, ProviderError } from "../../core/cache-policy.js";
-import { escapeHtml } from "../../core/constants.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
+import { MagnetResultsView } from "../../ui/detail/magnet-results.js";
 import { mapLimit } from "../../core/feature-helpers.js";
 import { calcMagnetScore } from "../../core/magnet-quality.js";
 import { createMovieContext } from "../../core/movie-context.js";
@@ -9,13 +10,13 @@ import { BUILT_IN_NATIVE_MAGNET_SOURCES } from "../../services/resource-settings
 import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, parseCustomMagnetResponse, parseNativeMagnets, validateCustomMagnetSource } from "../../services/magnet-source-registry.js";
 
 /** @typedef {any} JQueryHandle */
-/** @typedef {{ id: string, name: string, enabled?: boolean, applicable?: boolean, priority?: number, baseUrl?: string, search: (keyword: string, root?: JQueryHandle | Document) => Promise<MagnetResult[]>, targetUrl: (keyword: string) => string, targetPage?: string, parseHtml?: Function, parseJson?: Function, url?: string }} MagnetSource */
+/** @typedef {{ id: string, name: string, enabled?: boolean, applicable?: boolean, priority?: number, baseUrl?: string, search: (keyword: string, root?: JQueryHandle | Document, scope?: LifecycleScope) => Promise<MagnetResult[]>, targetUrl: (keyword: string) => string, targetPage?: string, parseHtml?: Function, parseJson?: Function, url?: string }} MagnetSource */
 /** @typedef {{ title: string, magnet: string, size?: string | number, date?: string, seeders?: number, tags?: string[], customTagWeight?: number, filterPenalty?: number, hidden?: boolean, _score?: any, [key: string]: any }} MagnetResult */
 /** @typedef {{ id: string, name: string, enabled?: boolean, searchUrlTemplate: string, targetUrlTemplate: string, parserType?: string, [key: string]: any }} CustomSource */
-/** @typedef {{ root?: JQueryHandle | Element, method?: string, body?: unknown, headers?: Record<string, string>, responseType?: string, ttlMs?: number, custom?: boolean, hosts?: string[] }} MagnetRequestOptions */
+/** @typedef {{ root?: JQueryHandle | Element, method?: string, body?: unknown, headers?: Record<string, string>, responseType?: string, ttlMs?: number, custom?: boolean, hosts?: string[], scope?: LifecycleScope }} MagnetRequestOptions */
 /** @typedef {{ movieContext?: import("../../core/movie-context.js").MovieContext, root?: JQueryHandle | Element, initialEngineId?: string, requireExternal?: boolean, isActive?: () => boolean }} MagnetHubOptions */
 /** @typedef {{ source: MagnetSource, status: "success" | "empty" | "error", results: MagnetResult[] }} MagnetSourceOutcome */
-/** @typedef {{ generation: number, engines: MagnetSource[], outcomes: MagnetSourceOutcome[], engineId: string, pending: boolean, isActive: () => boolean }} MagnetPanelState */
+/** @typedef {{ generation: number, engines: MagnetSource[], outcomes: MagnetSourceOutcome[], engineId: string, pending: boolean, isActive: () => boolean, queryScope?: LifecycleScope, releaseQuery?: () => void }} MagnetPanelState */
 
 export const MAGNET_HUB_STYLES = `
     .magnet-container { width:100%; margin:var(--jhs-space-4) auto; }
@@ -27,7 +28,12 @@ export const MAGNET_HUB_STYLES = `
     .magnet-info { display:flex; justify-content:space-between; margin-bottom:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
     .magnet-loading { padding:var(--jhs-space-4); text-align:center; }
     .magnet-error { padding:var(--jhs-space-2); color:var(--jhs-danger); }
-    .magnet-copy { position:absolute; top:var(--jhs-space-2); right:var(--jhs-space-3); }
+    .jhs-magnet-view .magnet-result { padding:var(--jhs-space-3) var(--jhs-space-4)!important; }
+    .jhs-magnet-view .magnet-copy { position:static!important; transform:none; display:flex; gap:var(--jhs-space-2); flex-wrap:wrap; margin-top:var(--jhs-space-2); }
+    .jhs-magnet-controls { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-3); padding:var(--jhs-space-2); }
+    .jhs-magnet-controls label { display:flex; align-items:center; gap:var(--jhs-space-1); min-height:44px; cursor:pointer; }
+    .magnet-info,.magnet-tags { overflow-wrap:anywhere; }
+    @media (max-width:600px) { .magnet-info { display:block; } .magnet-title { padding-right:0; white-space:normal; } }
 `;
 
 export class MagnetHubController {
@@ -58,7 +64,7 @@ export class MagnetHubController {
             const config = configured(source.id), baseUrl = String(config.baseUrl || source.baseUrl).replace(/\/$/, "");
             return {
                 ...source, ...config,
-                search: async (/** @type {string} */ keyword) => magnet.searchSource(source.id, keyword, { baseUrl, scope: this.scope }),
+                search: async (/** @type {string} */ keyword, /** @type {any} */ root, /** @type {LifecycleScope | undefined} */ scope) => magnet.searchSource(source.id, keyword, { baseUrl, scope: scope ?? this.scope }),
                 targetUrl: (/** @type {string} */ keyword) => magnet.getSourceTargetUrl(source.id, keyword, { baseUrl }),
             };
         }));
@@ -67,7 +73,7 @@ export class MagnetHubController {
         }, { name: "JavBus 本站", id: "native-javbus", applicable: this.site === "javbus", enabled: this.site === "javbus", priority: 2, search: async (/** @type {string} */ keyword, root = this.document) => parseNativeMagnets((/** @type {any} */ (root))?.jquery ? (/** @type {any} */ (root))[0] : root, "javbus"), targetUrl: () => this.window.location.href
         }, ...externalSources
         ].map((source => { const config = configured(source.id), applicable = source.applicable ?? true; return { ...source, ...config, enabled: applicable && (config.enabled ?? source.enabled ?? true), search: source.search, targetUrl: source.targetUrl }; })));
-        custom.filter((/** @type {CustomSource} */ source) => source.enabled).forEach((/** @type {CustomSource} */ config) => this.sourceRegistry.register({ ...config, id: `custom:${config.id}`, search: (/** @type {string} */ keyword) => this.searchCustomSource(config, keyword), targetUrl: (/** @type {string} */ keyword) => config.targetUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword)) }));
+        custom.filter((/** @type {CustomSource} */ source) => source.enabled).forEach((/** @type {CustomSource} */ config) => this.sourceRegistry.register({ ...config, id: `custom:${config.id}`, search: (/** @type {string} */ keyword, root, scope) => this.searchCustomSource(config, keyword, scope), targetUrl: (/** @type {string} */ keyword) => config.targetUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword)) }));
         const enabled = this.sourceRegistry.getEnabledSources().map((source => ({ ...source, targetPage: source.targetUrl("{keyword}").replace("%7Bkeyword%7D", "{keyword}") })));
         this.searchEngines = enabled.length ? [{ id: "all", name: "全部", priority: 0, targetPage: "#", targetUrl: () => "#", search: (/** @type {string} */ keyword, /** @type {JQueryHandle | Document} */ root) => this.searchAllSources(enabled, keyword, root) }, ...enabled] : [];
     }
@@ -142,12 +148,19 @@ export class MagnetHubController {
         if (!state.isActive() || this.scope?.disposed || (options.retryFailed && state.pending)) return;
         const previous = state.engineId === engine.id ? state.outcomes : [];
         const sources = engine.id === "all" ? state.engines.filter((source => source.id !== "all")) : [engine];
+        state.releaseQuery?.();
+        state.queryScope?.dispose();
+        const queryScope = state.queryScope = new LifecycleScope("magnet-query");
+        state.releaseQuery = this.scope?.addCleanup?.(() => queryScope.dispose());
         const generation = ++state.generation;
         state.engineId = engine.id;
-        const canCommit = () => generation === state.generation && state.isActive() && !this.scope?.disposed;
+        const canCommit = () => generation === state.generation && !queryScope.disposed && state.isActive() && !this.scope?.disposed;
         if (options.requireExternal && !sources.some((source => !source.id.startsWith("native-")))) {
             state.pending = false;
             state.outcomes = [];
+            queryScope.dispose();
+            state.releaseQuery?.();
+            state.releaseQuery = undefined;
             panel.empty().append(this.jquery('<div class="magnet-query-status" role="status"></div>').text("第三方磁力来源未启用，请前往资源来源设置"));
             return;
         }
@@ -158,8 +171,37 @@ export class MagnetHubController {
         if (!options.retryFailed) panel.empty();
         panel.find(".magnet-loading").remove();
         panel.prepend(this.jquery('<div class="magnet-loading" role="status"></div>').text(`正在从 ${engine.name} 搜索「${keyword}」…`));
+        panel.find(".magnet-source-status").remove();
+        const sourceStatus = this.jquery('<div class="magnet-source-status" role="status"></div>').prependTo(panel);
+        const updateSourceStatus = (/** @type {Map<string, MagnetSourceOutcome>} */ outcomes) => {
+            sourceStatus.text(sources.map(source => {
+                const outcome = outcomes.get(source.id);
+                const label = outcome ? { success: "成功", empty: "无结果", error: "失败" }[outcome.status] : "查询中";
+                return `${source.name} ${label}`;
+            }).join(" · "));
+        };
         try {
-            const queried = await this.querySources(selected, keyword, root);
+            const completed = new Map(previous.map(outcome => [outcome.source.id, outcome]));
+            for (const source of selected) completed.delete(source.id);
+            updateSourceStatus(completed);
+            let rendering = Promise.resolve();
+            /** @type {unknown} */ let renderError;
+            const publish = (/** @type {MagnetSourceOutcome} */ outcome) => {
+                if (!canCommit()) return;
+                completed.set(outcome.source.id, outcome);
+                const snapshot = sources.flatMap(source => { const item = completed.get(source.id); return item ? [item] : []; });
+                rendering = rendering.then(async () => {
+                    if (!canCommit()) return;
+                    const results = await this.applyRuntimeRules(/** @type {MagnetResult[]} */ (deduplicateMagnetResults(snapshot.flatMap(item => item.results))));
+                    if (!canCommit()) return;
+                    if (results.length) await this.displayResults(panel, results, engine.name);
+                    updateSourceStatus(new Map(snapshot.map(item => [item.source.id, item])));
+                    panel.find(".magnet-loading").text(`已完成 ${snapshot.length}/${sources.length} 个来源`);
+                }).catch(error => { renderError = error; });
+            };
+            const queried = await this.querySources(selected, keyword, root, publish, queryScope);
+            await rendering;
+            if (renderError) throw renderError;
             if (!canCommit()) return;
             const outcomes = options.retryFailed && retrySources.length
                 ? previous.map((outcome => queried.find((item => item.source.id === outcome.source.id)) || outcome)) : queried;
@@ -168,6 +210,7 @@ export class MagnetHubController {
             if (!canCommit()) return;
             state.outcomes = outcomes;
             state.pending = false;
+            panel.find(".magnet-loading,.magnet-error").remove();
             const failures = outcomes.filter((outcome => outcome.status === "error"));
             const allFailed = outcomes.length > 0 && failures.length === outcomes.length;
             if (results.length) await this.displayResults(panel, results, engine.name);
@@ -185,19 +228,27 @@ export class MagnetHubController {
             state.pending = false;
             this.diagnostics?.recordError?.({ source: "magnet-hub", message: "磁力查询结果处理失败", error });
             panel.empty().append(this.jquery('<div class="magnet-error" role="status"></div>').text("磁力查询结果处理失败，请检查资源规则后重试 ").append(this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" data-jhs-action="retry-magnets">重试</button>')));
+        } finally {
+            queryScope.dispose();
+            if (state.queryScope === queryScope) { state.releaseQuery?.(); state.releaseQuery = undefined; }
         }
     }
     /** Keep source failures separate from successful empty searches. */
-    /** @param {MagnetSource[]} sources @param {string} keyword @param {JQueryHandle | Document} root @returns {Promise<MagnetSourceOutcome[]>} */
-    async querySources(sources, keyword, root) {
+    /** @param {MagnetSource[]} sources @param {string} keyword @param {JQueryHandle | Document} root @param {(outcome: MagnetSourceOutcome) => void} [onOutcome] @param {LifecycleScope} [scope] @returns {Promise<MagnetSourceOutcome[]>} */
+    async querySources(sources, keyword, root, onOutcome, scope) {
         return mapLimit(sources, 3, async source => {
+            scope?.assertActive();
+            /** @type {MagnetSourceOutcome} */ let outcome;
             try {
-                const results = await source.search(keyword, root);
-                return /** @type {MagnetSourceOutcome} */ ({ source, status: results.length ? "success" : "empty", results });
+                const results = await source.search(keyword, root, scope);
+                outcome = { source, status: results.length ? "success" : "empty", results };
             } catch (error) {
+                scope?.assertActive();
                 this.diagnostics?.recordError?.({ source: "magnet-hub", message: `磁力源 ${source.name} 请求失败`, error });
-                return /** @type {MagnetSourceOutcome} */ ({ source, status: "error", results: [] });
+                outcome = { source, status: "error", results: [] };
             }
+            onOutcome?.(outcome);
+            return outcome;
         });
     }
     /** Bind delegated copy actions once for this result panel. @param {JQueryHandle} panel */
@@ -206,8 +257,11 @@ export class MagnetHubController {
         panel.data("jhsMagnetCopyBound", true).on("click", ".copy-btn", async (/** @type {MouseEvent} */ event) => {
             const button = this.jquery(event.currentTarget), label = button.text();
             if (!await this.clipboard.copyText("磁力链接", button.data("magnet"))) return;
+            if (this.scope?.disposed || !button[0]?.isConnected) return;
             button.addClass("copied").text("已复制");
-            setTimeout(() => button.removeClass("copied").text(label), 2000);
+            setTimeout(() => {
+                if (!this.scope?.disposed && button[0]?.isConnected) button.removeClass("copied").text(label);
+            }, 2000);
         });
     }
     /** @param {string} keyword */
@@ -225,10 +279,10 @@ export class MagnetHubController {
         }));
         return deduplicateMagnetResults(groups.flat());
     }
-    /** @param {CustomSource} config @param {string} keyword */
-    async searchCustomSource(config, keyword) {
+    /** @param {CustomSource} config @param {string} keyword @param {LifecycleScope} [scope] */
+    async searchCustomSource(config, keyword, scope) {
         const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
-        const payload = await this.requestSource(config.id, url, { ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
+        const payload = await this.requestSource(config.id, url, { scope, ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
         return parseCustomMagnetResponse(config, "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload, config.id);
     }
     /** @param {MagnetSource[]} sources @param {string} keyword @param {JQueryHandle | Document} [root] */
@@ -241,7 +295,7 @@ export class MagnetHubController {
             headers: options.headers, responseType: options.responseType || "text",
             cacheScope: options.method && options.method !== "GET" ? "none" : "public", ttlMs: options.ttlMs ?? CACHE_TTL.magnet,
             urlPolicy: options.custom ? { trustClass: "custom-public" } : { trustClass: "builtin-public", hosts: options.hosts || [new URL(url).hostname] },
-        }, this.scope);
+        }, options.scope ?? this.scope);
         return response.data;
     }
     /** @param {MagnetResult[]} results */
@@ -249,21 +303,15 @@ export class MagnetHubController {
         const service = this.resourceSettings, [tags, filters] = await Promise.all([service.getMagnetTagRules(), service.getMagnetFilterRules()]);
         return /** @type {MagnetResult[]} */ (/** @type {unknown} */ (results.map((result => applyMagnetRules(result, tags, filters.filter((/** @type {any} */ rule) => (rule.target || "title") === "title"), filters.filter((/** @type {any} */ rule) => rule.target === "file")))).filter((result => !result.hidden))));
     }
-    /** @param {JQueryHandle} e @param {MagnetResult[]} t @param {string} n */
-    async displayResults(e, t, n) {
-        this.bindResultActions(e);
-        e.empty(), 0 !== t.length ? (t.forEach((e => { const base = this.calcMagnetScore(e); e._score = { ...base, total: Math.max(0, Math.min(100, base.total + (e.customTagWeight || 0) + (e.filterPenalty || 0))) }; })),
-        t.sort(((e, t) => t._score.total - e._score.total)),
-        t.forEach((t => {
-            const n = t._score ? t._score.total : 0, a = n >= 80 ? "高" : n >= 60 ? "中" : "低", i = t._score ? `做种:${t._score.seeders}/35 分辨率:${t._score.resolution}/25 字幕:${t._score.subtitle}/20 新鲜度:${t._score.freshness}/15 完整性:${t._score.completeness}/5` : "";
-            const safeTitle = escapeHtml(t.title), safeMagnet = escapeHtml(t.magnet), safeSize = escapeHtml(String(t.size || "未知")), safeDate = escapeHtml(String(t.date || "未知"));
-            const item = this.jquery(`\n                <div class="magnet-result">\n                    <div class="magnet-title">\n                        <span class="magnet-score" title="${i}">${a} ${n}</span>\n                        <a href="${safeMagnet}">${safeTitle}</a>\n                    </div>\n                    <div class="magnet-info">\n                        <span>大小: ${safeSize}</span>\n                        <span>做种: ${t.seeders || "—"}</span>\n                        <span>日期: ${safeDate}</span>\n                    </div>\n                    <div class="magnet-copy">\n                        <button type="button" class="jhs-btn magnet-hub-btn copy-btn" data-magnet="${safeMagnet}">复制链接</button>\n                    </div>\n                </div>\n            `);
-            t.tags?.length && item.find(".magnet-info").after(this.jquery("<div></div>").addClass("magnet-tags").append(t.tags.map((tag => this.jquery("<span></span>").addClass("jhs-badge").text(tag)))));
-            const copyBox = item.find(".magnet-copy");
-            item.find(".copy-btn").removeClass("magnet-hub-btn").addClass("jhs-btn--secondary");
-            copyBox.append(this.jquery(`<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${safeMagnet}">离线</button>`));
-            item.appendTo(e);
-        }))) : e.append('<div class="magnet-query-status">未找到相关资源</div>');
+    /** @param {JQueryHandle} panel @param {MagnetResult[]} results @param {string} sourceName */
+    async displayResults(panel, results, sourceName) {
+        this.bindResultActions(panel);
+        let view = panel.data("jhsMagnetView");
+        if (!view || view.root[0].parentNode !== panel[0]) {
+            view = new MagnetResultsView(panel, this.jquery);
+            panel.data("jhsMagnetView", view);
+        }
+        view.update(results);
     }
     /** @param {MagnetResult} e */
     calcMagnetScore(e) {

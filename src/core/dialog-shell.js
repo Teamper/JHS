@@ -153,6 +153,8 @@ export function prepareDialogOptions(options = {}, utils = {}) {
             scope.addCleanup(enhanceDialogButtons(root));
             if (Number(vendor.type) !== 2 && ui?.focus !== "caller") scope.addCleanup(bindDialogFocus(root, ui?.initialFocus));
             const resize = () => {
+                const viewportWidth = root.ownerDocument.documentElement.clientWidth || window.innerWidth;
+                const viewportHeight = root.ownerDocument.documentElement.clientHeight || window.innerHeight;
                 if (ui?.size && utils.getDialogArea) {
                     const [width, height] = utils.getDialogArea(ui.size);
                     Object.assign(root.style, { width, height });
@@ -163,12 +165,12 @@ export function prepareDialogOptions(options = {}, utils = {}) {
                         frame.style.height = content.style.height;
                     }
                 }
-                root.style.maxWidth = `${Math.max(0, window.innerWidth - 16)}px`;
-                root.style.maxHeight = `${Math.max(0, window.innerHeight - 16)}px`;
+                root.style.maxWidth = `${Math.max(0, viewportWidth - 16)}px`;
+                root.style.maxHeight = `${Math.max(0, viewportHeight - 16)}px`;
                 const rect = root.getBoundingClientRect();
                 // 使用当前位置的偏移量，兼容宿主通过 transform 居中的外壳。
-                if (ui?.size || rect.right > window.innerWidth - 8 || rect.left < 8) root.style.left = `${root.offsetLeft + Math.max(8, (window.innerWidth - rect.width) / 2) - rect.left}px`;
-                if (ui?.size || rect.bottom > window.innerHeight - 8 || rect.top < 8) root.style.top = `${root.offsetTop + Math.max(8, (window.innerHeight - rect.height) / 2) - rect.top}px`;
+                if (ui?.size || rect.right > viewportWidth - 8 || rect.left < 8) root.style.left = `${root.offsetLeft + Math.max(8, (viewportWidth - rect.width) / 2) - rect.left}px`;
+                if (ui?.size || rect.bottom > viewportHeight - 8 || rect.top < 8) root.style.top = `${root.offsetTop + Math.max(8, (viewportHeight - rect.height) / 2) - rect.top}px`;
             };
             scope.listen(window, "resize", resize);
             resize();

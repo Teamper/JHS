@@ -167,3 +167,42 @@ describe("ScreenshotService provider whitelist", () => {
         expect(service.getSearchUrl({ carNum: "ABC-123" }, { screenshotProviders: JSON.stringify([{ id: "javstore", enabled: false }]) })).toBeNull();
     });
 });
+
+
+describe("multiple enabled screenshot integrations", () => {
+    function setup() {
+        const calls = [];
+        const adapters = {
+            javstore: { getImages: vi.fn(async () => { calls.push("javstore"); throw new Error("source offline"); }) },
+            projectjav: { getImages: vi.fn(async () => { calls.push("projectjav"); return []; }) },
+            javfree: { getImages: vi.fn(async () => { calls.push("javfree"); return [{ url: "https://cf.javfree.me/HLIC/ABC-123-1080p.jpg", providerId: "javfree" }]; }) },
+        };
+        const integrations = { list: () => Object.keys(adapters).map(id => ({ id })), getAdapter: id => adapters[id] };
+        const diagnostics = { updateProvider: vi.fn() };
+        const service = new ScreenshotService({ getAvailable: async () => [] }, integrations, diagnostics);
+        const settings = { screenshotProviders: [{ id: "javstore", enabled: true, priority: 10 }, { id: "projectjav", enabled: true, priority: 20 }, { id: "javfree", enabled: true, priority: 30 }] };
+        return { service, settings, calls, adapters, diagnostics };
+    }
+    it("falls through errors and empty sources in configured priority order", async () => {
+        const h = setup();
+        const result = await h.service.resolve({ carNum: "ABC-123" }, { settings: h.settings });
+        expect(result[0].providerId).toBe("javfree");
+        expect(h.calls).toEqual(["javstore", "projectjav", "javfree"]);
+        expect(h.diagnostics.updateProvider).toHaveBeenCalledWith("javstore", expect.objectContaining({ ok: false }));
+        expect(h.diagnostics.updateProvider).toHaveBeenCalledWith("javfree", expect.objectContaining({ ok: true, count: 1 }));
+    });
+    it("uses user priority and forwards refresh only to the explicitly selected source", async () => {
+        const h = setup();
+        h.settings.screenshotProviders[2].priority = 1;
+        await h.service.resolve({ carNum: "ABC-123" }, { settings: h.settings });
+        expect(h.calls).toEqual(["javfree"]);
+        await h.service.resolve({ carNum: "ABC-123" }, { providerId: "projectjav", refreshCache: true, settings: h.settings });
+        expect(h.calls).toEqual(["javfree", "projectjav"]);
+        expect(h.adapters.projectjav.getImages).toHaveBeenLastCalledWith({ carNum: "ABC-123" }, expect.objectContaining({ refreshCache: true, providerId: "projectjav" }));
+    });
+    it("keeps new sources off by default", async () => {
+        const h = setup();
+        await expect(h.service.resolve({ carNum: "ABC-123" }, { settings: {} })).rejects.toThrow("source offline");
+        expect(h.calls).toEqual(["javstore"]);
+    });
+});

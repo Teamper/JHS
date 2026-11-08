@@ -7,10 +7,12 @@ import { JavBusPreviewController } from "../src/features/detail/javbus-preview-c
 import { ExternalBridgeTranslationController } from "../src/features/translation/translation-controller.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { MagnetFilterController } from "../src/features/detail/magnet-filter-controller.js";
+import { installVisibleLayout } from "./helpers/visible-layout.js";
 
 const $ = jquery;
 const win = /** @type {any} */ (globalThis.window);
 const doc = win.document;
+let restoreLayout;
 
 /** Minimal SettingsService double that records listeners and emits settings.changed on set(). */
 function makeSettings(initial) {
@@ -32,6 +34,7 @@ function makeSettings(initial) {
 }
 
 beforeEach(() => {
+    restoreLayout = installVisibleLayout(win);
     doc.body.innerHTML = "";
     vi.stubGlobal("$", $);
     vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() });
@@ -40,7 +43,7 @@ beforeEach(() => {
     win.isDetailPage = false;
     win.isListPage = false;
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { restoreLayout?.(); vi.unstubAllGlobals(); });
 
 describe("PreviewVideoPlugin live lifecycle", () => {
     it("registers exactly one settings listener even when the master switch starts OFF", async () => {
@@ -251,16 +254,16 @@ describe("native translation feature live lifecycle", () => {
 
         controller.start();
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
-        await vi.waitFor(() => expect($(".translated-title").length).toBe(1));
+        await vi.waitFor(() => expect($(".translated-title").text()).toBe("译名"));
         expect($(".translated-title").text()).toBe("译名");
 
         await settings.set("translateTitle", "no");
         expect($(".translated-title").length).toBe(0);
 
         await settings.set("translateTitle", "yes");
-        await vi.waitFor(() => expect($(".translated-title").length).toBe(1));
+        await vi.waitFor(() => expect($(".translated-title").text()).toBe("译名"));
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
-        expect(translation.translate).toHaveBeenLastCalledWith("ABC-123 タイトル", expect.objectContaining({ cacheAlias: "ABC-123", scope }));
+        expect(translation.translate).toHaveBeenLastCalledWith("ABC-123 タイトル", expect.objectContaining({ cacheAlias: "ABC-123", scope:expect.any(LifecycleScope),automatic:true }));
         scope.dispose();
         expect($(".translated-title").length).toBe(0);
     });

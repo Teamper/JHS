@@ -15,9 +15,10 @@ describe("legacy-compatible state domains", () => {
         await domains.carList.write([ { carNum: "ABC-1" } ]);
         await domains.actresses.write([ { starId: "star-1" } ]);
         await domains.decisions.write({ "ABC-1": { action: "dismissed" } });
+        await domains.ratings.write({ "ABC-1": { rating: 4, updatedAt: "2026-11-07T00:00:00.000Z" } });
 
-        expect(STATE_DOMAIN_NAMES).toEqual([ "carList", "actresses", "decisions", "activity", "offlineHistory" ]);
-        expect([...data.keys()]).toEqual([ "car_list", "favorite_actresses", "new_video_decisions" ]);
+        expect(STATE_DOMAIN_NAMES).toEqual([ "carList", "actresses", "decisions", "activity", "offlineHistory", "ratings" ]);
+        expect([...data.keys()]).toEqual([ "car_list", "favorite_actresses", "new_video_decisions", "personal_ratings" ]);
         expect(await domains.decisions.read()).toEqual({ "ABC-1": { action: "dismissed" } });
     });
 });

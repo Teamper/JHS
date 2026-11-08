@@ -354,7 +354,7 @@ assertIncludes(listPageAdapterSource, "export class ListPagePluginAdapter {", "L
 assert(!listPageAdapterSource.includes("extends BasePlugin"), "ListPage compatibility shell must not inherit the legacy plugin base");
 assertIncludes(registry, 'manifest("list.core", "list", null', "List core Contribution has no legacy executor");
 assertIncludes(registry, 'executionOwner: "feature", lifecycleOwner: "feature", legacyPluginId: "ListPagePlugin"', "List core preserves its legacy disable ID under Feature ownership");
-assertIncludes(registry, 'registerCompatibilityBean("ListPagePlugin", new ListPagePluginAdapter())', "ListPagePlugin remains a lookup alias without entering executor registration");
+assertIncludes(registry, 'register("ListPagePlugin", new ListPagePluginAdapter())', "ListPagePlugin remains a lookup alias without entering executor registration");
 assertIncludes(listPageAdapterSource, 'List Feature compatibility service is not active', "List compatibility lookup cannot create an executor outside Feature startup");
 assertMissing("src/plugins/status/list-page.js", "ListPagePlugin legacy executor");
 
@@ -466,11 +466,13 @@ assert(!registry.includes('./image-viewer/bus-img.js'), "JavBus image layout mus
 assertIncludes(registry, 'manifest("external-bridge.translation", "translation", null, ["javdb", "javbus"]', "Feature-owned title translation contribution");
 assert(!registry.includes('./translate/translate.js'), "title translation must not instantiate the retired legacy plugin");
 const translationController = await read("src/features/translation/translation-controller.js");
-assertIncludes(translationController, 'names?.includes("translateTitle")', "title translation live setting listener");
-assertIncludes(translationController, "this.translation.translate(sourceText", "native title translation service");
+assertIncludes(translationController, 'names?.some(name => ["translateTitle","privacyTargets"].includes(name))', "title translation and privacy live setting listener");
+assertIncludes(translationController, "this.translateTitle(sourceText", "native title translation detailed-service bridge");
+assertIncludes(translationController, "this.translation.translateDetailed(text", "detailed title translation service");
+assertIncludes(translationController, "this.translation.translate(text", "compatible string translation service");
 assertIncludes(translationController, "generation === this.generation", "stale title translation response gate");
 const pluginRuntimeReadyAt = bootstrap.indexOf('await jhsEventBus.emit("jhs-features-ready", {}, { broadcast: false });');
-assert(pluginRuntimeReadyAt > bootstrap.indexOf("await context.registries.features.start();"), "feature-ready signal must follow Feature activation");
+assert(pluginRuntimeReadyAt > bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());"), "feature-ready signal must follow Feature activation");
 assertIncludes(otherSite, 'events?.on?.("jhs-features-ready"', "external sites insertion order readiness");
 assertIncludes(otherSite, 'if (!legacyPluginsReady || settings.snapshot().enableLoadOtherSite === "no")', "external sites readiness and live setting gate");
 assert(

@@ -120,3 +120,40 @@ describe("magnet source results and recovery", () => {
         expect(clipboard.copyText).toHaveBeenCalledOnce(); vi.runAllTimers();
     });
 });
+
+
+describe("progressive magnet results", () => {
+    it("renders a fast source before the slow source completes and retains focused actions", async () => {
+        const slow = deferred();
+        const { open } = setup({ u9a9: async () => [magnet("fast")], sukebei: () => slow.promise });
+        const hub = await open();
+        await vi.waitFor(() => expect(hub.find(".magnet-result")).toHaveLength(1));
+        expect(hub.find(".magnet-results").data("jhsMagnetPanel").pending).toBe(true);
+        expect(hub.find(".magnet-source-status").text()).toContain("Sukebei 查询中");
+        const button = hub.find(".copy-btn")[0]; button.focus();
+        slow.resolve([magnet("slow", "2".repeat(40))]); await settled(hub);
+        expect(hub.find(".magnet-result")).toHaveLength(2);
+        expect(hub.find(".copy-btn")[0]).toBe(button);
+        expect(document.activeElement).toBe(button);
+        expect(hub.find(".magnet-source-status").text()).toContain("Sukebei 成功");
+    });
+    it("preserves filters during progressive updates and retry", async () => {
+        const slow = deferred();
+        const { open } = setup({ u9a9: async () => [magnet("4K fast")], sukebei: () => slow.promise });
+        const hub = await open();
+        await vi.waitFor(() => expect(hub.find(".magnet-result")).toHaveLength(1));
+        hub.find('input[value="4k"]').prop("checked", true).trigger("change");
+        slow.resolve([magnet("1080p slow", "2".repeat(40))]); await settled(hub);
+        expect(hub.find(".magnet-result")).toHaveLength(1);
+        expect(hub.find('input[value="4k"]').prop("checked")).toBe(true);
+    });
+    it("aborts the previous query scope when changing sources", async () => {
+        const slow = deferred(); const { controller, open } = setup({ sukebei: () => slow.promise, u9a9: async () => [] }, { remembered: "sukebei" });
+        const hub = await open();
+        const scope = hub.find(".magnet-results").data("jhsMagnetPanel").queryScope;
+        hub.find('[data-engine="u9a9"]').trigger("click"); await settled(hub);
+        expect(scope.disposed).toBe(true);
+        slow.resolve([magnet("late")]); await new Promise(done => setTimeout(done, 10));
+        expect(hub.text()).not.toContain("late");
+    });
+});

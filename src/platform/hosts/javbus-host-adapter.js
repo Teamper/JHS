@@ -1,4 +1,5 @@
 // @ts-check
+import { privacySelectors } from "../../contracts/privacy-targets.js";
 
 import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
 
@@ -6,6 +7,8 @@ import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie
 const JAVBUS_LIST_PREFIXES = new Set([ "star", "genre", "maker", "actress", "series", "tag", "search", "director", "studio", "label" ]);
 
 export class JavBusHostAdapter {
+    getPrivacySelectors() { return privacySelectors({ title: ".movie-box .photo-info span,.container > h3,.container > .row > h3", code: ".movie-box date,.info .header + span,.info p", actors: ".star-box,.star-name,.info a[href*='/star/']", images: ".movie-box img,.bigImage img,.sample-box img,.star-box img" }); }
+    locateMediaLibraryDetailRoot() { return this.detectRoute() === "detail" ? this.document.querySelector(".container .info") : null; }
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
     constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) { this.site = "javbus"; this.document = documentRuntime; this.location = locationRuntime; this.blacklistParser = blacklistParser; }
     getBlacklistSubjectInfo() {

@@ -1,9 +1,11 @@
 // @ts-check
+import { mountEnhancementAction } from "../../ui/detail/enhancement-actions.js";
 
 import { OwnedPopover, closeOwnedPopover } from "../../core/owned-popover.js";
 import { k, m, v, y } from "../../core/constants.js";
 import { normalizeStateFlags } from "../../core/state-model.js";
 import { getIcon } from "../../core/icons.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 const SORT_LABELS = { default: "默认", rateCount: "评价人数", date: "时间" };
 
@@ -179,6 +181,8 @@ const RESPONSIVE_SHELL_STYLES = `
             }
             .jhs-commandbar__left { flex: 1 1 auto; overflow:visible; }
             .jhs-commandbar__right { flex: 0 0 auto; overflow:visible; }
+            .jhs-page-commandbar:has(> .jhs-commandbar__utilities) { flex-wrap:wrap; }
+            .jhs-commandbar__utilities { flex-basis:100%; justify-content:flex-end; }
             .jhs-commandbar__filters { overflow:visible; }
             .jhs-commandbar__batch, .jhs-commandbar__more, .jhs-sort-control { position:relative; }
             .jhs-commandbar__menu { min-width:220px; }
@@ -211,7 +215,7 @@ export const RESPONSIVE_SHELL_CAPABILITIES = Object.freeze([
 ]);
 
 export class ResponsiveShellController {
-    /** @param {{jquery: (value: any) => any, window: Window & typeof globalThis, document: Document, profile: any, settings: any, host: any, state: any, logger: any, notifications: any, capabilities?: Record<string, any>, openNewVideo?: () => Promise<unknown>, getPageActions?: () => Promise<any>, executePageAction?: (action: string) => Promise<any>}} dependencies */
+    /** @param {{jquery: (value: any) => any, window: Window & typeof globalThis, document: Document, profile: any, settings: any, host: any, state: any, logger: any, notifications: any, capabilities?: Record<string, any>, openNewVideo?: () => Promise<unknown>, getPageActions?: () => Promise<any>, executePageAction?: (action: string) => Promise<any>, privacyActions?: any, mediaActions?: any}} dependencies */
     constructor(dependencies) {
         if (typeof dependencies.jquery !== "function") throw new TypeError("Responsive shell requires the injected jQuery UI boundary");
         this.jquery = dependencies.jquery;
@@ -225,12 +229,15 @@ export class ResponsiveShellController {
             logger: dependencies.logger,
             notifications: dependencies.notifications,
         });
-        const capabilities = { ...(dependencies.capabilities ?? {}) };
+        const capabilities = /** @type {Record<string, any>} */ (Object.defineProperties({}, Object.getOwnPropertyDescriptors(dependencies.capabilities ?? {})));
         for (const name of RESPONSIVE_SHELL_CAPABILITIES) {
             if (!Object.prototype.hasOwnProperty.call(capabilities, name)) capabilities[name] = null;
         }
         this.capabilities = Object.freeze(capabilities);
         this.openNewVideo = dependencies.openNewVideo ?? null;
+        this.privacyActions = /** @type {any} */ (dependencies).privacyActions ?? null;
+        this.mediaActions = /** @type {any} */ (dependencies).mediaActions ?? null;
+        this.utilityScope = /** @type {LifecycleScope | null} */ (null);
         this.getPageActions = dependencies.getPageActions ?? null;
         this.executePageAction = dependencies.executePageAction ?? null;
         this._fabGeneration = 0;
@@ -263,10 +270,14 @@ export class ResponsiveShellController {
         if (this._started || this._disposed) return;
         this._started = true;
         scope.listen(this.services.profile, "profile.changed", () => this.syncSurfaces());
+        scope.listen(this.document, "jhs-feature-availability-changed", () => { this.unmountBottomBar(); this.syncSurfaces(); });
+        scope.listen(this.document, "jhs-selection-mode-changed", () => this.mountUtilityTools(this.services.profile.current() === "compact"));
         this.syncSurfaces();
     }
     dispose() {
         if (this._disposed) return;
+        this.utilityScope?.dispose();
+        this.jquery("#jhs-private-tools").remove();
         this._disposed = true;
         this._fabGeneration++;
         for (const timer of this._animationTimers) this.window.clearTimeout(timer);
@@ -316,9 +327,89 @@ export class ResponsiveShellController {
             this.mountDesktopCommandBar();
             setting?.mountDesktopSettingNav?.();
         }
+        this.mountUtilityTools(compact);
+    }
+    /** @param {boolean} compact */
+    mountUtilityTools(compact) {
+        this.utilityScope?.dispose();
+        this.jquery("#jhs-private-tools").remove();
+        const scope = new LifecycleScope("shell:utility-tools");
+        this.utilityScope = scope;
+        const bindReveal = (/** @type {Element} */ button) => {
+            void Promise.resolve(this.privacyActions?.bindReveal(button, scope)).catch(error => {
+                if (!scope.disposed) this.services.logger.error("临时查看入口初始化失败", error);
+            });
+        };
+        if (compact) {
+            const reveal = this.document.querySelector('[data-action="privacyReveal"]');
+            if (reveal) bindReveal(reveal);
+            return;
+        }
+        const toolbar = ["#jhs-page-commandbar .jhs-commandbar__right", "#top-right-box", "[data-jhs-detail-actions]", "#navbar-menu-user .navbar-end"]
+            .map(selector => this.document.querySelector(selector)).find(element => element && element.getClientRects().length);
+        const commandbar = toolbar?.closest("#jhs-page-commandbar");
+        const host = commandbar || toolbar || this.services.host.locateDetailRoot?.() || this.document.body;
+        const root = this.document.createElement("div");
+        root.id = "jhs-private-tools";
+        root.className = "jhs-privacy-tools jhs-ui";
+        if (commandbar) root.classList.add("jhs-commandbar__utilities");
+        const add = (/** @type {string} */ text, /** @type {() => any} */ action, keepOpen = false) => {
+            const button = this.document.createElement("button");
+            button.type = "button";
+            button.className = "jhs-btn jhs-btn--secondary jhs-btn--sm";
+            button.textContent = text;
+            scope.listen(button, "click", () => { if (!keepOpen) for (const popover of this._commandBarPopovers) if (popover.menu.contains(button)) popover.close(true); void Promise.resolve(action()).catch(error => this.services.logger.error("工具操作失败", error)); });
+            root.append(button);
+            return button;
+        };
+        if (this.privacyActions && this.privacyActions.available?.() !== false) {
+            const toggle = add(this.privacyActions.enabled() ? "关闭隐私遮罩" : "隐私遮罩", () => this.privacyActions.toggle());
+            toggle.setAttribute("data-jhs-privacy-toggle", "");
+            toggle.setAttribute("aria-pressed", String(this.privacyActions.enabled()));
+            const reveal = add("按住临时查看", () => {}, true);
+            bindReveal(reveal);
+            add("遮罩偏好", () => this.privacyActions.configure());
+        }
+        if (this.mediaActions && this.mediaActions.available?.() !== false) add("媒体库", () => this.mediaActions.configure());
+        root.className = "jhs-ui jhs-enhancement-menu-group";
+        const findMenu = (/** @type {string} */ selector) => {
+            const container = this.document.querySelector(selector);
+            return [...this._commandBarPopovers].find(popover => container?.contains(popover.anchor))?.menu || container?.querySelector(".jhs-commandbar__menu");
+        };
+        const moreMenu = findMenu(".jhs-commandbar__more");
+        if (moreMenu && root.children.length) {
+            root.querySelectorAll("button").forEach(button => { button.setAttribute("role", "menuitem"); button.tabIndex = -1; });
+            moreMenu.append(root);
+        }
+        else if (host && root.children.length) {
+            const button = this.document.createElement("div");
+            button.append(root);
+            mountEnhancementAction(host, button, scope);
+        }
+        this.document.querySelectorAll("[data-jhs-enhancement-action]").forEach(node => node.remove());
+        if (this.getPageActions) void this.getPageActions().then((/** @type {any[]} */ actions) => {
+            if (scope.disposed) return;
+            const menu = findMenu(".jhs-commandbar__batch");
+            if (!menu) return;
+            for (const action of actions.filter((/** @type {any} */ item) => item.id.startsWith("enhancement-"))) {
+                const button = this.document.createElement("button");
+                button.type = "button";
+                button.className = "jhs-btn jhs-btn--ghost";
+                button.setAttribute("role", "menuitem");
+                button.setAttribute("data-jhs-enhancement-action", "");
+                button.textContent = action.label;
+                button.disabled = !action.enabled;
+                menu.append(button);
+                scope.listen(button, "click", () => { void this.executePageAction?.(action.id).catch(error => this.services.logger.error("增强操作失败", error)); });
+                scope.addCleanup(() => button.remove());
+            }
+        }).catch((/** @type {unknown} */ error) => this.services.logger.warn("增强菜单加载失败", error));
+        scope.addCleanup(() => root.remove());
     }
     mountDesktopCommandBar() {
         if (!this.window.isListPage) return;
+        this._commandBarSources = this._commandBarSources.filter(source => source.element.isConnected);
+        for (const element of this._commandBarOrigins.keys()) if (!element.isConnected) this._commandBarOrigins.delete(element);
         const existing = this.jquery("#jhs-page-commandbar");
         // 插件并发启动时，部分按钮可能晚于命令栏创建：已存在时补收后到的控件，而不是直接返回
         existing.length ? this.collectCommandControls(existing) : this.buildCommandBar();
@@ -493,6 +584,8 @@ export class ResponsiveShellController {
             const statusDefs = [ { action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" } ];
             items = group(hasDetailPageButton ? statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("") : "") + divider + group((hasHighlightMagnet ? item("magnetFilter", "磁力过滤") : "") + (hasMagnetHub ? item("magnet", "磁力搜索") : "") + (hasDetailPageButton ? item("subtitle", "字幕") : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
         } else items = group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
+        if (this.privacyActions && this.privacyActions.available?.() !== false) items += divider + group(item("privacy", this.privacyActions.enabled() ? "关闭隐私遮罩" : "隐私遮罩", `data-jhs-privacy-toggle aria-pressed="${this.privacyActions.enabled()}"`) + item("privacyReveal", "按住临时查看") + item("privacyConfigure", "遮罩偏好"));
+        if (this.mediaActions && this.mediaActions.available?.() !== false) items += group(item("mediaConfigure", "媒体库"));
         const menu = this.jquery(`<div id="jhs-fab-menu" class="jhs-fab-menu jhs-ui" role="menu" aria-hidden="true" inert>${items}</div>`);
         menu.find(".jhs-fab-status-dot").each((/** @type {number} */ _, /** @type {HTMLElement} */ element) => {
             this.jquery(element).closest(".jhs-fab-menu-item").addClass(`jhs-state-action jhs-btn--${element.dataset.statusKey}`);
@@ -623,7 +716,7 @@ export class ResponsiveShellController {
             closeMenu(true);
             void this.executePageAction?.(action).catch(error => this.services.logger.error("移动端列表操作失败", error));
         });
-        bindKeys(filterMenu, ".jhs-mobile-filter-option", closeFilterMenu).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
+        bindKeys(filterMenu, "button", closeFilterMenu).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             event.stopPropagation(), this.getCapability("ListPagePlugin")?.setQuickFilter?.(this.jquery(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
         bindKeys(sortMenu, ".jhs-mobile-sort-option", closeSortMenu).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
@@ -645,6 +738,7 @@ export class ResponsiveShellController {
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (/** @type {any} */ e) => {
             const action = this.jquery(e.currentTarget).data("action");
+            if ("privacyReveal" === action) return;
             if ("batch" === action) {
                 e.stopPropagation(); menu.addClass("jhs-fab-batch-open"); batchTrigger.attr("aria-expanded", "true");
                 batchMenu.find("button:not(:disabled)").first().trigger("focus"); return;
@@ -666,6 +760,9 @@ export class ResponsiveShellController {
     /** @param {unknown} action */
     async handleAction(action) {
         switch (action) {
+            case "privacy": await this.privacyActions?.toggle(); break;
+            case "privacyConfigure": await this.privacyActions?.configure(); break;
+            case "mediaConfigure": await this.mediaActions?.configure(); break;
             // 列表页操作
             case "check":
                 await this.getCapability("ListPageButtonPlugin")?.openWaitCheck?.();
@@ -702,7 +799,7 @@ export class ResponsiveShellController {
                 this.jquery("#magnetSearchBtn").length && this.jquery("#magnetSearchBtn").click();
                 break;
             case "subtitle":
-                this.jquery("#search-subtitle-btn").length && this.jquery("#search-subtitle-btn").click();
+                this.jquery("#xunLeiSubtitleBtn").length && this.jquery("#xunLeiSubtitleBtn").click();
                 break;
             // 通用
             case "setting":

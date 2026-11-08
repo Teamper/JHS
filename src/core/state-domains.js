@@ -1,7 +1,7 @@
 // @ts-check
 
-/** Internal domain names deliberately match the 6.5.1 journal protocol. */
-export const STATE_DOMAIN_NAMES = Object.freeze([ "carList", "actresses", "decisions", "activity", "offlineHistory" ]);
+/** Legacy domain names retain their established journal meanings. */
+export const STATE_DOMAIN_NAMES = Object.freeze([ "carList", "actresses", "decisions", "activity", "offlineHistory", "ratings" ]);
 
 /** @param {any} value @returns {any[]} */
 function normalizeArray(value) { return Array.isArray(value) ? value : []; }
@@ -17,6 +17,7 @@ export function createStateDomainRegistry(storage) {
         decisions: { key: "new_video_decisions", fallback: () => ({}), normalize: normalizeObject },
         activity: { key: "activity_log", fallback: () => ({ entries: [] }), normalize: normalizeObject },
         offlineHistory: { key: "offline_history", fallback: () => [], normalize: normalizeArray },
+        ratings: { key: "personal_ratings", fallback: () => ({}), normalize: normalizeObject },
     };
     return Object.freeze(Object.fromEntries(Object.entries(definitions).map(([name, definition]) => {
         const normalize = (/** @type {any} */ value) => definition.normalize(value ?? definition.fallback());

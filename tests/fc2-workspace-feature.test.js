@@ -21,6 +21,7 @@ describe("FC2 workspace Feature ownership", () => {
             .register(SERVICE.account, {})
             .register(SERVICE.credential, new EventTarget())
             .register(SERVICE.translation, {})
+            .register(SERVICE.privacy, new EventTarget())
             .register(SERVICE.settings, {})
             .register(SERVICE.storage, {})
             .register(SERVICE.screenshot, {})

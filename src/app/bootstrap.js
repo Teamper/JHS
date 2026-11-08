@@ -1,4 +1,5 @@
 // @ts-check
+import { initializeEnhancementControls } from "../core/enhancement-controls.js";
 
 import { mountPendingDialogShell, prepareDialogOptions } from "../core/dialog-shell.js";
 import { initializeRuntimeConstants, l, r } from "../core/constants.js";
@@ -64,6 +65,7 @@ async function readDisabledPluginSettings(storageManager) {
 /** Apply bootstrap compatibility values in one atomic settings write. */
 async function persistBootstrapMigration(settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration = null, alreadyLocked = false) {
     await (alreadyLocked ? settings.updateWithoutLock : settings.update).call(settings, (draft) => {
+        initializeEnhancementControls(draft);
         const previous = parseDisabledPlugins(typeof draft.disabledPlugins === "string" ? draft.disabledPlugins : "[]");
         const migrated = migrateDisabledPlugins(previous);
         if (JSON.stringify(previous) !== JSON.stringify(migrated)) draft.disabledPlugins = JSON.stringify(migrated);
@@ -207,7 +209,7 @@ export async function bootstrapJhs() {
             await stateService.recoverPendingTransactionWithoutLock();
         });
         markPhase("data-prepare");
-        await context.registries.features.start();
+        await context.registries.features.start(context.services.settings.snapshot());
         markPhase("feature-runtime");
         applyThemeMode(context.services.settings.snapshot().themeMode);
         if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });

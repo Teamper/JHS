@@ -7,6 +7,7 @@ export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.clog, SERVICE.titleKeywords, SERVICE.state, SERVICE.settings, SERVICE.storageMutation, SERVICE.notifications, SERVICE.dialog, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clipboard, SERVICE.navigation, SERVICE.screenshot, SERVICE.movie],
     contributes: ["list.core", "list.auto-page", "detail.fc2-navigation", "list.fold-category", "list.actions", "detail.javbus-images", "detail.cover-state-actions"],
+    configurationDependencies: ["new-video", "discovery.new-video", "library", "library.blacklist"],
     providesCommands: ["list.current-page-summary", "list.set-quick-filter", "list.get-page-actions", "list.execute-page-action"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const [
@@ -198,7 +199,7 @@ export default defineFeature({
             listActionsController = new ListActionsController({
                 hostAdapter: deps[PORT.host], list, batchController: controller?.batchController, settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], scope, sortController,
-                blacklist, newVideo: runtime.resolveCompatibilityBean?.("NewVideoPlugin"),
+                blacklist, newVideo: runtime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin") ? runtime.resolveCompatibilityBean?.("NewVideoPlugin") : null,
                 diagnostics: runtime.diagnostics, openNewVideo: () => runtime.executeCommand("new-video.open"),
             });
             try {

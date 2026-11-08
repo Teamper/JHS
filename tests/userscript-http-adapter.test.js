@@ -2,6 +2,25 @@ import { describe, expect, it, vi } from "vitest";
 import { UserscriptHttpAdapter } from "../src/platform/userscript/userscript-http-adapter.js";
 
 describe("UserscriptHttpAdapter", () => {
+    it("never replays a native-only session mutation through GM after a lost response", async () => {
+        const gm = vi.fn(), native = vi.fn(async () => { throw new Error("response lost"); });
+        const adapter = new UserscriptHttpAdapter(gm, native);
+        await expect(adapter.request({ url: "https://javdb.com/users/save_video_to_list", method: "POST", transport: "native-fetch", nativeFallback: false, requestOptions: { redirect: "error", cache: "no-store" } })).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+        expect(native).toHaveBeenCalledOnce();
+        expect(native.mock.calls[0][1]).toMatchObject({ credentials: "same-origin", redirect: "error", cache: "no-store" });
+        expect(gm).not.toHaveBeenCalled();
+        await expect(new UserscriptHttpAdapter(gm, null).request({ url: "https://javdb.com/users/simple_lists", transport: "native-fetch", nativeFallback: false })).rejects.toMatchObject({ code: "UNSUPPORTED" });
+        expect(gm).not.toHaveBeenCalled();
+    });
+    it("bounds binary downloads while preserving original bytes without reading responseText", async () => {
+        const bytes = new Uint8Array([1, 2, 3]).buffer;
+        const adapter = new UserscriptHttpAdapter(options => options.onload({ status: 200, response: bytes, get responseText() { throw new Error("binary responseText is unavailable"); } }));
+        expect(await adapter.request({ url: "https://example.test/sub.srt", responseType: "arraybuffer", maxResponseBytes: 10 })).toMatchObject({ data: bytes, responseText: "" });
+        const abort = vi.fn();
+        const oversized = new UserscriptHttpAdapter(options => { options.onprogress({ loaded: 11 }); return { abort }; });
+        await expect(oversized.request({ url: "https://example.test/sub.srt", maxResponseBytes: 10 })).rejects.toMatchObject({ code: "RESPONSE_TOO_LARGE" });
+        expect(abort).toHaveBeenCalledOnce();
+    });
     it("marks dispatch only at the GM boundary and lets a preflight callback refuse it", async () => {
         const order = [], onDispatch = vi.fn(() => order.push("dispatch"));
         const request = vi.fn(options => { order.push("gm"); options.onload({ status: 200 }); });

@@ -84,12 +84,24 @@ describe("release comparison range and contribution evidence", () => {
     });
     it("rejects a non-ancestor base before requesting any GitHub evidence", async () => {
         const root = await mkdtemp(join(tmpdir(), "jhs-notes-ancestry-")); directories.push(root);
-        const git = args => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-        let sequence = 0;
-        const commit = () => git(["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", `fixture ${++sequence}`]);
-        git(["init", "-q", "--initial-branch=main"]); commit();
-        git(["checkout", "-b", "other"]); commit();
-        git(["checkout", "main"]); commit();
+        const git = (args, input) => execFileSync("git", args, { cwd: root, encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] });
+        git(["init", "-q", "--initial-branch=main"]);
+        // Build the same divergent history in one import, avoiding repeated process startup and checkout work.
+        git(["fast-import", "--quiet"], [
+            "commit refs/heads/main",
+            "mark :1",
+            "committer fixture <fixture@example.invalid> 1700000000 +0000",
+            "data 4", "root", "",
+            "commit refs/heads/other",
+            "mark :2",
+            "committer fixture <fixture@example.invalid> 1700000001 +0000",
+            "data 5", "other", "from :1", "",
+            "commit refs/heads/main",
+            "mark :3",
+            "committer fixture <fixture@example.invalid> 1700000002 +0000",
+            "data 4", "main", "from :1", "",
+            "done", "",
+        ].join("\n"));
         await expect(collectNotesContext({ base: "other", target: "main", version: "7.0.0", adapted: [] }, root)).rejects.toThrow(/merge-base/);
     });
 });

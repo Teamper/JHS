@@ -13,6 +13,10 @@ function card(html) {
 }
 
 describe("list item reader", () => {
+    it("reads native recommendation links and rejects conflicting native numbers", () => {
+        expect(readListItem(card('<a class="tile-item" href="/v/a"><span class="video-number">ABC-123</span><span class="video-title">标题</span></a>'))).toMatchObject({carNum:"ABC-123",url:"/v/a",stateEligibility:{eligible:true}});
+        expect(readListItem(card('<a class="tile-item" href="/v/a"><span class="video-number">ABC-123</span><span class="video-number">ABC-124</span></a>')).stateEligibility.eligible).toBe(false);
+    });
     it("reads JavDB-style cards and preserves explicit FC2 source", () => {
         const item = card('<div data-jhs-fc2-source="123av"><a href="/v/a" title="标题"><div class="video-title"><strong>fc2-123</strong> fallback</div><div class="meta">2026-08-24</div></a></div>');
         expect(readListItem(item)).toMatchObject({ carNum: "FC2-123", url: "/v/a", title: "标题", publishTime: "2026-08-24", fc2Source: "123av" });

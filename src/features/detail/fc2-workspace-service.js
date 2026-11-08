@@ -42,6 +42,10 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
  * @property {string | null} [wantRevision]
  * @property {string} [wantMovieId]
  * @property {number | undefined} translationGeneration
+ * @property {(() => void) | undefined} [releaseTranslationScope]
+ * @property {boolean} [translationCleanupRegistered]
+ * @property {IntersectionObserver} [translationObserver]
+ * @property {Element} [translationVisibilityTarget]
  * @property {number | undefined} screenshotGeneration
  * @property {(() => void) | undefined} [releaseScreenshotScope]
  * @property {boolean} [screenshotCleanupRegistered]
@@ -189,10 +193,11 @@ export class Fc2WorkspaceService {
     }
     /** @param {Fc2DetailContext} context */
     initializeWorkspace(context) {
+        context.root.attr("data-jhs-movie-code", context.carNum);
         const summary = $('<div class="jhs-fc2-summary"><div class="jhs-fc2-preview" data-jhs-role="main-preview"></div><div class="jhs-fc2-summary__body"><div data-jhs-role="summary-content"></div></div></div>'), toolbar = $('<div class="jhs-fc2-toolbar" role="toolbar" aria-label="影片操作"></div>');
         renderFc2State(summary.find('[data-jhs-role="summary-content"]'), "加载中…");
         toolbar.append(createStateActions());
-        toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitlecat">字幕（SubtitleCat）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="xunlei">字幕（迅雷）</button>'), summary.find(".jhs-fc2-summary__body").append(toolbar), context.getSlot("summary").append(summary);
+        toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitles">字幕</button>'), summary.find(".jhs-fc2-summary__body").append(toolbar), context.getSlot("summary").append(summary);
         const gallery = $('<div class="jhs-fc2-gallery-grid" data-jhs-role="gallery-grid"></div>'), screenshot = $('<div class="jhs-fc2-screenshot" data-jhs-role="screenshot"></div>');
         gallery.on(`click${context.namespace}`, ".jhs-fc2-gallery-item", (async (/** @type {MouseEvent} */ event) => {
             const trigger = event.currentTarget, image = $(trigger).find("img")[0];
@@ -206,12 +211,11 @@ export class Fc2WorkspaceService {
         let magnetHubPromise = null;
         /** @type {any} */ let mountedMagnetHub = null;
         hubGroup.find('[data-jhs-role="magnet-hub"]').append(hubButton, '<div data-jhs-role="magnet-hub-content"></div>'), resources.append(nativeGroup, sitesGroup, hubGroup), context.getSlot("resources").append(resources);
-        toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', ((/** @type {MouseEvent} */ event) => {
-            const target = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["subtitlecat"])[0]?.url;
-            if (target) utils.openPage(target, context.carNum, !1, event);
+        toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitles"]', ((/** @type {MouseEvent} */ event) => {
+            const open = this.runtimeServices.openSubtitles;
+            if (!open) return;
+            void open({ carNum: context.carNum, owner: context.root[0], trigger: event.currentTarget }).catch((/** @type {unknown} */ error) => this.logger.error("字幕打开失败", error));
         }));
-        const detailActions = this.getOptionalDependency("DetailPageButtonPlugin");
-        detailActions ? toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => detailActions.searchXunLeiSubtitle(context.carNum))) : toolbar.find('[data-jhs-action="xunlei"]').remove();
         context.syncMagnetHub = () => {
             if (this.featureMagnetHubAdapter) {
                 if (!hubGroup[0].isConnected) resources.append(hubGroup);
@@ -274,7 +278,7 @@ export class Fc2WorkspaceService {
                     void this.loadFc2Screenshot(context);
                 }
             }
-            if (names.includes("translateTitle")) {
+            if (names.some(name => ["translateTitle","privacyTargets"].includes(name))) {
                 if ((settings.snapshot().translateTitle ?? _) === _) void this.applyFc2Translation(context);
                 else {
                     context.translationGeneration = (context.translationGeneration || 0) + 1;
@@ -296,6 +300,12 @@ export class Fc2WorkspaceService {
         };
         settings.addEventListener("settings.changed", handler);
         context.addObserver({ disconnect: () => settings.removeEventListener("settings.changed", handler) });
+        const refreshTranslation = () => this.applyFc2Translation(context);
+        for (const [target,type] of [[this.runtimeServices.privacy,"privacy.changed"],[this.runtimeServices.translation,"translation.changed"],[context.root[0].ownerDocument,"visibilitychange"]]) {
+            if (typeof target?.addEventListener !== "function") continue;
+            target.addEventListener(type,refreshTranslation);
+            context.addObserver({disconnect:() => target.removeEventListener(type,refreshTranslation)});
+        }
     }
     /** ON：渲染 FC2 截图面板；请求返回后再查一次开关，OFF 立即清空（防异步回流）。 */
     /** @param {Fc2DetailContext} context */
@@ -336,16 +346,48 @@ export class Fc2WorkspaceService {
     /** ON：按当前 DOM 标题重新翻译（原生/123AV 共用 .current-title）；所有翻译入口唯一实现。 */
     /** @param {Fc2DetailContext} context */
     applyFc2Translation(context) {
-        const settings = this.getRuntimeService("settings");
-        if (!context.isAlive() || (settings.snapshot().translateTitle ?? _) !== _) return;
+        this.revertFc2Translation(context);
+        const settings = this.getRuntimeService("settings"), translation = this.getRuntimeService("translation"), privacy = this.runtimeServices.privacy;
+        const root = context.root[0], document = root.ownerDocument, window = document.defaultView;
+        const title = root.querySelector(".origin-title") || root.querySelector(".jhs-fc2-original-title") || root.querySelector(".current-title") || root.querySelector("h3");
+        if (!title) return;
+        if (!context.translationCleanupRegistered) {
+            context.translationCleanupRegistered = true;
+            context.addObserver({disconnect:() => { context.releaseTranslationScope?.(); context.translationObserver?.disconnect(); }});
+            if (window.IntersectionObserver) context.translationObserver = new window.IntersectionObserver((/** @type {IntersectionObserverEntry[]} */ entries) => {
+                if (entries.some(entry => entry.isIntersecting)) this.applyFc2Translation(context);
+                else this.revertFc2Translation(context);
+            });
+        }
+        if (context.translationVisibilityTarget !== title) {
+            if (context.translationVisibilityTarget) context.translationObserver?.unobserve(context.translationVisibilityTarget);
+            context.translationVisibilityTarget = title;
+            context.translationObserver?.observe(title);
+        }
+        const isVisible = () => {
+            const bounds = title.getBoundingClientRect(), style = window.getComputedStyle(title);
+            return title.isConnected && bounds.width > 0 && bounds.height > 0 && bounds.bottom > 0 && bounds.right > 0 && bounds.top < window.innerHeight && bounds.left < window.innerWidth && style.display !== "none" && style.visibility !== "hidden";
+        };
+        const allowed = () => context.isAlive() && translation.enabled !== false && (settings.snapshot().translateTitle ?? _) === _ && document.visibilityState !== "hidden" && !(privacy?.masked && privacy.targets().includes("title")) && isVisible();
+        if (!allowed()) return;
         const generation = (context.translationGeneration || 0) + 1;
         context.translationGeneration = generation;
-        Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === context.translationGeneration })).catch((error => this.logger.error("FC2 标题翻译失败", error)));
+        const scope = new LifecycleScope(`fc2-translation:${generation}`);
+        context.releaseTranslationScope = () => scope.dispose();
+        const isActive = () => !scope.disposed && allowed() && generation === context.translationGeneration;
+        Promise.resolve().then(() => this.getRuntimeService("scope")()).then((/** @type {LifecycleScope} */ parent) => {
+            if (!isActive()) return;
+            const release = parent.addCleanup(() => scope.dispose()); scope.addCleanup(release);
+            return renderTranslatedTitle({root:context.root,carNum:context.carNum,translation,scope,isActive});
+        }).catch(error => { if (isActive()) this.logger.error("FC2 标题翻译失败",error); });
     }
     /** OFF：移除 FC2 已渲染的翻译节点。 */
     /** @param {Fc2DetailContext} context */
     revertFc2Translation(context) {
-        context.root.find(".translated-title").remove();
+        context.translationGeneration = (context.translationGeneration || 0) + 1;
+        context.releaseTranslationScope?.();
+        context.releaseTranslationScope = undefined;
+        context.root.find(".translated-title,[data-jhs-fc2-translation-meta]").remove();
     }
     /** ON：挂载外部站点面板（方法内部按设置门禁）；只有整个 capability 缺失时才允许移除分组。 */
     /** @param {Fc2DetailContext} context @param {any} sitesGroup @param {any} [otherSite] */
@@ -533,7 +575,8 @@ export class Fc2WorkspaceService {
         title.find("strong").text(movie.title || "无标题"), body.append(title);
         if (movie.originalTitle && movie.originalTitle !== movie.title) body.append($('<div class="jhs-fc2-original-title"></div>').text(movie.originalTitle));
         const meta = $('<div class="jhs-fc2-meta"></div>');
-        [ `番号：${movie.carNum || context.carNum}`, `发行：${movie.releaseDate || "未知"}`, `评分：${Number.isFinite(Number(movie.score)) ? movie.score : "无"}`, `时长：${Number.isFinite(Number(movie.duration)) ? movie.duration + " 分钟" : "无"}` ].forEach((value => meta.append($("<span></span>").text(value)))), body.append(meta);
+        const duration = Number(movie.duration);
+        [ `番号：${movie.carNum || context.carNum}`, `发行：${movie.releaseDate || "未知"}`, `评分：${Number.isFinite(Number(movie.score)) ? movie.score : "无"}`, `时长：${Number.isFinite(duration) && duration > 0 ? duration + " 分钟" : "未知"}` ].forEach((value => meta.append($("<span></span>").text(value)))), body.append(meta);
         /** @type {string[]} */
         const actressNames = [];
         const actors = $('<div class="jhs-fc2-actors"><strong>主演：</strong></div>');

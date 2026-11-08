@@ -5,6 +5,7 @@ import { ListPageCompatibilityService as ListPagePlugin } from "../src/features/
 import { ExternalBridgeTranslationController } from "../src/features/translation/translation-controller.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
+import { installVisibleLayout } from "./helpers/visible-layout.js";
 
 function flush() {
     return new Promise((resolve) => setTimeout(resolve, 0));
@@ -18,6 +19,7 @@ function createListHarness() {
         </div>
     </body></html>`, { url: "https://javdb.com/" });
     const jq = jqueryFactory(dom.window);
+    installVisibleLayout(dom.window);
     const translate = vi.fn(async () => "译文");
     const clog = { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn(), lowZIndex: vi.fn() };
 
@@ -70,7 +72,7 @@ describe("translation DOM/jQuery contract", () => {
             settings, translation: { translate }, styles: { register: () => () => {} }, diagnostics: { recordError: clog.error }, scope,
         });
         controller.start();
-        await vi.waitFor(() => expect(translate).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(dom.window.document.querySelector(".item").getAttribute("data-jhs-translation-key")).toBe("ABC-123"));
 
         expect(translate).toHaveBeenCalledTimes(2);
         expect(dom.window.document.querySelector(".item").getAttribute("data-jhs-translation-key")).toBe("ABC-123");
@@ -80,6 +82,7 @@ describe("translation DOM/jQuery contract", () => {
 
     it("translates the JavDB h1 title on detail routes", async () => {
         const dom = new JSDOM("<!DOCTYPE html><body><h1>ABC-123 Browser Fixture</h1></body>", { url: "https://javdb.com/v/test-id" });
+        installVisibleLayout(dom.window);
         const translate = vi.fn(async () => "即时译文");
         const settings = new EventTarget();
         settings.snapshot = () => ({ translateTitle: "yes" });
@@ -93,7 +96,7 @@ describe("translation DOM/jQuery contract", () => {
         controller.start();
         await vi.waitFor(() => expect(dom.window.document.querySelector(".translated-title")?.textContent).toBe("即时译文"));
 
-        expect(translate).toHaveBeenCalledWith("ABC-123 Browser Fixture", expect.objectContaining({ cacheAlias: "ABC-123", scope }));
+        expect(translate).toHaveBeenCalledWith("ABC-123 Browser Fixture", expect.objectContaining({ cacheAlias: "ABC-123", scope:expect.any(LifecycleScope),automatic:true }));
         scope.dispose();
     });
 

@@ -4,6 +4,7 @@ import jqueryFactory from "jquery";
 import { ListPageCompatibilityService as ListPagePlugin } from "../src/features/list/list-compatibility-service.js";
 import { ExternalBridgeTranslationController } from "../src/features/translation/translation-controller.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { installVisibleLayout } from "./helpers/visible-layout.js";
 
 function createHarness({ site = "javdb", translation = vi.fn(async () => "即时译文"), markup } = {}) {
     const isJavDb = site === "javdb";
@@ -12,6 +13,7 @@ function createHarness({ site = "javdb", translation = vi.fn(async () => "即时
         : '<div class="masonry"><article class="item"><a href="/ABC-123"><span class="video-title">原始标题</span><img data-title="原始标题"></a></article></div>');
     const dom = new JSDOM(`<!doctype html><html><head></head><body>${html}</body></html>`, { url: `https://${isJavDb ? "javdb.com" : "www.javbus.com"}/` });
     const window = dom.window;
+    installVisibleLayout(window);
     window.isListPage = true;
     vi.stubGlobal("window", window);
     vi.stubGlobal("document", window.document);
@@ -50,7 +52,7 @@ describe("Feature-owned list title translation", () => {
         expect(title.textContent).toContain("即时译文");
         expect(title.title).toBe("即时译文");
         expect(item.dataset.jhsOriginalTitle).toBe("原始标题");
-        expect(translation).toHaveBeenCalledWith("原始标题", expect.objectContaining({ cacheAlias: "ABC-123", scope }));
+        expect(translation).toHaveBeenCalledWith("原始标题", expect.objectContaining({ cacheAlias: "ABC-123", scope:expect.any(LifecycleScope),automatic:true }));
 
         await listPage.translateListItems([item]);
         expect(translation).toHaveBeenCalledTimes(2);
@@ -67,7 +69,7 @@ describe("Feature-owned list title translation", () => {
         controller.start();
         await vi.waitFor(() => expect(dom.window.document.querySelector(".video-title").textContent).toBe("即时译文"));
 
-        expect(translation).toHaveBeenCalledWith("原始标题", expect.objectContaining({ cacheAlias: "ABC-123", scope }));
+        expect(translation).toHaveBeenCalledWith("原始标题", expect.objectContaining({ cacheAlias: "ABC-123", scope:expect.any(LifecycleScope),automatic:true }));
         scope.dispose();
         expect(dom.window.document.querySelector(".video-title").textContent.trim()).toBe("原始标题");
     });

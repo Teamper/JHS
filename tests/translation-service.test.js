@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { TranslationService } from "../src/services/translation-service.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 describe("translation service", () => {
     it("resolves the declared translation capability", async () => {
@@ -7,7 +8,7 @@ describe("translation service", () => {
         const integrations = { list: vi.fn(() => [{ id: "google-translate" }]), getAdapter: vi.fn(() => ({ translate })) };
         const service = new TranslationService(integrations);
         await expect(service.translate("原題")).resolves.toBe("译文");
-        expect(translate).toHaveBeenCalledWith("原題", { sourceLanguage: "ja", targetLanguage: "zh-CN" });
+        expect(translate).toHaveBeenCalledWith("原題", { sourceLanguage: "ja", targetLanguage: "zh-CN", scope:expect.any(LifecycleScope), beforeSend:expect.any(Function) });
     });
 
     it("reuses persistent results across service instances and isolates language pairs", async () => {

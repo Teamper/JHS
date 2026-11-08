@@ -9,6 +9,16 @@ import { SERVICE } from "../src/contracts/tokens.js";
 
 const privateMapped = ["::ffff:127.0.0.1", "::ffff:192.168.1.1", "::ffff:10.0.0.1", "::ffff:172.16.1.2", "::ffff:169.254.1.2", "::ffff:0.1.2.3", "::ffff:7f00:1", "0:0:0:0:0:ffff:c0a8:0101"];
 
+it("pins one-use upload authorization to the exact URL before dispatch and after redirects", () => {
+    const policy = new ExternalUrlPolicy(), target = "https://bucket.oss-cn-shenzhen.aliyuncs.com/";
+    const options = { trustClass: "builtin-public", hosts: ["aliyuncs.com"], expectedUrl: target };
+    expect(policy.assertAllowed(target, options).href).toBe(target);
+    for (const value of [`${target}other`, `${target}?token=other`, "https://user:password@bucket.oss-cn-shenzhen.aliyuncs.com/"]) {
+        expect(() => policy.assertAllowed(value, options)).toThrow();
+        expect(() => policy.assertFinalUrl(value, options)).toThrow();
+    }
+});
+
 describe("mapped IPv6 URL policy", () => {
     it.each(privateMapped)("rejects private literal %s before transport and after a redirect", (host) => {
         const policy = new ExternalUrlPolicy(), options = { trustClass: "custom-public" }, url = `https://[${host}]/data`;

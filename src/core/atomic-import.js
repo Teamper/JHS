@@ -1,6 +1,6 @@
 // @ts-check
 
-import { getPortableDataKeys, hasPortableUserData, mergePortableSettings, runDataMigrations } from "./migration.js";
+import { PORTABLE_DATA_KEYS, getPortableDataKeys, hasPortableUserData, mergePortableSettings, runDataMigrations } from "./migration.js";
 import { SyncPendingLedger, SYNC_PENDING_KEY } from "./sync-pending-ledger.js";
 import { SYNC_DOMAINS } from "./webdav-sync-model.js";
 
@@ -37,7 +37,7 @@ function createDraft(storage, expected) {
 
 /** Prepare every business and synchronization write before opening the commit transaction. @param {any} storage @param {any} atomic @param {any} imported @param {any[]} warnings @param {number} version */
 export async function prepareAtomicImport(storage, atomic, imported, warnings, version) {
-    const keys = [...getPortableDataKeys(0), "data_version", "data_health_warnings", "snapshots", SYNC_PENDING_KEY, SYNC_STATE_KEY];
+    const keys = [...PORTABLE_DATA_KEYS, ...getPortableDataKeys(0), "data_version", "data_health_warnings", "snapshots", SYNC_PENDING_KEY, SYNC_STATE_KEY];
     // V3 removes the old HTTP cache namespace as part of the same batch.
     if (version < 3) keys.push(...(await storage.forage.keys()).filter((/** @type {string} */ key) => key.startsWith("jhs_http_public_cache:v1:")));
     const expected = await atomic.readAtomicSnapshot([...new Set(keys)]);

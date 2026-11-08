@@ -77,6 +77,19 @@ function loadHistory(records = createRecords()) {
 }
 
 describe("History cross-page selection", () => {
+    it("filters and sorts personal ratings with unknown values last and preserves all-filtered exclusions", async () => {
+        const rows = [{carNum:"ABC-001",personalRating:null},{carNum:"ABC-002",personalRating:2},{carNum:"ABC-003",personalRating:5}];
+        const {plugin,root} = loadHistory(rows);
+        root.find("#dataType").append('<option value="rated">已评分</option><option value="unrated">未评分</option>');
+        expect((await plugin.getFilteredHistoryData([{field:"personalRating",dir:"desc"}])).map(item=>item.carNum)).toEqual(["ABC-003","ABC-002","ABC-001"]);
+        expect((await plugin.getFilteredHistoryData([{field:"personalRating",dir:"asc"}])).map(item=>item.carNum)).toEqual(["ABC-002","ABC-003","ABC-001"]);
+        root.find("#dataType").val("rated");
+        plugin.historySelectionModel.selectAllFiltered();
+        plugin.historySelectionModel.set(rows[1],false);
+        expect((await plugin.getHistoryBatchSelection()).map(item=>item.carNum)).toEqual(["ABC-003"]);
+        root.find("#dataType").val("unrated");
+        expect((await plugin.getFilteredHistoryData()).map(item=>item.carNum)).toEqual(["ABC-001"]);
+    });
     it("keeps saved checkbox edits local when the editor is canceled", async () => {
         const { plugin, layer, $, document, patch, records } = loadHistory();
         await plugin.editRecord(records[0]);

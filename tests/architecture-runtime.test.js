@@ -105,7 +105,13 @@ describe("v6.5 architecture runtime contracts", () => {
     });
 
     it("registers legacy contributions from manifests without changing site order", async () => {
-        expect(featureManifests).toHaveLength(23);
+        expect(featureManifests).toHaveLength(31);
+        expect(featureManifests.find(item => item.id === "personal-ratings").providesCommands).toContain("library.rating.open");
+        expect(featureManifests.find(item => item.id === "movie-lists").providesCommands).toContain("library.lists.open");
+        expect(featureManifests.find(item => item.id === "movie-selection")).toMatchObject({ routes: ["list"] });
+        expect(featureManifests.find(item => item.id === "privacy").providesCommands).toContain("privacy.toggle");
+        expect(featureManifests.find(item => item.id === "enhancement-settings").providesCommands).toContain("media.configure");
+        expect(featureManifests.find(item => item.id === "subtitle-workspace")).toMatchObject({ startup: "on-command", providesCommands: ["subtitle.open"], contributes: [] });
         expect(featureManifests.find(item => item.id === "webdav-sync")).toMatchObject({ kind: "system", startup: "eager", disableable: false, requires: [SERVICE.webdavSync, PORT.host] });
         expect(featureManifests.find((item) => item.id === "fc2-workspace")).toMatchObject({ startup: "eager", providesCommands: ["detail.fc2.workspace"], contributes: ["detail.fc2-owned"] });
         expect(featureManifests.find((item) => item.id === "settings-effects")).toMatchObject({ kind: "system", startup: "eager", contributes: [], requires: expect.arrayContaining([SERVICE.clog, SERVICE.settings, SERVICE.busImageLayout]) });
@@ -159,7 +165,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(compatibilityContributionCatalog.find((item) => item.id === "external-bridge.offline")).toMatchObject({ featureId: "external-bridge", legacyPluginId: "UnifiedOfflinePlugin", executionOwner: "feature", lifecycleOwner: "feature", plugin: null });
         expect(compatibilityContributionCatalog.find((item) => item.id === "external-bridge.javtrailers")).toMatchObject({ featureId: "external-bridge", legacyPluginId: "JavTrailersPlugin", executionOwner: "feature", plugin: null });
         expect(compatibilityContributionCatalog.find((item) => item.id === "external-bridge.subtitle")).toMatchObject({ featureId: "external-bridge", legacyPluginId: "SubTitleCatPlugin", executionOwner: "feature", plugin: null });
-        expect(compatibilityContributionCatalog.find((item) => item.id === "external-bridge.translation")).toMatchObject({ featureId: "translation", legacyPluginId: "TranslatePlugin", executionOwner: "feature", plugin: null, routes: ["list", "detail"] });
+        expect(compatibilityContributionCatalog.find((item) => item.id === "external-bridge.translation")).toMatchObject({ featureId: "translation", legacyPluginId: "TranslatePlugin", executionOwner: "feature", plugin: null, routes: [], surfaces: [] });
         expect(compatibilityContributionCatalog.find((item) => item.id === "detail.javbus-preview")).toMatchObject({ featureId: "detail", legacyPluginId: "BusPreviewVideoPlugin", executionOwner: "feature", plugin: null });
         expect(compatibilityContributionCatalog.find((item) => item.id === "detail.javbus-images")).toMatchObject({
             featureId: "list", legacyPluginId: "BusImgPlugin", executionOwner: "feature", plugin: null, routes: ["list"], surfaces: ["list-page"],
@@ -182,7 +188,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(featureManifests.find((item) => item.id === "new-video").startup).toBe("idle");
         expect(featureManifests.find((item) => item.id === "new-video").requires).toContain(SERVICE.events);
         expect(featureManifests.find((item) => item.id === "scheduler").startup).toBe("idle");
-        expect(featureManifests.find((item) => item.id === "translation")).toMatchObject({ sites: ["javdb", "javbus"], requires: expect.arrayContaining([PORT.host, SERVICE.translation]), contributes: ["external-bridge.translation"] });
+        expect(featureManifests.find((item) => item.id === "translation")).toMatchObject({ sites: ["javdb", "javbus"], routes: [], providesCommands: [], requires: expect.arrayContaining([PORT.host, SERVICE.translation, SERVICE.privacy]), contributes: ["external-bridge.translation"] });
         expect(featureManifests.find((item) => item.id === "translation").requiresFeaturesByRoute).toEqual({ list: ["list"] });
         expect(featureManifests.find((item) => item.id === "detail").contributes).toContain("detail.screenshot");
         expect(featureManifests.find((item) => item.id === "detail").contributes).not.toContain("detail.external-magnets");

@@ -48,10 +48,12 @@ export class CommandRegistry {
     async execute(command, ...args) {
         const owner = this.owners.get(command);
         if (!owner) throw new Error(`Unknown command: ${command}`);
+        if (!this.isAvailable(command)) throw new Error("此功能已关闭或不适用于当前页面");
         if (!this.handlers.has(command)) {
             if (!this.activateOwner) throw new Error("Command activator is not configured");
             await this.activateOwner(owner);
         }
+        if (!this.isAvailable(command)) throw new Error("此功能已关闭或不适用于当前页面");
         const handler = this.handlers.get(command);
         if (!handler) throw new Error(`Feature ${owner} did not register ${command}`);
         return handler(...args);

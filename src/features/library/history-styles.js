@@ -28,5 +28,6 @@ export const HISTORY_DETAIL_STYLES = `.jhs-history-car-number { display:inline-f
 .jhs-history-details dt { color:var(--jhs-text-muted); font-weight:var(--jhs-font-weight-normal); }`;
 
 export const HISTORY_STYLES = HISTORY_BASE_STYLES + HISTORY_DETAIL_STYLES + `
+.jhs-history-dialog [data-enhancement-command][hidden] { display:none!important; }
 @media(max-height:500px) { .jhs-history-layout { overflow-y:auto; } .jhs-history-dialog #table-container { flex:1 0 240px; min-height:240px; } }
 `;

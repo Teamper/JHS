@@ -36,6 +36,8 @@ describe("Feature-owned history entry points", () => {
         expect(dom.window.document.querySelector(".historyBtnBox").style.display).toBe("none");
         expect(dom.window.document.querySelector(".miniHistoryBtnBox").style.display).toBe("");
 
+        // The responsive shell moves these controls out of their original wrappers.
+        dom.window.document.body.append(dom.window.document.querySelector("#historyBtn"), dom.window.document.querySelector("#miniHistoryBtn"));
         scope.dispose();
         expect(dom.window.document.querySelector("#historyBtn")).toBeNull();
         expect(dom.window.document.querySelector("#miniHistoryBtn")).toBeNull();

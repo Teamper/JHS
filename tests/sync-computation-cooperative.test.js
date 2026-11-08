@@ -34,7 +34,7 @@ describe("cooperative synchronization computations", () => {
     const joined = await model.joinSyncModelsAsync(golden.model, difference.model);
     expect(joined).toEqual(golden.joined);
     expect(await model.visibleSyncRecordsAsync(joined)).toEqual(golden.visible);
-    expect(await model.materializeSyncDataAsync(joined, golden.data, ["a1"])).toEqual(golden.materialized);
+    expect(await model.materializeSyncDataAsync(joined, golden.data, ["a1"])).toEqual({ ...golden.materialized, personal_ratings: {} });
     expect(golden.model.records["car_list/ABC-1"].fields["flag:favorite"].value).toBe(true);
   });
   it("can reuse locked snapshot records while isolating records changed by a diff", async () => {

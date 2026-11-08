@@ -30,4 +30,6 @@ if (nativeTileResult.status !== 0) process.exit(nativeTileResult.status ?? 1);
 const viewerResult = spawnSync(npx, [ "playwright", "test", "specs/unified-image-viewer.spec.js", "--grep=unified long-image controls", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
 if (viewerResult.status !== 0) process.exit(viewerResult.status ?? 1);
 const isolatedSheetResult = spawnSync(npx, [ "playwright", "test", "specs/image-kind-isolation.spec.js", "--grep=late sheet stays outside photographs", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
-process.exit(isolatedSheetResult.status ?? 1);
+if (isolatedSheetResult.status !== 0) process.exit(isolatedSheetResult.status ?? 1);
+const translationResult = spawnSync(npx, [ "playwright", "test", "specs/translation-services.spec.js", "--grep=translation connections, explicit fallback", "--update-snapshots=none" ], { cwd: browserRoot, stdio: "inherit", shell: process.platform === "win32" });
+process.exit(translationResult.status ?? 1);

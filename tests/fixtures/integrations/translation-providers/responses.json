@@ -1,0 +1,10 @@
+{
+  "deepseek": {"choices":[{"message":{"role":"assistant","content":"ABC-123 译文","reasoning_content":"私有思考"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20,"secret":"ignored"}},
+  "custom-chat": {"choices":[{"message":{"role":"assistant","content":"ABC-123 译文"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20}},
+  "custom-completions": {"choices":[{"text":"ABC-123 译文","finish_reason":"stop"}]},
+  "openai": {"status":"completed","output":[{"type":"reasoning","summary":[{"text":"忽略思考"}]},{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ABC-123 译文"}]}],"usage":{"input_tokens":12,"output_tokens":8,"total_tokens":20}},
+  "custom-responses": {"status":"completed","output":[{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ABC-123 译文"}]}]},
+  "gemini": {"candidates":[{"finishReason":"STOP","content":{"parts":[{"thought":true,"text":"忽略思考"},{"text":"ABC-123 译文"}]}}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":8,"totalTokenCount":20}},
+  "deeplx": {"code":200,"data":"ABC-123 译文"},
+  "deepl": {"translations":[{"text":"ABC-123 译文","billed_characters":14}]}
+}

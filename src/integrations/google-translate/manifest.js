@@ -9,7 +9,7 @@ const ENDPOINT = "https://translate-pa.googleapis.com/v1/translate";
 export function createGoogleTranslateAdapter(http) {
     return Object.freeze({
         contracts: ["Translation"],
-        /** @param {string} text @param {{sourceLanguage?: string, targetLanguage?: string, scope?: any}} [options] */
+        /** @param {string} text @param {{sourceLanguage?: string, targetLanguage?: string, scope?: any, beforeSend?: () => Promise<any>}} [options] */
         async translate(text, options = {}) {
             if (!String(text || "").trim()) throw new TypeError("Translation text cannot be empty");
             const url = new URL(ENDPOINT);
@@ -24,6 +24,7 @@ export function createGoogleTranslateAdapter(http) {
             const response = await http.request({
                 providerId: "google-translate", capability: "text.translate", method: "GET", url: url.href, responseType: "json",
                 transport: "native-fetch", nativeTimeout: 1_500, timeout: 5_000,
+                ...(options.beforeSend ? {beforeSend:options.beforeSend} : {}),
                 urlPolicy: { trustClass: "builtin-public", hosts: ["translate-pa.googleapis.com"] },
             }, options.scope);
             return parseGoogleTranslation(response.data);

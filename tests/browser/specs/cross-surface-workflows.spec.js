@@ -238,7 +238,7 @@ test("cloud settings dependency status belongs only to the 115 sibling section",
   })();
   await expect(dialog.locator("#one-one-five-state")).toBeVisible();
   await expect(dialog.locator("#check-one-one-five-login")).toBeVisible();
-  await expect(dialog.locator("#cloud-settings-catalog .jhs-setting-row")).toHaveCount(7);
+  await expect(dialog.locator("#cloud-settings-catalog .jhs-setting-row")).toHaveCount(8);
   await expect(dialog.locator('[data-jhs-cloud-group="115"] #one-one-five-state')).toHaveCount(1);
   await expect(dialog.locator('[data-jhs-cloud-group="123"] #enable123Offline')).toHaveCount(1);
   await expect(dialog.locator('[data-jhs-cloud-group="general"] #offlineProviderMode')).toHaveCount(1);

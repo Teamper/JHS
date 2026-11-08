@@ -1,6 +1,7 @@
 // @ts-check
 
 import { normalizeCarNum } from "./constants.js";
+import { isPersonalRating } from "./personal-rating.js";
 
 const ENTITIES = new Set(["car_list", "blacklist_car_list", "favorite_actresses", "blacklist"]);
 const MEMBERS = new Set(["filter_keyword_title", "filter_keyword_review", "highlighted_tags"]);
@@ -54,6 +55,7 @@ export function validateSyncRecordFields(domain, id, record, active) {
     const fail = () => { throw new Error(`同步字段内容无效：${domain}/${id}`); };
     const entity = ENTITIES.has(domain), primary = ["car_list", "blacklist_car_list"].includes(domain) ? "carNum" : "starId";
     if (entity && primary === "carNum" && normalizeCarNum(id) !== id) fail();
+    if (domain === "personal_ratings" && normalizeCarNum(id) !== id) fail();
     for (const [name, field] of Object.entries(record.fields)) {
         let allowed = name === "value" && !entity;
         if (entity && name.startsWith("f:")) allowed = name.length > 2 && !OMITTED.has(name.slice(2));
@@ -72,6 +74,7 @@ export function validateSyncRecordFields(domain, id, record, active) {
         else if (name.startsWith("video:")) { if (!newVideo(value, name.slice(6))) fail(); }
         else if (MEMBERS.has(domain)) { if (!text(value) || value !== id) fail(); }
         else if (domain === "activity_log" || domain === "offline_history") { if (!history(value, id, domain === "activity_log")) fail(); }
+        else if (domain === "personal_ratings") { if (!isPersonalRating(value)) fail(); }
         else if (domain === "new_video_decisions") {
             if (!isSyncObject(value) || !jsonValue(value) || !["ignored", "snoozed", "dismissed"].includes(value.action) || !["until", "createdAt", "updatedAt"].every(key => optional(value, key, date))) fail();
         } else if (!jsonValue(value)) fail();

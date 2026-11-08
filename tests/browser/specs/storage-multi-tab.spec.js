@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { CURRENT_DATA_VERSION } from "../../../src/core/constants.js";
 
 test("coordinates concurrent state writes across tabs sharing IndexedDB", async ({ browser }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one desktop project owns shared IndexedDB concurrency timing");
@@ -15,8 +16,8 @@ test("coordinates concurrent state writes across tabs sharing IndexedDB", async 
 
     const lockSupport = await pages[0].evaluate(() => typeof navigator.locks?.request === "function");
     expect(lockSupport, "Edge must provide the cross-tab Web Locks API used by StorageMutationCoordinator").toBe(true);
-    await expect.poll(() => pages[0].evaluate(() => window.storageManager.getDataVersion())).toBe(3);
-    await expect.poll(() => pages[1].evaluate(() => window.storageManager.getDataVersion())).toBe(3);
+    await expect.poll(() => pages[0].evaluate(() => window.storageManager.getDataVersion())).toBe(CURRENT_DATA_VERSION);
+    await expect.poll(() => pages[1].evaluate(() => window.storageManager.getDataVersion())).toBe(CURRENT_DATA_VERSION);
 
     const results = await Promise.all(pages.map((page, index) => page.evaluate(async (record) => window.stateService.patch(
       record.carNum,

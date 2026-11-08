@@ -35,6 +35,7 @@ export default defineFeature({
             ? new DetailPageActionsController({
                 hostAdapter: deps[PORT.host], route: runtime.route, scope: runtime.scope,
                 settings: deps[SERVICE.settings], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle],
+                openSubtitles: (movie) => runtime.isCommandAvailable?.("subtitle.open") ? runtime.executeCommand("subtitle.open", movie) : Promise.resolve(null),
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], events: deps[SERVICE.events], diagnostics: runtime.diagnostics,
             })
             : null;

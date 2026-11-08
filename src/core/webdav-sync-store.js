@@ -4,7 +4,7 @@ import { runSyncJob } from "./sync-computation-jobs.js";
 import { ComputationBudget } from "./cooperative-work.js";
 import { changedSyncKeysAsync, equalSyncValuesAsync, syncRecordMapAsync, needsHistoryPruneAsync } from "./webdav-sync-model.js";
 import { assertSupportedDataVersion } from "./migration.js";
-import { normalizeCarNum } from "./constants.js";
+import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
 import { SyncPendingLedger, SYNC_PENDING_KEY } from "./sync-pending-ledger.js";
 import { SYNC_DOMAINS, SYNC_LEGACY_DEFAULTS, emptySyncModel, historyRank, maximumClockAsync, pruneSyncHistoryAsync, syncCloneAsync, syncLayout, validateSyncStateAsync, versionSyncDiffAsync, visibleSyncRecordsAsync, withSyncRetentionDefaults } from "./webdav-sync-model.js";
 
@@ -314,7 +314,7 @@ export class WebDavSyncStore extends EventTarget {
     /** @param {readonly string[]} [domains] @returns {Promise<Dict>} */
     async readData(domains = SYNC_DOMAINS) {
         const values = await Promise.all(domains.map(async key => [key, await this.forage.getItem(key)]));
-        return Object.fromEntries(values.map(([key, value]) => [key, value ?? (["setting", "new_video_decisions"].includes(key) ? {} : key === "activity_log" ? { entries: [] } : [])]));
+        return Object.fromEntries(values.map(([key, value]) => [key, value ?? (["setting", "new_video_decisions", "personal_ratings"].includes(key) ? {} : key === "activity_log" ? { entries: [] } : [])]));
     }
     /** Must run before every subsequent writer, even after a page crash. @param {(pending: Dict) => void} [onCleanLedger] @returns {Promise<{notificationId: string, carNums: string[], domains?: string[], changedNames?: string[]} | null>} */
     async recoverWithoutLock(onCleanLedger) {
@@ -322,7 +322,10 @@ export class WebDavSyncStore extends EventTarget {
         let [pending, journal] = await Promise.all([this.ledger.read(), this.forage.getItem(SYNC_JOURNAL_KEY)]);
         if (!journal) { onCleanLedger?.(pending); return null; }
         await assertSupportedDataVersion(this.deps.storage);
-        if (journal.schema !== 1 || !journal.after || journal.afterState?.schema !== 1 || !SYNC_DOMAINS.every(key => Object.hasOwn(journal.after, key))) throw new Error("同步恢复日志版本无效，已停止写入以保留本地数据");
+        const dataVersion = journal.dataVersion ?? 3;
+        if (!Number.isInteger(dataVersion) || dataVersion < 0 || dataVersion > CURRENT_DATA_VERSION) throw new Error("同步恢复日志来自不支持的数据版本，请更新 JHS");
+        const domains = dataVersion < 4 ? SYNC_DOMAINS.filter(key => key !== "personal_ratings") : SYNC_DOMAINS;
+        if (journal.schema !== 1 || !journal.after || journal.afterState?.schema !== 1 || !domains.every(key => Object.hasOwn(journal.after, key))) throw new Error("同步恢复日志版本无效，已停止写入以保留本地数据");
         // Old v1 journals have no notification marker. Upgrade it before replay
         // so a crash cannot erase the outstanding refresh or change its identity.
         if (!journal.notificationId || !Array.isArray(journal.carNums)) {
@@ -332,7 +335,7 @@ export class WebDavSyncStore extends EventTarget {
             await this.forage.setItem(SYNC_JOURNAL_KEY, journal);
         }
         if (journal.state !== "committed") {
-            for (const key of SYNC_DOMAINS) await this.forage.setItem(key, journal.after[key]);
+            for (const key of domains) await this.forage.setItem(key, journal.after[key]);
             await this.writeWithoutLock(journal.afterState);
             await this.forage.setItem(SYNC_JOURNAL_KEY, { ...journal, state: "committed" });
             this.deps.storage?._invalidateCache?.();
@@ -577,6 +580,10 @@ export class WebDavSyncStore extends EventTarget {
             const beforeCars = await syncRecordMapAsync(local.car_list, "carNum", work);
             const afterCars = await syncRecordMapAsync(after.car_list, "carNum", work);
             carNums = [...new Set([...beforeCars.keys(), ...afterCars.keys()])].filter(id => beforeCars.get(id) !== afterCars.get(id));
+            const ratingKeys = new Set([...Object.keys(local.personal_ratings), ...Object.keys(after.personal_ratings)]);
+            const changedRatings = [];
+            for (const key of ratingKeys) if (!(await equalSyncValuesAsync(local.personal_ratings[key], after.personal_ratings[key], work))) changedRatings.push(key);
+            carNums = [...new Set([...carNums, ...changedRatings])];
             state.shadow = await this.computeJob("project", { data: after, frontiers: state.model.frontiers }, work);
             state.layout = syncLayout(after.setting);
             const domains = /** @type {string[]} */ ([]);
@@ -602,7 +609,7 @@ export class WebDavSyncStore extends EventTarget {
                 if (changed) {
                     if (!first && new Set(local.blacklist_car_list.map((/** @type {any} */ item) => normalizeCarNum(item.carNum))).size < local.blacklist_car_list.length) await this.deps.storage?._createSnapshotWithoutMutation?.("同步屏蔽影片整理前", "sync-repair");
                     const pending = await this.forage.getItem(SYNC_JOURNAL_KEY);
-                    const journal = { schema: 1, state: "prepared", after, afterState: state, binding, notificationId: crypto.randomUUID(), carNums: [...new Set([...(pending?.carNums || []), ...carNums])],
+                    const journal = { schema: 1, dataVersion: CURRENT_DATA_VERSION, state: "prepared", after, afterState: state, binding, notificationId: crypto.randomUUID(), carNums: [...new Set([...(pending?.carNums || []), ...carNums])],
                         ...(pending && !Array.isArray(pending.domains) ? {} : { domains: [...new Set([...(pending?.domains || []), ...domains])], changedNames: [...new Set([...(pending?.changedNames || []), ...changedNames])] }) };
                     await assertCurrent();
                     await this.forage.setItem(SYNC_JOURNAL_KEY, journal);
@@ -630,9 +637,10 @@ export class WebDavSyncStore extends EventTarget {
         this.deps.storage?._invalidateCache?.(); this.deps.storage?.invalidateSettingCache?.();
         let failed = false;
         if (!notice.domains || notice.domains.includes("setting")) try { await this.deps.settings?.refresh(); } catch { failed = true; }
-        for (const type of ["car-state-changed", "actress-changed", "new-video-changed", "blacklist-rules-changed", "filter-rules-changed", "offline-history-changed", "activity-log-changed", "settings-changed"]) {
+        for (const type of ["car-state-changed", "personal-rating-changed", "actress-changed", "new-video-changed", "blacklist-rules-changed", "filter-rules-changed", "offline-history-changed", "activity-log-changed", "settings-changed"]) {
             const eventDomains = /** @type {Record<string, string[]>} */ ({
                 "car-state-changed": ["car_list", "activity_log"], "actress-changed": ["favorite_actresses"],
+                "personal-rating-changed": ["personal_ratings"],
                 "new-video-changed": ["favorite_actresses", "new_video_decisions"],
                 "blacklist-rules-changed": ["blacklist", "blacklist_car_list"],
                 "filter-rules-changed": ["filter_keyword_title", "filter_keyword_review"],

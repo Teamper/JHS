@@ -2,6 +2,7 @@ import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import budget from "../../../performance-budget.json" with { type: "json" };
 import { assertNoHorizontalOverflow, fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { installSharedGmFixture } from "../harness/shared-gm.js";
 
 for (const [label, url, legacyPlugin, legacyExecutorExpected] of [
   ["JavDB", "https://javdb.com/v/test-id", "DetailPagePlugin", false],
@@ -78,24 +79,24 @@ test("JavDB detail external links preserve HTTP(S) targets and the legacy disabl
   await disabledPage.close();
 });
 
-test("Detail Feature owns the SubtitleCat entry and retains modified-click and disable-key behavior", async ({ context, page }, testInfo) => {
+test("Detail Feature owns the unified subtitle entry and retains its disable-key behavior", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers detail subtitle navigation");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/v/test-id?hideNav=1&jhsCarNum=ABC-123", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(() => {
     window.__subtitleOpens = [];
-    window.utils.openPage = (url, carNum, newTab, event) => window.__subtitleOpens.push({ url, carNum, newTab, ctrlKey: Boolean(event?.ctrlKey) });
+    window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").openSubtitles = async movie => window.__subtitleOpens.push({ carNum: movie.carNum, active: !movie.scope.disposed, trigger: movie.trigger.id });
   });
-  await page.locator("#search-subtitle-btn").click({ modifiers: ["Control"] });
+  await page.locator("#xunLeiSubtitleBtn").click({ modifiers: ["Control"] });
   await expect.poll(() => page.evaluate(() => window.__subtitleOpens)).toEqual([{
-    url: "https://subtitlecat.com/index.php?search=ABC-123", carNum: "ABC-123", newTab: false, ctrlKey: true,
+    carNum: "ABC-123", active: true, trigger: "xunLeiSubtitleBtn",
   }]);
 
   const disabledPage = await context.newPage();
   await disabledPage.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(disabledPage, { disabledPlugins: ["DetailPageButtonPlugin"] });
-  await expect(disabledPage.locator("#search-subtitle-btn")).toHaveCount(0);
+  await expect(disabledPage.locator("#xunLeiSubtitleBtn")).toHaveCount(0);
   await expect.poll(() => disabledPage.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).not.toContain("detail.page-state-actions");
   await disabledPage.close();
 });
@@ -393,11 +394,14 @@ test("JavDB list titles translate through the Translation Feature and roll back 
 test("JavBus list titles translate from the host image title and roll back when disabled", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers JavBus list translation ownership");
   await fulfillHostFixtures(context);
+  const sharedGm = await installSharedGmFixture(context), broker = await context.newPage();
+  await broker.goto("https://javdb.com/", {waitUntil:"domcontentloaded"});
+  await injectUserscriptRuntime(broker,{beforeUserscriptInjection:sharedGm.attach});
   await page.goto("https://www.javbus.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, {
     settingOverrides: { translateTitle: "yes" },
     nativeTranslation: "即时译文",
-    beforeUserscriptInjection: async (hostPage) => hostPage.evaluate(() => {
+    beforeUserscriptInjection: async (hostPage) => { await sharedGm.attach(hostPage); return hostPage.evaluate(() => {
       const item = document.querySelector(".masonry .item");
       const image = item?.querySelector("img");
       if (image) image.setAttribute("data-title", image.getAttribute("title") || "");
@@ -407,7 +411,7 @@ test("JavBus list titles translate from the host image title and roll back when 
       title.textContent = "JavBus Fixture Movie";
       info.append(title);
       item?.append(info);
-    }),
+    }); },
   });
   const title = page.locator(".masonry .item .video-title");
   await expect(title).toContainText("即时译文");

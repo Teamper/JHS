@@ -6,6 +6,13 @@ import { SettingsEntryController } from "../src/features/system/settings-entry-c
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SettingsEntryController", () => {
+    it("routes translation configuration through its declared command and releases the entry listener",async()=>{
+        const dom=new JSDOM('<button data-jhs-open="translation"><span>翻译配置</span></button>'),scope=new LifecycleScope("translation-setting-entry");
+        const executeCommand=vi.fn(async()=>{}),controller=new SettingsEntryController({document:dom.window.document,scope,initializeSurface:vi.fn(),closeQuickSettings:vi.fn(),lowZIndex:vi.fn(),executeCommand,onError:vi.fn()});
+        controller.start();dom.window.document.querySelector("span").dispatchEvent(new dom.window.MouseEvent("click",{bubbles:true}));
+        await vi.waitFor(()=>expect(executeCommand).toHaveBeenCalledExactlyOnceWith("translation.configure"));
+        scope.dispose();dom.window.document.querySelector("button").click();expect(executeCommand).toHaveBeenCalledOnce();dom.window.close();
+    });
     it("routes stable desktop entry clicks through the lazy command and closes quick surfaces", async () => {
         const dom = new JSDOM('<body><button id="setting-btn"><span>设置</span></button><button id="mini-setting-btn"></button><button id="other"></button></body>');
         const closeQuickSettings = vi.fn(), lowZIndex = vi.fn(), executeCommand = vi.fn(async () => "opened"), onError = vi.fn();

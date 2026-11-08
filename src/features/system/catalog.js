@@ -1,5 +1,6 @@
 // @ts-check
 
+import { parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 import { openSettingsUi, registerSettingsUiOwner } from "../../core/settings-ui-owner.js";
@@ -103,7 +104,7 @@ export const systemFeatureManifests = Object.freeze([
     }),
     defineFeature({
         id: "responsive-shell", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "idle",
-        requires: [PORT.host, PORT.style, SERVICE.clog, SERVICE.domUi, SERVICE.notifications, SERVICE.profile, SERVICE.settings, SERVICE.state],
+        requires: [PORT.host, PORT.style, SERVICE.clog, SERVICE.domUi, SERVICE.notifications, SERVICE.profile, SERVICE.settings, SERVICE.state, SERVICE.privacy, SERVICE.movieSelection],
         contributes: ["responsive-shell.bottom-bar"], providesCommands: [],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const id = "responsive-shell.bottom-bar";
@@ -111,14 +112,24 @@ export const systemFeatureManifests = Object.freeze([
             const { RESPONSIVE_SHELL_CAPABILITIES, ResponsiveShellController } = await import("./responsive-shell-controller.js");
             const bridge = runtime.resolveCompatibilityBean("MobileBottomBarPlugin");
             if (!bridge) throw new Error("Responsive shell compatibility bridge is unavailable");
-            const capabilities = Object.fromEntries(RESPONSIVE_SHELL_CAPABILITIES.map((name) => [name, runtime.resolveCompatibilityBean(name) ?? null]));
+            const capabilities = {};
+            for (const name of RESPONSIVE_SHELL_CAPABILITIES) Object.defineProperty(capabilities, name, { enumerable: true, get: () => runtime.isCompatibilityBeanAvailable?.(name) === false ? null : runtime.resolveCompatibilityBean(name) ?? null });
             const controller = new ResponsiveShellController({
                 jquery: deps[SERVICE.domUi].jquery, window, document,
                 profile: deps[SERVICE.profile], settings: deps[SERVICE.settings], host: deps[PORT.host],
                 state: deps[SERVICE.state], logger: deps[SERVICE.clog], notifications: deps[SERVICE.notifications], capabilities,
+                privacyActions: { available: () => runtime.isCommandAvailable("privacy.toggle"), enabled: () => deps[SERVICE.privacy].enabled, toggle: () => runtime.executeCommand("privacy.toggle"), configure: () => runtime.executeCommand("privacy.configure"), bindReveal: (/** @type {HTMLElement} */ button, /** @type {any} */ scope) => runtime.executeCommand("privacy.bind-reveal", button, scope) },
+                mediaActions: { available: () => runtime.isCommandAvailable("media.configure") && !parseDisabledPlugins(deps[SERVICE.settings].snapshot().disabledPlugins).includes("media-library"), configure: () => runtime.executeCommand("media.configure") },
                 openNewVideo: () => runtime.executeCommand("new-video.open"),
-                getPageActions: () => runtime.executeCommand("list.get-page-actions"),
-                executePageAction: (action) => runtime.executeCommand("list.execute-page-action", action),
+                getPageActions: async () => {
+                    const actions = await runtime.executeCommand("list.get-page-actions");
+                    const count = deps[SERVICE.movieSelection].values().length;
+                    for (const [command, label] of [["selection.toggle", "进入 / 退出选择"], ["library.rating.open", "为所选影片评分"], ["translation.selection", "翻译所选影片"], ["library.lists.open", "管理清单与恢复"]]) {
+                        if (runtime.isCommandAvailable(command)) actions.push({ id: "enhancement-" + command, label, group: "batch", enabled: command === "selection.toggle" || command === "library.lists.open" || count > 0 });
+                    }
+                    return actions;
+                },
+                executePageAction: (action) => action.startsWith("enhancement-") ? runtime.executeCommand(action.slice(12), deps[SERVICE.movieSelection].values()) : runtime.executeCommand("list.execute-page-action", action),
             });
             let releaseStyles = () => {};
             try {

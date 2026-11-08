@@ -122,9 +122,15 @@ test("115 matching cancels late detail results and restarts once", async ({page,
     await fulfillHostFixtures(context);await boot(page,{enable115Match:false});
     await page.waitForFunction(()=>Boolean(window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin")));
     await page.evaluate(()=>{
+        const evidence=document.createElement("div");
+        evidence.className="panel-block";
+        evidence.innerHTML='<strong>番号:</strong><span class="value">ABC-123</span>';
+        document.querySelector(".column-video-info").append(evidence);
         window.matchRequests=[];
         const plugin=window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin");
-        plugin.getRuntimeService("offline").searchFiles=(_id,_query,{scope})=>new Promise(resolve=>window.matchRequests.push({scope,resolve}));
+        const offline=plugin.getRuntimeService("offline");
+        offline.getAccountIdentity=async()=>({accountId:"1"});
+        offline.searchFilePage=(_id,_query,{scope})=>new Promise(resolve=>window.matchRequests.push({scope,resolve:items=>resolve({items,hasMore:false,nextOffset:items.length})}));
         window.matchSettings=plugin.getRuntimeService("settings");
         return window.matchSettings.set("enable115Match",true);
     });
@@ -136,6 +142,8 @@ test("115 matching cancels late detail results and restarts once", async ({page,
     await page.evaluate(()=>window.matchSettings.set("enable115Match",true));
     await expect.poll(()=>page.evaluate(()=>window.matchRequests.length)).toBe(2);
     await page.evaluate(()=>window.matchRequests[1].resolve([]));
+    await expect.poll(()=>page.evaluate(()=>window.matchRequests.length)).toBe(3);
+    await page.evaluate(()=>window.matchRequests[2].resolve([]));
     await expect(page.locator(".jhs-115-match")).toHaveText("115 匹配：未匹配 重试");
 });
 
@@ -146,12 +154,13 @@ for(const count of [0,1,2]) test(`115 ${count} matches isolate their card action
         const plugin=window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin"),offline=plugin.getRuntimeService("offline");
         window.matchCalls=0;window.playLinks=[];
         window.open=url=>window.playLinks.push(url);
-        offline.searchFiles=async()=>{window.matchCalls++;return Array.from({length:count},(_,id)=>({name:`ABC-123-CD${id+1}.mp4`,fileId:String(id)}));};
+        offline.getAccountIdentity=async()=>({accountId:"1"});
+        offline.searchFilePage=async()=>{window.matchCalls++;const items=Array.from({length:count},(_,id)=>({name:`ABC-123-CD${id+1}.mp4`,fileId:String(id)}));return {items,hasMore:false,nextOffset:items.length};};
         offline.getPlayUrl=(_id,match)=>`https://115.com/?fixture=${match.fileId}`;
         await plugin.getRuntimeService("settings").set("enable115Match",true);
     },count);
     await page.locator(".jhs-115-list-match").click();
-    if(count===0) await expect.poll(()=>page.evaluate(()=>window.matchCalls)).toBe(2);
+    if(count===0) await expect.poll(()=>page.evaluate(()=>window.matchCalls)).toBe(4);
     if(count===1) expect(await page.evaluate(()=>window.playLinks)).toEqual(["https://115.com/?fixture=0"]);
     if(count===2) await expect(page.locator('.layui-layer a[href^="https://115.com/"]')).toHaveCount(2);
     expect(page.url()).toBe("https://javdb.com/");await expect(page.locator("iframe")).toHaveCount(0);

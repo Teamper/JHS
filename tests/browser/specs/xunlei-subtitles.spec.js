@@ -70,6 +70,12 @@ async function boot(page, context, { theme = "light", mode = "results" } = {}) {
   return errors;
 }
 
+// The normal entry now opens the aggregate workspace. Keep the public legacy method covered.
+async function openLegacySubtitles(page) {
+  await page.locator("#xunLeiSubtitleBtn").focus();
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle("ABC-123"));
+}
+
 async function expectDownload(page, trigger, extension) {
   const pending = page.waitForEvent("download");
   await trigger.click();
@@ -83,7 +89,7 @@ async function expectDownload(page, trigger, extension) {
 for (const theme of ["light", "dark"]) test(`Xunlei frozen records render, preview and download with real Tabulator ${theme}`, async ({ page, context }, info) => {
   const errors = await boot(page, context, { theme });
   const trigger = page.locator("#xunLeiSubtitleBtn");
-  await trigger.click();
+  await openLegacySubtitles(page);
   const dialog = page.locator(".layui-layer").filter({ has: page.locator("#xunlei-table-container") });
   const rows = dialog.locator(".tabulator-row").filter({ has: page.locator(".subtitle-preview-btn") });
   await expect(rows).toHaveCount(2);
@@ -123,7 +129,7 @@ for (const theme of ["light", "dark"]) test(`Xunlei frozen records render, previ
 
 for (const mode of ["empty", "failure"]) test(`Xunlei ${mode} response reports feedback and closes loading`, async ({ page, context }) => {
   const errors = await boot(page, context, { mode });
-  await page.locator("#xunLeiSubtitleBtn").click();
+  await openLegacySubtitles(page);
   await expect.poll(() => page.evaluate(() => window.__subtitleMessages.length)).toBeGreaterThan(0);
   await expect(page.locator("#xunlei-table-container")).toHaveCount(0);
   await expect(page.locator(".layui-layer-loading")).toHaveCount(0);
@@ -133,7 +139,7 @@ for (const mode of ["empty", "failure"]) test(`Xunlei ${mode} response reports f
 
 for (const action of ["preview", "download"]) test(`closing the subtitle table cancels a pending ${action} and its late response`, async ({ page, context }) => {
   const errors = await boot(page, context);
-  await page.locator("#xunLeiSubtitleBtn").click();
+  await openLegacySubtitles(page);
   await expect(page.locator("#xunlei-table-container .subtitle-preview-btn").first()).toBeVisible();
   await page.evaluate(() => {
     const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
@@ -149,7 +155,7 @@ for (const action of ["preview", "download"]) test(`closing the subtitle table c
   await page.keyboard.press("Escape");
   await expect(page.locator("#xunlei-table-container")).toHaveCount(0);
   expect(await page.evaluate(() => ({ disposed: window.__subtitlePending.scope.disposed, destroyed: window.__subtitleTableDestroyed }))).toEqual({ disposed: true, destroyed: 1 });
-  await page.locator("#xunLeiSubtitleBtn").click();
+  await openLegacySubtitles(page);
   await expect(page.locator("#xunlei-table-container .subtitle-preview-btn")).toHaveCount(2);
   await page.evaluate(async () => { window.__subtitlePending.resolve("late subtitle"); await new Promise(resolve => setTimeout(resolve, 0)); });
   await expect(page.locator(".layui-layer .jhs-code-viewer")).toHaveCount(0);
@@ -159,7 +165,7 @@ for (const action of ["preview", "download"]) test(`closing the subtitle table c
 
 test("a direct subtitle download failure reports feedback without an unhandled rejection", async ({ page, context }) => {
   const errors = await boot(page, context);
-  await page.locator("#xunLeiSubtitleBtn").click();
+  await openLegacySubtitles(page);
   await page.evaluate(() => {
     window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").subtitle.download = async () => { throw new Error("Fixture direct download failure"); };
   });
@@ -172,7 +178,7 @@ test("a direct subtitle download failure reports feedback without an unhandled r
 
 for (const action of ["preview", "download"]) test(`subtitle ${action} gives focused waiting feedback and deduplicates repeated activation`, async ({ page, context }) => {
   const errors = await boot(page, context);
-  await page.locator("#xunLeiSubtitleBtn").click();
+  await openLegacySubtitles(page);
   const button = page.locator(`.subtitle-${action}-btn`).first();
   await expect(button).toBeVisible();
   await page.evaluate(() => {

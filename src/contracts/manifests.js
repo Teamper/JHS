@@ -46,6 +46,7 @@ export function defineFeature(manifest) {
             requireUniqueStrings(featureIds, `requiresFeaturesByRoute.${route}`);
         }
     }
+    if (manifest.configurationDependencies !== undefined) requireUniqueStrings(manifest.configurationDependencies, "configurationDependencies");
     if (typeof manifest.activate !== "function") throw new TypeError("Feature activate must be a function");
     if (typeof manifest.disableable !== "boolean") throw new TypeError("Feature disableable must be explicit");
     if (manifest.kind === "system" && manifest.disableable !== false) throw new TypeError("System features cannot be disableable");
@@ -80,7 +81,7 @@ export function defineIntegration(manifest) {
     requireUniqueTokens(manifest.requires, "requires");
     const hosts = /** @type {unknown[]} */ (manifest.hosts);
     const capabilities = /** @type {unknown[]} */ (manifest.capabilities);
-    if (hosts.length === 0 || capabilities.length === 0) throw new TypeError("Integration hosts and capabilities cannot be empty");
+    if (hosts.length === 0 && manifest.trustClass !== "user-local" || capabilities.length === 0) throw new TypeError("Public Integration hosts and all capabilities cannot be empty");
     for (const host of hosts) {
         const value = String(host);
         if (value !== value.toLowerCase() || new URL(`https://${value}`).hostname !== value) throw new TypeError(`Integration host is invalid: ${value}`);

@@ -1,8 +1,11 @@
 // @ts-check
+import { parseBooleanSetting } from "../core/feature-helpers.js";
 
 import { LifecycleScope } from "../core/lifecycle-scope.js";
+import { disabledIdForPlugin, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { defineFeature } from "../contracts/manifests.js";
+import { ENHANCEMENT_FEATURES, ENHANCEMENT_METADATA } from "../core/enhancement-controls.js";
 
 export { LEGACY_PLUGIN_CONTRIBUTION_MAP, migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 
@@ -14,6 +17,14 @@ export class FeatureRuntime {
         this.commands = options.commands;
         this.diagnostics = options.diagnostics;
         this.disabled = new Set(migrateDisabledPlugins(options.disabled));
+
+        this.configurationSnapshot = /** @type {Record<string, any>} */ ({});
+        this.started = false;
+        /** @type {null | (()=>void)} */ this.compatibilityRefresh = null;
+        this.configurationRevision = 0;
+        this.configurationQueue = Promise.resolve();
+        /** @type {Map<string, LifecycleScope>} */
+        this.activationScopes = new Map();
         this.site = options.site ?? "unknown";
         this.route = options.route ?? "unknown";
         /** @type {Map<string, Record<string, any>>} */
@@ -69,9 +80,88 @@ export class FeatureRuntime {
     /** @param {Record<string, any>} manifest */
     isEligible(manifest) {
         if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
+
+        if (manifest.id === "media-library" && !parseBooleanSetting(this.configurationSnapshot.enableMediaLibrary, false)) return false;
         if (manifest.sites.length && !manifest.sites.includes(this.site)) return false;
         if (manifest.routes.length && !manifest.routes.includes(this.route)) return false;
+        const dependencies = manifest.requiresFeaturesByRoute?.[this.route] ?? [];
+        if (dependencies.some((/** @type {string} */ id) => this.disabled.has(id))) return false;
+        const metadata = /** @type {any} */ (ENHANCEMENT_METADATA)[manifest.id];
+        if (metadata?.dependencies.some((/** @type {string} */ id) => {
+            const owner = this.contributionOwners.get(id);
+            return owner && !this.isContributionEnabled(owner, id, this.contributionManifests.get(id)?.legacyPluginId || id);
+        })) return false;
         return true;
+    }
+
+    /** @param {string} name */
+    isCompatibilityBeanAvailable(name) {
+        const id = disabledIdForPlugin(name), owner = this.contributionOwners.get(id);
+        return !owner || this.isContributionEnabled(owner, id, name);
+    }
+
+    getFeatureDescriptors() {
+        return Object.entries(ENHANCEMENT_METADATA).map(([id, metadata]) => {
+            const details = /** @type {any} */ (metadata), owner = id === "subtitle115-upload" ? "subtitle-workspace" : id;
+            const manifest = this.manifests.get(owner), enabled = details.settingKey ? parseBooleanSetting(this.configurationSnapshot[details.settingKey], true) : !this.disabled.has(id);
+            const available = Boolean(enabled && manifest && this.isEligible(manifest));
+            const active = available && this.activations.has(owner);
+            const status = !enabled ? "已关闭" : !available ? "当前页面不可用" : active ? "运行中" : "按需启用";
+            return { ...details, id, name: details.name || /** @type {Record<string, string>} */ (ENHANCEMENT_FEATURES)[id], disableable: true, sites: manifest?.sites || [], enabled, available, active, status };
+        });
+    }
+
+    /** Apply persisted settings in order; block commands before asynchronous teardown. @param {any} snapshot */
+    reconcileConfiguration(snapshot) {
+        const mediaChanged = this.configurationSnapshot.enableMediaLibrary !== snapshot.enableMediaLibrary;
+        this.configurationSnapshot = snapshot;
+        const previous = this.disabled;
+        this.disabled = new Set(migrateDisabledPlugins(parseDisabledPlugins(snapshot.disabledPlugins)));
+
+
+        const revision = ++this.configurationRevision;
+        const affected = new Set();
+        for (const manifest of this.manifests.values()) {
+            const contributionsChanged = [...manifest.contributes, ...(manifest.configurationDependencies || [])].some((/** @type {string} */ id) => previous.has(id) !== this.disabled.has(id));
+            if (!this.isEligible(manifest) || contributionsChanged || mediaChanged && manifest.id === "media-library") affected.add(manifest.id);
+            for (const command of manifest.providesCommands) this.commands.setOwnerEnabled(command, this.isEligible(manifest));
+        }
+        // Reattach consumers that hold an adapter from a restarting parent.
+        let added;
+        do {
+            added = false;
+            for (const manifest of this.manifests.values()) {
+                if (!affected.has(manifest.id) && (manifest.requiresFeaturesByRoute?.[this.route] || []).some((/** @type {string} */ id) => affected.has(id))) {
+                    affected.add(manifest.id);
+                    added = true;
+                }
+            }
+        } while (added);
+        if (!this.started) return Promise.resolve();
+        for (const id of affected) this.activationScopes.get(id)?.dispose();
+        for (const [id, scope] of this.contributionScopes) {
+            const owner = this.contributionOwners.get(id);
+            if (owner && !this.isContributionEnabled(owner, id, this.contributionManifests.get(id)?.legacyPluginId || id)) {
+                scope.dispose();
+                this.contributionScopes.delete(id);
+            }
+        }
+        const apply = async () => {
+            for (const id of affected) {
+                try { (await this.activations.get(id))?.dispose(); } catch { /* Canceled activation has already cleaned its scope. */ }
+            }
+            if (revision !== this.configurationRevision) return;
+            this.compatibilityRefresh?.();
+            for (const manifest of this.manifests.values()) {
+                if (this.isEligible(manifest) && manifest.startup !== "on-command" && manifest.startup !== "on-demand") {
+                    try { await this.activate(manifest.id); } catch (error) { this.diagnostics.recordError(error); }
+                }
+            }
+            this.diagnostics.featureDescriptors = this.getFeatureDescriptors();
+            if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("jhs-feature-availability-changed"));
+        };
+        this.configurationQueue = this.configurationQueue.catch(() => {}).then(apply);
+        return this.configurationQueue;
     }
 
     /** @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
@@ -81,6 +171,7 @@ export class FeatureRuntime {
         if (manifest.sites.length && !manifest.sites.includes(this.site)) return false;
         if (!manifest.contributes.includes(contributionId)) return false;
         if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
+
         if (manifest.kind === "system") return true;
         const contribution = this.contributionManifests.get(contributionId);
         if (contribution?.sites?.length && !contribution.sites.includes(this.site)) return false;
@@ -121,11 +212,11 @@ export class FeatureRuntime {
 
     /** @param {string} id */
     activate(id) {
-        const existing = this.activations.get(id);
-        if (existing) return existing;
         const manifest = this.manifests.get(id);
         if (!manifest) return Promise.reject(new Error(`Unknown feature: ${id}`));
         if (!this.isEligible(manifest)) return Promise.reject(new Error(`Feature is disabled or ineligible: ${id}`));
+        const existing = this.activations.get(id);
+        if (existing) return existing;
         const activation = this.activateManifest(manifest);
         this.activations.set(id, activation);
         activation.catch(() => { if (this.activations.get(id) === activation) this.activations.delete(id); });
@@ -136,6 +227,7 @@ export class FeatureRuntime {
     async activateManifest(manifest) {
         const started = performance.now();
         const scope = new LifecycleScope(`feature:${manifest.id}`, { onChange: (snapshot) => this.diagnostics.updateScope(snapshot) });
+        this.activationScopes.set(manifest.id, scope);
         /** @type {Record<string, any> | undefined} */ let result;
         /** @type {readonly string[]} */ let activeContributions = [];
         /** @type {Array<() => void>} */ const releaseCommands = [];
@@ -157,6 +249,7 @@ export class FeatureRuntime {
                 }
             }
             clean(() => scope.dispose());
+            if (this.activationScopes.get(manifest.id) === scope) this.activationScopes.delete(manifest.id);
             this.activations.delete(manifest.id);
             clean(() => this.diagnostics.setFeature(manifest.id, false));
             activeContributions.forEach((id) => clean(() => this.diagnostics.setContribution(id, false)));
@@ -175,6 +268,8 @@ export class FeatureRuntime {
                 scope, enabledContributions, site: this.site, route: this.route,
                 isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionEnabled(featureId, contributionId, legacyPluginId),
                 executeCommand: /** @type {(command: string, ...args: unknown[]) => Promise<unknown>} */ ((command, ...args) => this.commands.execute(command, ...args)),
+                isCommandAvailable: (/** @type {string} */ command) => this.commands.isAvailable(command),
+                isCompatibilityBeanAvailable: (/** @type {string} */ name) => this.isCompatibilityBeanAvailable(name),
                 resolveCompatibilityBean: (/** @type {string} */ name) => this.compatibilityBeanResolver?.(name),
                 registerCompatibilityBean: (/** @type {string} */ name, /** @type {any} */ bean) => this.compatibilityBeanRegistrar?.(name, bean),
                 diagnostics: this.diagnostics,
@@ -197,7 +292,16 @@ export class FeatureRuntime {
         }
     }
 
-    async start() {
+    /** @param {any} [snapshot] */
+    async start(snapshot) {
+        if (snapshot) {
+            this.configurationSnapshot = snapshot;
+            this.disabled = new Set(migrateDisabledPlugins(parseDisabledPlugins(snapshot.disabledPlugins)));
+
+            for (const manifest of this.manifests.values()) for (const command of manifest.providesCommands) this.commands.setOwnerEnabled(command, this.isEligible(manifest));
+        }
+        this.started = true;
+        this.diagnostics.featureDescriptors = this.getFeatureDescriptors();
         const eager = [];
         const idle = [];
         for (const manifest of this.manifests.values()) {

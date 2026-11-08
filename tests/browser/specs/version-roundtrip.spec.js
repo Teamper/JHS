@@ -3,12 +3,31 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { CURRENT_DATA_VERSION } from "../../../src/core/constants.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const releaseCommit = "8e2e9b8baefe99b13125f559e83ac98dd08cd02d";
 const devUserscriptPath = join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js");
 
-test("6.5.1 → isolated 7.0 → 6.5.1 restores and continues using the same synthetic storage", async ({ browser }, testInfo) => {
+async function rejectsFutureDatabase(page, releaseUserscript) {
+  const read = async host => host.evaluate(async () => {
+    const store = window.localforage.createInstance({name:"JAV-JHS",storeName:"appData"});
+    const keys = (await store.keys()).sort();
+    return Object.fromEntries(await Promise.all(keys.map(async key => [key,await store.getItem(key)])));
+  });
+  let before;
+  await injectUserscriptRuntime(page, {userscriptSource:releaseUserscript,version:"6.5.1",preserveStorage:true,realFeedback:true,expectBootstrapError:"更新版本",beforeUserscriptInjection:async host => { before = await read(host); }});
+  await expect(page.locator(".toastify,#jhs-bootstrap-error")).toContainText("更新版本");
+  // Frozen 6.5.1 fills these two missing defaults before its data-version guard.
+  // Every business domain, rating, snapshot and interrupted journal must stay exact.
+  const expected = structuredClone(before);
+  if (!Object.hasOwn(expected.setting,"enableLoadScreenShot")) expected.setting.enableLoadScreenShot = "yes";
+  if (!Object.hasOwn(expected.setting,"enableScreenSvg")) expected.setting.enableScreenSvg = expected.setting.enableLoadScreenShot ?? "yes";
+  expect(await read(page)).toEqual(expected);
+  expect(await page.evaluate(()=>Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]))).toBe(false);
+}
+
+test("6.5.1 upgrades to 7.0 while the older client preserves and refuses the newer database", async ({ browser }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one shared IndexedDB context owns the version round trip");
   const releaseUserscript = execFileSync("git", ["show", `${releaseCommit}:JHS.user.js`], {
     cwd: repoRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
@@ -79,7 +98,7 @@ test("6.5.1 → isolated 7.0 → 6.5.1 restores and continues using the same syn
     }));
     expect(recovered.state?.stateFlags).toMatchObject({ favorite: true, blocked: false });
     expect(recovered.journal).toBeNull();
-    expect(recovered.dataVersion).toBe(3);
+    expect(recovered.dataVersion).toBe(CURRENT_DATA_VERSION);
 
     const snapshotId = await devPage.evaluate(async () => {
       await window.settingsService.set("defaultQuickFilterTab", "recent7d");
@@ -106,7 +125,11 @@ test("6.5.1 → isolated 7.0 → 6.5.1 restores and continues using the same syn
     expect(snapshotId).toBeTruthy();
     await devPage.close();
 
-    const rollbackPage = await openRuntime({ source: releaseUserscript, version: "6.5.1" });
+    const incompatible = await context.newPage();
+    await incompatible.goto("https://javdb.com/search_advanced", {waitUntil:"domcontentloaded"});
+    await rejectsFutureDatabase(incompatible,releaseUserscript);
+    await incompatible.close();
+    const rollbackPage = await openRuntime({ userscriptPath: devUserscriptPath, version: "7.0-dev" });
     const readBack = await rollbackPage.evaluate(async () => ({
       setting: await window.storageManager.getSetting("defaultQuickFilterTab"),
       releaseRecord: await window.storageManager.getCar("ABC-123"),
@@ -126,7 +149,7 @@ test("6.5.1 → isolated 7.0 → 6.5.1 restores and continues using the same syn
     expect(readBack.titleKeywords).toEqual(["SYNTHETIC-IMPORT"]);
     expect(readBack.credential).toBe("synthetic-webdav-secret-updated");
     expect(readBack.credentialSchema).toBe(2);
-    expect(readBack.dataVersion).toBe(3);
+    expect(readBack.dataVersion).toBe(CURRENT_DATA_VERSION);
     expect(readBack.journal).toBeNull();
     const continued = await rollbackPage.evaluate(async (restoreId) => {
       await window.storageManager.restoreSnapshot(restoreId);
@@ -157,7 +180,7 @@ test("6.5.1 → isolated 7.0 → 6.5.1 restores and continues using the same syn
     expect(continued.backRecord?.stateFlags?.favorite).toBe(true);
     expect(continued.actresses.map((item) => item.starId)).toContain("synthetic-return-star");
     expect(continued.credential).toBe("synthetic-webdav-secret-updated");
-    expect(continued.dataVersion).toBe(3);
+    expect(continued.dataVersion).toBe(CURRENT_DATA_VERSION);
     expect(continued.journal).toBeNull();
     await rollbackPage.close();
   } finally {
@@ -168,7 +191,7 @@ test("6.5.1 → isolated 7.0 → 6.5.1 restores and continues using the same syn
 for (const scenario of [
   { name: "all affected domains", discovery: true, touchedDomains: ["carList", "actresses", "decisions", "activity"] },
   { name: "state-only domains", discovery: false, touchedDomains: ["carList", "activity"] },
-]) test(`6.5.1 recovers a 7.0 journal interrupted after the car-list write: ${scenario.name}`, async ({ browser }, testInfo) => {
+]) test(`the older client preserves an interrupted v4 journal and the current client recovers it: ${scenario.name}`, async ({ browser }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one shared IndexedDB context owns the interrupted transaction");
   const releaseUserscript = execFileSync("git", ["show", `${releaseCommit}:JHS.user.js`], {
     cwd: repoRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
@@ -209,7 +232,7 @@ for (const scenario of [
       journal: await window.storageManager.forage.getItem("mutation_journal"),
       car: await window.storageManager.forage.getItem("car_list"),
     }));
-    expect(interrupted.journal).toMatchObject({ schema: 2, state: "prepared", touchedDomains: scenario.touchedDomains });
+    expect(interrupted.journal).toMatchObject({ schema: 2, dataVersion: CURRENT_DATA_VERSION, state: "prepared", touchedDomains: scenario.touchedDomains });
     expect(Object.keys(interrupted.journal.before)).toEqual(scenario.touchedDomains);
     expect(Object.keys(interrupted.journal.after)).toEqual(scenario.touchedDomains);
     expect(interrupted.car.find((item) => item.carNum === "REC-123")?.stateFlags).toMatchObject({ downloaded: true, favorite: true });
@@ -217,8 +240,12 @@ for (const scenario of [
 
     const releasePage = await context.newPage();
     await releasePage.goto("https://javdb.com/search_advanced", { waitUntil: "domcontentloaded" });
-    await injectUserscriptRuntime(releasePage, { userscriptSource: releaseUserscript, version: "6.5.1", preserveStorage: true });
-    const recovered = await releasePage.evaluate(async () => ({
+    await rejectsFutureDatabase(releasePage,releaseUserscript);
+    await releasePage.close();
+    const recoveryPage = await context.newPage();
+    await recoveryPage.goto("https://javdb.com/search_advanced", {waitUntil:"domcontentloaded"});
+    await injectUserscriptRuntime(recoveryPage,{userscriptPath:devUserscriptPath,version:"7.0-dev",preserveStorage:true});
+    const recovered = await recoveryPage.evaluate(async () => ({
       car: await window.storageManager.getCar("REC-123"),
       journal: await window.storageManager.forage.getItem("mutation_journal"),
       activity: await window.storageManager.forage.getItem("activity_log"),
@@ -232,14 +259,14 @@ for (const scenario of [
     expect(recovered.conflicts ?? []).toEqual([]);
     expect(recovered.actresses).toEqual(before.actresses);
     expect(recovered.decisions).toEqual(before.decisions);
-    await releasePage.evaluate(() => window.stateService.patch("REC-123", { watched: true }, { type: "post-rollback-v651" }));
-    const continued = await releasePage.evaluate(async () => ({
+    await recoveryPage.evaluate(() => window.stateService.patch("REC-123", { watched: true }, { type: "post-rollback-v7" }));
+    const continued = await recoveryPage.evaluate(async () => ({
       car: await window.storageManager.getCar("REC-123"),
       journal: await window.storageManager.forage.getItem("mutation_journal"),
     }));
     expect(continued.car?.stateFlags).toMatchObject({ downloaded: true, favorite: false, watched: true });
     expect(continued.journal).toBeNull();
-    await releasePage.close();
+    await recoveryPage.close();
   } finally {
     await context.close();
   }

@@ -38,7 +38,10 @@ describe("RC 收口：async 回流 gate", () => {
         expect(translate).toContain("!this.scope.disposed");
         expect(titleTranslation).toContain("options.isActive && !options.isActive()");
         expect(titleTranslation).toContain("if (options.isActive && options.isActive() === false) return;");
-        expect(fc2).toContain("if (!context.isAlive() || (settings.snapshot().translateTitle ?? _) !== _) return;");
+        expect(fc2).toContain("context.isAlive() && translation.enabled !== false && (settings.snapshot().translateTitle ?? _) === _");
+        expect(fc2).toContain('document.visibilityState !== "hidden"');
+        expect(fc2).toContain('privacy?.masked && privacy.targets().includes("title")');
+        expect(fc2).toContain("if (!allowed()) return;");
         expect(fc2).toContain("context.translationGeneration = (context.translationGeneration || 0) + 1");
         expect(fc2).toContain("generation === context.translationGeneration");
     });

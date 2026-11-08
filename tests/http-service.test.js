@@ -7,6 +7,17 @@ import { canonicalizeUrl, createRequestKey, HttpService, isCloudflareChallenge }
 import { SettingsService } from "../src/services/settings-service.js";
 
 describe("HTTP, URL and settings contracts", () => {
+    it("isolates authoritative account reads from advisory and mutation failures", async () => {
+        const port = {request:vi.fn().mockResolvedValueOnce({status:500,data:{}}).mockResolvedValueOnce({status:500,data:{}}).mockImplementation(async options=>({status:200,data:{},finalUrl:options.url}))};
+        const service = new HttpService(port,new ExternalUrlPolicy());
+        const options = {providerId:"javdb",url:"https://javdb.com/users/simple_lists",retryCount:0,circuitThreshold:1,urlPolicy:{trustClass:"builtin-public",hosts:["javdb.com"]}};
+        await expect(service.request(options)).rejects.toThrow();
+        await expect(service.request({...options,method:"POST",circuitGroup:"account-mutation"})).rejects.toThrow();
+        await expect(service.request({...options,circuitGroup:"account-read"})).resolves.toMatchObject({status:200});
+        await expect(service.request(options)).rejects.toMatchObject({code:"CIRCUIT_OPEN"});
+        await expect(service.request({...options,method:"POST",circuitGroup:"account-mutation"})).rejects.toMatchObject({code:"CIRCUIT_OPEN"});
+        expect(port.request).toHaveBeenCalledTimes(3);
+    });
     it("keeps explicit account mutations available when an advisory read opens the circuit", async () => {
         const port = { request: vi.fn(async options => ({ status: options.method === "POST" ? 200 : 500, data: {}, finalUrl: options.url, responseHeaders: "content-type: text/html" })) };
         const service = new HttpService(port, new ExternalUrlPolicy());

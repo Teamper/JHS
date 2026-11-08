@@ -34,6 +34,18 @@ async function openAndSubmit(state, next) {
 }
 
 describe("History multi-state editor", () => {
+    it("keeps the rating editor reachable when the score column collapses on mobile", async () => {
+        const {plugin,dom} = loadHistory();
+        const element = dom.window.document.createElement("div");
+        element.innerHTML = '<div class="tabulator-responsive-collapse"></div>';
+        const record = {carNum:"ABC-123",personalRating:4};
+        plugin.onRate = vi.fn();
+        plugin.renderHistoryDetails({getElement:()=>element,getData:()=>record,getTable:()=>({getColumn:field=>({isVisible:()=>field !== "personalRating"})})});
+        const button = element.querySelector('[aria-label="设置 ABC-123 的个人评分"]');
+        expect(button.textContent).toBe("4 星");
+        button.click();
+        expect(plugin.onRate).toHaveBeenCalledWith([record]);
+    });
     it("clears explicit page selection before Tabulator replaces rows", async () => {
         const { plugin, $, dom } = loadHistory(), handlers = new Map();
         plugin.tableObj = null;

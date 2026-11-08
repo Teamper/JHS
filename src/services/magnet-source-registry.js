@@ -11,18 +11,43 @@ export function normalizeMagnetResult(result, source) {
     return { title: String(result.title || ""), magnet: result.magnet, size: result.size || "", date: result.date || "", seeders: Number(result.seeders) || 0, leechers: Number(result.leechers) || 0, source, files: Array.isArray(result.files) ? result.files : [] };
 }
 
-function extractInfoHash(/** @type {string} */ magnet) {
-    const hash = new URL(magnet).searchParams.get("xt")?.match(/^urn:btih:([a-z2-7]{32}|[a-f\d]{40})$/i)?.[1];
-    return hash ? hash.toUpperCase() : null;
+export function extractInfoHash(/** @type {string} */ magnet) {
+    let hash;
+    try { hash = new URL(magnet).searchParams.getAll("xt").map(value => value.match(/^urn:btih:([a-z2-7]{32}|[a-f\d]{40})$/i)?.[1]).find(Boolean); }
+    catch { return null; }
+    if (!hash) return null;
+    if (hash.length === 40) return hash.toUpperCase();
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = 0, buffer = 0, hex = "";
+    for (const character of hash.toUpperCase()) {
+        buffer = (buffer << 5) | alphabet.indexOf(character);
+        bits += 5;
+        if (bits >= 8) {
+            bits -= 8;
+            hex += ((buffer >>> bits) & 255).toString(16).padStart(2, "0");
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    return hex.toUpperCase();
 }
 
 export function deduplicateMagnetResults(/** @type {MagnetRecord[]} */ results) {
     /** @type {Map<string, MagnetRecord>} */
     const unique = new Map();
     results.forEach((result => {
-        const key = extractInfoHash(result.magnet) || `${result.source}:${result.magnet}`;
+        if (!result || !String(result.magnet || "").startsWith("magnet:")) return;
+        const infoHash = extractInfoHash(result.magnet);
+        const key = infoHash || `${result.source}:${result.magnet}`;
         const existing = unique.get(key);
-        existing ? existing.sources = [...new Set([...(existing.sources || [existing.source]), result.source])] : unique.set(key, { ...result, sources: [result.source] });
+        if (!existing) {
+            unique.set(key, { ...result, infoHash, sources: [...new Set(result.sources || [result.source])] });
+            return;
+        }
+        existing.sources = [...new Set([...existing.sources, ...(result.sources || [result.source])])];
+        for (const field of ["title", "size", "date", "seeders", "leechers"]) {
+            if (!existing[field] && result[field]) existing[field] = result[field];
+        }
+        existing.files = [...new Set([...(existing.files || []), ...(result.files || [])])];
     }));
     return [...unique.values()];
 }

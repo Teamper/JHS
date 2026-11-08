@@ -177,7 +177,9 @@ requireMatch(commandbar, /#addBlacklistBtn[\s\S]*jhs-commandbar__context/, "acto
 requireMatch(commandbar, /#filterAllVideo[\s\S]*#favoriteAllVideo[\s\S]*#hasDownAllVideo/, "batch menu must contain exactly the three bulk actions");
 requireMatch(hitShow, /getPageContext\?\.\(\)/, "playback enhancement must use the host page context");
 forbidMatch(hitShow, /preventDefault|handlePlayback|advanced_search/, "playback enhancement must not replace native navigation or list data");
-requireMatch(translate, /this\.translation\.translate\(sourceText/, "translation feature must use its injected translation service");
+requireMatch(translate, /this\.translateTitle\(sourceText/, "translation feature must route titles through its detailed-service bridge");
+requireMatch(translate, /this\.translation\.translateDetailed\(text/, "translation feature must use its injected detailed translation service");
+requireMatch(translate, /this\.translation\.translate\(text/, "translation feature must preserve the string translation service fallback");
 requireMatch(translate, /generation === this\.generation/, "translation feature must reject stale responses");
 forbidMatch(translate, /localStorage|fetch\(/, "translation feature must not own network or cache persistence");
 requireMatch(translationUi, /nextAll\("\.translated-title"\)/, "translation output must update an existing node");
@@ -236,8 +238,9 @@ forbidMatch(coverButtons, /elastic|jelly|right:\s*-/, "card menus must not use b
 requireMatch(injection, /:is\(\[data-jhs-card-list\],\[data-jhs-primary-list\],\[data-jhs-native-recommendations\]\) \.item \.cover img[\s\S]*transform:none!important[\s\S]*transition:none!important/, "JavDB cover reset is missing");
 forbidMatch(injection, /scale\(1\.04\)|\.masonry \.item:hover/, "JavBus cover hover effects must remain removed");
 
-requireMatch(magnet, /class="magnet-copy"[\s\S]*copy-btn[\s\S]*jhs-offline-btn/, "resource row must directly contain copy and unified offline buttons");
-forbidMatch(magnet, /magnet-(?:more|overflow)|more-menu/, "resource row must not hide actions in a more menu");
+const magnetRows = await readFile(join(srcRoot, "ui", "detail", "magnet-results.js"), "utf8");
+requireMatch(magnetRows, /class="magnet-copy"[\s\S]*copy-btn[\s\S]*jhs-offline-btn/, "resource row must directly contain copy and unified offline buttons");
+forbidMatch(magnet + magnetRows, /magnet-(?:more|overflow)|more-menu/, "resource row must not hide actions in a more menu");
 const newVideoStylesSource = await readFile(join(srcRoot, "features", "discovery", "new-video-styles.js"), "utf8");
 requireMatch(newVideoStylesSource, /repeat\(auto-fill,minmax\(min\(100%,260px\),1fr\)\)/, "actor cards must preserve the adaptive 260px grid without stretching a lone card");
 requireMatch(newVideoStylesSource, /\.newVideoToolBox\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video workspace must contain its own width");
@@ -382,6 +385,9 @@ for (const [name, path] of layoutReferences) if (!layoutDefinitions.has(name)) f
 requireMatch(settingRenderer, /descriptor\.type === "select"[\s\S]*<select class="jhs-select-source"/, "descriptor selects must use the enhanced source class");
 const settingController = await readFile(join(srcRoot, "plugins", "backup", "setting.js"), "utf8");
 requireMatch(settingController, /JhsSelect\.refreshAll\(e\)/, "all rendered settings selects must be enhanced after hydration");
+
+// Dynamic controls follow the same select contract as static setting templates.
+requireMatch(primitives, /select\.jhs-field,select\.jhs-select-source/, "dynamic owned selects must use the shared enhancer");
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`FAIL: ${failure}`));

@@ -22,6 +22,14 @@ export class SettingsEntryController {
             try { this.initializeSurface(); } catch (error) { this.onError(error); }
         });
         this.scope.listen(this.document, "click", (event) => {
+            const target = /** @type {Element | null} */ (event.target);
+            const entry = target?.closest?.('[data-jhs-open="media"],[data-jhs-open="privacy"],[data-jhs-open="translation"]');
+            if (!entry) return;
+            event.preventDefault();
+            const command = /** @type {Record<string,string>} */ ({media:"media.configure",privacy:"privacy.configure",translation:"translation.configure"})[entry.getAttribute("data-jhs-open") || ""];
+            if (command) void this.executeCommand(command).catch(this.onError);
+        });
+        this.scope.listen(this.document, "click", (event) => {
             const view = this.document.defaultView;
             const target = view && event.target instanceof view.Element ? event.target.closest("#setting-btn, #mini-setting-btn") : null;
             if (!target) return;

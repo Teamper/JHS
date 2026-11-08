@@ -85,7 +85,8 @@ test("Settings cloud panel visual baseline", async ({ context, page }, testInfo)
   await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
   const panel = dialog.locator("#cloud-services-panel");
   await expect(panel).toBeVisible();
-  await expect(panel.locator("#cloud-settings-catalog .jhs-setting-row")).toHaveCount(7);
+  await expect(panel.locator("#cloud-settings-catalog .jhs-setting-row")).toHaveCount(8);
+  await expect(panel.locator('[data-jhs-setting="enableSubtitle115Upload"]')).toHaveCount(1);
   for (const key of ["general", "123", "115"]) {
     const group = panel.locator(`[data-jhs-cloud-group="${key}"]`);
     await group.evaluate(node => node.scrollIntoView({block:"center"}));

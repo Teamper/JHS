@@ -1,4 +1,5 @@
 // @ts-check
+import { privacySelectors } from "../../contracts/privacy-targets.js";
 
 import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
@@ -62,6 +63,15 @@ function parseJavDbMovieActors(root, baseUrl) {
 }
 
 export class JavDbHostAdapter {
+    getWebAccountContext() {
+        const current = new URL(this.location.href);
+        const links = [...this.document.querySelectorAll("#navbar-menu-user a[href],.navbar-menu-user a[href]")];
+        const account = links.map(link => { try { return new URL(link.getAttribute("href") || "", current); } catch { return null; } })
+            .find(url => url?.origin === current.origin && /^\/users\/(?:edit|settings|account|profile)\/?$/.test(url.pathname));
+        return { origin: current.origin, accountUrl: `${current.origin}${(account || current).pathname}` };
+    }
+    getPrivacySelectors() { return privacySelectors({ title: ".video-title,.video-detail h2,.video-detail h1,.title.is-4,.column-video-info h1,.column-video-info h2", code: ".video-title strong,.video-id,#video_id,.column-video-info [data-clipboard-text]", actors: '.tags a[href^="/actors/"],.column-video-info a[href^="/actors/"],.actor-avatar,.actor-box', images: ".actor-avatar img,.actor-box img,.movie-list img,.video-detail img,.column-video-cover img,.tile-images img,.preview-images img" }); }
+    locateMediaLibraryDetailRoot() { return this.detectRoute() === "detail" ? this.document.querySelector(".column-video-info,.video-detail .panel") : null; }
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
     constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) {
         this.site = "javdb";
@@ -154,8 +164,8 @@ export class JavDbHostAdapter {
     }
     readMovieRef() {
         const location = new URL(this.location.href);
-        const copiedCarNum = this.document.querySelector('.column-video-info a[data-clipboard-text][title*="番"], .video-detail a[data-clipboard-text][title*="番"]')?.getAttribute("data-clipboard-text");
-        const copiedTitleCarNum = this.document.querySelector('a[title="複製番號"]')?.getAttribute("data-clipboard-text");
+        const copiedCarNum = this.document.querySelector('.column-video-info a[data-clipboard-text][title*="番"], .video-detail a[data-clipboard-text][title*="番"], .column-video-info a[data-clipboard-text][data-jhs-privacy-original-title*="番"], .video-detail a[data-clipboard-text][data-jhs-privacy-original-title*="番"]')?.getAttribute("data-clipboard-text");
+        const copiedTitleCarNum = this.document.querySelector('a[title="複製番號"],a[data-jhs-privacy-original-title="複製番號"]')?.getAttribute("data-clipboard-text");
         let panelCarNum = null;
         for (const panel of this.document.querySelectorAll(".column-video-info .panel-block, .video-detail .panel-block")) {
             const label = panel.querySelector("strong, .label")?.textContent?.trim() ?? "";

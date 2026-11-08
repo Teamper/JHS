@@ -6,11 +6,12 @@ import { normalizeHttpUrl } from "../core/feature-helpers.js";
 /** 未显式指定 provider 时，长缩略图只允许使用的默认来源。 */
 const DEFAULT_SCREENSHOT_PROVIDER = "javstore";
 /** 长缩略图链路只允许这些来源进入；JavBus cover / FC2 gallery 均不属于长缩略图。 */
-const SCREENSHOT_PROVIDER_IDS = new Set([DEFAULT_SCREENSHOT_PROVIDER]);
+/** @type {Set<string>} */
+const SCREENSHOT_PROVIDER_IDS = new Set(BUILT_IN_SCREENSHOT_SOURCES.filter(source => source.implemented !== false).map(source => source.id));
 
 export class ScreenshotService {
-    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
-    constructor(providers, integrations = null) { this.providers = providers; this.integrations = integrations; }
+    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] @param {import("./diagnostics-service.js").DiagnosticsService | null} [diagnostics] */
+    constructor(providers, integrations = null, diagnostics = null) { this.providers = providers; this.integrations = integrations; this.diagnostics = diagnostics; }
 
     /** 规范截图资源 URL，并升级 JavStore 自有域名的 HTTP 链接。 @param {unknown} value @param {string} [baseUrl] */
     normalizeAssetUrl(value, baseUrl = "https://javstore.net") {
@@ -46,14 +47,14 @@ export class ScreenshotService {
         const configured = this.parseScreenshotProviders(settings?.screenshotProviders);
         return BUILT_IN_SCREENSHOT_SOURCES
             .map((source) => ({ ...source, ...(configured.find((item) => item?.id === source.id) || {}) }))
-            .filter((provider) => provider.enabled !== false)
+            .filter((provider) => provider.enabled !== false && provider.implemented !== false)
             .sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
     }
 
     /**
      * 解析影片长缩略图。
      * 指定 providerId 时只使用该来源，无结果返回 null，不 fallback 到其他 movie.images；
-     * 未指定时先按 Provider 优先级，再回退到默认长缩略图来源（当前仅 javstore）。
+     * 未指定时先按 Provider 优先级，再按设置顺序查询已启用的长缩略图来源。
      * 传入 settings 时所有来源（ProviderRegistry / Integration fallback / manual provider）
      * 都必须位于 getEnabledProviders(settings) 白名单内；全部禁用时直接返回 null。
      * @param {Record<string, unknown>} movieRef
@@ -79,8 +80,18 @@ export class ScreenshotService {
             const result = await this.resolveFromProvider(provider, movieRef, context);
             if (result) return result;
         }
-        if (enabledIds && !enabledIds.has(DEFAULT_SCREENSHOT_PROVIDER)) return null;
-        return this.resolveIntegration(DEFAULT_SCREENSHOT_PROVIDER, movieRef, context);
+        let failure = null;
+        for (const id of enabledProviders?.map(provider => provider.id) ?? [DEFAULT_SCREENSHOT_PROVIDER]) {
+            try {
+                const images = await this.resolveIntegration(id, movieRef, context);
+                if (images) return images;
+            } catch (error) {
+                if (/** @type {any} */ (context.scope)?.disposed) throw error;
+                failure = error;
+            }
+        }
+        if (failure) throw failure;
+        return null;
     }
     /** @param {Record<string, any>} provider @param {Record<string, unknown>} movieRef @param {Record<string, unknown>} context */
     async resolveFromProvider(provider, movieRef, context) {
@@ -99,16 +110,22 @@ export class ScreenshotService {
         if (!manifest) return null;
         const adapter = this.integrations?.getAdapter(manifest.id);
         if (typeof adapter?.getImages !== "function") return null;
-        const result = await adapter.getImages(movieRef, context);
-        return Array.isArray(result) && result.length ? result : null;
+        try {
+            const result = await adapter.getImages(movieRef, context);
+            this.diagnostics?.updateProvider(providerId, { ok: true, count: Array.isArray(result) ? result.length : 0, updatedAt: Date.now() });
+            return Array.isArray(result) && result.length ? result : null;
+        } catch (error) {
+            this.diagnostics?.updateProvider(providerId, { ok: false, error: error instanceof Error ? error.message : String(error), updatedAt: Date.now() });
+            throw error;
+        }
     }
     /** @param {Record<string, unknown>} movieRef @param {Record<string, any> | null} [settings] */
     getSearchUrl(movieRef, settings = null) {
-        if (!SCREENSHOT_PROVIDER_IDS.has(DEFAULT_SCREENSHOT_PROVIDER)) return null;
         if (settings && !this.isEnabled(settings)) return null;
-        if (settings && !this.getEnabledProviders(settings).some((provider) => provider.id === DEFAULT_SCREENSHOT_PROVIDER)) return null;
+        const selected = settings ? this.getEnabledProviders(settings)[0]?.id : DEFAULT_SCREENSHOT_PROVIDER;
+        if (!selected || !SCREENSHOT_PROVIDER_IDS.has(selected)) return null;
         for (const manifest of this.integrations?.list("movie.images") ?? []) {
-            if (manifest.id !== DEFAULT_SCREENSHOT_PROVIDER) continue;
+            if (manifest.id !== selected) continue;
             const adapter = this.integrations?.getAdapter(manifest.id);
             if (typeof adapter?.getSearchUrl === "function") return adapter.getSearchUrl(movieRef);
         }

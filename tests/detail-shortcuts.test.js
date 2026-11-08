@@ -198,6 +198,10 @@ describe("shortcut recorder", () => {
         press({ code: "KeyB", altKey: true }, blocked);
         await vi.waitFor(() => expect(root.querySelector('[data-shortcut-status="blocked"]').textContent).toContain("已被"));
         expect(blocked.value).toBe("");
+        await settings.set("privacyShortcut", { code: "KeyP" });
+        press({ code: "KeyP" }, blocked);
+        await vi.waitFor(() => expect(root.querySelector('[data-shortcut-status="blocked"]').textContent).toContain("隐私遮罩"));
+        expect(blocked.value).toBe("");
         const escape = press({ key: "Escape", code: "Escape" }, input);
         expect(escape.defaultPrevented).toBe(true); expect(input.isConnected).toBe(true);
         expect(press({ key: "Tab", code: "Tab" }, input).defaultPrevented).toBe(false);

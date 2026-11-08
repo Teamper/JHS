@@ -146,7 +146,7 @@ export class HttpService {
     async executeUnderlying(options, urlPolicy) {
         const domain = new URL(options.url).hostname, retryCount = Math.max(0, Math.min(9, Math.trunc(Number(options.retryCount ?? 0) || 0))), acceptableStatuses = new Set((options.acceptableStatuses ?? []).map((/** @type {unknown} */ status) => Number(status)).filter(Number.isFinite));
         // Advisory/detail reads must not prevent a user from authenticating or submitting.
-        const circuitKey = options.circuitGroup === "account-mutation" ? `${domain}#account-mutation` : domain;
+        const circuitKey = ["account-mutation", "account-read"].includes(options.circuitGroup) ? `${domain}#${options.circuitGroup}` : domain;
         const state = this.ensureCircuit(circuitKey, options);
         let ownsProbe = false;
         let finalError = null;

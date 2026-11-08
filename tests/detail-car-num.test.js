@@ -215,7 +215,8 @@ describe("source regression contracts", () => {
         const screenshot = readTestFile(join(repoRoot, "src/features/detail/screenshot-controller.js"), "utf8");
         expect(screenshot).toContain("this.hostAdapter.readMovieRef?.()?.carNum");
         const translate = readTestFile(join(repoRoot, "src/features/translation/translation-controller.js"), "utf8");
-        expect(translate).toContain("this.translation.translate(sourceText, { cacheAlias: carNum");
+        expect(translate).toContain("this.translateTitle(sourceText, {cacheAlias:carNum");
+        expect(translate).toContain("this.translation.translateDetailed(text,request)");
         expect(translate).toContain("this.hostAdapter?.readMovieRef?.()?.carNum");
         expect(translate).not.toContain("getPageInfo()?.carNum");
     });

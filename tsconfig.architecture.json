@@ -6,7 +6,11 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "strict": true,
     "skipLibCheck": true
   },
@@ -47,6 +51,12 @@
     "src/core/magnet-quality.js",
     "src/core/migration.js",
     "src/core/movie-identity.js",
+    "src/core/subtitle-asset.js",
+    "src/ui/detail/subtitle-workspace.js",
+    "src/ui/detail/one115-rename-preview.js",
+    "src/core/movie-code-evidence.js",
+    "src/core/one-one-five-file-identity.js",
+    "src/ui/detail/magnet-results.js",
     "src/core/movie-context.js",
     "src/core/selection-model.js",
     "src/core/settings-ui-owner.js",
@@ -59,6 +69,7 @@
     "src/core/site-context.js",
     "src/core/state-model.js",
     "src/core/state-domains.js",
+    "src/core/personal-rating.js",
     "src/core/state-service.js",
     "src/core/storage-index.js",
     "src/core/theme.js",
@@ -110,7 +121,13 @@
     "src/plugins/status/nav-bar.js",
     "src/plugins/status/want-and-watched-videos.js",
     "src/plugins/subtitle/subtitle-cat.js",
-    "src/plugins/translate/translate.js"
+    "src/plugins/translate/translate.js",
+    "src/core/enhancement-controls.js",
+    "src/features/system/enhancement-settings-manifest.js",
+    "src/features/translation/tools-manifest.js",
+    "src/ui/detail/enhancement-actions.js"
   ],
-  "exclude": ["src/app/bootstrap.js"]
+  "exclude": [
+    "src/app/bootstrap.js"
+  ]
 }

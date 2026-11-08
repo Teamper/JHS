@@ -1,0 +1,8 @@
+{
+  "Items": [
+    { "Id": "fixture-movie-a", "Name": "本地影片名称", "OriginalTitle": "原始影片名称", "Path": "/media/ABC-123/ABC123-CD1.mp4", "ProviderIds": { "JavDB": "ABC-123" }, "MediaSources": [{ "Path": "/media/ABC-123/ABC123-CD1.mp4" }] },
+    { "Id": "fixture-movie-b", "Name": "ABC-1234 相邻影片", "Path": "/media/ABC-1234.mp4" }
+  ],
+  "TotalRecordCount": 2,
+  "StartIndex": 0
+}

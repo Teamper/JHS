@@ -1,7 +1,7 @@
 // @ts-check
 
 export const AUTO_BACKUP_STATE_KEY = "jhs_webdav_auto_backup_state_v1";
-const BUSINESS_KEYS = new Set(["car_list", "favorite_actresses", "blacklist", "blacklist_car_list", "filter_keyword_title", "filter_keyword_review", "highlighted_tags", "new_video_decisions", "offline_history"]);
+const BUSINESS_KEYS = new Set(["car_list", "favorite_actresses", "blacklist", "blacklist_car_list", "filter_keyword_title", "filter_keyword_review", "highlighted_tags", "new_video_decisions", "offline_history", "personal_ratings"]);
 
 /** Compare business values without bookkeeping timestamps. @param {any} value @returns {string} */
 function stableValue(value) {
@@ -11,7 +11,7 @@ function stableValue(value) {
 }
 /** @param {string} key @param {any} value */
 function records(key, value) {
-    if (key === "new_video_decisions") return new Map(Object.entries(value || {}).map(([id, item]) => [id, stableValue(item)]));
+    if (["new_video_decisions", "personal_ratings"].includes(key)) return new Map(Object.entries(value || {}).map(([id, item]) => [id, stableValue(item)]));
     return new Map((Array.isArray(value) ? value : []).map(item => {
         const identity = typeof item === "object" && item !== null ? item.carNum ?? item.starId ?? item.id ?? stableValue(item) : item;
         return [String(identity).trim().toUpperCase(), stableValue(item)];

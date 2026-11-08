@@ -14,7 +14,7 @@ const commandId = "detail.fc2.workspace";
 export default defineFeature({
     id: "fc2-workspace", kind: "feature", disableable: true,
     sites: ["javdb"], routes: ["list", "detail", "owned-detail"], startup: "eager",
-    requires: [PORT.style, SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.account, SERVICE.credential, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state, SERVICE.domUi, SERVICE.notifications, SERVICE.clog],
+    requires: [PORT.style, SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.account, SERVICE.credential, SERVICE.translation, SERVICE.privacy, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state, SERVICE.domUi, SERVICE.notifications, SERVICE.clog],
     contributes: [contributionId], providesCommands: [commandId],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         if (!runtime.enabledContributions.includes(contributionId)) {
@@ -26,10 +26,12 @@ export default defineFeature({
             runtimeServices: {
                 want, movie: deps[SERVICE.movie], magnet: deps[SERVICE.magnet], dialog: deps[SERVICE.dialog],
                 account: deps[SERVICE.account], credential: deps[SERVICE.credential], translation: deps[SERVICE.translation],
+                privacy:deps[SERVICE.privacy],
                 settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], screenshot: deps[SERVICE.screenshot],
                 review: deps[SERVICE.review], related: deps[SERVICE.related], state: deps[SERVICE.state],
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog],
                 ensureFc2Catalog: () => runtime.executeCommand("fc2-catalog.ensure"),
+                openSubtitles: (/** @type {any} */ movie) => runtime.isCommandAvailable?.("subtitle.open") ? runtime.executeCommand("subtitle.open", movie) : Promise.reject(new Error("统一字幕面板已关闭，可在完整设置的功能管理中开启")),
                 scope: () => Promise.resolve(runtime.scope),
                 mountShortcuts: (/** @type {any} */ context) => {
                     if (!runtime.isContributionEnabled("detail", "detail.shortcuts", "DetailShortcutPlugin")) return;

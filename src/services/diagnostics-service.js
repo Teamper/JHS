@@ -49,6 +49,7 @@ export class DiagnosticsService {
         this.legacyPlugins = [];
         /** @type {Array<{name: string, disableable: boolean}>} */
         this.legacyPluginDescriptors = [];
+        /** @type {any[]} */ this.featureDescriptors = [];
         this.legacyStartup = null;
         /** @type {Array<Record<string, unknown>>} */
         this.legacyTimings = [];
@@ -163,6 +164,7 @@ export class DiagnosticsService {
     exportSnapshot() {
         const scopes = [...this.scopes.values()];
         return Object.freeze({
+            featureDescriptors: this.featureDescriptors.map(item => ({ ...item })),
             activeFeatures: [...this.activeFeatures], activeContributions: [...this.activeContributions],
             startupTimings: Object.fromEntries(this.startupTimings), activeScopes: scopes,
             globalListeners: scopes.filter((scope) => scope.id === "app:root").reduce((sum, scope) => sum + Number(scope.listeners ?? 0), 0),

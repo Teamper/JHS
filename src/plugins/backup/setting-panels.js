@@ -1,4 +1,5 @@
 // @ts-check
+import { parseBooleanSetting } from "../../core/feature-helpers.js";
 
 import { getIcon } from "../../core/icons.js";
 import { escapeHtml } from "../../core/constants.js";
@@ -253,13 +254,25 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(settings.snapshot().disabledPlugins ?? "[]");
     if (dependencies.isActive?.() === false) return;
-    const configuredNames = (diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string}} */ item) => item.name);
+    const featureEntries = diagnosticSnapshot.featureDescriptors || [];
+    const featureById = new Map(featureEntries.map((/** @type {any} */ entry) => [entry.id, entry]));
+    const configuredNames = [...featureEntries.map((/** @type {any} */ item) => item.id), ...(diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string}} */ item) => item.name)];
     const allNames = [...new Set([...configuredNames, ...(diagnosticSnapshot.legacyPlugins || [])])];
     const effectiveDisabledNames = (/** @type {string[]} */ values) => {
         const disabledSet = new Set(values);
-        return allNames.filter(((/** @type {string} */ name) => disabledSet.has(name) || disabledSet.has(disabledIdForPlugin(name))));
+        return allNames.filter((/** @type {string} */ name) => {
+            const key = featureById.get(name)?.settingKey;
+            return key ? !parseBooleanSetting(settings.snapshot()[key], true) : disabledSet.has(name) || disabledSet.has(disabledIdForPlugin(name));
+        });
     };
-    const { categories, pluginMeta } = getPluginCategories();
+    const { categories: categoryDefaults, pluginMeta } = getPluginCategories();
+    const categories = /** @type {Record<string, {label:string,plugins:string[]}>} */ (categoryDefaults);
+    for (const item of featureEntries) {
+        const key = `feature-${item.group}`;
+        categories[key] ??= {label:item.group, plugins:[]};
+        categories[key].plugins.push(item.id);
+        pluginMeta[item.id] = [item.name, key];
+    }
     const pluginDescriptors = new Map((diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string, disableable: boolean}} */ item) => [item.name, item]));
     const registeredSet = new Set(allNames);
     let html = "";
@@ -270,20 +283,26 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
         html += `<h4 class="jhs-plugin-group__title">${escapeHtml(cat.label)}</h4>`;
         for (const pName of visiblePlugins) {
             const isCore = pluginDescriptors.get(pName)?.disableable === false;
-            const isDisabled = disabled.includes(pName) || disabled.includes(disabledIdForPlugin(pName));
+            const descriptor = featureById.get(pName);
+            const isDisabled = descriptor?.settingKey ? !parseBooleanSetting(settings.snapshot()[descriptor.settingKey], true) : disabled.includes(pName) || disabled.includes(disabledIdForPlugin(pName));
             const productName = pluginMeta[pName]?.[0] || pName;
             html += '<div class="jhs-plugin-row">';
-            html += `<span class="jhs-plugin-copy"><strong>${escapeHtml(productName)}</strong></span>`;
+            html += `<span class="jhs-plugin-copy"><strong>${escapeHtml(productName)}</strong>${descriptor ? `<small>${escapeHtml(descriptor.group)} · ${escapeHtml(descriptor.status)}</small>` : ""}</span>`;
             if (isCore) {
                 html += '<span class="jhs-badge jhs-badge--neutral">核心</span>';
             } else {
-                html += `<input type="checkbox" class="jhs-checkbox pm-toggle" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
+                html += `<input type="checkbox" class="jhs-switch pm-toggle" role="switch" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
             }
             html += `</div>`;
         }
         html += `</section>`;
     }
+    const focusedPlugin = $(".pm-toggle:focus").data("plugin");
     $("#plugin-mgmt-list").html(html);
+    if (focusedPlugin) {
+        const focused = $(".pm-toggle").toArray().find((/** @type {HTMLElement} */ node) => node.dataset.plugin === focusedPlugin);
+        focused?.focus({ preventScroll: true });
+    }
     const effectiveDisabled = effectiveDisabledNames(disabled), enabledCount = allNames.length - effectiveDisabled.length;
     $("#pm-total").text(allNames.length);
     $("#pm-enabled").text(enabledCount);
@@ -303,6 +322,8 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
         try {
             if (!settings?.update) throw new Error("SettingsService is unavailable");
             const snapshot = await settings.update((/** @type {Record<string, unknown>} */ draft) => {
+                const key = featureById.get(name)?.settingKey;
+                if (key) { draft[key] = nextEnabled; return; }
                 let list = parseDisabledPlugins(draft.disabledPlugins);
                 if (nextEnabled) list = list.filter(id => id !== name && id !== disabledId);
                 else if (!list.includes(disabledId)) list.push(disabledId);
@@ -313,13 +334,14 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
         } catch (error) {
             if (dependencies.isActive?.() === false) return;
             const rollbackList = parseDisabledPlugins(settings?.snapshot?.().disabledPlugins ?? disabled);
-            target.prop("checked", !rollbackList.includes(name) && !rollbackList.includes(disabledId));
+            const key = featureById.get(name)?.settingKey;
+            target.prop("checked", key ? parseBooleanSetting(settings.snapshot()[key], true) : !rollbackList.includes(name) && !rollbackList.includes(disabledId));
             renderState(rollbackList);
             clog.error("功能状态保存失败，已恢复", error), show.error("功能设置保存失败，已恢复");
             return;
         } finally { target.prop("disabled", false).removeAttr("aria-busy"); }
         try {
-            if (!dependencies.draftSettings) show.ok(`功能已${nextEnabled ? "开启" : "关闭"}，刷新后生效`);
+            if (!dependencies.draftSettings) show.ok(`功能已${nextEnabled ? "开启" : "关闭"}，保存后立即生效`);
         } catch (error) {
             clog.error("插件状态已保存，但通知显示失败", error);
         }

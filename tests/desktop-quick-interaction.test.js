@@ -15,6 +15,19 @@ function setup(initialize) {
     return {dom,doc,jq,scope,surface,pointer};
 }
 describe('desktop quick settings logical hover region', () => {
+    it('starts the full close delay when leaving after focus changes inside the hover region', async () => {
+        const {doc,surface,pointer,scope} = setup();
+        await surface.open();
+        pointer(doc.querySelector('#trigger'));
+        doc.querySelector('#outside').focus();
+        await vi.advanceTimersByTimeAsync(150);
+        pointer(doc.body);
+        await vi.advanceTimersByTimeAsync(100);
+        expect(surface.opened).toBe(true);
+        await vi.advanceTimersByTimeAsync(100);
+        expect(surface.opened).toBe(false);
+        scope.dispose();
+    });
     it('bridges the gap for 200ms, retains focus and reuses a single initialization', async () => {
         const initialize = vi.fn(async () => {}), {doc,jq,surface,pointer,scope} = setup(initialize);
         await surface.open();
@@ -51,4 +64,25 @@ describe('desktop quick settings logical hover region', () => {
         outside.dispatchEvent(new dom.window.Event('pointerdown',{bubbles:true}));expect(menu.opened).toBe(false);expect(surface.opened).toBe(false);expect(doc.activeElement).toBe(outside);
         closeOwnedPopover(doc);scope.dispose();
     });
+});
+
+it('recovers on real pointer movement over a newly mounted trigger',async()=>{
+ const {doc,surface,pointer,scope}=setup();
+ pointer(doc.querySelector('#trigger'));
+ await vi.waitFor(()=>expect(surface.ready).toBe(true));
+ expect(surface.opened).toBe(true);scope.dispose();
+});
+it('shows initialization failure and retries successfully',async()=>{
+ const initialize=vi.fn().mockRejectedValueOnce(Error('fixture')).mockResolvedValueOnce(undefined);
+ const {surface,jq,scope}=setup(initialize);await surface.open();
+ expect(jq(surface.host).css('display')).not.toBe('none');expect(surface.host.textContent).toContain('重试');
+ surface.host.querySelector('button').click();await vi.waitFor(()=>expect(surface.ready).toBe(true));
+ expect(initialize).toHaveBeenCalledTimes(2);scope.dispose();
+});
+
+it('rebuilds a ready host if an external owner removed its contents',async()=>{
+ const {surface,scope}=setup(vi.fn(async()=>{surface.host.innerHTML='<input>'; }));
+ await surface.open();surface.close();surface.host.replaceChildren();
+ await surface.open();expect(surface.options.initialize).toHaveBeenCalledTimes(2);
+ expect(surface.host.querySelector('input')).not.toBeNull();scope.dispose();
 });

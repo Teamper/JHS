@@ -2,6 +2,7 @@ import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
 import { runDataMigrations } from "../src/core/migration.js";
+import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 import { SettingsService } from "../src/services/settings-service.js";
 
 function createCoordinator() {
@@ -161,7 +162,7 @@ describe("portable migration and consistent exports", () => {
         await storage.importData(input);
         expect(data.get("car_list")[0]).toMatchObject({ carNum: "ABC-123", stateFlags: { favorite: true } });
         expect(data.get("favorite_actresses")).toEqual(untouched);
-        expect(data.get("data_version")).toBe(3);
+        expect(data.get("data_version")).toBe(CURRENT_DATA_VERSION);
         expect(input).toEqual(original);
         expect(globalThis.settingsService.updateWithoutLock).not.toHaveBeenCalled();
         expect(storage.forage.setItem.mock.calls.filter(([key]) => key === "data_version")).toEqual([]);
@@ -198,7 +199,7 @@ describe("portable migration and consistent exports", () => {
         expect(data.get("blacklist_car_list")[0]).toMatchObject({ starId: "a", names: "A" });
         expect(data.get("favorite_actresses")[0]).toMatchObject({ starId: "a" });
         expect(data.get("setting")).toEqual({ themeMode: "dark", webDavPassword: "AES:local" });
-        expect(data.get("data_version")).toBe(3);
+        expect(data.get("data_version")).toBe(CURRENT_DATA_VERSION);
         expect(coordinator.entries).toBe(1);
     });
 
@@ -242,14 +243,14 @@ describe("portable migration and consistent exports", () => {
             data.set("car_list", []);
             await storage.restoreSnapshot(snapshot.id);
             expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
-            expect(data.get("data_version")).toBe(3);
+            expect(data.get("data_version")).toBe(CURRENT_DATA_VERSION);
         }
     });
 
     it("rejects future source and destination versions before snapshot, recovery or writes", async () => {
         const { storage, data, writes } = createStorage();
-        await expect(storage.importData({ data_version: 4, setting: {} })).rejects.toThrow("数据来自更新版本");
-        data.set("data_version", 4);
+        await expect(storage.importData({ data_version: CURRENT_DATA_VERSION + 1, setting: {} })).rejects.toThrow("数据来自更新版本");
+        data.set("data_version", CURRENT_DATA_VERSION + 1);
         await expect(storage.importData({ setting: {} })).rejects.toThrow("数据来自更新版本");
         await expect(storage.exportData()).rejects.toThrow("数据来自更新版本");
         expect(writes).toEqual([]);

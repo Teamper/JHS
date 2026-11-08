@@ -39,14 +39,14 @@ describe("bootstrap compatibility P0", () => {
 
     it("attaches compatibility before FeatureRuntime.start", () => {
         const attachIndex = bootstrap.indexOf("attachCompatibilityFacade({");
-        const startIndex = bootstrap.indexOf("await context.registries.features.start();");
+        const startIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
         expect(attachIndex).toBeGreaterThan(-1);
         expect(startIndex).toBeGreaterThan(attachIndex);
     });
 
     it("finishes migration and journal recovery before starting Features", () => {
         const prepareIndex = bootstrap.indexOf("await storageMutationCoordinator.runExclusive(async () =>");
-        const startIndex = bootstrap.indexOf("await context.registries.features.start();");
+        const startIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
         expect(prepareIndex).toBeGreaterThan(-1);
         expect(bootstrap.indexOf("runDataMigrations(storageManager, storageMutationCoordinator, true)", prepareIndex)).toBeLessThan(startIndex);
         expect(bootstrap.indexOf("recoverPendingTransactionWithoutLock", prepareIndex)).toBeLessThan(startIndex);
@@ -60,7 +60,7 @@ describe("bootstrap compatibility P0", () => {
     });
 
     it("does not run a legacy CSS stage and publishes feature readiness after activation", () => {
-        const featureIndex = bootstrap.indexOf("await context.registries.features.start();");
+        const featureIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
         const readyIndex = bootstrap.indexOf('await jhsEventBus.emit("jhs-features-ready", {}, { broadcast: false });');
         expect(featureIndex).toBeGreaterThan(-1);
         expect(readyIndex).toBeGreaterThan(featureIndex);

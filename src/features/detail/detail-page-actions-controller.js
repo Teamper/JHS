@@ -10,7 +10,7 @@ import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 /** Detail-page controls owned by the Detail Feature; the returned adapter keeps old cross-feature calls stable. */
 export class DetailPageActionsController {
-    /** @param {{hostAdapter: any, route: string, scope: import("../../core/lifecycle-scope.js").LifecycleScope, settings: any, dialog: any, subtitle: any, ui: any, notifications: any, events: any, diagnostics: any}} options */
+    /** @param {{hostAdapter: any, route: string, scope: import("../../core/lifecycle-scope.js").LifecycleScope, settings: any, dialog: any, subtitle: any, ui: any, notifications: any, events: any, diagnostics: any, openSubtitles?: (movie: any) => Promise<any>}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.route = options.route;
@@ -18,6 +18,7 @@ export class DetailPageActionsController {
         this.settings = options.settings;
         this.dialog = options.dialog;
         this.subtitle = options.subtitle;
+        this.openSubtitles = options.openSubtitles;
         this.ui = options.ui;
         this.notifications = options.notifications;
         this.events = options.events;
@@ -145,8 +146,7 @@ export class DetailPageActionsController {
                 <div class="jhs-layout-1e90930a">
                     <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--secondary jhs-layout-5f3e3549"><span id="magnets-span">关闭磁力过滤</span></button>
                     <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent"><span>磁力搜索</span></button>
-                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--secondary"><span>字幕（迅雷）</span></button>
-                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--secondary jhs-layout-f43f0d6d"><span>字幕（SubtitleCat）</span></button>
+                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--secondary"><span>字幕</span></button>
                 </div>
             </div>
         `);
@@ -177,7 +177,10 @@ export class DetailPageActionsController {
             const wasFiltering = row.find("#magnets-span").text() === "关闭磁力过滤";
             await writeMagnetFilter(wasFiltering ? C : _);
         });
-        row.on("click.jhsDetailActions", "#xunLeiSubtitleBtn", () => void this.searchXunLeiSubtitle(carNum ?? ""));
+        row.on("click.jhsDetailActions", "#xunLeiSubtitleBtn", (/** @type {any} */ event) => {
+            const operation = this.openSubtitles ? this.openSubtitles({ carNum, scope: this.scope, trigger: event.currentTarget }).then(result => result === null ? this.searchXunLeiSubtitle(carNum ?? "") : result) : this.searchXunLeiSubtitle(carNum ?? "");
+            void operation.catch(error => this.subtitleError("打开", error));
+        });
         if (!carNum) {
             row.find("#filterBtn,#favoriteBtn,#hasDownBtn,#hasWatchBtn,#magnetSearchBtn,#xunLeiSubtitleBtn,#search-subtitle-btn")
                 .prop("disabled", true).attr("title", "番号不可用");

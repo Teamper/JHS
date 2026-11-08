@@ -7,6 +7,7 @@ import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordin
 import { SettingsService } from "../src/services/settings-service.js";
 import { CREDENTIAL_KEYS, CredentialService } from "../src/services/credential-service.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
+import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 
 const seam = vi.hoisted(() => ({ legacy: null, context: null, contextCreated: vi.fn() }));
 vi.mock("../src/core/legacy-runtime.js", () => ({ createLegacyRuntime: () => seam.legacy }));
@@ -24,7 +25,7 @@ vi.mock("../src/app/integration-catalog.js", () => ({ integrationManifests: [] }
 vi.mock("../src/features/compatibility/contribution-catalog.js", () => ({ registerSiteCompatibility() {} }));
 import { bootstrapJhs } from "../src/app/bootstrap.js";
 
-function fixture(version = 3) {
+function fixture(version = CURRENT_DATA_VERSION) {
     const clone = (value) => value == null ? value : structuredClone(value);
     const data = new Map(Object.entries({ data_version: version, setting: { webDavPassword: "old-dummy-password", themeMode: "dark" }, car_list: [] }));
     const writes = [], gmWrites = [], gm = new Map();
@@ -76,7 +77,7 @@ function watchLegacyPageStorage() {
 
 describe("bootstrap future-version write protection", () => {
     it("rejects a future database before constructing the app or writing IDB/GM values", async () => {
-        const f = fixture(4), before = structuredClone(Object.fromEntries(f.data));
+        const f = fixture(CURRENT_DATA_VERSION + 1), before = structuredClone(Object.fromEntries(f.data));
         const assertPageStorageUntouched = watchLegacyPageStorage();
         await expect(bootstrapJhs()).rejects.toThrow(/数据来自更新版本/);
         expect(seam.contextCreated).not.toHaveBeenCalled();
@@ -90,7 +91,7 @@ describe("bootstrap future-version write protection", () => {
     it("rechecks inside the settings lock after another tab upgrades during settings load", async () => {
         const f = fixture(), load = f.settings._readSnapshot.bind(f.settings);
         const assertPageStorageUntouched = watchLegacyPageStorage();
-        vi.spyOn(f.settings, "_readSnapshot").mockImplementation(async (...args) => { const result = await load(...args); f.data.set("data_version", 4); return result; });
+        vi.spyOn(f.settings, "_readSnapshot").mockImplementation(async (...args) => { const result = await load(...args); f.data.set("data_version", CURRENT_DATA_VERSION + 1); return result; });
         await expect(bootstrapJhs()).rejects.toThrow(/数据来自更新版本/);
         expect(f.writes).toEqual([]);
         expect(f.gmWrites).toEqual([]);
@@ -103,7 +104,7 @@ describe("bootstrap future-version write protection", () => {
         await expect(bootstrapJhs()).resolves.toBe(f.context);
         expect(f.gmWrites.length).toBeGreaterThan(0);
         expect(f.data.get("setting").enableLoadScreenShot).toBe("yes");
-        expect([...f.writes, ...f.gmWrites].every((write) => write.version === 3 && write.depth === 1)).toBe(true);
+        expect([...f.writes, ...f.gmWrites].every((write) => write.version === CURRENT_DATA_VERSION && write.depth === 1)).toBe(true);
         expect(f.context.services.profile.start).toHaveBeenCalledOnce();
         expect(f.features.start).toHaveBeenCalledOnce();
         expect(f.context.services.backgroundWork.markReady).toHaveBeenCalledOnce();

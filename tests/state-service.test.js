@@ -5,13 +5,14 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { assertMovieStateEligible } from "../src/core/movie-identity.js";
+import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadStateService(diagnosticConsole = console, uiDiagnostics = {}) {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
     const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), domains = readTestFile(join(repoRoot, "src/core/state-domains.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
-    const context = vm.createContext({ assertMovieStateEligible, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, console: diagnosticConsole, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: uiDiagnostics.clog ?? { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: uiDiagnostics.show ?? { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
+    const context = vm.createContext({ assertMovieStateEligible, CURRENT_DATA_VERSION, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, console: diagnosticConsole, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: uiDiagnostics.clog ?? { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: uiDiagnostics.show ?? { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
     vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${domains}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
     return context.StateServiceClass;
 }

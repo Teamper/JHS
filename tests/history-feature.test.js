@@ -29,7 +29,7 @@ describe("Library Feature history ownership", () => {
                 .register(SERVICE.movie, {})
                 .register(SERVICE.titleKeywords, {})
                 .register(SERVICE.domUi, domUi)
-                .register(SERVICE.events, { emit: vi.fn() })
+                .register(SERVICE.events, { emit: vi.fn(), on: vi.fn(() => () => {}) })
                 .register(SERVICE.profile, profile)
                 .register(SERVICE.dialog, dialog)
                 .register(SERVICE.clipboard, { copyText: vi.fn() })

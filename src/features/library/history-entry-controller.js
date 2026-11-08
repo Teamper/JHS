@@ -13,6 +13,7 @@ export class HistoryEntryController {
         this.scope = options.scope;
         this.onError = options.onError;
         this.disposed = false;
+        this.buttons = /** @type {Set<HTMLButtonElement>} */ (new Set());
         this.desktopEntry = null;
         this.compactEntry = null;
         this.busEntry = null;
@@ -47,6 +48,7 @@ export class HistoryEntryController {
             button.className = "jhs-btn navbar-link nav-btn jhs-nav-btn";
             button.textContent = "鉴定记录";
             button.addEventListener("click", this.openHistory);
+            this.buttons.add(button);
             wrapper.append(button);
             navEnd.prepend(wrapper);
             this.desktopEntry = wrapper;
@@ -59,6 +61,7 @@ export class HistoryEntryController {
             button.className = "jhs-btn navbar-link nav-btn jhs-nav-btn";
             button.textContent = "鉴定记录";
             button.addEventListener("click", this.openHistory);
+            this.buttons.add(button);
             wrapper.append(button);
             search.before(wrapper);
             this.compactEntry = wrapper;
@@ -110,6 +113,7 @@ export class HistoryEntryController {
                 button.className = "jhs-btn jhs-btn--secondary";
                 button.textContent = "鉴定记录";
                 button.addEventListener("click", this.openHistory);
+            this.buttons.add(button);
                 host.append(button);
                 this.busEntry = button;
             } catch (error) {
@@ -130,6 +134,8 @@ export class HistoryEntryController {
         this.waitTimeout = null;
         this.resolveWait?.(false);
         this.resolveWait = null;
+        for (const button of this.buttons) button.remove();
+        this.buttons.clear();
         this.desktopEntry?.remove();
         this.compactEntry?.remove();
         this.busEntry?.remove();

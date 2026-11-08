@@ -63,7 +63,7 @@ describe("SettingsRegistry canonical descriptors", () => {
         registerDefaultSettings(registry);
         const cloud = registry.list({ surfaces: ["full"] }).filter((descriptor) => descriptor.section === "cloud");
         expect(cloud.map((descriptor) => descriptor.key)).toEqual([
-            "enable123Offline", "enable115Offline", "offlineProviderMode", "enable115Match",
+            "enableSubtitle115Upload", "enable123Offline", "enable115Offline", "offlineProviderMode", "enable115Match",
             "enable115LoginRedirect", "oneOneFiveConcurrency", "oneOneFiveCacheMinutes",
         ]);
         const normalizers = registry.normalizers();

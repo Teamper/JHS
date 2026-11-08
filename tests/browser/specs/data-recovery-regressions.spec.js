@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
+import { CURRENT_DATA_VERSION } from "../../../src/core/constants.js";
 
 test.beforeEach(async ({ page, context }, info) => {
   test.skip(info.project.name !== "desktop-wide", "storage regressions use one real IndexedDB browser project");
@@ -16,7 +17,7 @@ test("unversioned import retains favorite when another state is changed", async 
     await window.stateService.patch("ABC-123", { downloaded: true });
     return { favorites, record: await storage.getCar("ABC-123"), version: await storage.getDataVersion() };
   });
-  expect(result).toMatchObject({ favorites: 1, version: 3, record: { stateFlags: { favorite: true, downloaded: true } } });
+  expect(result).toMatchObject({ favorites: 1, version: CURRENT_DATA_VERSION, record: { stateFlags: { favorite: true, downloaded: true } } });
 });
 
 test("undo cannot transfer a deleted actress's new movie to another actress", async ({ page }) => {
@@ -50,5 +51,5 @@ test("restoring an actual migration snapshot normalizes its source version witho
     await storage.restoreSnapshot(snapshot.id);
     return { sourceVersion: snapshot.data.data_version, version: await storage.getDataVersion(), record: await storage.getCar("ABC-123") };
   });
-  expect(result).toMatchObject({ sourceVersion: 1, version: 3, record: { stateFlags: { favorite: true, watched: false } } });
+  expect(result).toMatchObject({ sourceVersion: 1, version: CURRENT_DATA_VERSION, record: { stateFlags: { favorite: true, watched: false } } });
 });

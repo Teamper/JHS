@@ -101,7 +101,8 @@ for (const theme of ["light", "dark"]) {
     expect(normal.flatMap(report => report.fields).filter(field => !field.trigger).length).toBeGreaterThan(0);
     const choices = dialog.locator('input[type="checkbox"]');
     expect(await choices.count()).toBeGreaterThan(0);
-    await expect(dialog.locator('input[role="switch"]')).toHaveCount(0);
+    expect(await dialog.locator('input[role="switch"].jhs-switch').count()).toBeGreaterThan(0);
+    await expect(dialog.locator('.jhs-setting-row input[type="checkbox"]:not([role="switch"])')).toHaveCount(0);
     const states = await choices.evaluateAll(nodes => nodes.map(node => node.checked));
     expect(states.includes(true)).toBe(true); expect(states.includes(false)).toBe(true);
     await info.attach(`computed-control-contrast-${theme}.json`, { body: JSON.stringify(reports, null, 2), contentType: "application/json" });

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { build } from "../../../node_modules/esbuild/lib/main.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
+import { CURRENT_DATA_VERSION } from "../../../src/core/constants.js";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
 const foragePath = fileURLToPath(new URL("../node_modules/localforage/dist/localforage.min.js", import.meta.url));
@@ -128,11 +129,15 @@ test("an older destination migrates in memory and commits the partial import as 
         const legacy = localforage.createInstance({ name: "JAV-JHS", storeName: "appData" });
         return { version: await legacy.getItem("data_version"), cars: await legacy.getItem("car_list"), blacklist: await legacy.getItem("blacklist") };
     });
-    expect(result.version).toBe(3);
+    expect(result.version).toBe(CURRENT_DATA_VERSION);
     expect(result.cars).toHaveLength(1); expect(result.cars[0].carNum).toBe("OLD-123");
     expect(result.blacklist).toEqual(["Keep actor"]);
     const stableSource = await readFile(new URL("../../../JHS.user.js", import.meta.url), "utf8");
     const legacyPage = await context.newPage(); await legacyPage.goto("https://javdb.com/");
-    await injectUserscriptRuntime(legacyPage, { userscriptSource: stableSource, preserveStorage: true });
-    expect(await legacyPage.evaluate(async () => ({ version: await window.storageManager.getDataVersion(), cars: await window.storageManager.getCarList(), blacklist: await window.storageManager.getBlacklist() }))).toEqual(result);
+    await injectUserscriptRuntime(legacyPage, { userscriptSource: stableSource, preserveStorage: true, realFeedback: true, expectBootstrapError: "更新版本" });
+    await expect(legacyPage.locator(".toastify,#jhs-bootstrap-error")).toContainText("更新版本");
+    expect(await legacyPage.evaluate(async () => {
+        const store = window.localforage.createInstance({name:"JAV-JHS",storeName:"appData"});
+        return {version:await store.getItem("data_version"),cars:await store.getItem("car_list"),blacklist:await store.getItem("blacklist")};
+    })).toEqual(result);
 });

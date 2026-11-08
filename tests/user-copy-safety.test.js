@@ -6,6 +6,8 @@ import { ExternalBridgeTranslationController } from "../src/features/translation
 import { renderTranslatedTitle } from "../src/ui/translation/title-translation.js";
 import { OtherSitesController } from "../src/features/external-sites/other-sites-controller.js";
 import { V } from "../src/core/javdb-api.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { installVisibleLayout } from "./helpers/visible-layout.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -63,12 +65,13 @@ describe("user copy keeps technical diagnostics private", () => {
 
     it("shows a safe detail translation failure and retains the original diagnostic", async () => {
         const dom = new JSDOM("<body><h1>ABC-1 原题</h1></body>");
+        installVisibleLayout(dom.window);
         const failure = new Error("https://private.example/?token=secret"), recordError = vi.fn();
         const controller = new ExternalBridgeTranslationController({
             document: dom.window.document, window: dom.window, route: "detail", hostAdapter: {}, listPage: null,
             settings: { snapshot: () => ({ translateTitle: "yes" }) },
             translation: { translate: vi.fn().mockRejectedValue(failure) }, styles: {},
-            diagnostics: { recordError }, scope: { disposed: false },
+            diagnostics: { recordError }, scope: new LifecycleScope("safe-translation-error"),
         });
         await controller.translateDetail(0);
         expect(dom.window.document.querySelector(".translated-title")?.textContent).toBe("翻译失败，请重试");

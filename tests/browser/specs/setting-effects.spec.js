@@ -586,7 +586,7 @@ test("cloud settings use the canonical catalog and persist normalized numeric va
     await expect(page.locator(".layui-layer #cloud-settings-catalog")).toBeVisible();
   };
   await openCloud();
-  await expect(page.locator(".layui-layer #cloud-settings-catalog .jhs-setting-row")).toHaveCount(7);
+  await expect(page.locator(".layui-layer #cloud-settings-catalog .jhs-setting-row")).toHaveCount(8);
   await page.locator(".layui-layer #oneOneFiveConcurrency").fill("99");
   await page.locator(".layui-layer #oneOneFiveConcurrency").press("Tab");
   await expect(page.locator(".layui-layer #oneOneFiveConcurrency")).toHaveValue("10");

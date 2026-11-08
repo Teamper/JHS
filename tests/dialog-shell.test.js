@@ -43,6 +43,22 @@ it("owns one iframe scroll lock across repeated success and ignores success afte
     expect(success).toHaveBeenCalledTimes(2);
     expect(dom.window.document.body.style.overflow).toBe('');
 });
+it("clamps and centers against the client viewport when innerWidth includes a scrollbar gutter",()=>{
+    dom=new JSDOM('<div id="dialog"></div>');vi.stubGlobal("window",dom.window);
+    const doc=dom.window.document,root=doc.querySelector("#dialog");
+    Object.defineProperty(doc.documentElement,"clientWidth",{configurable:true,value:360});
+    Object.defineProperty(doc.documentElement,"clientHeight",{configurable:true,value:640});
+    Object.defineProperty(dom.window,"innerWidth",{configurable:true,value:372});
+    Object.defineProperty(dom.window,"innerHeight",{configurable:true,value:652});
+    Object.defineProperty(root,"offsetLeft",{get:()=>parseFloat(root.style.left)||0});
+    Object.defineProperty(root,"offsetTop",{get:()=>parseFloat(root.style.top)||0});
+    root.getBoundingClientRect=()=>new dom.window.DOMRect(root.offsetLeft,root.offsetTop,Math.min(parseFloat(root.style.width)||800,parseFloat(root.style.maxWidth)||Infinity),Math.min(parseFloat(root.style.height)||700,parseFloat(root.style.maxHeight)||Infinity));
+    const options=prepareDialogOptions({type:1,ui:{size:"md",body:"scroll"}},{getDialogArea:()=>["800px","700px"]});
+    options.success(root,1);
+    expect(root.style.maxWidth).toBe("344px");expect(root.style.maxHeight).toBe("624px");
+    expect(root.getBoundingClientRect().right).toBe(352);expect(root.getBoundingClientRect().bottom).toBe(632);
+    options.end();
+});
 
 it("releases a removed iframe dialog even when the vendor end callback is absent", async () => {
     dom=new JSDOM('<div id="dialog"></div>'); vi.stubGlobal('window',dom.window);

@@ -2,17 +2,19 @@
 
 import { B, D, P, CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
 import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./state-model.js";
+import { isPersonalRating } from "./personal-rating.js";
+import { formatUiDateTime } from "./ui-date-time.js";
 
 /** @typedef {Record<string, any>} MigrationRecord */
 
-export const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions" ]);
+export const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions", "personal_ratings" ]);
 export const IMPORTABLE_DATA_KEYS = Object.freeze([ ...PORTABLE_DATA_KEYS, "third_party_ttl_cache" ]);
 /** Settings that are bound to this installation's local trust boundary. */
-export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins", "webDavUrl", "webDavUsername", "webDavPassword", "webDavProfileRevision", "webDavAutoBackupEnabled", "webDavAutoBackupOnChanges", "webDavAutoBackupOnInterval", "webDavAutoBackupChangeCount", "webDavAutoBackupMinutes", "webDavAutoBackupKeepCount" ]);
+export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins", "webDavUrl", "webDavUsername", "webDavPassword", "webDavProfileRevision", "webDavAutoBackupEnabled", "webDavAutoBackupOnChanges", "webDavAutoBackupOnInterval", "webDavAutoBackupChangeCount", "webDavAutoBackupMinutes", "webDavAutoBackupKeepCount", "translationRequestsPerMinute", "translationRequestsPerDay" ]);
 /** Settings that contain installation-bound credentials and never belong in portable data. */
 export const CREDENTIAL_SETTING_KEYS = Object.freeze([ "webDavPassword" ]);
 const PORTABLE_ARRAY_KEYS = new Set([ "car_list", "filter_keyword_title", "filter_keyword_review", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "offline_history" ]);
-const PORTABLE_OBJECT_KEYS = new Set([ "setting", "third_party_ttl_cache", "activity_log", "new_video_decisions" ]);
+const PORTABLE_OBJECT_KEYS = new Set([ "setting", "third_party_ttl_cache", "activity_log", "new_video_decisions", "personal_ratings" ]);
 export const LEGACY_DATA_ALIASES = Object.freeze({
     filter_actor_actress_info_list: "blacklist", favorite_actresses_info_list: "favorite_actresses",
     car_list_filter_actor_actress: "blacklist_car_list", title_filter_keyword: "filter_keyword_title",
@@ -133,6 +135,12 @@ export function validatePortableData(/** @type {Record<string, any>} */ data) {
     if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
     for (const key of PORTABLE_ARRAY_KEYS) if (null != data[key] && !Array.isArray(data[key])) throw new TypeError(`备份字段 ${key} 必须为数组`);
     for (const key of PORTABLE_OBJECT_KEYS) if (null != data[key] && ("object" != typeof data[key] || Array.isArray(data[key]))) throw new TypeError(`备份字段 ${key} 必须为对象`);
+    if (Object.hasOwn(data, "personal_ratings")) {
+        if (version < 4) throw new TypeError("个人评分需要数据版本 4");
+        for (const [key, value] of Object.entries(data.personal_ratings || {})) {
+            if (normalizeCarNum(key) !== key || !isPersonalRating(value)) throw new TypeError("个人评分格式无效");
+        }
+    }
     return version;
 }
 
@@ -143,7 +151,8 @@ export async function assertSupportedDataVersion(storage) {
 
 /** Old databases can still store user data under pre-v1 keys. @param {number} version */
 export function getPortableDataKeys(version) {
-    return version < 1 ? [...PORTABLE_DATA_KEYS, ...Object.keys(LEGACY_DATA_ALIASES)] : PORTABLE_DATA_KEYS;
+    const keys = version < 4 ? PORTABLE_DATA_KEYS.filter(key => key !== "personal_ratings") : PORTABLE_DATA_KEYS;
+    return version < 1 ? [...keys, ...Object.keys(LEGACY_DATA_ALIASES)] : keys;
 }
 
 export async function hasPortableUserData(/** @type {any} */ storage) {
@@ -240,8 +249,24 @@ async function migrateV3(/** @type {any} */ storage) {
     for (const key of keys) if (String(key).startsWith("jhs_http_public_cache:v1:")) await storage.forage.removeItem(key);
 }
 
+async function migrateV4(/** @type {any} */ storage) {
+    await storage.syncState?.recoverWithoutLock?.();
+    await storage.stateService?.recoverPendingTransactionWithoutLock?.();
+    const snapshots = await storage._getSnapshots();
+    if (!snapshots.some((/** @type {MigrationRecord} */ item) => item.kind === "migration-snapshot" && item.targetDataVersion === 4)) {
+        const data = await storage._exportPortableDataWithoutLock();
+        const now = new Date().toISOString();
+        snapshots.push({ id: `migration_v4_${Date.now()}`, name: "个人评分升级前", source: "migration", kind: "migration-snapshot", targetDataVersion: 4, createdAt: now, time: formatUiDateTime(now), itemCount: Array.isArray(data.car_list) ? data.car_list.length : 0, data });
+        if (snapshots.length > 10) snapshots.splice(0, snapshots.length - 10);
+        await storage._saveSnapshots(snapshots);
+    }
+    const ratings = await storage.forage.getItem("personal_ratings");
+    if (ratings == null) await storage._setItemAndInvalidate("personal_ratings", {});
+    else validatePortableData({ data_version: 4, personal_ratings: ratings });
+}
+
 /** @type {Readonly<Record<number, (storage: any) => Promise<void>>>} */
-const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags, 3: migrateV3 });
+const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags, 3: migrateV3, 4: migrateV4 });
 
 export async function runDataMigrations(/** @type {any} */ storage, coordinator = storage.mutationCoordinator, alreadyLocked = false) {
     // 迁移是“读版本→整表覆写→写版本”的多步过程，必须跨标签页互斥，防止双标签页同时执行互相丢数据

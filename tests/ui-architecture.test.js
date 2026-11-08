@@ -110,7 +110,8 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
 
     it("uses an idempotent translation node and a safe cache key", () => {
         expect(translationUi).toContain('nextAll(".translated-title").first()');
-        expect(translate).toContain("this.translation.translate(sourceText");
+        expect(translate).toContain("this.translateTitle(sourceText");
+        expect(translate).toContain("this.translation.translateDetailed(text,request)");
         expect(translate).toContain("this.hostAdapter?.readMovieRef?.()?.carNum");
         expect(translate).not.toContain("localStorage");
         expect(translationUi).not.toMatch(/\.html\(/);

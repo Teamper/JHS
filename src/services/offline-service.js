@@ -21,6 +21,22 @@ export class OfflineService {
         if (typeof adapter.searchFiles !== "function") throw new TypeError(`Integration ${integrationId} does not support file search`);
         return adapter.searchFiles(keyword, context);
     }
+    /** @param {string} integrationId @param {Record<string, any>} [context] */
+    getAccountIdentity(integrationId, context = {}) {
+        const adapter = this.integrations.getAdapter(integrationId);
+        if (typeof adapter.getAccountIdentity !== "function") throw new TypeError(`Integration ${integrationId} does not support account identity`);
+        return adapter.getAccountIdentity(context);
+    }
+    /** @param {string} integrationId @param {string} keyword @param {Record<string, any>} [context] */
+    searchFilePage(integrationId, keyword, context = {}) {
+        const adapter = this.integrations.getAdapter(integrationId);
+        if (typeof adapter.searchFilePage !== "function") throw new TypeError(`Integration ${integrationId} does not support paged file search`);
+        return adapter.searchFilePage(keyword, context);
+    }
+    /** @param {string} integrationId @param {string} folderId @param {Record<string, any>} [context] */
+    listDirectory(integrationId, folderId, context = {}) { return this.integrations.getAdapter(integrationId).listDirectory(folderId, context); }
+    /** @param {string} integrationId @param {any} file @param {Record<string, any>} [context] */
+    uploadSubtitle(integrationId, file, context = {}) { return this.integrations.getAdapter(integrationId).uploadSubtitle(file, context); }
     /** @param {string} integrationId @param {string} fileId @param {string} newName @param {Record<string, any>} [context] */
     renameFile(integrationId, fileId, newName, context = {}) {
         const adapter = this.integrations.getAdapter(integrationId);

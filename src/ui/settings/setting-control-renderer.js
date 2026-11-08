@@ -25,7 +25,7 @@ export function renderSettingControl(descriptor, options = {}) {
     const onChange = options.onChange ?? null;
     /** @type {any} */ let control;
     if (descriptor.type === "boolean") {
-        control = jq(options.deferred ? '<input type="checkbox" class="jhs-checkbox">' : '<input type="checkbox" class="mini-switch" role="switch">').prop("checked", normalizeBooleanValue(descriptor.key, value));
+        control = jq('<input type="checkbox" class="jhs-switch mini-switch" role="switch">').prop("checked", normalizeBooleanValue(descriptor.key, value));
         control.on("change", () => { onChange?.(control.is(":checked") ? "yes" : "no"); });
         return { root: control, getValue: () => control.is(":checked") ? "yes" : "no", setValue: /** @param {unknown} next */ (next) => control.prop("checked", normalizeBooleanValue(descriptor.key, next)) };
     }

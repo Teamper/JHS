@@ -8,7 +8,7 @@ import { SubtitleService } from "../../src/services/subtitle-service.js";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixtures/integrations/xunlei/subtitles.json"), "utf8"));
 
 it("normalizes Xunlei subtitle contracts", () => {
-    expect(parseXunleiSubtitles(fixture)).toEqual([{ name: "ABC-123 Chinese", extension: "srt", url: "https://subtitle.example/ABC-123.srt", providerId: "xunlei" }]);
+    expect(parseXunleiSubtitles(fixture)).toEqual([{ name: "ABC-123 Chinese", extension: "srt", url: "https://subtitle.example/ABC-123.srt", providerId: "xunlei", language: "zh" }]);
 });
 
 it("searches and downloads through explicit URL trust boundaries", async () => {

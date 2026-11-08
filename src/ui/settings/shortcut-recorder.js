@@ -40,6 +40,7 @@ export function bindShortcutRecorder({ root, settings, scope, onManage, deferred
         try {
             await settings.update((/** @type {Record<string, unknown>} */ draft) => {
                 const shortcuts = readDetailShortcuts(draft.detailShortcuts);
+                if (shortcut && shortcutMatches(readDetailShortcuts({ favorite: draft.privacyShortcut }).favorite, shortcut)) throw new Error("该快捷键已被隐私遮罩使用");
                 const conflict = shortcut && Object.entries(DETAIL_SHORTCUT_ACTIONS).find(([other]) => other !== key && shortcutMatches(shortcuts[/** @type {keyof typeof DETAIL_SHORTCUT_ACTIONS} */ (other)], shortcut));
                 if (conflict) throw new Error(`该快捷键已被“${conflict[1].label}”使用`);
                 if (shortcut) shortcuts[key] = shortcut; else delete shortcuts[key];

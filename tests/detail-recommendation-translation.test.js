@@ -3,10 +3,12 @@ import {JSDOM} from 'jsdom';
 import {LifecycleScope} from '../src/core/lifecycle-scope.js';
 import {JavDbHostAdapter} from '../src/platform/hosts/javdb-host-adapter.js';
 import {ExternalBridgeTranslationController} from '../src/features/translation/translation-controller.js';
+import {installVisibleLayout} from './helpers/visible-layout.js';
 
 const markup='<main class="video-detail"><div class="tile-images tile-small"><a class="tile-item" href="/v/other"><img src="/cover.jpg"><div class="video-number">REC-123</div><div class="video-title" title="原提示"> 原始标题 </div></a></div></main>';
 function setup(translate=vi.fn(async()=> '推荐译文'),enabled='yes') {
     const dom=new JSDOM(markup,{url:'https://javdb.com/v/test'});
+    installVisibleLayout(dom.window);
     vi.stubGlobal('MutationObserver',dom.window.MutationObserver);
     const scope=new LifecycleScope('recommendation-test'),settings=new EventTarget();
     settings.value=enabled;settings.snapshot=()=>({translateTitle:settings.value});
@@ -18,7 +20,7 @@ afterEach(()=>vi.unstubAllGlobals());
 it('translates both initial and delayed recommendation cards, retaining source nodes, number and links, and restores exact text when disabled',async()=>{
     const {dom,scope,settings,translate,card,title}=setup();
     await vi.waitFor(()=>expect(title.textContent).toContain('推荐译文'));
-    expect(translate).toHaveBeenCalledWith('原始标题',expect.objectContaining({cacheAlias:'REC-123',scope}));
+    expect(translate).toHaveBeenCalledWith('原始标题',expect.objectContaining({cacheAlias:'REC-123',scope:expect.any(LifecycleScope),automatic:true}));
     expect(card.querySelector('.video-number').textContent).toBe('REC-123');expect(card.getAttribute('href')).toBe('/v/other');
     const next=card.cloneNode(true);next.querySelector('.video-title').textContent='迟到标题';next.querySelector('.video-number').textContent='REC-456';card.parentElement.append(next);
     await vi.waitFor(()=>expect(next.querySelector('.video-title').textContent).toContain('推荐译文'));

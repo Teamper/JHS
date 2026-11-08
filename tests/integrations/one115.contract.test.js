@@ -4,6 +4,10 @@ import { expect, it, vi } from "vitest";
 import { classify115OfflineError, createOne115Adapter, normalize115SearchResults } from "../../src/integrations/one115/manifest.js";
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixtures/integrations/one115/search.json"), "utf8"));
+it("preserves numeric root directory identities for subtitle destinations", () => {
+    expect(normalize115SearchResults({ data: [{ fid: "1", pid: 0, n: "ABC-123.mp4" }] })[0].folderId).toBe("0");
+    expect(normalize115SearchResults({ data: [{ fid: "1", cid: 0, n: "ABC-123.mp4" }] })[0].folderId).toBe("0");
+});
 
 it("normalizes 115 file search contracts", async () => {
     expect(normalize115SearchResults(fixture)).toEqual([{
@@ -34,4 +38,12 @@ it("classifies normalized 115 offline failures", () => {
     expect(classify115OfflineError("请先登录")).toBe("AUTH_REQUIRED");
     expect(classify115OfflineError("任务已存在")).toBe("TASK_EXISTS");
     expect(classify115OfflineError("任务创建失败")).toBe("OPERATION_FAILED");
+});
+
+it("exposes pagination metadata using all raw entries and confirms the account identity", async () => {
+    const request = vi.fn().mockResolvedValueOnce({ data: { sign: "fixture", uid: 12 } }).mockResolvedValueOnce({ data: { count: 3, data: [{ n: "ABC-123.mp4", fid: "1" }, { n: "notes.txt", fid: "2" }] } });
+    const adapter = createOne115Adapter({ request });
+    await expect(adapter.getAccountIdentity()).resolves.toEqual({ accountId: "12" });
+    await expect(adapter.searchFilePage("ABC-123", { limit: 2 })).resolves.toMatchObject({ nextOffset: 2, hasMore: true, total: 3, scanned: 2, items: [{ name: "ABC-123.mp4" }] });
+    expect(new URL(request.mock.calls[1][0].url).searchParams.get("type")).toBe("4");
 });

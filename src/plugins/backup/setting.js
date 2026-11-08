@@ -157,7 +157,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     }
     disposeQuickSettings() {
         this._quickSettingInstance?.close(!1);
-        this.jquery(".simple-setting, .mini-simple-setting").each((_, element) => disposeQuickSettingHost(element, this.jquery));
+        for (const surface of this._desktopQuickSurfaces.values()) surface.close();
     }
     /** 桌面设置入口 Surface：compact 卸载，regular/wide 幂等挂载。 */
     /** @param {boolean} compact */
@@ -210,10 +210,12 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             const host = this.jquery(box).find(".simple-setting, .mini-simple-setting")[0];
             if (!host || !this._settingScope) continue;
             const surface = new DesktopQuickSettings({box, host, jquery:this.jquery, scope:this._settingScope,
+                canOpen: () => !this._settingsDialog,
                 onOpen: () => { for (const other of this._desktopQuickSurfaces.values()) if (other.box !== box) other.close(); },
                 initialize: async () => {
                     const { buildQuickSettingHtml } = await import("./setting-templates.js");
                     if (surface.scope.disposed || !box.isConnected) return;
+                    disposeQuickSettingHost(host, this.jquery);
                     this.jquery(host).html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry")));
                     await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), async panel => {
                         surface.close(); await this.openSettingDialog(panel);
@@ -390,7 +392,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 if (sharedProfile) instance.scope.listen(sharedProfile, "changed", connectionChanged);
                 instance.scope.listen(instance.session, "settings.changed", (/** @type {CustomEvent} */ event) => {
                     if (!event.detail.external || !instance.formReady || !instance.resourcesReady) return;
-                    if (event.detail.names.includes("disabledPlugins") && layerRoot.find("#advanced-panel").hasClass("active")) void this._settingPanels.renderPluginMgmtPanel(this.getRuntimeService("diagnostics"), instance.session, this.getFormDependencies());
+                    if (event.detail.names.some(name => ["disabledPlugins", "enableSubtitle115Upload"].includes(name)) && layerRoot.find("#advanced-panel").hasClass("active")) void this._settingPanels.renderPluginMgmtPanel(this.getRuntimeService("diagnostics"), instance.session, this.getFormDependencies());
                     if (event.detail.names.some(key => ["customMagnetSources", "magnetTagRules", "magnetFilterRules", "magnetBuiltInSources", "screenshotMode", "screenshotProviders"].includes(key))) {
                         void this.loadResourceSettings(layerRoot, generation).catch(error => this.logger.error("资源设置同步失败", error));
                     }
@@ -843,7 +845,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         const card = (source, custom, kind) => {
             const node = this.jquery('<article class="jhs-card jhs-resource-card"></article>');
             const defaultType = "magnet" === kind ? "磁力来源" : "截图来源";
-            node.append(this.jquery('<div class="jhs-setting-row jhs-setting-row--action"></div>').append(this.jquery('<div></div>').append(this.jquery("<strong></strong>").text(source.name), source.experimental ? '<span class="jhs-badge">实验性</span>' : "", this.jquery("<small></small>").text(`${source.type || defaultType} · ${source.domain || (() => { try { return new URL(source.searchUrlTemplate).hostname; } catch { return "未配置域名"; } })()} · 优先级 ${source.priority}`)), this.jquery('<input type="checkbox" class="jhs-checkbox jhs-source-toggle">').prop("checked", source.enabled)));
+            node.append(this.jquery('<div class="jhs-setting-row jhs-setting-row--action"></div>').append(this.jquery('<div></div>').append(this.jquery("<strong></strong>").text(source.name), source.experimental ? '<span class="jhs-badge">实验性</span>' : "", this.jquery("<small></small>").text(`${source.type || defaultType} · ${source.domain || (() => { try { return new URL(source.searchUrlTemplate).hostname; } catch { return "未配置域名"; } })()} · 优先级 ${source.priority}`)), this.jquery('<input type="checkbox" class="jhs-switch jhs-source-toggle" role="switch">').prop("checked", source.enabled)));
             const actions = this.jquery('<div class="jhs-toolbar"></div>').append('<button type="button" class="jhs-btn jhs-source-test">测试</button>');
             if (custom) actions.append('<button type="button" class="jhs-btn jhs-source-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-source-delete">删除</button>');
             const row = node.children(".jhs-setting-row"), toggle = row.children("input").attr("aria-label", `启用 ${source.name}`);
@@ -939,7 +941,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         const resources = this.fullResources;
         const dialog = this.getRuntimeService("dialog"), fields = ["rowSelector","titleSelector","magnetSelector","sizeSelector","dateSelector","seedersSelector","leechersSelector","resultsPath","titlePath","magnetPath","hashPath","sizePath","datePath","seedersPath"];
         const fieldLabels = { rowSelector: "结果行选择器", titleSelector: "标题选择器", magnetSelector: "磁力选择器", sizeSelector: "大小选择器", dateSelector: "日期选择器", seedersSelector: "做种数选择器", leechersSelector: "下载数选择器", resultsPath: "结果列表路径", titlePath: "标题字段路径", magnetPath: "磁力字段路径", hashPath: "哈希字段路径", sizePath: "大小字段路径", datePath: "日期字段路径", seedersPath: "做种数字段路径" };
-        const content = this.jquery(`<div class="jhs-setting-section jhs-resource-form jhs-scrollbar"><label>名称<input name="name" class="jhs-field"></label><label>开启<input name="enabled" type="checkbox" class="jhs-checkbox"></label><label>优先级<input name="priority" type="number" class="jhs-field" min="1"></label><label>搜索地址模板<input name="searchUrlTemplate" class="jhs-field"></label><label>原网页地址模板<input name="targetUrlTemplate" class="jhs-field"></label><label>解析类型<select name="parserType" class="jhs-select-source"><option value="magnet-links">自动寻找磁力链接</option><option value="torrent-table">表格或列表页面</option><option value="json">${PRODUCT_NAMES.json} 接口</option></select></label><div class="jhs-parser-fields"></div></div>`);
+        const content = this.jquery(`<div class="jhs-setting-section jhs-resource-form jhs-scrollbar"><label>名称<input name="name" class="jhs-field"></label><label>开启<input name="enabled" type="checkbox" class="jhs-switch" role="switch"></label><label>优先级<input name="priority" type="number" class="jhs-field" min="1"></label><label>搜索地址模板<input name="searchUrlTemplate" class="jhs-field"></label><label>原网页地址模板<input name="targetUrlTemplate" class="jhs-field"></label><label>解析类型<select name="parserType" class="jhs-select-source"><option value="magnet-links">自动寻找磁力链接</option><option value="torrent-table">表格或列表页面</option><option value="json">${PRODUCT_NAMES.json} 接口</option></select></label><div class="jhs-parser-fields"></div></div>`);
         const renderFields = () => {
             const type = content.find('[name="parserType"]').val(), names = "torrent-table" === type ? fields.slice(0, 7) : "json" === type ? fields.slice(7) : [];
             content.find(".jhs-parser-fields").html(names.map((name => `<label>${fieldLabels[name]}<input name="${name}" class="jhs-field"></label>`)).join(""));
@@ -976,7 +978,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     openRuleDialog(kind, existing = null, root = null) {
         const resources = this.fullResources;
         const dialog = this.getRuntimeService("dialog"), isTag = "tag" === kind;
-        const content = this.jquery(`<div class="jhs-setting-section jhs-resource-form jhs-rule-form jhs-scrollbar"><label>名称<input name="name" class="jhs-field"></label>${isTag ? "" : '<label>匹配范围<select name="target" class="jhs-select-source"><option value="title">标题</option><option value="file">文件名</option></select></label>'}<label>匹配方式<select name="type" class="jhs-select-source"><option value="contains">包含</option><option value="regex">正则</option></select></label><label>匹配内容<input name="pattern" class="jhs-field"></label>${isTag ? '<label>权重<input name="weight" type="number" class="jhs-field"></label>' : '<label>动作<select name="action" class="jhs-select-source"><option value="hide">隐藏</option><option value="penalty">降权</option></select></label><label>降权分数<input name="penalty" type="number" class="jhs-field"></label>'}<label>开启<input name="enabled" type="checkbox" class="jhs-checkbox"></label></div>`);
+        const content = this.jquery(`<div class="jhs-setting-section jhs-resource-form jhs-rule-form jhs-scrollbar"><label>名称<input name="name" class="jhs-field"></label>${isTag ? "" : '<label>匹配范围<select name="target" class="jhs-select-source"><option value="title">标题</option><option value="file">文件名</option></select></label>'}<label>匹配方式<select name="type" class="jhs-select-source"><option value="contains">包含</option><option value="regex">正则</option></select></label><label>匹配内容<input name="pattern" class="jhs-field"></label>${isTag ? '<label>权重<input name="weight" type="number" class="jhs-field"></label>' : '<label>动作<select name="action" class="jhs-select-source"><option value="hide">隐藏</option><option value="penalty">降权</option></select></label><label>降权分数<input name="penalty" type="number" class="jhs-field"></label>'}<label>开启<input name="enabled" type="checkbox" class="jhs-switch" role="switch"></label></div>`);
         Object.entries(existing || { enabled: true, type: "contains", weight: 0, action: "hide", penalty: -20 }).forEach(([key, value]) => {
             const input = content.find(`[name="${key}"]`);
             "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);

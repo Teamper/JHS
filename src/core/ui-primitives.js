@@ -596,6 +596,11 @@ export function buildUiPrimitivesCss() {
     .jhs-task-status__name { color:var(--jhs-text); font-weight:var(--jhs-font-weight-semibold); }
     .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
     .jhs-is-hidden { display: none !important; }
+    .jhs-detail-extra-actions { position:relative; display:inline-block; margin-block:var(--jhs-space-2); }
+    .jhs-detail-extra-actions[open] { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); align-items:center; }
+    .jhs-detail-extra-actions > summary { cursor:pointer; }
+    .jhs-enhancement-menu-group { display:grid; gap:var(--jhs-space-1); }
+    .jhs-enhancement-menu-group .jhs-btn { justify-content:flex-start; }
     .jhs-dialog-title { padding: 0 var(--jhs-space-2); }
     .jhs-pagination__summary { margin-left: var(--jhs-space-3); color: var(--jhs-text-muted); font-size: var(--jhs-font-size-sm); }
     .jhs-skeleton {
@@ -1157,6 +1162,12 @@ export function initializeUiAccessibility(lifecycleScope) {
     if (!lifecycleScope || "function" != typeof lifecycleScope.observe) throw new TypeError("UI accessibility requires an app LifecycleScope");
     const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
     const enhance = (/** @type {any} */ e) => {
+        const selects = e.matches?.("select.jhs-field,select.jhs-select-source") ? [e] : [];
+        if (e.querySelectorAll) selects.push(...e.querySelectorAll("select.jhs-field,select.jhs-select-source"));
+        for (const select of selects) if (!select.multiple && select.closest(".jhs-ui,.jhs-dialog")) {
+            select.classList.add("jhs-select-source");
+            JhsSelect.enhance(select);
+        }
         const links = e.querySelectorAll ? [...e.querySelectorAll(".jhs-ui a[href]")] : [];
         if (e.nodeType === Node.ELEMENT_NODE && e.closest?.(".jhs-ui")) {
             if (e.matches?.("a[href]")) links.push(e);
@@ -1208,6 +1219,18 @@ export function initializeUiAccessibility(lifecycleScope) {
         }
     };
     return lifecycleScope.observe(document.documentElement, (records => {
+        for (const record of records) {
+            const source = record.target.parentElement?.closest("select.jhs-select-source") || (record.target.nodeType === Node.ELEMENT_NODE && /** @type {Element} */ (record.target).matches("select.jhs-select-source") ? record.target : null);
+            if (source) JhsSelect.refresh(source);
+            for (const removed of record.removedNodes) if (removed.nodeType === Node.ELEMENT_NODE) {
+                const element = /** @type {Element} */ (removed);
+                const selects = element.matches("select.jhs-select-source") ? [element] : [];
+                selects.push(...element.querySelectorAll("select.jhs-select-source"));
+                for (const select of selects) {
+                    if (!select.isConnected) JhsSelect.instances.get(select)?.close();
+                }
+            }
+        }
         records.forEach((record => record.addedNodes.forEach((node => {
             node.nodeType === Node.ELEMENT_NODE && pending.add(node);
         }))));
@@ -1249,6 +1272,8 @@ export class JhsSelect {
         this.searchTime = 0;
         const initiallyHidden = this.source.hasClass("jhs-is-hidden") || this.source[0].style.display === "none";
         this.labels = [...(this.source[0].labels || [])];
+        const enclosingLabel = this.source[0].closest("label");
+        if (!this.labels.length && enclosingLabel) this.labels.push(enclosingLabel);
         this.trigger = $('<button type="button" class="jhs-btn jhs-field jhs-select-trigger" role="combobox" aria-haspopup="listbox" aria-expanded="false"><span class="jhs-select-value"></span></button>').attr({ id: this.id, "aria-controls": `${this.id}-listbox` }).append(getIcon("chevron-down"));
         this.menu = $('<div class="jhs-popover jhs-select-menu" role="listbox"></div>').attr("id", `${this.id}-listbox`);
         this.source.wrap('<div class="jhs-select-control"></div>');

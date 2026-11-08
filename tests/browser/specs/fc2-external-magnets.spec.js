@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
-test.beforeEach(({}, info) => test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop and narrow-screen magnet coverage"));
+test.beforeEach(({}, info) => test.skip(!info.title.includes("progressively") && !["desktop-wide", "mobile"].includes(info.project.name), "desktop and narrow-screen magnet coverage"));
 
-async function boot(page, context, { mode = "page", disabled = false, sourcesDisabled = false } = {}) {
+async function boot(page, context, { mode = "page", disabled = false, sourcesDisabled = false, theme = "light" } = {}) {
   await fulfillHostFixtures(context);
   await page.goto(mode === "page"
     ? "https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-1234567&url=https%3A%2F%2Fjavdb.com%2Fv%2Ffixture-id&source=fc2"
     : "https://javdb.com/search_advanced?type=3");
-  await injectUserscriptRuntime(page, { disabledPlugins: disabled ? ["MagnetHubPlugin"] : [], settingOverrides: { enableLoadReview: "no", enableLoadRelated: "no", enableLoadScreenShot: "no", enableLoadOtherSite: "no" } });
+  await injectUserscriptRuntime(page, { disabledPlugins: disabled ? ["MagnetHubPlugin"] : [], settingOverrides: { themeMode: theme, enableLoadReview: "no", enableLoadRelated: "no", enableLoadScreenShot: "no", enableLoadOtherSite: "no" } });
   if (mode === "page") await expect(page.locator('.jhs-fc2-workspace[data-jhs-fc2-mode="page"]')).toBeVisible();
   await page.evaluate(async ({ mode, sourcesDisabled }) => {
     const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
@@ -133,4 +133,38 @@ test("FC2 closed dialog ignores late results and another dialog remains independ
   await expect.poll(() => page.evaluate(() => window.__magnetProbe.completed)).toBe(4);
   expect(await page.evaluate(() => window.__closedMagnetHub.innerHTML === window.__closedMagnetHtml)).toBe(true);
   await expect(second.locator(".magnet-result").first()).toContainText("7654321");
+});
+
+
+for (const theme of ["light", "dark"]) test(`FC2 magnet results appear progressively and preserve focused actions and filters ${theme}`, async ({ page, context }, info) => {
+  const root = await boot(page, context, { theme });
+  await page.evaluate(() => {
+    const hub = window.unsafeWindow.pluginManager.getBean("Fc2Plugin").featureMagnetHubAdapter;
+    const search = hub.magnet.searchSource;
+    hub.magnet.searchSource = async (id, keyword) => {
+      if (id === "u9a9") await new Promise(resolve => window.__magnetProbe.releases.push(resolve));
+      const records = await search(id, keyword);
+      return records.map(record => ({ ...record, title: `${record.title} ${id === "sukebei" ? "4K 中字" : "1080p"}` }));
+    };
+  });
+  await root.getByRole("button", { name: "搜索第三方磁力", exact: true }).click();
+  await expect(root.locator(".magnet-result")).toHaveCount(1);
+  await expect(root.locator(".magnet-source-status")).toContainText("U9A9 查询中");
+  const copy = root.locator(".copy-btn").first();
+  await copy.focus();
+  await page.evaluate(() => window.__magnetProbe.releases.splice(0).forEach(resolve => resolve()));
+  await expect(root.locator(".magnet-result")).toHaveCount(2);
+  await expect(copy).toBeFocused();
+  await root.getByLabel("4K", { exact: true }).check();
+  await expect(root.locator(".magnet-result")).toHaveCount(1);
+  await root.getByRole("button", { name: "大小升序", exact: true }).click();
+  await expect(root.getByLabel("4K", { exact: true })).toBeChecked();
+  const bounds = await root.locator(".magnet-result").evaluate(row => ({
+    textBottom: row.querySelector(".magnet-tags").getBoundingClientRect().bottom,
+    buttonsTop: row.querySelector(".magnet-copy").getBoundingClientRect().top,
+    overflow: row.scrollWidth - row.clientWidth,
+  }));
+  expect(bounds.buttonsTop).toBeGreaterThanOrEqual(bounds.textBottom);
+  expect(bounds.overflow).toBeLessThanOrEqual(1);
+  await root.locator('[data-jhs-section="resources"]').screenshot({ path: info.outputPath("progressive-magnets.png") });
 });
