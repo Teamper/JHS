@@ -2,27 +2,33 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
+import { gzipSync } from "node:zlib";
 
 const browserRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(browserRoot, "..", "..");
 const defaultUserscriptPath = process.env.JHS_TEST_BUNDLE_PATH || join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js");
 const getUserscriptPath = (options) => process.env.JHS_TEST_BUNDLE_PATH || options.userscriptPath || defaultUserscriptPath;
 
-async function addUserscript(page, options) {
-  const script = options.userscriptSource ? { content: options.userscriptSource } : { path: getUserscriptPath(options) };
-  if (options.userscriptTransport !== "base64") return page.addScriptTag(script);
-  // Large non-ASCII arguments add measurable Chromium protocol overhead.
-  // Only the transport is encoded; the original UTF-8 source executes as an inline script.
-  const source = script.content ?? `${await readFile(script.path, "utf8")}\n//# sourceURL=${script.path.replace(/\n/g, "")}`;
-  await page.evaluate((encoded) => {
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(Uint8Array.fromBase64(encoded));
+async function addFixtureBytes(page, resource, tag = "script") {
+  const source = resource.content ?? `${await readFile(resource.path, "utf8")}${tag === "script" ? `\n//# sourceURL=${resource.path.replace(/\n/g, "")}` : ""}`;
+  // File reads, compression, transfer, decoding and execution stay inside the startup interval.
+  // Compact protocol arguments preserve the complete original inline script or stylesheet.
+  await page.evaluate(async ({ encoded, tag }) => {
+    const stream = new Blob([Uint8Array.fromBase64(encoded)]).stream().pipeThrough(new DecompressionStream("gzip"));
+    const script = document.createElement(tag);
+    if (tag === "script") script.type = "text/javascript";
+    script.textContent = new TextDecoder("utf-8", { ignoreBOM: true }).decode(await new Response(stream).arrayBuffer());
     let error = null;
     script.onerror = (event) => { error = event; };
     document.head.appendChild(script);
     if (error) throw error;
-  }, Buffer.from(source, "utf8").toString("base64"));
+  }, { encoded: gzipSync(Buffer.from(source, "utf8"), { level: 1 }).toString("base64"), tag });
+}
+
+async function addUserscript(page, options) {
+  const script = options.userscriptSource ? { content: options.userscriptSource } : { path: getUserscriptPath(options) };
+  if (options.userscriptTransport !== "base64") return page.addScriptTag(script);
+  return addFixtureBytes(page, script);
 }
 
 export async function fulfillHostFixtures(context) {
@@ -71,13 +77,13 @@ export async function injectUserscriptRuntime(page, options = {}) {
   // These vendor globals and the table stylesheet have no mutual dependencies.
   // Await every load before configuring the fixture or executing the userscript.
   await Promise.all([
-    page.addScriptTag({ path: join(browserRoot, "node_modules", "jquery", "dist", "jquery.min.js") })
+    addFixtureBytes(page, { path: join(browserRoot, "node_modules", "jquery", "dist", "jquery.min.js") })
       .then(() => markPhase("jquery")),
-    page.addScriptTag({ path: join(browserRoot, "node_modules", "localforage", "dist", "localforage.min.js") })
+    addFixtureBytes(page, { path: join(browserRoot, "node_modules", "localforage", "dist", "localforage.min.js") })
       .then(() => markPhase("localforage")),
-    page.addScriptTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "js", "tabulator.min.js") })
+    addFixtureBytes(page, { path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "js", "tabulator.min.js") })
       .then(() => markPhase("tabulator")),
-    page.addStyleTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "css", "tabulator_semanticui.min.css") })
+    addFixtureBytes(page, { path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "css", "tabulator_semanticui.min.css") }, "style")
       .then(() => markPhase("vendor-style")),
   ]);
   await page.evaluate(async ({ disabledPlugins, settingOverrides, preserveStorage }) => {
