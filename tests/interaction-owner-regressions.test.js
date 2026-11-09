@@ -5,6 +5,7 @@ import { SettingPlugin } from "../src/plugins/backup/setting.js";
 import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";
+import { FullSettingsSession } from "../src/ui/settings/full-settings-session.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { getPluginCategories } from "../src/plugins/backup/setting-templates.js";
 import { renderPluginMgmtPanel, renderSnapshotPanel, showDiffPreview } from "../src/plugins/backup/setting-panels.js";
@@ -71,6 +72,26 @@ describe("settings instance and management",()=>{
         await settings.waitForIdle();expect(JSON.parse(stored.disabledPlugins).sort()).toEqual(["discovery.new-video","future.contribution","list.auto-page"]);
         write.mockRejectedValueOnce(new Error("failed"));jquery('[data-plugin="AutoPagePlugin"]').prop("checked",true).trigger("change");
         await vi.waitFor(()=>expect(deps.notifications.error).toHaveBeenCalledOnce());expect(jquery('[data-plugin="AutoPagePlugin"]').prop("checked")).toBe(false);
+    });
+    it("keeps draft switches focused on browsers that blur disabled inputs",async()=>{
+        document.body.innerHTML='<div id="plugin-mgmt-list"></div>';
+        const settings=new SettingsService({get:async()=>({disabledPlugins:"[]"}),set:vi.fn()});await settings.load();
+        const session=new FullSettingsSession(settings);
+        const deps={jquery,draftSettings:session,legacyStorage:{getCacheHitStats:()=>({})},notifications:{ok:vi.fn()},logger:{error:vi.fn()},domUi:{},window};
+        const diagnostics={exportSnapshot:()=>({legacyPluginDescriptors:[{name:"AutoPagePlugin",disableable:true}],legacyPlugins:[],legacyTimings:[],activeFeatures:[],errors:[]})};
+        await renderPluginMgmtPanel(diagnostics,session,deps);
+        const toggle=document.querySelector('.pm-toggle');
+        const disabled=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"disabled");
+        Object.defineProperty(toggle,"disabled",{get(){return disabled.get.call(this);},set(value){disabled.set.call(this,value);if(value)this.blur();}});
+        toggle.focus();
+        for(const checked of [false,true]){
+            jquery(toggle).prop("checked",checked).trigger("change");
+            await vi.waitFor(()=>expect(toggle.getAttribute("aria-busy")).toBeNull());
+            expect(document.activeElement).toBe(toggle);
+            expect(toggle.checked).toBe(checked);
+        }
+        expect(settings.snapshot().disabledPlugins).toBe("[]");
+        session.dispose();
     });
 });
 

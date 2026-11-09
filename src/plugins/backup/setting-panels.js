@@ -318,7 +318,9 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
             $("#pm-enabled").text(allNames.length - currentDisabled.length);
             $("#pm-disabled").text(currentDisabled.length);
         };
-        target.prop("disabled", true).attr("aria-busy", "true");
+        // Draft edits are synchronous and must keep the keyboard focus on the switch.
+        if (!dependencies.draftSettings) target.prop("disabled", true);
+        target.attr("aria-busy", "true");
         try {
             if (!settings?.update) throw new Error("SettingsService is unavailable");
             const snapshot = await settings.update((/** @type {Record<string, unknown>} */ draft) => {
