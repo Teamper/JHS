@@ -294,6 +294,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     const session = root.data("jhsFullSettingsSession");
     const sessionSubmitted = session?.capture() || {};
     try {
+        const editorSubmission = session?.captureEditors?.() || [];
         if (dirtyKeys instanceof Set && dependencies.webdav?.getProfile && ["webDavUrl", "webDavUsername", "webDavPassword"].some(key => dirtyKeys.has(key))) {
             const currentProfile = {
                 webDavUrl: String(submitted?.fields.webDavUrl ?? root.find("#webDavUrl").val() ?? "").trim(),
@@ -358,6 +359,13 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
                 draft.trustedLocalOrigins = [ ...origins ];
             }
         };
+        const connectionErrors = await session?.saveEditors?.(editorSubmission) || [];
+        /** @type {Record<string, string[]>} */
+        const groupPreferences = { translation: ["translationPrompt", "translationConcurrency"], media: ["enableMediaLibrary"] };
+        for (const { id } of connectionErrors) for (const key of groupPreferences[id] || []) {
+            delete patch[key];
+            delete sessionSubmitted[key];
+        }
         const webdavDirty = !dirtyKeys || ["webDavUrl", "webDavUsername", "webDavPassword"].some((key) => dirtyKeys.has(key));
         const repairingCredential = root.data("jhsWebDavCredentialError") && dirtyKeys?.has("webDavPassword");
         if (webdavDirty && dependencies.webdav?.saveProfile) {
@@ -375,7 +383,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         if (draft) draft.commitFields(submitted, [...Object.keys(patch), ...(webdavDirty && dependencies.webdav?.saveProfile ? ["webDavUrl", "webDavUsername", "webDavPassword"] : [])]);
         else root.data("jhsDirtyManualKeys", new Set());
 
-        const keywordErrors = [];
+        const keywordErrors = connectionErrors.map((/** @type {any} */ { error }) => error);
         if (dirtyReviewKeywords) {
             try {
                 // replaceAll 清掉删除按钮的 ×；去重避免重复标签落库

@@ -309,3 +309,21 @@ describe("StateService durable transactions", () => {
         expect(journals[0].touchedDomains).toEqual(["activity"]);
     });
 });
+
+it("undoes only the initial flag when a created movie acquired later state and metadata", async () => {
+    const { service, data } = createHarness({ car_list: [], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-123"] }], new_video_decisions: {} });
+    const first = await service.patch("ABC-123", { favorite: true });
+    await service.patch("ABC-123", { downloaded: true }, { record: { carNum: "ABC-123", remark: "later" } });
+    expect(await service.undoTransaction(first.transactionId)).toMatchObject({ reverted: ["ABC-123"], conflicts: [] });
+    expect(data.get("car_list")[0]).toMatchObject({ remark: "later", stateFlags: { favorite: false, downloaded: true } });
+    expect(data.get("favorite_actresses")[0].newVideoList).toEqual([]);
+});
+
+it("keeps a later handled movie out of pending work when undoing manual removal", async () => {
+    const {service,data}=createHarness({car_list:[],favorite_actresses:[{starId:"a",newVideoList:["ABC-123"]}],new_video_decisions:{}});
+    const removed=await service.removeFromNewVideoList("ABC-123");
+    await service.patch("ABC-123",{downloaded:true});
+    expect(await service.undoTransaction(removed.transactionId)).toMatchObject({reverted:["ABC-123"],conflicts:[]});
+    expect(data.get("favorite_actresses")[0].newVideoList).toEqual([]);
+    expect(data.get("car_list")[0].stateFlags.downloaded).toBe(true);
+});

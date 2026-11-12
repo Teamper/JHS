@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { MediaConnectionValidationError } from "../../core/media-library-model.js";
+import { mountEnhancementSettings, ENHANCEMENT_SETTINGS_STYLES } from "../../ui/settings/enhancement-settings.js";
 import { DesktopQuickSettings } from "../../ui/settings/desktop-quick-settings.js";
 import { closeOwnedPopover, ownedPopoverRoots } from "../../core/owned-popover.js";
 import { acquirePageScrollLock } from "../../core/page-scroll-lock.js";
@@ -138,7 +140,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         let t = (null == e ? void 0 : e.containerWidth) ?? "100";
         this.utils.isMobileMode() && (t = "100");
         let n = this.utils.isMobileMode() ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
-        return buildSettingCss(t, n, l, r, includeFull).replace("</style>", `${includeFull ? SHORTCUT_RECORDER_STYLES : ""}</style>`);
+        return buildSettingCss(t, n, l, r, includeFull).replace("</style>", `${includeFull ? SHORTCUT_RECORDER_STYLES + ENHANCEMENT_SETTINGS_STYLES : ""}</style>`);
     }
     initEntryCss() { return this.initCss(false); }
     /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope @param {{current: () => string}} profile */
@@ -383,6 +385,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 const binding = this.hydrateLiveSettings(layerRoot);
                 this._fullSettingBinding = binding;
                 if (binding) instance.scope.addCleanup(() => binding.dispose());
+                await mountEnhancementSettings({ document: this.document, root: layerRoot[0], session: instance.session, scope: instance.scope,
+                    translation: this.getRuntimeService("translation"), media: this.getRuntimeService("mediaLibrary") });
                 this.bindClick(layerRoot);
                 const connectionChanged = () => { void this.syncFullConnection(instance); };
                 instance.scope.listen(this.getRuntimeService("settings"), "settings.changed", event => {
@@ -447,6 +451,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         if (instance.scope.disposed || this._settingsDialog !== instance || instance.closeConfirmation != null) return;
         const root = instance.root, dialog = this.getRuntimeService("dialog");
         if (root?.find("#saveBtn").data("jhsBusy")) {
+            instance.pendingClose = true;
             root.find("#settings-draft-status").text("正在保存，请稍候"); return;
         }
         const draft = root?.data("jhsSettingsDraft")?.refresh();
@@ -663,7 +668,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         root.find("#saveBtn").on("click", (async event => {
             const button = this.jquery(event.currentTarget);
             if (button.data("jhsBusy") || "true" !== button.attr("data-jhs-settings-ready")) return;
-            button.data("jhsBusy", !0).prop("disabled", !0).attr("aria-busy", "true");
+            button.data("jhsBusy", !0).attr({ "aria-busy": "true", "aria-disabled": "true" });
             const fullBinding = this._fullSettingBinding, cloudBinding = this._cloudSettingBinding;
             try {
                 // Settle input normalization into this instance draft before capturing a save.
@@ -701,11 +706,17 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 catch (error) { try { this.logger?.warn?.("设置已保存，完成提示显示失败", error); } catch { /* committed settings win */ } }
             } catch (error) {
                 if (dependencies.isActive?.() === false) return;
-                if (error?.partialFailure) this.notifications.error("部分设置保存失败，请重试");
+                if (error instanceof MediaConnectionValidationError) this.notifications.error(error.message);
+                else if (error?.partialFailure) this.notifications.error("部分设置保存失败，请重试");
                 else this.notifications.error("设置保存失败");
                 this.logger.error("设置保存失败", error);
             } finally {
-                button.removeData("jhsBusy").prop("disabled", "true" !== button.attr("data-jhs-settings-ready")).removeAttr("aria-busy");
+                button.removeData("jhsBusy").prop("disabled", "true" !== button.attr("data-jhs-settings-ready")).removeAttr("aria-busy aria-disabled");
+                const instance = this._settingsDialog;
+                if (instance?.pendingClose && instance.root?.[0] === root[0]) {
+                    instance.pendingClose = false;
+                    void this.requestSettingsClose(instance);
+                }
             }
         }));
         root.find("#runHealthCheckBtn").on("click", (() => this._settingPanels.renderDataHealthPanel(dependencies)));

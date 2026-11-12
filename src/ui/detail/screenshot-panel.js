@@ -3,14 +3,6 @@
 import { createPanelEmpty, createPanelError, createPanelLoading } from "./primitives.js";
 import { screenshotErrorMessage } from "./screenshot-error.js";
 
-/** @param {unknown} value */
-function normalizeImageUrl(value) {
-    try {
-        const url = new URL(String(value || ""));
-        return url.protocol === "https:" ? url.href : null;
-    } catch { return null; }
-}
-
 /** Replace a result without losing keyboard focus owned by that result. @param {any} host @param {any} content */
 function replaceResult(host, content) {
     const restoreFocus = host[0]?.contains(document.activeElement);
@@ -21,10 +13,10 @@ function replaceResult(host, content) {
     }
 }
 
-/** @param {any} host @param {string} url @param {string} alt @param {any} scope @param {() => void} onError */
-function renderImage(host, url, alt, scope, onError) {
+/** @param {any} host @param {string} url @param {string} alt @param {any} scope @param {() => void} onError @param {any} screenshot */
+function renderImage(host, url, alt, scope, onError, screenshot) {
     const jq = /** @type {any} */ (globalThis).$;
-    const normalized = normalizeImageUrl(url);
+    const normalized = screenshot.normalizeAssetUrl(url);
     if (!normalized) return null;
     const image = jq("<img>").attr({ src: normalized, alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image");
     image.one("error", () => { if (host[0]?.contains(image[0])) onError(); });
@@ -71,7 +63,7 @@ export async function renderScreenshotPanel(options) {
             const image = Array.isArray(images) ? images[0] : images;
             if (!image?.url) { if (options.renderError) options.renderError(null); else replaceResult(resultHost, createPanelEmpty("暂无缩略图")); return null; }
             if (options.isDuplicate?.(image.url)) return resultHost.empty(), null;
-            const imageUrl = options.renderImage ? options.renderImage(image.url) ? image.url : null : renderImage(resultHost, image.url, "缩略图", options.scope, showError);
+            const imageUrl = options.renderImage ? options.renderImage(image.url) ? image.url : null : renderImage(resultHost, image.url, "缩略图", options.scope, showError, options.screenshot);
             if (!imageUrl) replaceResult(resultHost, createPanelEmpty("暂无缩略图"));
             else {
                 const source = enabledProviders.find(provider => provider.id === image.providerId);

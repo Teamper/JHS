@@ -4,9 +4,9 @@ import { PRODUCT_NAMES } from "../../core/product-names.js";
 
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
-import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
+import { createFc2SourceLinks, renderFc2Gallery, renderFc2State, renderFc2SummaryState } from "../../ui/detail/fc2-workspace-view.js";
 
-/** @typedef {{ root: any, carNum: string, isAlive: () => boolean }} Fc2DetailContext */
+/** @typedef {{ root: any, carNum: string, isAlive: () => boolean, initialMovie?: {title?: string, releaseDate?: string} }} Fc2DetailContext */
 
 /** Native owner for the 123AV FC2 catalog and the FC2 detail lookup capability. */
 export class Fc2CatalogController {
@@ -314,17 +314,18 @@ export class Fc2CatalogController {
     /** @param {Fc2DetailContext} context @param {string} url */
     async loadSummary(context, url) {
         const body = context.root.find('[data-jhs-role="summary-content"]');
-        renderFc2State(body, "加载中…");
+        const status = renderFc2SummaryState(context, "加载中…");
         try {
             const info = await this.get123AvVideoInfo(context.carNum, url);
             if (!context.isAlive()) return null;
             this.render123AvSummary(context, info);
             return info;
         } catch (error) {
-            if (context.isAlive()) renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", () => void this.loadSummary(context, url));
+            if (context.isAlive()) renderFc2SummaryState(context, "影片信息加载失败，可重试补全详情", () => void this.loadSummary(context, url));
             this.diagnostics.recordError({ source: "fc2-catalog", message: error instanceof Error ? error.message : String(error) });
             throw error;
         } finally {
+            status.attr("aria-busy", "false");
             body.attr("aria-busy", "false");
         }
     }
@@ -334,8 +335,8 @@ export class Fc2CatalogController {
         const $ = this.jquery;
         const body = context.root.find('[data-jhs-role="summary-content"]').empty();
         const title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
-        title.find("strong").text(info.title || "无标题");
-        body.append(title, $('<div class="jhs-fc2-meta"></div>').append($('<span></span>').text(`番号：${context.carNum}`), $('<span></span>').text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors" aria-busy="true"><strong>主演：</strong><span role="status">加载中…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', createFc2SourceLinks(context, this.movie), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
+        title.find("strong").text(info.title || context.initialMovie?.title || "无标题");
+        body.append(title, $('<div class="jhs-fc2-meta"></div>').append($('<span></span>').text(`番号：${context.carNum}`), $('<span></span>').text(`发行：${info.publishDate || context.initialMovie?.releaseDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors" aria-busy="true"><strong>主演：</strong><span role="status">加载中…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', createFc2SourceLinks(context, this.movie), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
 
     /** @param {string} carNum @param {string} url */

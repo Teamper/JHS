@@ -116,6 +116,7 @@ describe("FC2 dynamic navigation protection", () => {
         const controller = new Fc2NavigationController({ hostAdapter: host, fc2, scope, eventBus, ui: { jquery: $ } });
 
         await controller.start();
+        card.querySelector("a").title = "列表已有标题";
         const primary = card.querySelector("a[data-jhs-fc2-primary]");
         primary.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
         await vi.waitFor(() => expect(fc2.openFc2Dialog).toHaveBeenCalledOnce());
@@ -123,6 +124,9 @@ describe("FC2 dynamic navigation protection", () => {
         await vi.waitFor(() => expect(fc2.openFc2Page).toHaveBeenCalledOnce());
         primary.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }));
         await vi.waitFor(() => expect(fc2.openFc2Page).toHaveBeenCalledTimes(2));
+        const initialMovie = { title: "列表已有标题", coverUrl: "http://localhost:3000/cover.jpg", releaseDate: "" };
+        expect(fc2.openFc2Dialog).toHaveBeenCalledWith("mid", "FC2-999", "/v/primary", { source: "fc2", initialMovie });
+        expect(fc2.openFc2Page).toHaveBeenLastCalledWith("mid", "FC2-999", "/v/primary", expect.objectContaining({ newTab: true }), { source: "fc2", initialMovie });
         card.querySelectorAll("a")[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
         expect(fc2.openFc2Dialog).toHaveBeenCalledOnce();
         expect(card.querySelectorAll("a")[1].href).toBe("http://localhost:3000/actors/actor-1");

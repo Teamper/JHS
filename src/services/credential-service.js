@@ -6,8 +6,11 @@ export const CREDENTIAL_KEYS = Object.freeze({
     javdbToken: "jhs_appAuthorization",
 });
 
+/** Same-realm fallback when Web Locks is unavailable. */
+const connectionQueues = new Map();
+
 export class CredentialService extends EventTarget {
-    /** @param {{getValue: (key: string, fallback?: unknown) => unknown, setValue: (key: string, value: unknown) => unknown, removeValue: (key: string) => unknown, listenValue?: (key: string, callback: () => void) => any, unlistenValue?: (listener: any) => void}} storage @param {Storage} [legacyStorage] */
+    /** @param {{getValue: (key: string, fallback?: unknown) => unknown, setValue: (key: string, value: unknown) => unknown, removeValue: (key: string) => unknown, listValues?: () => any, listenValue?: (key: string, callback: () => void) => any, unlistenValue?: (listener: any) => void}} storage @param {Storage} [legacyStorage] */
     constructor(storage, legacyStorage = globalThis.localStorage) {
         super();
         this.storage = storage;
@@ -53,6 +56,58 @@ export class CredentialService extends EventTarget {
         if (record !== undefined && typeof record !== "string" && (!record || typeof record !== "object")) throw new Error("凭证格式无效");
         const revision = record && typeof record === "object" && /** @type {any} */ (record).schema === 2 ? String(/** @type {any} */ (record).id || "") || null : null;
         return record === undefined ? { exists: false, value: "", revision: null } : { exists: true, value: await this.decode(record), revision };
+    }
+    /** Read immutable encrypted connection revisions, retaining concurrent branches. @param {string} key */
+    async readVersioned(key) {
+        const prefix = `${key}:revision:`;
+        const nodes = [];
+        for (const name of await this.storage.listValues?.() || []) {
+            if (!name.startsWith(prefix)) continue;
+            const entry = await this.readEntry(name);
+            const node = JSON.parse(entry.value);
+            const revision = name.slice(prefix.length);
+            if (node.schema !== 1 || !Array.isArray(node.parents) || !node.parents.every((/** @type {any} */ parent) => parent === null || typeof parent === "string") || node.parents.includes(revision) || typeof node.value !== "string") {
+                throw new Error("连接修订版本不受支持");
+            }
+            nodes.push({ ...node, revision });
+        }
+        if (!nodes.length) return this.readEntry(key);
+        const parents = new Set(nodes.flatMap(node => node.parents));
+        const heads = nodes.filter(node => !parents.has(node.revision));
+        if (!heads.length) throw new Error("连接修订关系无效，原记录已保留");
+        if (heads.length > 1) throw Object.assign(new Error("连接配置存在并发冲突，请选择保留的版本"), { code: "CONFIG_CONFLICT", candidates: heads });
+        return { exists: true, value: heads[0].value, revision: heads[0].revision };
+    }
+    /** Compare inside the origin lock; immutable siblings preserve cross-origin races. @param {string} key @param {string} value @param {string | null | string[]} expected */
+    async setVersioned(key, value, expected) {
+        const save = async () => {
+            let revisions;
+            try {
+                const entry = await this.readVersioned(key);
+                revisions = [entry.revision];
+            } catch (error) {
+                if (!Array.isArray(expected) || /** @type {any} */ (error)?.code !== "CONFIG_CONFLICT") throw error;
+                revisions = /** @type {any} */ (error).candidates.map((/** @type {any} */ node) => node.revision);
+            }
+            const parents = Array.isArray(expected) ? expected : [expected];
+            if (JSON.stringify([...revisions].sort()) !== JSON.stringify([...parents].sort())) {
+                throw Object.assign(new Error("连接已被其他页面修改，当前草稿已保留"), { code: "CONFIG_CONFLICT" });
+            }
+            const revision = crypto.randomUUID();
+            await this.set(`${key}:revision:${revision}`, JSON.stringify({ schema: 1, parents, value }));
+            // The immutable revision is authoritative if the compatibility mirror fails.
+            try { await this.set(key, value); }
+            catch { await this.notifyChanged(key); }
+            const current = await this.readVersioned(key);
+            if (current.revision !== revision) throw Object.assign(new Error("连接配置已变化，请重新读取"), { code: "CONFIG_CONFLICT" });
+            return current;
+        };
+        const locks = /** @type {any} */ (globalThis.navigator?.locks);
+        if (locks?.request) return locks.request(`jhs_connection:${key}`, save);
+        const pending = (connectionQueues.get(key) || Promise.resolve()).catch(() => {}).then(save);
+        connectionQueues.set(key, pending);
+        try { return await pending; }
+        finally { if (connectionQueues.get(key) === pending) connectionQueues.delete(key); }
     }
     /** Notifications never contain the credential value. @param {string} key */
     async notifyChanged(key) {

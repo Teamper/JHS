@@ -12,24 +12,37 @@ function normalizeUrl(value) {
 
 import { createPanelState } from "./primitives.js";
 
-/** @param {any} target @param {string} message @param {null|(() => void)} [retry] */
-export function renderFc2State(target, message, retry = null) {
+/** @param {any} target @param {string} message @param {null|(() => void)} [retry] @param {string} [actionLabel] */
+export function renderFc2State(target, message, retry = null, actionLabel = "重试") {
     const jq = /** @type {any} */ (globalThis).$, host = jq(target).empty();
     const loading = /^(正在加载|加载中)/.test(message);
     host.attr("aria-busy", String(loading));
     if (loading) message = "加载中…";
     const state = createPanelState(message, { retry, tone: retry ? "error" : "neutral", extraClass: "jhs-fc2-state" });
+    if (retry) state.find("button").text(actionLabel);
     host.append(state);
+}
+
+/** Render request feedback alongside the metadata already owned by the workspace. */
+/** @param {any} context @param {string} message @param {null|(() => void)} [retry] @param {string} [actionLabel] */
+export function renderFc2SummaryState(context, message, retry = null, actionLabel = "重试") {
+    const jq = /** @type {any} */ (globalThis).$;
+    const host = context.root.find('[data-jhs-role="summary-content"]');
+    let status = host.find('[data-jhs-role="detail-status"]');
+    if (!status.length) status = jq('<div data-jhs-role="detail-status"></div>').appendTo(host);
+    renderFc2State(status, message, retry, actionLabel);
+    host.attr("aria-busy", status.attr("aria-busy"));
+    return status;
 }
 
 /** @param {any} context @param {unknown[]} images @param {unknown} [coverUrl] */
 export function renderFc2Gallery(context, images, coverUrl = null) {
     const jq = /** @type {any} */ (globalThis).$;
     const urls = [...new Set((images || []).map(normalizeUrl).filter(Boolean))];
-    const grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]').empty();
+    const grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]');
     context.galleryUrls = new Set(urls);
     const normalizedCover = normalizeUrl(coverUrl);
-    if (normalizedCover) preview.append(jq("<img>").attr({ src: normalizedCover, alt: `${context.carNum} 概览`, loading: "eager" }));
+    if (normalizedCover) preview.empty().append(jq("<img>").attr({ src: normalizedCover, alt: `${context.carNum} 概览`, loading: "eager" }));
     if (!urls.length) return renderFc2State(grid, "暂无剧照");
     urls.forEach((url, index) => grid.append(jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item"></button>').attr("aria-label", `查看剧照 ${index + 1}`).append(jq("<img>").addClass("jhs-fc2-gallery__image").attr({ src: url, alt: `剧照 ${index + 1}`, loading: "lazy" }))));
     // 去重保险：若额外长缩略图复用了 Gallery 图片，隐藏 screenshot 区域。

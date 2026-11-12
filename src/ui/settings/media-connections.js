@@ -1,4 +1,6 @@
 // @ts-check
+import { enhanceSettingRows } from "./setting-control-renderer.js";
+import { MediaConnectionValidationError, mediaConnectionErrorLabel, normalizeMediaConnection } from "../../core/media-library-model.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 export const MEDIA_LIBRARY_STYLES = `
@@ -8,6 +10,8 @@ export const MEDIA_LIBRARY_STYLES = `
 .jhs-media-connection-editor > summary { padding:var(--jhs-space-2); cursor:pointer; color:var(--jhs-text); }
 .jhs-media-connections label { display:flex; flex-direction:column; gap:var(--jhs-space-1); min-width:0; width:100%; }
 .jhs-media-connections input:not([type=checkbox]) { width:100%; box-sizing:border-box; min-width:0; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); font:inherit; color:var(--jhs-text); background:var(--jhs-surface); }
+.jhs-media-connections input[aria-invalid="true"] { border-color:var(--jhs-danger); }
+.jhs-media-result--error { color:var(--jhs-danger); }
 .jhs-media-connections legend { color:var(--jhs-text); font-weight:var(--jhs-font-weight-semibold); }
 .jhs-media-connections .jhs-media-choice { flex-direction:row; align-items:center; }
 .jhs-media-connections__wide { grid-column:1/-1; }
@@ -20,13 +24,14 @@ export const MEDIA_LIBRARY_STYLES = `
 @media(max-width:480px) { .jhs-media-connections fieldset { grid-template-columns:minmax(0,1fr); } }
 `;
 
-/** @param {{document: Document, scope: any, connections: any[], enabled: boolean, onSave: (connections: any[], enabled: boolean) => Promise<void>, onTest: (connection: any, scope: LifecycleScope) => Promise<any>}} options */
+/** @param {{document: Document, scope: any, connections: any[], enabled: boolean, onSave: (connections: any[], enabled: boolean) => Promise<void>, onTest: (connection: any, scope: LifecycleScope) => Promise<any>, embedded?: boolean, bindDraft?: (editor: any) => void}} options */
 export function createMediaConnections(options) {
     const { document, scope } = options;
     const root = document.createElement("div");
     root.className = "jhs-media-connections";
     const enabledLabel = document.createElement("label"), enabled = document.createElement("input");
     enabled.type = "checkbox";
+    enabled.className = "jhs-switch";
     enabled.setAttribute("role", "switch");
     enabled.checked = options.enabled;
     enabledLabel.className = "jhs-media-choice";
@@ -34,13 +39,13 @@ export function createMediaConnections(options) {
     const rows = document.createElement("div"), actions = document.createElement("div"), status = document.createElement("p");
     actions.className = "jhs-media-actions";
     status.setAttribute("role", "status");
-    /** @type {Array<{root: HTMLElement, read: () => any}>} */ const entries = [];
+    /** @type {Array<{root: HTMLElement, read: () => any, validate: () => any, showError: (error: any) => void}>} */ const entries = [];
     const button = (/** @type {HTMLElement} */ host, /** @type {string} */ text, /** @type {() => void} */ action, owner = scope) => {
         const node = document.createElement("button");
         node.type = "button";
         node.className = "jhs-btn jhs-btn--secondary jhs-btn--sm";
         node.textContent = text;
-        owner.listen(node, "click", action);
+        owner.listen(node, "click", () => { action(); root.dispatchEvent(new (/** @type {any} */ (document.defaultView)).Event("input", { bubbles: true })); });
         host.append(node);
         return node;
     };
@@ -60,6 +65,7 @@ export function createMediaConnections(options) {
         const field = (/** @type {string} */ text, /** @type {string} */ value, type = "text") => {
             const label = document.createElement("label"), input = document.createElement("input");
             input.type = type;
+            input.className = "jhs-field";
             input.value = value;
             if (type === "password") { input.autocomplete = "new-password"; input.spellcheck = false; }
             label.append(text, input);
@@ -94,16 +100,66 @@ export function createMediaConnections(options) {
         footer.className = "jhs-media-actions jhs-media-connections__wide";
         result.className = "jhs-media-connections__wide";
         result.setAttribute("role", "status");
+        result.id = `jhs-media-test-result-${crypto.randomUUID()}`;
+        const fields = /** @type {Record<string, HTMLInputElement>} */ ({ name, address, apiKey, userId });
+        const showError = (/** @type {any} */ error) => {
+            result.textContent = mediaConnectionErrorLabel(error);
+            result.classList.add("jhs-media-result--error");
+            if (error instanceof MediaConnectionValidationError) {
+                const input = fields[error.field];
+                input?.closest("label")?.after(result);
+                input?.setAttribute("aria-invalid", "true");
+                input?.setAttribute("aria-describedby", result.id);
+                input?.focus();
+            } else footer.after(result);
+            result.scrollIntoView?.({ block: "nearest" });
+        };
+        rowScope.listen(row, "input", event => {
+            const input = /** @type {HTMLInputElement} */ (event.target);
+            if (!Object.values(fields).includes(input)) return;
+            if (input.getAttribute("aria-describedby") === result.id) {
+                result.textContent = "";
+                footer.after(result);
+            }
+            input.removeAttribute("aria-invalid");
+            input.removeAttribute("aria-describedby");
+        });
         const read = () => ({ id, name: name.value, address: address.value, apiKey: apiKey.value, userId: userId.value, type, enabled: enable.checked });
-        const test = button(footer, "测试连接", () => {
-            test.disabled = true;
-            result.textContent = "连接中…";
-            void options.onTest(read(), rowScope).then(info => { if (!rowScope.disposed && row.isConnected) result.textContent = `连接成功 · ${info.name}`; }, () => { if (!rowScope.disposed && row.isConnected) result.textContent = "连接失败，请检查地址、API Key 和用户范围"; }).finally(() => { if (!rowScope.disposed && row.isConnected) test.disabled = false; });
+        const validate = () => {
+            for (const input of Object.values(fields)) {
+                input.removeAttribute("aria-invalid");
+                input.removeAttribute("aria-describedby");
+            }
+            return normalizeMediaConnection(read());
+        };
+        let testing = false;
+        const test = button(footer, "测试连接", async () => {
+            if (testing) return;
+            try {
+                const value = validate();
+                testing = true;
+                test.setAttribute("aria-busy", "true");
+                test.setAttribute("aria-disabled", "true");
+                result.classList.remove("jhs-media-result--error");
+                footer.after(result);
+                result.textContent = "连接中…";
+                const info = await options.onTest(value, rowScope);
+                if (!rowScope.disposed && row.isConnected) result.textContent = `连接成功 · ${info.name}`;
+            } catch (error) {
+                if (!rowScope.disposed && row.isConnected) showError(error);
+            } finally {
+                testing = false;
+                if (!rowScope.disposed) {
+                    test.removeAttribute("aria-busy");
+                    test.removeAttribute("aria-disabled");
+                }
+            }
         }, rowScope);
         button(footer, "移除此服务器", () => { const index = entries.findIndex(item => item.root === editor); entries.splice(index, 1); rowScope.dispose(); editor.remove(); add.focus(); }, rowScope);
         row.append(footer, result);
+        if (options.embedded) enhanceSettingRows(row);
         rows.append(editor);
-        entries.push({ root: editor, read });
+        entries.push({ root: editor, read, validate, showError });
         if (!connection.id) name.focus();
     };
     const add = button(actions, "添加服务器", () => { if (entries.length < 20) append({}); });
@@ -112,8 +168,16 @@ export function createMediaConnections(options) {
         status.textContent = "正在保存…";
         void options.onSave(entries.map(item => item.read()), enabled.checked).then(() => { if (!scope.disposed) status.textContent = "已保存"; }, error => { if (!scope.disposed) status.textContent = error instanceof TypeError ? error.message : "保存失败，请检查配置后重试"; }).finally(() => { if (!scope.disposed) save.disabled = false; });
     });
+    save.hidden = options.embedded === true;
     root.append(enabledLabel, rows, actions, status);
     for (const connection of options.connections) append(connection);
+    if (options.embedded) enhanceSettingRows(root);
+    options.bindDraft?.({ validate: () => {
+        for (const entry of entries) {
+            try { entry.validate(); }
+            catch (error) { entry.showError(error); throw error; }
+        }
+    }, capture: () => entries.map(item => item.read()), enabled: () => enabled.checked, applyPreferences: (/** @type {any} */ value) => { enabled.checked = [true, "yes"].includes(value.enableMediaLibrary); } });
     return root;
 }
 

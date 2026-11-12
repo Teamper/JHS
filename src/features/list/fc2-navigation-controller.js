@@ -1,5 +1,6 @@
 // @ts-check
 
+import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
 
 const FC2_PRIMARY_SELECTOR = '.item a[data-jhs-fc2-primary="true"]';
@@ -126,11 +127,18 @@ export class Fc2NavigationController {
         let carNum;
         let aHref;
         let fc2Source;
+        let initialMovie;
         try {
             const record = readListItem(item);
             carNum = record.carNum;
             aHref = item.attr("data-jhs-original-url") || record.aHref;
             fc2Source = record.fc2Source;
+            const image = item.find(".cover img, img").first()[0];
+            initialMovie = {
+                title: record.title,
+                coverUrl: normalizeHttpUrl(image?.currentSrc || image?.getAttribute("data-src") || image?.getAttribute("src"), item[0].ownerDocument.baseURI),
+                releaseDate: record.publishTime,
+            };
         } catch (error) {
             aHref = item.attr("data-jhs-original-url") || item.find("a").first().attr("href");
             carNum = item.find(".video-title strong").first().text().trim();
@@ -149,9 +157,9 @@ export class Fc2NavigationController {
             const source = fc2Source || (await this.fc2.resolveFc2Source({ url: aHref })) || "";
             if (this.disposed || this.scope.disposed || !item[0]?.isConnected) return;
             if (shouldOpenTab) {
-                await this.fc2.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source });
+                await this.fc2.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source, initialMovie });
             } else {
-                this.fc2.openFc2Dialog(movieId, carNum, aHref, { source });
+                this.fc2.openFc2Dialog(movieId, carNum, aHref, { source, initialMovie });
             }
         } catch (error) { fallbackToNative(aHref, carNum, error); }
     }

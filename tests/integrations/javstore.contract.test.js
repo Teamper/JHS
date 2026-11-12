@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 import { expect, it, vi } from "vitest";
 import { createJavStoreAdapter } from "../../src/integrations/javstore/manifest.js";
 import { parseJavStoreSearch } from "../../src/integrations/javstore/parser.js";
@@ -34,4 +36,17 @@ it("continues through candidates after missing or invalid details", async () => 
         { url: "https://javstore.net/preview.jpg", providerId: "javstore" },
     ]);
     expect(request).toHaveBeenCalledTimes(4);
+});
+
+it.each(["FC2-4995326", "FC2-PPV-4995326"])("uses the full FC2 query to find the exact article for %s", async carNum => {
+    const search = await readFile(resolve(import.meta.dirname, "../fixtures/integrations/javstore/search-fc2-4995326.html"), "utf8");
+    const request = vi.fn(async options => ({
+        data: options.url.includes("/search?") ? search : '<main><img src="http://img2.javstore.net/images/2026/10/22/fc2ppv-4995326_s.jpg" alt="FC2PPV-4995326"></main>',
+        finalUrl: options.url,
+    }));
+    const adapter = createJavStoreAdapter({ request });
+    expect(adapter.getSearchUrl({ carNum })).toBe("https://javstore.net/search?q=FC2-PPV-4995326");
+    await expect(adapter.getImages({ carNum })).resolves.toEqual([{ url: "https://img2.javstore.net/images/2026/10/22/fc2ppv-4995326_s.jpg", providerId: "javstore" }]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1][0].url).toContain("/594223-");
 });

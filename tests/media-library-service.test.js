@@ -131,6 +131,22 @@ it("keeps unreadable credentials in a stable unknown state until explicitly repa
     await service.queryMovie({ carNum: "ABC-123" });
     expect(credential.readEntry).toHaveBeenCalledOnce();
     expect(adapter.readPage).not.toHaveBeenCalled();
+    await expect(service.saveConnections([])).rejects.toThrow("无法读取");
+    expect(credential.set).not.toHaveBeenCalled();
+    await service.reload();
     await service.saveConnections([first]);
     expect((await service.queryMovie({ carNum: "ABC-123" })).status).toBe("present");
+});
+
+it("revokes a connection test grant immediately when its owner closes", async () => {
+    let finish;
+    const { service, adapter, urlPolicy } = setup([], { serverInfo: vi.fn(() => new Promise(resolve => { finish = resolve; })) });
+    const scope = new LifecycleScope("closing-test");
+    const pending = service.testConnection(first, scope);
+    await vi.waitFor(() => expect(adapter.serverInfo).toHaveBeenCalledOnce());
+    scope.dispose();
+    expect(() => urlPolicy.assertAllowed(first.address, { trustClass: "user-local" })).toThrow();
+    finish({ id: "server" });
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(adapter.readPage).not.toHaveBeenCalled();
 });

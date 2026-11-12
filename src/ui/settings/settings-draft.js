@@ -70,7 +70,7 @@ export class SettingsDraft {
             }
         });
         this.root.data("jhsDirtyResourceJson", pendingGroups.has("resources"));
-        const count = new Set([...dirty, ...(this.session?.dirtyKeys() || [])]).size + Number(review || pendingGroups.has("review")) + Number(title || pendingGroups.has("title")) + Number(pendingGroups.has("resources"));
+        const count = (this.session?.extraDirtyCount?.() || 0) + new Set([...dirty, ...(this.session?.dirtyKeys() || [])]).size + Number(review || pendingGroups.has("review")) + Number(title || pendingGroups.has("title")) + Number(pendingGroups.has("resources"));
         const text = count ? `有 ${count} 项未保存` : "";
         this.root.find("#settings-draft-status").text(text);
         this.root.find("#saveBtn").attr("data-jhs-dirty-count", count);

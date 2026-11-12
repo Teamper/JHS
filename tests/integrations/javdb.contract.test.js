@@ -6,6 +6,11 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { parseJavDbActorList } from "../../src/integrations/javdb/parser.js";
 import { createJavDbAdapter } from "../../src/integrations/javdb/manifest.js";
+import { HttpService } from "../../src/services/http-service.js";
+import { CacheService } from "../../src/services/cache-service.js";
+import { ExternalUrlPolicy } from "../../src/services/external-url-policy.js";
+import { createIntegrationRequestFacade } from "../../src/app/integration-registry.js";
+import javdbManifest from "../../src/integrations/javdb/manifest.js";
 import { AccountService } from "../../src/services/account-service.js";
 import { JavDbHostAdapter } from "../../src/platform/hosts/javdb-host-adapter.js";
 
@@ -125,4 +130,37 @@ it("normalizes JavDB ranking contracts", async () => {
         { movieId: "9", carNum: "ABC-123", title: "Title", coverUrl: "https://c0.jdbstatic.com/a.jpg", releaseDate: null, hasSubtitle: true, magnetCount: 2, newMagnets: false, providerId: "javdb" },
     ]);
     expect(request.mock.calls[0][0].url).toContain("period=weekly");
+});
+
+it("uses the current encrypted account token and keeps login failures out of detail cache", async () => {
+    let token = "";
+    const credential = { get: vi.fn(async key => { expect(key).toBe("jhs_appAuthorization"); return token; }) };
+    const request = vi.fn(async options => ({ status: 200, finalUrl: options.url,
+        data: options.headers.authorization ? { success: 1, data: { movie: { id: "fixture-id", number: "FC2-4995326", title: "Fixture" } } } : { success: 0, message: "請登錄帳號", data: null },
+    }));
+    const cache = new CacheService();
+    const http = new HttpService({ request }, new ExternalUrlPolicy(), { cache });
+    const adapter = createJavDbAdapter(createIntegrationRequestFacade(http, javdbManifest), () => "signature", null, credential);
+    await expect(adapter.getDetail({ movieId: "fixture-id" })).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
+    token = "fixture-account-one";
+    await expect(adapter.getDetail({ movieId: "fixture-id" })).resolves.toMatchObject({ carNum: "FC2-4995326" });
+    await adapter.getDetail({ movieId: "fixture-id" });
+    expect(request).toHaveBeenCalledTimes(2);
+    token = "fixture-account-two";
+    await adapter.getDetail({ movieId: "fixture-id" });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls[1][0].headers.authorization).toBe("Bearer fixture-account-one");
+    expect(request.mock.calls[2][0].headers.authorization).toBe("Bearer fixture-account-two");
+    token = "";
+    await expect(adapter.getDetail({ movieId: "fixture-id" })).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(JSON.stringify([...cache.publicCache])).not.toContain("fixture-account-");
+});
+
+it("reports an expired saved login as authentication required without caching its response", async () => {
+    const request = vi.fn(async () => ({ data: { success: 0, message: "請重新登入", data: null } }));
+    const adapter = createJavDbAdapter({ request }, () => "signature", null, { get: async () => "expired-fixture-token" });
+    await expect(adapter.getDetail({ movieId: "fixture-id" })).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
+    expect(request.mock.calls[0][0].headers.authorization).toBe("Bearer expired-fixture-token");
+    expect(request.mock.calls[0][0].cacheAccept({ data: { success: 0, message: "請重新登入" } })).toBe(false);
 });

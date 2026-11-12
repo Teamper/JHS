@@ -600,7 +600,10 @@ export class StateService {
                     continue;
                 }
                 const current = carMap.get(change.carNum);
-                if (change.newVideoEffect && !canRestoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect, change.afterDecision ?? null)) {
+                const remainingFlags = /** @type {Record<string, boolean>} */ (current ? normalizeStateFlags(current.stateFlags) : createEmptyStateFlags());
+                for (const field of change.fields || []) if (field.startsWith("stateFlags.")) remainingFlags[field.slice(11)] = getStatePath(change.before, field) === true;
+                const restoreEffect = !Object.values(remainingFlags).some(Boolean);
+                if (restoreEffect && change.newVideoEffect && !canRestoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect, change.afterDecision ?? null)) {
                     change.undoState = "conflict", conflicts.push(change.carNum); continue;
                 }
                 if ("delete" === change.operation) {
@@ -613,14 +616,31 @@ export class StateService {
                     continue;
                 }
                 if ("new-video-remove" === change.operation) {
-                    restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum), touched.add("actresses"), touched.add("decisions");
+                    if (restoreEffect) {
+                        restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect);
+                        touched.add("actresses");
+                        touched.add("decisions");
+                    }
+                    change.undoState = "reverted";
+                    reverted.push(change.carNum);
                     continue;
                 }
                 if (![ "patch", "create" ].includes(change.operation) || !current || change.fields.some((/** @param {string} field */ field => stableStateValue(getStatePath(current, field)) !== stableStateValue(getStatePath(change.after, field))))) {
                     change.undoState = "conflict", conflicts.push(change.carNum); continue;
                 }
-                if ("create" === change.operation && !change.before) carMap.delete(change.carNum); else change.fields.forEach((/** @param {string} field */ field => setStatePath(current, field, getStatePath(change.before, field)))), syncLegacyStatus(current), carMap.set(change.carNum, current);
-                touched.add("carList"), change.newVideoEffect && (restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), touched.add("actresses"), touched.add("decisions")), change.undoState = "reverted", reverted.push(change.carNum);
+                const businessValue = (/** @type {StateRecord} */ record) => { const { updateDate, status, ...value } = record; return stableStateValue(value); };
+                if (change.operation === "create" && !change.before && businessValue(current) === businessValue(change.after)) {
+                    carMap.delete(change.carNum);
+                } else {
+                    for (const field of change.fields) {
+                        const value = getStatePath(change.before, field);
+                        setStatePath(current, field, value === undefined && field.startsWith("stateFlags.") ? false : value);
+                    }
+                    current.updateDate = utils.getNowStr();
+                    syncLegacyStatus(current);
+                    carMap.set(change.carNum, current);
+                }
+                touched.add("carList"), restoreEffect && change.newVideoEffect && (restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), touched.add("actresses"), touched.add("decisions")), change.undoState = "reverted", reverted.push(change.carNum);
             }
             transaction.undoAttemptedAt = new Date().toISOString();
             const log = this._prepareActivity(domains.activity), nextCars = [ ...carMap.values() ], touchedDomains = [...touched];

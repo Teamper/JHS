@@ -21,3 +21,18 @@ it("does not count toggling built-in sources off and back to their default",asyn
  await session.set("magnetBuiltInSources",JSON.stringify([{id:"fixture",enabled:false}])); expect(session.dirtyKeys()).toEqual(["magnetBuiltInSources"]);
  await session.set("magnetBuiltInSources",JSON.stringify([{id:"fixture",enabled:true}])); expect(session.dirtyKeys()).toEqual([]); expect(writes()).toBe(0); session.dispose();
 });
+
+it("advances only successful connection snapshots and retains edits made during save", async () => {
+ const {session}=await setup(); let current={apiKey:"original"}; let finish;
+ session.registerEditor("media",{capture:()=>current,validate:()=>{},save:()=>new Promise(resolve=>{finish=resolve}),error:()=>{}});
+ current={apiKey:"submitted"}; const submitted=session.captureEditors(); const pending=session.saveEditors(submitted);
+ current={apiKey:"original"}; finish(); expect(await pending).toEqual([]); expect(session.extraDirtyCount()).toBe(1);
+ expect(JSON.stringify(session.snapshot())).not.toContain("apiKey"); session.dispose(); expect(session.editors.size).toBe(0);
+});
+
+it("continues healthy connection groups after another group fails", async () => {
+ const {session}=await setup(); let current="base"; const failure=new Error("failure");
+ for(const id of ["translation","media"])session.registerEditor(id,{capture:()=>current,validate:()=>{},save:async()=>{if(id==="translation")throw failure},error:()=>{}});
+ current="edited"; expect(await session.saveEditors(session.captureEditors())).toEqual([{id:"translation",error:failure}]);
+ expect(session.extraDirtyCount()).toBe(1); expect(session.editors.get("media").base).toBe("edited");session.dispose();
+});

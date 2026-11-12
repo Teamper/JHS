@@ -141,3 +141,26 @@ it("restores nested Layer focus after native removal and still respects later hi
     await close(parent);
     expect(doc.activeElement.id).toBe("opener");
 });
+
+it("recenters content-adaptive forms as their content grows and releases observation", () => {
+    dom = new JSDOM('<div id="dialog"></div>'); vi.stubGlobal("window", dom.window);
+    const root = dom.window.document.querySelector("#dialog");
+    Object.defineProperty(dom.window.document.documentElement, "clientWidth", { value: 390 });
+    Object.defineProperty(dom.window.document.documentElement, "clientHeight", { value: 640 });
+    let height = 100, resized;
+    const disconnect = vi.fn();
+    dom.window.ResizeObserver = class {
+        constructor(callback) { resized = callback; }
+        observe() {}
+        disconnect = disconnect;
+    };
+    Object.defineProperty(root, "offsetLeft", { get: () => parseFloat(root.style.left) || 0 });
+    Object.defineProperty(root, "offsetTop", { get: () => parseFloat(root.style.top) || 0 });
+    root.getBoundingClientRect = () => new dom.window.DOMRect(root.offsetLeft, root.offsetTop, 300, height);
+    const options = prepareDialogOptions({ type: 1, ui: { size: "form", body: "scroll" } }, { getDialogArea: () => ["300px", "auto"] });
+    options.success(root, 1);
+    expect(root.style.height).toBe("auto"); expect(root.style.top).toBe("270px");
+    height = 500; resized(); expect(root.style.top).toBe("70px");
+    expect(root.style.maxHeight).toBe("624px");
+    options.end(); expect(disconnect).toHaveBeenCalledOnce();
+});

@@ -24,3 +24,24 @@ describe("projectjav screenshot contract", () => {
         expect(http.request.mock.calls[1][1]).toBe(scope);
     });
 });
+
+it("continues after a missing first detail", async () => {
+    const original = fixture("search");
+    const search = original.replaceAll("79945", "11111").replaceAll("202569", "11111") + original;
+    let details = 0;
+    const request = vi.fn(async options => {
+        if (details === 0) { details++; return { data: search }; }
+        if (details++ === 1) throw Object.assign(new Error("missing"), { code: "NOT_FOUND" });
+        return { data: fixture("detail"), finalUrl: detailUrl };
+    });
+    const result = await createProjectJavAdapter({ request }).getImages({ carNum: "SSIS-001" });
+    expect(result.length).toBeGreaterThan(0);
+    expect(request).toHaveBeenCalledTimes(3);
+});
+
+it.each(["ABORTED", "UNAUTHORIZED", "TIMEOUT"])("preserves %s from detail requests", async code => {
+    const failure = Object.assign(new Error(code), { code });
+    const request = vi.fn().mockResolvedValueOnce({ data: fixture("search") }).mockRejectedValueOnce(failure);
+    await expect(createProjectJavAdapter({ request }).getImages({ carNum: "SSIS-001" })).rejects.toBe(failure);
+    expect(request).toHaveBeenCalledTimes(2);
+});

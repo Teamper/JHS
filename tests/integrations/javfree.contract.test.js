@@ -29,3 +29,24 @@ it("matches FC2 numeric screenshot filenames exactly and supports lazy images", 
     const html = '<h1 class="entry-title">FC2-PPV-1234567</h1><div class="entry-content"><img data-src="//cf.javfree.me/test/1234567_1.jpg"><img src="https://cf.javfree.me/test/12345670_1.jpg"></div>';
     expect(parseJavFreeImages(html, "FC2-1234567", "https://javfree.me/777/fc2-ppv-1234567")).toEqual([{ url: "https://cf.javfree.me/test/1234567_1.jpg", providerId: "javfree" }]);
 });
+
+it("continues after a missing first detail", async () => {
+    const original = fixture("search");
+    const search = original.replaceAll("79945", "11111").replaceAll("202569", "11111") + original;
+    let details = 0;
+    const request = vi.fn(async options => {
+        if (details === 0) { details++; return { data: search }; }
+        if (details++ === 1) throw Object.assign(new Error("missing"), { code: "NOT_FOUND" });
+        return { data: fixture("detail"), finalUrl: detailUrl };
+    });
+    const result = await createJavFreeAdapter({ request }).getImages({ carNum: "SSIS-001" });
+    expect(result.length).toBeGreaterThan(0);
+    expect(request).toHaveBeenCalledTimes(3);
+});
+
+it.each(["ABORTED", "UNAUTHORIZED", "TIMEOUT"])("preserves %s from detail requests", async code => {
+    const failure = Object.assign(new Error(code), { code });
+    const request = vi.fn().mockResolvedValueOnce({ data: fixture("search") }).mockRejectedValueOnce(failure);
+    await expect(createJavFreeAdapter({ request }).getImages({ carNum: "SSIS-001" })).rejects.toBe(failure);
+    expect(request).toHaveBeenCalledTimes(2);
+});

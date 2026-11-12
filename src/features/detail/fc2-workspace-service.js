@@ -7,13 +7,13 @@ import { createStateActions } from "../../ui/detail/state-actions.js";
 import { _, k, m, v, y } from "../../core/constants.js";
 import { DetailStateController } from "../../core/detail-state-controller.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
-import { normalizeBtihHash } from "../../core/feature-helpers.js";
+import { normalizeHttpUrl, normalizeBtihHash } from "../../core/feature-helpers.js";
 import { extractJavDbMovieId } from "../../core/movie-identity.js";
 import { getJavDbWantWatchState, markJavDbWantWatch } from "../../core/javdb-api.js";
 import { openJavDbLoginDialog } from "./javdb-login-dialog.js";
 import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
 import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
-import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
+import { createFc2SourceLinks, renderFc2Gallery, renderFc2State, renderFc2SummaryState } from "../../ui/detail/fc2-workspace-view.js";
 import { RelatedPanel } from "../../ui/detail/related-panel.js";
 import { ReviewPanel } from "../../ui/detail/review-panel.js";
 import { createFc2DetailContext, createFc2DetailShell } from "../../ui/detail/fc2-detail-workspace.js";
@@ -36,6 +36,8 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
  * @property {() => void} destroy
  * @property {(observer: { disconnect?: () => void }) => unknown} addObserver
  * @property {((enabled: boolean) => void) | undefined} [magnetFilterApply]
+ * @property {Fc2Movie} [initialMovie]
+ * @property {Fc2Movie} [summaryMovie]
  * @property {Set<string> | undefined} galleryUrls
  * @property {LifecycleScope} [wantScope]
  * @property {number} [wantGeneration]
@@ -57,7 +59,7 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
 /** @typedef {{ title?: string, originalTitle?: string, coverUrl?: string | null, carNum?: string, releaseDate?: string, score?: number | string, duration?: number | string, actors?: MovieActor[], imageUrls?: string[] }} Fc2Movie */
 /** @typedef {{ hash?: string, title?: string, hasHdTag?: boolean, hasSubtitleTag?: boolean, createdAt?: string, seeders?: number, sizeMb?: number, fileCount?: number }} NativeMagnet */
 /** @typedef {{ highQuality: boolean, grade: string, score: { total: number } }} MagnetAssessment */
-/** @typedef {{ movieId?: string | null, carNum: string, url: string, source: string, mode: string, layerIndex?: number }} Fc2MountOptions */
+/** @typedef {{ movieId?: string | null, carNum: string, url: string, source: string, mode: string, layerIndex?: number, initialMovie?: Fc2Movie }} Fc2MountOptions */
 /** @typedef {{ fc2Source?: string, url?: string }} Fc2SourceRecord */
 
 /** Returns an id only for an explicit JavDB detail route. */
@@ -170,13 +172,13 @@ export class Fc2WorkspaceService {
     }
     /** @param {string} carNum @param {string} [url] */
     async resolveMovieIdForRecord(carNum, url = "") { return parseExplicitJavDbMovieId(url) || this.resolveMovieId(carNum); }
-    /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ source?: string }} [options] */
-    openFc2Dialog(movieId, carNum, url, { source = "" } = {}) {
+    /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ source?: string, initialMovie?: Fc2Movie }} [options] */
+    openFc2Dialog(movieId, carNum, url, { source = "", initialMovie } = {}) {
         source = [ "fc2", "123av" ].includes(source) ? source : "";
         /** @type {Fc2DetailContext | null} */
         let context = null;
         return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', ui: { size: "workspace", body: "scroll" }, area: utils.getDialogArea("workspace"), skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
-            success: (/** @type {HTMLElement} */ layerRoot, /** @type {number} */ layerIndex) => { context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog" }), utils.setupEscClose(layerIndex); },
+            success: (/** @type {HTMLElement} */ layerRoot, /** @type {number} */ layerIndex) => { context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog", initialMovie }), utils.setupEscClose(layerIndex); },
             end: () => context?.destroy()
         });
     }
@@ -195,7 +197,6 @@ export class Fc2WorkspaceService {
     initializeWorkspace(context) {
         context.root.attr("data-jhs-movie-code", context.carNum);
         const summary = $('<div class="jhs-fc2-summary"><div class="jhs-fc2-preview" data-jhs-role="main-preview"></div><div class="jhs-fc2-summary__body"><div data-jhs-role="summary-content"></div></div></div>'), toolbar = $('<div class="jhs-fc2-toolbar" role="toolbar" aria-label="影片操作"></div>');
-        renderFc2State(summary.find('[data-jhs-role="summary-content"]'), "加载中…");
         toolbar.append(createStateActions());
         toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitles">字幕</button>'), summary.find(".jhs-fc2-summary__body").append(toolbar), context.getSlot("summary").append(summary);
         const gallery = $('<div class="jhs-fc2-gallery-grid" data-jhs-role="gallery-grid"></div>'), screenshot = $('<div class="jhs-fc2-screenshot" data-jhs-role="screenshot"></div>');
@@ -207,6 +208,10 @@ export class Fc2WorkspaceService {
             if (session) context.addObserver({ disconnect: () => session.close(false) });
         }));
         context.getSlot("gallery").append(gallery, screenshot);
+        if (context.initialMovie) {
+            this.renderSummary(context, context.initialMovie);
+            renderFc2Gallery(context, [], context.initialMovie.coverUrl);
+        }
         const resources = $('<div class="jhs-fc2-resource-stack"></div>'), nativeGroup = this.createResourceGroup("站内磁力", "native-magnets"), sitesGroup = this.createResourceGroup("第三方站点", "other-sites"), hubGroup = this.createResourceGroup("更多磁力来源", "magnet-hub"), hubButton = $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="magnet-hub" aria-expanded="false">展开磁力搜索</button>');
         let magnetHubPromise = null;
         /** @type {any} */ let mountedMagnetHub = null;
@@ -430,12 +435,12 @@ export class Fc2WorkspaceService {
         if (!source && typeof this.runtimeServices.ensureFc2Catalog === "function") {
             try { source = await this.runtimeServices.ensureFc2Catalog(); }
             catch {
-                if (context.isAlive()) renderFc2State(context.getSlot("summary"), "123AV 详情初始化失败", () => void this.load123AvDetail(context));
+                if (context.isAlive()) renderFc2SummaryState(context, "123AV 详情初始化失败", () => void this.load123AvDetail(context));
                 return;
             }
         }
         if (!context.isAlive()) return;
-        if (!source) return void renderFc2State(context.getSlot("summary"), "123AV 详情功能已禁用");
+        if (!source) return void renderFc2SummaryState(context, "123AV 详情功能已禁用");
         const movieIdPromise = /** @type {Promise<string | null>} */ (source.resolveMovieId(context.carNum));
         void this.configureJavDbWantButton(context, movieIdPromise), void this.mountPanels(context, movieIdPromise), void movieIdPromise.then((movieId => {
             if (context.isAlive()) return this.fetchAndRenderNativeMagnets(context, movieId);
@@ -556,21 +561,49 @@ export class Fc2WorkspaceService {
     /** @param {Fc2DetailContext} context */
     async fetchAndRenderNativeDetail(context) {
         const host = context.root.find('[data-jhs-role="summary-content"]');
-        renderFc2State(host, "加载中…");
+        const status = renderFc2SummaryState(context, "加载中…");
         try {
             const scope = await this.getRuntimeService("scope")();
             const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
             if (!movie) throw new Error("JavDB 影片详情不存在");
             if (!context.isAlive()) return;
-            this.renderSummary(context, movie), renderFc2Gallery(context, movie.imageUrls || [], movie.coverUrl || null);
+            const resolved = {
+                ...movie,
+                title: movie.title || context.summaryMovie?.title,
+                coverUrl: normalizeHttpUrl(movie.coverUrl) || context.summaryMovie?.coverUrl,
+                releaseDate: movie.releaseDate || context.summaryMovie?.releaseDate,
+                imageUrls: movie.imageUrls || context.summaryMovie?.imageUrls || [],
+            };
+            this.renderSummary(context, resolved);
+            renderFc2Gallery(context, resolved.imageUrls, resolved.coverUrl);
         } catch (error) {
-            context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), this.logger.error("FC2 详情加载失败", error);
+            if (!context.isAlive()) return;
+            if (/** @type {any} */ (error)?.code === "AUTH_REQUIRED") {
+                renderFc2State(status, "影片信息需要登录，请在脚本中登录 JavDB 账号", () => {
+                    if (!context.isAlive()) return;
+                    openJavDbLoginDialog({
+                        dialog: this.getRuntimeService("dialog"), account: this.getRuntimeService("account"),
+                        credential: this.getRuntimeService("credential"), getScope: () => Promise.resolve(this.wantScopeFor(context)),
+                        ui: this.getRuntimeService("ui"), notifications: this.getRuntimeService("notifications"), logger: this.logger,
+                        onSuccess: async () => {
+                            if (!context.isAlive()) return;
+                            await this.fetchAndRenderNativeDetail(context);
+                            if (context.isAlive()) void this.applyFc2Translation(context);
+                        },
+                    });
+                }, "登录 JavDB");
+            } else {
+                renderFc2State(status, "影片信息加载失败，可重试补全详情", () => void this.fetchAndRenderNativeDetail(context));
+                this.logger.error("FC2 详情加载失败", error);
+            }
         } finally {
+            status.attr("aria-busy", "false");
             host.attr("aria-busy", "false");
         }
     }
     /** @param {Fc2DetailContext} context @param {Fc2Movie} movie */
     renderSummary(context, movie) {
+        context.summaryMovie = movie;
         const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
         title.find("strong").text(movie.title || "无标题"), body.append(title);
         if (movie.originalTitle && movie.originalTitle !== movie.title) body.append($('<div class="jhs-fc2-original-title"></div>').text(movie.originalTitle));
@@ -664,18 +697,22 @@ export class Fc2WorkspaceService {
             return url.origin === window.location.origin ? "fc2" : "";
         } catch { return ""; }
     }
-    /** Build an owned FC2 detail URL only after a movie identity has been resolved. @param {string} movieId @param {string} carNum @param {string} url @param {{source?: string}} [options] */
-    createFc2PageUrl(movieId, carNum, url, { source = "" } = {}) {
+    /** Build an owned FC2 detail URL only after a movie identity has been resolved. @param {string} movieId @param {string} carNum @param {string} url @param {{source?: string, initialMovie?: Fc2Movie}} [options] */
+    createFc2PageUrl(movieId, carNum, url, { source = "", initialMovie } = {}) {
         if (!String(movieId || "").trim()) throw new TypeError("FC2 owned detail requires movieId");
         const target = new URL("/users/collection_codes", window.location.origin);
         target.searchParams.set("movieId", String(movieId).trim()), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
+        if (initialMovie?.title) target.searchParams.set("title", initialMovie.title);
+        const coverUrl = normalizeHttpUrl(initialMovie?.coverUrl);
+        if (coverUrl) target.searchParams.set("coverUrl", coverUrl);
+        if (initialMovie?.releaseDate) target.searchParams.set("releaseDate", initialMovie.releaseDate);
         return target.href;
     }
-    /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ newTab?: boolean }} [navigation] @param {{ source?: string }} [options] */
-    async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "" } = {}) {
+    /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ newTab?: boolean }} [navigation] @param {{ source?: string, initialMovie?: Fc2Movie }} [options] */
+    async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "", initialMovie } = {}) {
         source = [ "fc2", "123av" ].includes(source) ? source : "";
         const resolvedMovieId = String(movieId || "").trim();
         if (!resolvedMovieId) return void utils.openPage(url, carNum, !0, navigation);
-        utils.openPage(this.createFc2PageUrl(resolvedMovieId, carNum, url, { source }), carNum, !0, navigation);
+        utils.openPage(this.createFc2PageUrl(resolvedMovieId, carNum, url, { source, initialMovie }), carNum, !0, navigation);
     }
 }

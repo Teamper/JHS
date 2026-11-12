@@ -16,9 +16,13 @@ export function createProjectJavAdapter(http) {
             const searchUrl = this.getSearchUrl(movie), response = await request(searchUrl, options, response => parseProjectJavSearch(response.data, movie.carNum, response.finalUrl || searchUrl).length > 0);
             for (const candidate of parseProjectJavSearch(response.data, movie.carNum, response.finalUrl || searchUrl).slice(0, 5)) {
                 options.scope?.assertActive();
-                const detail = await request(candidate, options, response => parseProjectJavImages(response.data, movie.carNum, response.finalUrl || candidate).length > 0);
-                const images = parseProjectJavImages(detail.data, movie.carNum, detail.finalUrl || candidate);
-                if (images.length) return images;
+                try {
+                    const detail = await request(candidate, options, response => parseProjectJavImages(response.data, movie.carNum, response.finalUrl || candidate).length > 0);
+                    const images = parseProjectJavImages(detail.data, movie.carNum, detail.finalUrl || candidate);
+                    if (images.length) return images;
+                } catch (error) {
+                    if (options.scope?.disposed || /** @type {any} */ (error)?.code !== "NOT_FOUND") throw error;
+                }
             }
             return [];
         },

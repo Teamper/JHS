@@ -9,8 +9,8 @@ import { createJavDbWebLists } from "./web-lists.js";
 
 const API_ORIGIN = "https://jdforrepam.com";
 
-/** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {() => string} sign @param {{parseActorMovies?: (html: string, baseUrl: string) => any, parseActorCollection?: (html: string, baseUrl: string) => any} | null} hostAdapter */
-export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapter = null) {
+/** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {() => string} sign @param {{parseActorMovies?: (html: string, baseUrl: string) => any, parseActorCollection?: (html: string, baseUrl: string) => any} | null} hostAdapter @param {{get:(key:string)=>Promise<string>} | null} [credential] */
+export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapter = null, credential = null) {
     /** @param {string} baseUrl */
     const hostPolicy = (baseUrl) => {
         const origin = new URL(baseUrl).origin, hostname = new URL(baseUrl).hostname, builtin = hostname === "javdb.com" || hostname.endsWith(".javdb.com");
@@ -20,12 +20,28 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
     const request = async (path, query, options = {}, headers = {}, capability = "movie.detail") => {
         const url = new URL(path, API_ORIGIN);
         Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, String(value)));
+        const token = credential ? await credential.get("jhs_appAuthorization") : "";
         const response = await http.request({
             providerId: "javdb", capability, method: "GET", url: url.href, responseType: "json",
-            headers: { jdSignature: sign(), ...headers },
+            headers: { jdSignature: sign(), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+            varyHeaders: ["authorization"],
+            cacheAccept: (/** @type {any} */ response) => {
+                const payload = response.data;
+                if (payload?.success === 0) return false;
+                if (capability === "movie.detail") return Boolean(payload?.data?.movie?.number);
+                if (capability === "movie.search") return Array.isArray(payload?.data?.movies);
+                return true;
+            },
             urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] },
         }, options.scope);
-        return response.data;
+        const payload = response.data;
+        if (payload?.success === 0) {
+            if (/登[录錄入]|log[ -]?in|sign[ -]?in/i.test(String(payload.message || ""))) {
+                throw new JhsError("AUTH_REQUIRED", "请在脚本中登录 JavDB 账号后重试", { source: "javdb" });
+            }
+            throw new JhsError("INVALID_RESPONSE", "JavDB API 请求未成功", { source: "javdb" });
+        }
+        return payload;
     };
     return Object.freeze({
         contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList", "AccountSession", "MovieList"],
@@ -157,8 +173,8 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
 export default defineIntegration({
     id: "javdb", trustClass: "builtin-public", hosts: ["javdb.com", "jdforrepam.com", "c0.jdbstatic.com"],
     capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "actor.avatar-placeholder", "account.login", "account.want-read", "account.want-write", "lists.membership"],
-    requires: [SERVICE.http, PORT.javdbHost],
-    createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost] }),
-    createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter), createHostAdapter: null,
+    requires: [SERVICE.http, PORT.javdbHost, SERVICE.credential],
+    createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost], credential: dependencies[SERVICE.credential] }),
+    createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter, client.credential), createHostAdapter: null,
     cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none", "account.want-read": "none", "account.want-write": "none", "lists.membership": "none" }, quality: "silver",
 });

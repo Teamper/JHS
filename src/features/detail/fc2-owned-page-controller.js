@@ -41,6 +41,11 @@ export class Fc2OwnedPageController {
         const carNum = params.get("carNum") || "";
         const url = params.get("url") || "";
         const explicitSource = params.get("source");
+        const initialMovie = params.has("title") || params.has("coverUrl") || params.has("releaseDate") ? {
+            title: params.get("title") || "",
+            coverUrl: params.get("coverUrl"),
+            releaseDate: params.get("releaseDate") || "",
+        } : undefined;
         if (!carNum || !url) {
             this.renderError("FC2 详情参数不完整");
             return true;
@@ -55,7 +60,7 @@ export class Fc2OwnedPageController {
                 ? explicitSource
                 : await this.adapter.resolveFc2Source({ url });
             if (!this.canCommit(generation)) return false;
-            this.context = this.adapter.mountFc2Detail(this.host, { movieId, carNum, url, source, mode: "page" });
+            this.context = this.adapter.mountFc2Detail(this.host, { movieId, carNum, url, source, mode: "page", ...(initialMovie ? { initialMovie } : {}) });
             return true;
         } catch (error) {
             if (!this.canCommit(generation)) return false;

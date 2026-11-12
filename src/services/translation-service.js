@@ -19,6 +19,7 @@ export class TranslationService extends EventTarget {
         this.configuration = normalizeTranslationConfiguration({schema:1,profiles:[],primary:"google",fallbacks:[]});
         this.configurationReady = /** @type {Promise<void>|null} */ (null);
         this.configurationError = "";
+        this.configurationFailure = /** @type {any} */ (null);
         this.configurationRevision = /** @type {string|null} */ (null);
         this.loadSequence = 0;
         this.requestGeneration = 0;
@@ -47,15 +48,16 @@ export class TranslationService extends EventTarget {
     async loadConfiguration(sequence,notify) {
         this.configurationError = "";
         try {
-            const entry = this.credential ? await this.credential.readEntry(TRANSLATION_CONNECTIONS_KEY) : {value:"",revision:null};
+            const entry = this.credential ? await (this.credential.readVersioned?.(TRANSLATION_CONNECTIONS_KEY) ?? this.credential.readEntry(TRANSLATION_CONNECTIONS_KEY)) : {value:"",revision:null};
             const next = normalizeTranslationConfiguration(entry.value ? JSON.parse(entry.value) : {schema:1,profiles:[],primary:"google",fallbacks:[]});
             if (this.disposed || sequence !== this.loadSequence) return;
             this.configuration = next;
             this.configurationRevision = entry.revision;
             this.urlPolicy?.setLocalOriginOwner("translation",next.profiles.filter((/** @type {any} */ profile) => profile.enabled).map((/** @type {any} */ profile) => new URL(profile.endpoint).origin));
             if (notify) this.configurationChanged();
-        } catch {
+        } catch (error) {
             if (this.disposed || sequence !== this.loadSequence) return;
+            this.configurationFailure = error;
             this.configurationError = "翻译连接无法读取或版本不受支持，已暂停外发请求";
             this.urlPolicy?.setLocalOriginOwner("translation",[]);
             if (notify) this.configurationChanged();
@@ -66,15 +68,22 @@ export class TranslationService extends EventTarget {
     /** @param {boolean} enabled */
     setEnabled(enabled) { if (this.enabled === enabled) return; this.enabled = enabled; if (!enabled) this.cancelAll(); this.dispatchEvent(new Event("translation.changed")); }
     cancelAll() { this.requestGeneration++; for (const scope of this.workScopes) scope.dispose(); for (const entry of this.inflight.values()) entry.scope.dispose(); this.inflight.clear(); }
-    async getConfiguration() { await this.initializeConfiguration(); if (this.configurationError) throw new JhsError("UNSUPPORTED",this.configurationError); return {configuration:structuredClone(this.configuration),revision:this.configurationRevision}; }
+    async getConfiguration() { await this.initializeConfiguration().catch(error => { throw this.configurationFailure || error; }); if (this.configurationError) throw this.configurationFailure || new JhsError("UNSUPPORTED",this.configurationError); return {configuration:structuredClone(this.configuration),revision:this.configurationRevision}; }
     /** @param {any} value @param {string|null} revision */
     async saveConfiguration(value,revision) {
         const next = normalizeTranslationConfiguration(value);
         if (!this.credential) throw new JhsError("UNSUPPORTED","当前环境无法保存加密翻译连接");
-        const entry = await this.credential.readEntry(TRANSLATION_CONNECTIONS_KEY);
+        const entry = await (this.credential.readVersioned?.(TRANSLATION_CONNECTIONS_KEY) ?? this.credential.readEntry(TRANSLATION_CONNECTIONS_KEY));
         if (entry.revision !== revision) throw new Error("翻译配置已被其他标签页修改，请重新打开配置");
         if (entry.value) normalizeTranslationConfiguration(JSON.parse(entry.value));
-        await this.credential.set(TRANSLATION_CONNECTIONS_KEY,JSON.stringify(next));
+        if (this.credential.setVersioned) await this.credential.setVersioned(TRANSLATION_CONNECTIONS_KEY, JSON.stringify(next), revision);
+        else await this.credential.set(TRANSLATION_CONNECTIONS_KEY,JSON.stringify(next));
+        await this.reloadConfiguration();
+    }
+    /** @param {any} value @param {string[]} revisions */
+    async resolveConfiguration(value, revisions) {
+        const next = normalizeTranslationConfiguration(value);
+        await this.credential.setVersioned(TRANSLATION_CONNECTIONS_KEY, JSON.stringify(next), revisions);
         await this.reloadConfiguration();
     }
     prompt() { return normalizeTranslationPrompt(this.settings?.snapshot().translationPrompt ?? DEFAULT_TRANSLATION_PROMPT); }
@@ -127,7 +136,7 @@ export class TranslationService extends EventTarget {
     /** Connection tests temporarily pin only the submitted endpoint origin. @param {any} value @param {LifecycleScope} scope */
     async testConnection(value,scope) {
         const profile = normalizeTranslationProfile(value), owner = `translation-test:${crypto.randomUUID()}`;
-        const requestScope = new LifecycleScope(owner), release = scope.addCleanup(() => requestScope.dispose());
+        const requestScope = new LifecycleScope(owner), release = scope.addCleanup(() => { requestScope.dispose(); this.urlPolicy?.setLocalOriginOwner(owner,[]); });
         this.urlPolicy?.setLocalOriginOwner(owner,[new URL(profile.endpoint).origin]);
         try { return await this.schedule(() => this.perform(profile,"接続テスト ABC-123",{sourceLanguage:"ja",targetLanguage:"zh-CN",prompt:this.prompt()},requestScope),requestScope); }
         finally { requestScope.dispose(); release(); this.urlPolicy?.setLocalOriginOwner(owner,[]); }

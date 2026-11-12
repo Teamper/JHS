@@ -47,6 +47,7 @@ export const SETTINGS_GROUPS = Object.freeze([
 
 /** @type {Readonly<Record<string, string>>} */
 const LEGACY_PANEL_GROUPS = Object.freeze({
+    "translation-connections-panel": "resources-panel", "media-connections-panel": "resources-panel", "privacy-preferences-panel": "appearance-panel",
     "base-panel": "appearance-panel", "filter-panel": "filtering-panel", "task-panel": "tasks-panel",
     "domain-panel": "resources-panel", "resource-sources-panel": "resources-panel", "cloud-services-panel": "cloud-panel",
     "backup-panel": "data-panel", "snapshot-panel": "data-panel", "data-tools-panel": "data-panel",

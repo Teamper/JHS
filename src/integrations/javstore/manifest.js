@@ -1,5 +1,6 @@
 // @ts-check
 import { defineIntegration } from "../../contracts/manifests.js";
+import { normalizeCarNum } from "../../core/movie-identity.js";
 import { CACHE, SERVICE } from "../../contracts/tokens.js";
 import { parseJavStorePreview, parseJavStoreSearch } from "./parser.js";
 
@@ -14,7 +15,12 @@ export function createJavStoreAdapter(http) {
     return Object.freeze({
         contracts: ["Screenshot"],
         /** @param {{carNum?: string}} movieRef */
-        getSearchUrl(movieRef) { return `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`; },
+        getSearchUrl(movieRef) {
+            const carNum = normalizeCarNum(movieRef.carNum);
+            const fc2Id = carNum?.match(/^FC2-?(?:PPV-?)?(\d+)$/)?.[1];
+            const query = fc2Id ? `FC2-PPV-${fc2Id}` : movieRef.carNum || "";
+            return `https://javstore.net/search?q=${encodeURIComponent(query)}`;
+        },
         /** @param {{carNum: string}} movieRef @param {{scope?: any, refreshCache?: boolean}} [options] */
         async getImages(movieRef, options = {}) {
             const searchUrl = this.getSearchUrl(movieRef);

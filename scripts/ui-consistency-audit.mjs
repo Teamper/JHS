@@ -3,6 +3,7 @@ import { extname, join, relative } from "node:path";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
+import { createJavStoreAdapter } from "../src/integrations/javstore/manifest.js";
 import { parseJavStoreSearch, parseJavStorePreview } from "../src/integrations/javstore/parser.js";
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -284,7 +285,13 @@ forbidMatch(previewVideo, /nativePreviewSrc|rememberNativeSource|restoreNativeSo
 forbidMatch(previewVideo, /\$nativeVideo\.attr\("src"|nativeVideo\.load\(\)/, "JHS must not replace or reload the JavDB HLS media source");
 requireMatch(screenshot, /async getScreenshot\(rawCarNum/, "screenshots must validate carNum first");
 requireMatch(screenshot, /无法获取番号，缩略图未加载/, "screenshot invalid-number fallback is missing");
-requireMatch(javstoreIntegration, /javstore\.net\/search\?q=\$\{encodeURIComponent\(movieRef\.carNum \|\| ""\)\}/, "JavStore must use its query search endpoint");
+requireBehavior(() => {
+  const adapter = createJavStoreAdapter({ request: async () => ({}) });
+  assert.equal(adapter.getSearchUrl({ carNum: "ABC 123" }), "https://javstore.net/search?q=ABC%20123");
+  for (const carNum of ["FC2-4995326", "FC2-PPV-4995326"]) {
+    assert.equal(adapter.getSearchUrl({ carNum }), "https://javstore.net/search?q=FC2-PPV-4995326");
+  }
+}, "JavStore must use its query search endpoint and the full FC2-PPV search identity");
 requireBehavior(() => {
   const dom = new JSDOM('<a href="/ABC-123-pn.html">ABC-123</a><a href="/ABC-1234-pn.html">ABC-1234</a><main><div class="grid"><a href="/ABC-123-new.html">ABC-123</a><a href="/ABC-123-pn.html">ABC-123</a><a href="https://external.test/ABC-123-pn.html">ABC-123</a></div></main>');
   try { assert.deepEqual(parseJavStoreSearch(dom.window.document,"ABC-123"),["https://javstore.net/ABC-123-pn.html","https://javstore.net/ABC-123-new.html"]); }

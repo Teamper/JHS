@@ -46,6 +46,28 @@ describe("FC2 123AV Feature catalog lifecycle", () => {
         expect(root.text()).toContain(actorsFail ? "演员信息加载失败" : "暂无演员信息");
         scope.dispose(); dom.window.close();
     });
+    it("keeps the card summary and cover when 123AV detail fails and gallery finishes", async () => {
+        const { controller, dom, scope, movie } = createController();
+        vi.stubGlobal("$", controller.jquery);
+        let failSummary;
+        controller.get123AvVideoInfo = vi.fn(() => new Promise((_resolve, reject) => { failSummary = reject; }));
+        controller.getImgList = vi.fn(async () => ["https://images.example.test/scene.jpg"]);
+        controller.getActressInfo = vi.fn(async () => ({ actors: [] }));
+        movie.sourceUrls = vi.fn(() => []);
+        const root = controller.jquery('<div><div data-jhs-role="summary-content"><h1>列表标题</h1></div><div data-jhs-role="main-preview"><img src="https://images.example.test/card.jpg"></div><div data-jhs-role="gallery-grid"></div></div>').appendTo(dom.window.document.body);
+        const context = { root, carNum: "FC2-123", source: "123av", url: "https://123av.com/video/test", isAlive: () => !scope.disposed };
+        const pending = controller.loadDetail(context, context.url);
+        expect(root.find("h1").text()).toBe("列表标题");
+        failSummary(new Error("network unavailable"));
+        await pending;
+        expect(root.find("h1").text()).toBe("列表标题");
+        expect(root.find('[data-jhs-role="main-preview"] img').attr("src")).toBe("https://images.example.test/card.jpg");
+        expect(root.find('[data-jhs-role="gallery-grid"] img')).toHaveLength(1);
+        expect(root.text()).toContain("影片信息加载失败");
+        scope.dispose();
+        dom.window.close();
+    });
+
     it("resets page and maxPage when searching with a new keyword", async () => {
         const { controller, dom, catalog } = createController({ search: "old", page: 8, catalog: vi.fn(async () => ({ items: [], maxPage: 20 })) });
         await controller.start();

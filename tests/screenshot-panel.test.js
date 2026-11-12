@@ -149,3 +149,11 @@ it("parses legacy JSON-string screenshotProviders (6.5 regression fix)", async (
     });
     expect(jquery("#target [role='tab']").text()).toBe("JavStore");
 });
+
+it.each([['http://images.example.test/contact.jpg', 'http://images.example.test/contact.jpg'], ['http://img.javstore.net/contact.jpg', 'https://img.javstore.net/contact.jpg']])("uses the service URL policy for %s", async (url, expected) => {
+    const screenshot = createService(vi.fn(async () => [{ url }]));
+    const host = jquery("#target");
+    await renderScreenshotPanel({ target: host, carNum: "SONE-917", screenshot, settings: {} });
+    expect(host.find("img").attr("src")).toBe(expected);
+    expect(host.text()).not.toContain("暂无缩略图");
+});

@@ -1,4 +1,5 @@
 // @ts-check
+import { JhsError } from "../../core/jhs-error.js";
 import { defineIntegration } from "../../contracts/manifests.js";
 import { SERVICE } from "../../contracts/tokens.js";
 import { mediaApiUrl } from "../../core/media-library-model.js";
@@ -31,7 +32,7 @@ export function createMediaLibraryAdapter(http) {
         /** @param {any} connection @param {{scope?: any}} [options] */
         async serverInfo(connection, options = {}) {
             const info = await get(connection, "System/Info/Public", {}, options.scope);
-            if (!info || typeof info.Id !== "string" || !/^[\w-]+$/.test(info.Id)) throw new Error("媒体服务器身份响应无效");
+            if (!info || typeof info.Id !== "string" || !/^[\w-]+$/.test(info.Id)) throw new JhsError("INVALID_RESPONSE", "媒体服务器身份响应无效", { source: "media-library", details: { stage: "identity" } });
             return { id: info.Id, name: String(info.ServerName || connection.name) };
         },
         /** @param {any} connection @param {{offset: number, scope?: any}} options */
@@ -41,8 +42,8 @@ export function createMediaLibraryAdapter(http) {
                 StartIndex: String(options.offset), Limit: "200", EnableTotalRecordCount: "true", SortBy: "SortName", SortOrder: "Ascending",
                 ...(connection.userId ? { UserId: connection.userId } : {}),
             }, options.scope);
-            if (!data || !Array.isArray(data.Items) || !Number.isSafeInteger(data.TotalRecordCount) || data.TotalRecordCount < 0 || !data.Items.every(validMediaItem)) throw new Error("媒体目录响应无效");
-            if (data.Items.length === 0 && options.offset < data.TotalRecordCount) throw new Error("媒体目录分页不完整");
+            if (!data || !Array.isArray(data.Items) || !Number.isSafeInteger(data.TotalRecordCount) || data.TotalRecordCount < 0 || !data.Items.every(validMediaItem)) throw new JhsError("INVALID_RESPONSE", "媒体目录响应无效", { source: "media-library", details: { stage: "catalog" } });
+            if (data.Items.length === 0 && options.offset < data.TotalRecordCount) throw new JhsError("INVALID_RESPONSE", "媒体目录分页不完整", { source: "media-library", details: { stage: "catalog" } });
             return { items: data.Items, total: data.TotalRecordCount };
         },
     });

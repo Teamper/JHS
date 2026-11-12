@@ -57,6 +57,15 @@ describe("Fc2OwnedPageController", () => {
         dom.window.close();
     });
 
+    it("restores card metadata passed through the owned-page URL", async () => {
+        const query = new URLSearchParams({ movieId: "movie-123", carNum: "FC2-123", url: "https://javdb.com/v/movie-123", source: "fc2", title: "列表标题", coverUrl: "https://images.example.test/card.jpg", releaseDate: "2026-11-10" });
+        const { dom, scope, adapter, controller } = createPage(`?${query}`);
+        await controller.start();
+        expect(adapter.mountFc2Detail.mock.calls[0][1].initialMovie).toEqual({ title: "列表标题", coverUrl: "https://images.example.test/card.jpg", releaseDate: "2026-11-10" });
+        scope.dispose();
+        dom.window.close();
+    });
+
     it("does not mount a late resolution after the Feature is disposed", async () => {
         const { dom, scope, adapter, controller } = createPage("?movieId=search&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123");
         let resolveMovieId;

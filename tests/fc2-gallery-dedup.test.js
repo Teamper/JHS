@@ -23,6 +23,15 @@ describe("FC2 gallery dedup insurance", () => {
         expect(context.root.find('[data-jhs-role="main-preview"] img').attr("src")).toBe("https://covers.example/cover.jpg");
     });
 
+    it("preserves the known overview cover when an independent gallery request completes", () => {
+        const context = makeContext();
+        renderFc2Gallery(context, [], "https://covers.example/card.jpg");
+        const cover = context.root.find('[data-jhs-role="main-preview"] img')[0];
+        renderFc2Gallery(context, ["https://fc2content.net/a/1.jpg"], null);
+        expect(context.root.find('[data-jhs-role="main-preview"] img')[0]).toBe(cover);
+        expect(context.root.find('[data-jhs-role="main-preview"] img').attr("src")).toBe("https://covers.example/card.jpg");
+    });
+
     it("keeps the overview cover separate from the first gallery image", () => {
         const context = makeContext();
         renderFc2Gallery(context, [ "https://fc2content.net/a/1.jpg", "https://fc2content.net/a/2.jpg" ]);

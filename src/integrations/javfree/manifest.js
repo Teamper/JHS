@@ -16,9 +16,13 @@ export function createJavFreeAdapter(http) {
             const searchUrl = this.getSearchUrl(movie), response = await request(searchUrl, options, response => parseJavFreeSearch(response.data, movie.carNum, response.finalUrl || searchUrl).length > 0);
             for (const candidate of parseJavFreeSearch(response.data, movie.carNum, response.finalUrl || searchUrl).slice(0, 5)) {
                 options.scope?.assertActive();
-                const detail = await request(candidate, options, response => parseJavFreeImages(response.data, movie.carNum, response.finalUrl || candidate).length > 0);
-                const images = parseJavFreeImages(detail.data, movie.carNum, detail.finalUrl || candidate);
-                if (images.length) return images;
+                try {
+                    const detail = await request(candidate, options, response => parseJavFreeImages(response.data, movie.carNum, response.finalUrl || candidate).length > 0);
+                    const images = parseJavFreeImages(detail.data, movie.carNum, detail.finalUrl || candidate);
+                    if (images.length) return images;
+                } catch (error) {
+                    if (options.scope?.disposed || /** @type {any} */ (error)?.code !== "NOT_FOUND") throw error;
+                }
             }
             return [];
         },

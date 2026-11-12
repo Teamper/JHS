@@ -55,14 +55,17 @@ function javStoreUrlPath(value, baseUrl) {
     } catch { return ""; }
 }
 
-/** DMM 的封面 CID 可带 maker 数字前缀；仅认可固定域、目录与同名封面文件。 @param {string} value @param {string} baseUrl @param {string} target */
+/** DMM 封面 CID 可带 maker 前缀或数字补零；仅认可固定域、目录与同名封面文件。 @param {string} value @param {string} baseUrl @param {string} target */
 function javStoreCoverPath(value, baseUrl, target) {
     const path = javStoreUrlPath(value, baseUrl);
     try {
         const url = new URL(value, baseUrl);
-        const cid = url.hostname === "pics.dmm.co.jp" && !url.username && !url.password
-            && path.match(/^\/mono\/movie\/adult\/(\d{1,3}([a-z]{2,10}\d{2,}))\/\1(?:pl|ps)\.jpg$/i);
-        return cid && cid[2].toUpperCase() === target ? target : path;
+        if (url.hostname !== "pics.dmm.co.jp" || url.username || url.password) return path;
+        const cid = path.match(/^\/mono\/movie\/adult\/(\d{1,3}([a-z]{2,10}\d{2,}))\/\1(?:pl|ps)\.jpg$/i);
+        if (cid && cid[2].toUpperCase() === target) return target;
+        const digitalCid = path.match(/^\/digital\/video\/(([a-z]{2,10})(\d{5}))\/\1(?:pl|ps)\.jpg$/i);
+        const movie = target.match(/^([A-Z]{2,10})(\d{2,5})$/);
+        return digitalCid && movie && digitalCid[2].toUpperCase() === movie[1] && digitalCid[3] === movie[2].padStart(5, "0") ? target : path;
     } catch { return path; }
 }
 
@@ -93,7 +96,8 @@ export function parseJavStoreSearch($searchPage, carNum, baseUrl = "https://javs
         // Publication dates are card metadata. Otherwise an English title tail
         // and its day ("Yuka\n05/11/2026") become the false movie code YUKA05.
         const text = (anchor.textContent || "").replace(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g, " ");
-        const evidence = [javStoreUrlPath(url.href, baseUrl), text, anchor.getAttribute("title") || ""];
+        const path = javStoreUrlPath(url.href, baseUrl).replace(/^(\/\d+-)\[?(?:FHD(?:\/?SD)?|SD|[48]K)\]?[-_ ]?(?=[A-Z]{2,10}[-_]?\d)/i, "$1");
+        const evidence = [path, text, anchor.getAttribute("title") || ""];
         for (const image of anchor.querySelectorAll("img")) evidence.push(image.getAttribute("alt") || "", image.getAttribute("title") || "", javStoreCoverPath(image.getAttribute("src") || "", baseUrl, target));
         if (matchesJavStoreIdentity(evidence, target)) candidates.add(url.href);
     }

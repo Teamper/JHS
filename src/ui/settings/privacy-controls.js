@@ -1,4 +1,5 @@
 // @ts-check
+import { enhanceSettingRows } from "./setting-control-renderer.js";
 import { readDetailShortcuts, shortcutFromEvent, shortcutLabel, shortcutMatches } from "../../core/detail-shortcuts.js";
 
 export const PRIVACY_STYLES = `
@@ -11,8 +12,8 @@ html[data-jhs-privacy-active] [data-jhs-privacy-media] { visibility:hidden!impor
 .jhs-privacy-config input[type=text] { min-width:0; width:100%; font:inherit; color:var(--jhs-text); background:var(--jhs-surface); border:1px solid var(--jhs-border); padding:var(--jhs-space-2); }
 `;
 
-/** @param {{document: Document, scope: any, settings: any, onClose: () => void}} options */
-export function createPrivacyPreferences({ document, scope, settings, onClose }) {
+/** @param {{document: Document, scope: any, settings: any, onClose: () => void, embedded?:boolean, bindDraft?:(editor:any)=>void}} options */
+export function createPrivacyPreferences({ document, scope, settings, onClose, embedded, bindDraft }) {
     const root = document.createElement("div");
     root.className = "jhs-privacy-config";
     const values = settings.snapshot();
@@ -21,6 +22,8 @@ export function createPrivacyPreferences({ document, scope, settings, onClose })
     for (const [value, text] of Object.entries({ title: "影片标题", code: "番号", actors: "演员信息", images: "封面与截图", video: "视频画面" })) {
         const label = document.createElement("label"), input = document.createElement("input");
         input.type = "checkbox";
+        input.className = "jhs-switch";
+        input.setAttribute("role", "switch");
         input.checked = selected.includes(value);
         inputs.set(value, input);
         label.append(input, text);
@@ -41,6 +44,7 @@ export function createPrivacyPreferences({ document, scope, settings, onClose })
         event.stopPropagation();
         binding = ["Backspace", "Delete"].includes(event.key) ? null : shortcutFromEvent(event) || binding;
         shortcut.value = shortcutLabel(binding);
+        root.dispatchEvent(new (/** @type {any} */ (document.defaultView)).Event("input", { bubbles: true }));
     });
     const note = document.createElement("p");
     note.textContent = "遮罩从脚本运行后生效。首次加载可能短暂显示内容。临时查看松开后恢复，视频需手动继续播放。";
@@ -61,6 +65,16 @@ export function createPrivacyPreferences({ document, scope, settings, onClose })
             if (!scope.disposed) onClose();
         } catch { if (!scope.disposed) { status.textContent = "保存失败，请重试"; save.disabled = false; } }
     });
+    save.hidden = embedded === true;
+    if (embedded) enhanceSettingRows(root);
+    bindDraft?.({ validate: () => {
+        if (binding && Object.values(readDetailShortcuts(settings.snapshot().detailShortcuts)).some(value => shortcutMatches(value, binding))) throw new Error("该快捷键已用于影片状态操作，请换一个快捷键");
+    }, applyPreferences: (/** @type {any} */ value) => {
+        const targets = value.privacyTargets ?? ["title", "code", "actors", "images", "video"];
+        for (const [key, input] of inputs) input.checked = targets.includes(key);
+        binding = value.privacyShortcut || null;
+        shortcut.value = shortcutLabel(binding);
+    }, capture: () => ({ privacyTargets: [...inputs].filter(([, input]) => input.checked).map(([key]) => key), privacyShortcut: binding }) });
     root.append(note, status, save);
     return root;
 }

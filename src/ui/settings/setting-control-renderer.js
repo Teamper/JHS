@@ -74,6 +74,22 @@ export function renderSettingRow(descriptor, options = {}) {
     return { row, root: rendered.root, getValue: rendered.getValue, setValue: rendered.setValue };
 }
 
+/** Adapt connection fields to the same row structure without replacing their controls or listeners. @param {HTMLElement} root */
+export function enhanceSettingRows(root) {
+    for (const label of root.querySelectorAll("label:not(.jhs-setting-row)")) {
+        const control = label.querySelector("input,select,textarea");
+        if (!control) continue;
+        const copy = root.ownerDocument.createElement("span");
+        const slot = root.ownerDocument.createElement("span");
+        copy.className = "jhs-setting-row__copy";
+        slot.className = "jhs-setting-row__control";
+        for (const node of [...label.childNodes]) if (node !== control) copy.append(node);
+        slot.append(control);
+        label.classList.add("jhs-setting-row", "jhs-setting-row--compact");
+        label.append(copy, slot);
+    }
+}
+
 /** Render the quick settings list from registry descriptors. @param {import("../../app/settings-registry.js").SettingsRegistry} registry @param {{ disabledContributions?: Set<string> }} [options] */
 export function buildQuickSettingsHtml(registry, options = {}) {
     const jq = /** @type {any} */ (globalThis).$;

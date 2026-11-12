@@ -159,7 +159,7 @@ export function prepareDialogOptions(options = {}, utils = {}) {
                     const [width, height] = utils.getDialogArea(ui.size);
                     Object.assign(root.style, { width, height });
                     const content = root.querySelector(".layui-layer-content"), frame = root.querySelector("iframe");
-                    if (frame && content) {
+                    if (frame && content && height !== "auto") {
                         const titleHeight = root.querySelector(".layui-layer-title")?.getBoundingClientRect().height || 0;
                         content.style.height = `${Math.max(0,parseFloat(height)-titleHeight)}px`;
                         frame.style.height = content.style.height;
@@ -173,6 +173,11 @@ export function prepareDialogOptions(options = {}, utils = {}) {
                 if (ui?.size || rect.bottom > viewportHeight - 8 || rect.top < 8) root.style.top = `${root.offsetTop + Math.max(8, (viewportHeight - rect.height) / 2) - rect.top}px`;
             };
             scope.listen(window, "resize", resize);
+            if (ui?.size === "form" && view?.ResizeObserver) {
+                const observer = new view.ResizeObserver(resize);
+                observer.observe(root);
+                scope.ownObserver(observer);
+            }
             resize();
         }
         return true;

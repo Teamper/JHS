@@ -46,7 +46,7 @@ it.each(["FC2-1234567", "FC2-PPV-1234567"])("resolves the list screenshot action
     document.querySelector(".screenSvg").click();
     await vi.waitFor(() => expect(openImageViewer).toHaveBeenCalledWith(imageUrl, expect.objectContaining({ imageKind: "contact-sheet" })));
     expect(request.mock.calls.map(([options]) => options.url)).toEqual([
-        `https://javstore.net/search?q=${encodeURIComponent(carNum)}`,
+        "https://javstore.net/search?q=FC2-PPV-1234567",
         "https://javstore.net/FC2-PPV-1234567.html",
     ]);
 });
@@ -59,7 +59,7 @@ it.each(["FC2-1234567", "FC2-PPV-1234567"])("renders the FC2 workspace screensho
     service.loadFc2Screenshot({ root: jquery("main"), carNum, isAlive: () => true });
     await vi.waitFor(() => expect(document.querySelector('[data-jhs-role="screenshot"] img')?.getAttribute("src")).toBe(imageUrl));
     expect(request.mock.calls.map(([options]) => options.url)).toEqual([
-        `https://javstore.net/search?q=${encodeURIComponent(carNum)}`,
+        "https://javstore.net/search?q=FC2-PPV-1234567",
         "https://javstore.net/FC2-PPV-1234567.html",
     ]);
 });

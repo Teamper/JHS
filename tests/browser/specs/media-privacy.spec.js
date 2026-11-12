@@ -56,8 +56,9 @@ for (const theme of ["light", "dark"]) test(`media connections save encrypted cr
     await panel.getByRole("switch", { name: "启用媒体库联动", exact: true }).check();
     await row.getByRole("button", { name: "测试连接", exact: true }).click();
     await expect(row).toContainText("连接成功 · 家庭媒体库");
-    await panel.getByRole("button", { name: "保存连接与启用状态", exact: true }).click();
-    await expect(panel.getByRole("status").last()).toHaveText("已保存");
+    await page.locator("#saveBtn").click();
+    await expect(page.locator("#saveBtn")).not.toHaveAttribute("aria-busy", "true");
+    await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-dirty-count", "0");
     const encrypted = await page.evaluate(() => window.GM_getValue("jhs_media_connections_v1"));
     expect(encrypted).toMatchObject({ schema: 2 });
     expect(JSON.stringify(encrypted)).not.toContain("fixture-key");
@@ -138,10 +139,12 @@ for (const site of ["javdb", "javbus"]) for (const theme of ["light", "dark"]) t
     await page.screenshot({ path: info.outputPath(`privacy-${site}-${theme}.png`) });
     await (await utility(page, "遮罩偏好")).click();
     const preferences = page.locator(".jhs-privacy-config");
-    await expect(preferences.getByRole("button", { name: "保存遮罩偏好" })).toBeVisible();
+    await expect(page.locator("#saveBtn")).toBeVisible();
     if (site === "javbus") expect(await page.locator(".info p [data-jhs-privacy-text]").count()).toBeGreaterThan(0);
     await preferences.screenshot({ path: info.outputPath(`privacy-preferences-${site}-${theme}.png`) });
-    await preferences.getByRole("button", { name: "保存遮罩偏好" }).click();
+    await page.locator("#saveBtn").click();
+    await expect(page.locator("#saveBtn")).not.toHaveAttribute("aria-busy", "true");
+    await page.keyboard.press("Escape");
     await expect(preferences).toHaveCount(0);
     await expect(page.locator("#xunLeiSubtitleBtn")).toBeEnabled();
     await (await utility(page, "关闭隐私遮罩")).click();

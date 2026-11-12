@@ -14,6 +14,7 @@ export class FullSettingsSession extends EventTarget {
         this.defaults = copy(defaults);
         /** @type {Record<string,any[]>} */ this.resourceDefaults = copy(resourceDefaults);
         this.disposed = false;
+        this.editors = new Map();
         /** Protect a submission even when a newer edit returns to its original value. */
         this.submitting = new Set();
         this.base = this.applied();
@@ -72,6 +73,37 @@ export class FullSettingsSession extends EventTarget {
         this.emit();
         return this.snapshot();
     }
+    /** @param {Record<string,any>} values */
+    async patch(values) { return this.update(draft => Object.assign(draft, values)); }
+    /** Sensitive editor snapshots stay outside portable preference values. @param {string} id @param {any} editor */
+    registerEditor(id, editor) { this.editors.set(id, { ...editor, base: copy(editor.capture()) }); }
+    extraDirtyCount() { return [...this.editors.values()].filter(editor => editor.countDirty !== false && !equal(editor.capture(), editor.base)).length; }
+    captureEditors() {
+        const submitted = [];
+        for (const [id, editor] of this.editors) {
+            const value = copy(editor.capture());
+            editor.validatePreferences?.();
+            if (equal(value, editor.base)) continue;
+            editor.validate(value);
+            submitted.push({ id, value, editor });
+        }
+        return submitted;
+    }
+    /** @param {any[]} submitted */
+    async saveEditors(submitted) {
+        const errors = [];
+        for (const { id, value, editor } of submitted) {
+            if (this.disposed) break;
+            try {
+                await editor.save(value);
+                if (!this.disposed && this.editors.get(id) === editor) editor.base = copy(value);
+            } catch (error) {
+                if (!this.disposed && this.editors.get(id) === editor) editor.error(error);
+                errors.push({ id, error });
+            }
+        }
+        return errors;
+    }
     async waitForIdle() {}
 
     /** @param {string[]} [names] @param {boolean} [external] */
@@ -90,6 +122,6 @@ export class FullSettingsSession extends EventTarget {
     dispose() {
         this.disposed = true;
         this.settings.removeEventListener("settings.changed", this.listener);
-        this.values = {}; this.base = {}; this.submitting.clear();
+        this.values = {}; this.base = {}; this.submitting.clear(); this.editors.clear();
     }
 }

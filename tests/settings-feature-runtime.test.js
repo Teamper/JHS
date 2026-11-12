@@ -83,6 +83,7 @@ describe("Settings system Feature UI ownership", () => {
                 .register(SERVICE.movie, {})
                 .register(SERVICE.state, {})
                 .register(SERVICE.translation, {})
+                .register(SERVICE.mediaLibrary, {})
                 .register(SERVICE.busImageLayout, {})
                 .register(REGISTRY.settings, {})
                 .register(SERVICE.legacyStorage, {})

@@ -186,8 +186,9 @@ export class MediaLibraryController {
         if (this.configScope && !this.configScope.disposed) return;
         const scope = new LifecycleScope("media:connections");
         this.configScope = scope;
+        let revision = this.service.configurationRevision;
         const root = createMediaConnections({ document: this.document, scope, connections: this.service.listConnections(), enabled: this.service.enabled(),
-            onSave: async (connections, enabled) => { scope.assertActive(); await this.service.saveConnections(connections); scope.assertActive(); await this.settings.set("enableMediaLibrary", enabled); },
+            onSave: async (connections, enabled) => { scope.assertActive(); await this.service.saveConnections(connections, revision); revision = this.service.configurationRevision; scope.assertActive(); await this.settings.set("enableMediaLibrary", enabled); },
             onTest: (connection, testScope) => this.service.testConnection(connection, testScope),
         });
         this.openDialog(root, "Emby / Jellyfin", scope);

@@ -386,7 +386,7 @@ export class Utils {
             workspace: [ 1440, 960 ]
         }, n = t[e] || t.md, a = window.innerWidth <= 768 ? 16 : "workspace" === e ? 32 : 64,
         i = Math.max(320, Math.min(n[0], window.innerWidth - a)), s = Math.max(320, Math.min(n[1], window.innerHeight - a));
-        return [ `${i}px`, `${s}px` ];
+        return [ `${i}px`, e === "form" ? "auto" : `${s}px` ];
     }
     getDefaultArea() {
         return [ "85%", "90%" ];

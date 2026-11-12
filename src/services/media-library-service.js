@@ -1,7 +1,7 @@
 // @ts-check
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { assertMovieStateEligible, normalizeCarNum } from "../core/movie-identity.js";
-import { MEDIA_CONNECTIONS_KEY, normalizeMediaConnection, mediaItemCode, mediaItemLink } from "../core/media-library-model.js";
+import { MEDIA_CONNECTIONS_KEY, normalizeMediaConnection, mediaConnectionErrorLabel, mediaItemCode, mediaItemLink } from "../core/media-library-model.js";
 import { movieCodeKey } from "../core/movie-code-evidence.js";
 
 const CACHE_MS = 600000;
@@ -26,6 +26,8 @@ export class MediaLibraryService extends EventTarget {
         this.loadSequence = 0;
         this.ready = /** @type {Promise<void> | null} */ (null);
         this.configurationError = "";
+        this.configurationFailure = /** @type {any} */ (null);
+        this.configurationRevision = /** @type {string|null} */ (null);
         this.disposed = false;
         this.listener = storage.listenValue(MEDIA_CONNECTIONS_KEY, () => { void this.reload().catch(() => {}); });
         this.onCredential = (/** @type {any} */ event) => { if (event.detail?.key === MEDIA_CONNECTIONS_KEY) void this.reload().catch(() => {}); };
@@ -35,8 +37,16 @@ export class MediaLibraryService extends EventTarget {
     }
     enabled() { return [true, "yes"].includes(this.settings.snapshot().enableMediaLibrary); }
     listConnections() { return this.connections.map(item => ({ ...item })); }
-    initialize() { return this.ready ||= this.reload().catch(() => {}); }
-    async reload() {
+    async initialize() {
+        let pending;
+        do { pending = this.ready || this.reload(); await pending.catch(() => {}); } while (pending !== this.ready);
+    }
+    reload() {
+        const operation = this.loadConfiguration();
+        this.ready = operation;
+        return operation;
+    }
+    async loadConfiguration() {
         if (this.disposed) return;
         const sequence = ++this.loadSequence;
         this.configurationError = "";
@@ -44,40 +54,60 @@ export class MediaLibraryService extends EventTarget {
         this.urlPolicy.setLocalOriginOwner("media-library", []);
         this.invalidate();
         try {
-            const entry = await this.credential.readEntry(MEDIA_CONNECTIONS_KEY);
+            const entry = await (this.credential.readVersioned?.(MEDIA_CONNECTIONS_KEY) ?? this.credential.readEntry(MEDIA_CONNECTIONS_KEY));
             const parsed = entry.value ? JSON.parse(entry.value) : [];
             if (!Array.isArray(parsed) || parsed.length > 20) throw new Error("媒体库连接配置无效，请重新保存");
             const next = parsed.map(normalizeMediaConnection);
             if (new Set(next.map(item => item.id)).size !== next.length) throw new Error("媒体服务器标识重复");
             if (sequence !== this.loadSequence || this.disposed) return;
             this.connections = next;
+            this.configurationRevision = entry.revision ?? null;
             this.urlPolicy.setLocalOriginOwner("media-library", next.filter(item => item.enabled).map(item => new URL(item.address).origin));
             this.dispatchEvent(new Event("media.changed"));
-        } catch {
+        } catch (error) {
             if (sequence !== this.loadSequence || this.disposed) return;
+            this.configurationFailure = error;
             this.configurationError = "媒体库连接无法读取，请重新保存连接配置";
             this.dispatchEvent(new Event("media.changed"));
             throw new Error(this.configurationError);
         }
     }
-    /** One encrypted replacement keeps addresses, user scopes and keys local. @param {any[]} values */
-    async saveConnections(values) {
+    async getConfiguration() {
+        await this.initialize();
+        if (this.configurationError) throw this.configurationFailure || new Error(this.configurationError);
+        return { connections: this.listConnections(), revision: this.configurationRevision };
+    }
+    /** @param {any[]} values @param {string[]} revisions */
+    async resolveConfiguration(values, revisions) {
         if (!Array.isArray(values) || values.length > 20) throw new Error("最多配置 20 个媒体服务器");
         const next = values.map(normalizeMediaConnection);
         if (new Set(next.map(item => item.id)).size !== next.length) throw new Error("媒体服务器标识重复");
-        await this.credential.set(MEDIA_CONNECTIONS_KEY, JSON.stringify(next));
+        await this.credential.setVersioned(MEDIA_CONNECTIONS_KEY, JSON.stringify(next), revisions);
+        await this.reload();
+    }
+    /** One encrypted replacement keeps addresses, user scopes and keys local. @param {any[]} values @param {string|null} [revision] */
+    async saveConnections(values, revision) {
+        await this.initialize();
+        if (this.configurationError) throw new Error(this.configurationError);
+        revision = revision === undefined ? this.configurationRevision : revision;
+        if (!Array.isArray(values) || values.length > 20) throw new Error("最多配置 20 个媒体服务器");
+        const next = values.map(normalizeMediaConnection);
+        if (new Set(next.map(item => item.id)).size !== next.length) throw new Error("媒体服务器标识重复");
+        if (this.credential.setVersioned) await this.credential.setVersioned(MEDIA_CONNECTIONS_KEY, JSON.stringify(next), revision);
+        else await this.credential.set(MEDIA_CONNECTIONS_KEY, JSON.stringify(next));
         await this.reload();
     }
     /** Explicit connection tests temporarily authorize only the submitted origin. @param {any} value @param {LifecycleScope} scope */
     async testConnection(value, scope) {
         const connection = normalizeMediaConnection(value), owner = `media-test:${crypto.randomUUID()}`;
         this.urlPolicy.setLocalOriginOwner(owner, [new URL(connection.address).origin]);
+        const release = scope.addCleanup(() => this.urlPolicy.setLocalOriginOwner(owner, []));
         try {
             const adapter = this.integrations.getAdapter("media-library");
             const info = await this.schedule(() => adapter.serverInfo(connection, { scope }), scope);
             await this.schedule(() => adapter.readPage(connection, { offset: 0, scope }), scope);
             return info;
-        } finally { this.urlPolicy.setLocalOriginOwner(owner, []); }
+        } finally { release(); this.urlPolicy.setLocalOriginOwner(owner, []); }
     }
     invalidate() {
         this.generation++;
@@ -201,7 +231,7 @@ export class MediaLibraryService extends EventTarget {
             } catch (error) {
                 options.scope?.assertActive();
                 server.status = "error";
-                server.error = /** @type {any} */ (error)?.code === "AUTH_REQUIRED" ? "认证失败，请检查 API Key 与用户范围" : "查询失败，请检查地址、权限及服务器响应";
+                server.error = mediaConnectionErrorLabel(error);
             }
             publish();
         }));

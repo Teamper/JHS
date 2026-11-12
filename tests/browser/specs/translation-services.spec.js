@@ -60,7 +60,7 @@ test("full settings opens the registered translation configuration command",asyn
   await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
   await clickSettingsCategory(page.locator('.side-menu-item[data-panel="resources-panel"]'));
-  await page.locator('[data-jhs-open="translation"]').click();await expect(page.locator(".jhs-translation-settings")).toBeVisible();
+  await expect(page.locator(".jhs-translation-settings")).toBeVisible();
 });
 
 async function seed(page) {
@@ -99,11 +99,12 @@ for(const theme of ["light","dark"]) {
     await pick(panel.getByRole("combobox",{name:"主服务",exact:true}),"主服务");
     await panel.getByRole("button",{name:"添加备用服务",exact:true}).click();
     await pick(panel.getByRole("combobox",{name:"备用服务",exact:true}),"备用服务");
-    const save=panel.getByRole("button",{name:"保存服务",exact:true});await save.click();await expect(panel).toContainText("服务配置已保存");await expect(save).toBeFocused();
+    const save=page.locator("#saveBtn");await save.click();await expect(save).not.toHaveAttribute("aria-busy","true");await expect(save).toHaveAttribute("data-jhs-dirty-count","0");await expect(save).toBeFocused();
     const encrypted=await page.evaluate(()=>window.GM_getValue("jhs_translation_connections_v1"));
     expect(encrypted).toMatchObject({schema:2});expect(JSON.stringify(encrypted)).not.toContain("fixture-api-secret");expect(JSON.stringify(encrypted)).not.toContain("fixture-address-secret");
     if (!await primary.locator("..").evaluate(node=>node.open)) await primary.locator("..").locator(":scope > summary").click();
     await primary.getByLabel("名称",{exact:true}).scrollIntoViewIfNeeded();
+    expect(await panel.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await page.screenshot({path:info.outputPath(`translation-connections-${theme}.png`)});
     if(process.env.JHS_VISUAL_REGRESSION==="1")await expect(page).toHaveScreenshot(`translation-connections-${theme}.png`,{maxDiffPixelRatio:.02});
     await page.keyboard.press("Escape");await expect(panel).toHaveCount(0);

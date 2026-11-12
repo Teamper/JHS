@@ -1,7 +1,8 @@
 // @ts-check
+import { enhanceSettingRows } from "./setting-control-renderer.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
-import { DEFAULT_TRANSLATION_PROMPT, TRANSLATION_TYPES, translationErrorLabel } from "../../core/translation-model.js";
+import { DEFAULT_TRANSLATION_PROMPT, TRANSLATION_TYPES, translationErrorLabel, normalizeTranslationPrompt } from "../../core/translation-model.js";
 export const TRANSLATION_SETTINGS_STYLES = `
 .jhs-translation-settings,.jhs-translation-workspace{padding:var(--jhs-space-4);box-sizing:border-box;display:grid;gap:var(--jhs-space-3);color:var(--jhs-text);min-width:0}
 .jhs-translation-settings fieldset,.jhs-translation-row{display:grid;gap:var(--jhs-space-3);min-width:0;padding:var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md)}
@@ -20,7 +21,7 @@ export const TRANSLATION_SETTINGS_STYLES = `
 .jhs-translation-meta{font-size:var(--jhs-font-size-sm);color:var(--jhs-text-secondary)}
 .jhs-translation-range{max-height:220px;overflow:auto;overscroll-behavior:contain}
 `;
-/** Encrypted connection editing is separate from portable preferences and the durable request ledger. @param {{document:Document, scope:LifecycleScope, state:any, preferences:any, onSave:(value:any,revision:string|null)=>Promise<any>, onTest:(value:any,scope:LifecycleScope)=>Promise<any>, onPreferences:(value:any)=>Promise<any>}} options */
+/** Encrypted connection editing is separate from portable preferences and the durable request ledger. @param {{document:Document, scope:LifecycleScope, state:any, preferences:any, onSave:(value:any,revision:string|null)=>Promise<any>, onTest:(value:any,scope:LifecycleScope)=>Promise<any>, onPreferences:(value:any)=>Promise<any>, embedded?:boolean, bindDraft?:(editor:any)=>void}} options */
 export function createTranslationConnections(options) {
     const { document, scope } = options, root = document.createElement("section");
     root.className = "jhs-translation-settings jhs-ui";
@@ -37,10 +38,11 @@ export function createTranslationConnections(options) {
                 return;
             pending = true;
             node.setAttribute("aria-disabled", "true");
-            void Promise.resolve().then(run).catch(error => { if (!owner.disposed)
+            void Promise.resolve().then(run).then(() => root.dispatchEvent(new (/** @type {any} */ (document.defaultView)).Event("input", { bubbles: true }))).catch(error => { if (!owner.disposed)
                 status.textContent = error instanceof Error ? error.message : "翻译设置操作失败"; }).finally(() => { pending = false; if (!owner.disposed)
                 node.removeAttribute("aria-disabled"); });
         });
+        if (options.embedded && ["保存服务", "保存翻译偏好"].includes(label)) node.hidden = true;
         host.append(node);
         return node;
     };
@@ -151,6 +153,7 @@ export function createTranslationConnections(options) {
         details.append(summary, row);
         rows.append(details);
         entries.push({ root: row, read });
+        if (options.embedded) enhanceSettingRows(row);
         renderType();
         return name;
     };
@@ -198,6 +201,17 @@ export function createTranslationConnections(options) {
     fill(primary, options.state.configuration.primary);
     for (const value of options.state.configuration.fallbacks)
         appendFallback(value);
+    options.bindDraft?.({
+        validate: () => {
+            normalizeTranslationPrompt(prompt.value);
+            if (!concurrency.checkValidity() || !Number.isInteger(Number(concurrency.value))) throw new Error("翻译并发请求须为 1—10 的整数");
+        },
+        capture: () => ({ schema: 1, profiles: entries.map(entry => entry.read()), primary: primary.value, fallbacks: fallbacks.map(item => item.select.value) }),
+        preferences: () => ({ translationPrompt: prompt.value, translationConcurrency: Number(concurrency.value) }),
+        applyPreferences: (/** @type {any} */ value) => { prompt.value = value.translationPrompt ?? DEFAULT_TRANSLATION_PROMPT; concurrency.value = String(value.translationConcurrency ?? 2); },
+        setRevision: (/** @type {string|null} */ value) => { revision = value; },
+    });
+    if (options.embedded) enhanceSettingRows(root);
     JhsSelect.refreshAll(root);
     return root;
 }
