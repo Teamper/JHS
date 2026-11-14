@@ -115,7 +115,7 @@ export class ScreenshotService {
             this.diagnostics?.updateProvider(providerId, { ok: true, count: Array.isArray(result) ? result.length : 0, updatedAt: Date.now() });
             return Array.isArray(result) && result.length ? result : null;
         } catch (error) {
-            this.diagnostics?.updateProvider(providerId, { ok: false, error: error instanceof Error ? error.message : String(error), updatedAt: Date.now() });
+            this.diagnostics?.updateProvider(providerId, { ok: false, error: error instanceof Error ? error.message : String(error), ...(/** @type {any} */ (error)?.source === "javstore" ? { details: /** @type {any} */ (error).details } : {}), updatedAt: Date.now() });
             throw error;
         }
     }

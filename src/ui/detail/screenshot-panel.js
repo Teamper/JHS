@@ -13,10 +13,18 @@ function replaceResult(host, content) {
     }
 }
 
+/** @param {unknown} value */
+function normalizeFallbackImageUrl(value) {
+    try {
+        const parsed = new URL(String(value || ""));
+        return parsed.protocol === "https:" ? parsed.href : null;
+    } catch { return null; }
+}
+
 /** @param {any} host @param {string} url @param {string} alt @param {any} scope @param {() => void} onError @param {any} screenshot */
 function renderImage(host, url, alt, scope, onError, screenshot) {
     const jq = /** @type {any} */ (globalThis).$;
-    const normalized = screenshot.normalizeAssetUrl(url);
+    const normalized = typeof screenshot?.normalizeAssetUrl === "function" ? screenshot.normalizeAssetUrl(url) : normalizeFallbackImageUrl(url);
     if (!normalized) return null;
     const image = jq("<img>").attr({ src: normalized, alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image");
     image.one("error", () => { if (host[0]?.contains(image[0])) onError(); });

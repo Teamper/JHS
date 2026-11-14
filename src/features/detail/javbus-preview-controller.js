@@ -133,7 +133,7 @@ export class JavBusPreviewController {
             this.updateQuality(video);
             session.index = this.dialog.open({
                 type: 1, title: "视频预览", content: '<div data-jhs-bus-preview-host></div>', shadeClose: true, scrollbar: false, anim: -1,
-                area: this.ui.getResponsiveArea(["80%", "80%"]), ui: { size: "lg", body: "media", initialFocus: "#preview-video" },
+                ui: { size: "lg", body: "media", initialFocus: "#preview-video" },
                 success: (/** @type {any} */ element, /** @type {number} */ id) => {
                     session.index = id; modal.addClass("is-open"); this.ui.setupEscClose(id);
                     const root = element?.nodeType === 1 ? element : element[0];

@@ -1,6 +1,7 @@
 // @ts-check
 
 import { createStateActions } from "../../ui/detail/state-actions.js";
+import { renderStateView } from "../../core/ui-primitives.js";
 import { C, _, escapeHtml, normalizeCarNum } from "../../core/constants.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 import { createLatestSettingWriter } from "../../ui/settings/setting-binding-controller.js";
@@ -93,17 +94,18 @@ export class DetailPageActionsController {
             } catch (error) {
                 if (!active.open || this.scope.disposed || !content[0]?.isConnected) return;
                 this.diagnostics.recordError({ source: "detail-page-actions", message: "磁力来源初始化失败", error });
-                content.empty().append(this.jquery('<p class="magnet-error"></p>').text("磁力来源加载失败"), this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary">重试</button>').on("click", () => void load()));
+                renderStateView(content, { type: "error", title: "磁力来源加载失败", actionLabel: "重试", onAction: () => void load(), jquery: this.jquery });
             } finally {
                 content.attr("aria-busy", "false");
             }
         };
         try {
             active.index = this.dialog.open({
-                type: 1, title: `磁力搜索 ${carNum}`, content: '<div class="jhs-magnet-dialog" role="status" aria-live="polite">加载中…</div>',
-                area: this.ui.getResponsiveArea(["60%", "80%"]), scrollbar: false,
+                type: 1, title: `磁力搜索 ${carNum}`, content: '<div class="jhs-magnet-dialog"></div>',
+                ui: { size: "lg", body: "scroll" }, scrollbar: false,
                 success: (/** @type {any} */ element) => {
                     active.content = this.jquery(element).find(".jhs-magnet-dialog");
+                    renderStateView(active.content, { type: "loading", title: "正在加载磁力来源…", jquery: this.jquery });
                     void load();
                 },
                 end: () => { active.open = false; active.content?.attr("aria-busy", "false"); if (this.magnetDialog === active) this.magnetDialog = null; },
@@ -318,15 +320,16 @@ export class DetailPageActionsController {
             const escaped = lines.map((/** @type {string} */ line, /** @type {number} */ index) => `<span class="jhs-code-line-number">${String(index + 1).padStart(width, " ")}. </span>${escapeHtml(line)}`).join("\n");
             index = this.dialog.open({
                 type: 1, title, area: this.ui.getResponsiveArea(["80%", "80%"]), scrollbar: false,
-                ui: { body: "scroll" },
-                content: `<div class="jhs-code-viewer">${escaped}</div>`, btn: ["下载", "关闭"],
+                skin: "jhs-confirm-actions", ui: { body: "scroll" },
+                content: `<div class="jhs-code-viewer">${escaped}</div>`, btn: ["关闭", "下载"],
                 success: (/** @type {any} */ element, /** @type {number} */ id) => {
                     index = id; this.ui.setupEscClose(id);
                     const root = element?.nodeType === 1 ? element : element[0];
                     if (root.parentNode) scope.observe(root.parentNode, () => { if (!root.isConnected) scope.dispose(); }, { childList: true });
                 },
                 end: () => { index = null; scope.dispose(); },
-                btn1: () => { if (!scope.disposed) this.ui.download(data, filename); return false; },
+
+                btn2: () => { if (!scope.disposed) this.ui.download(data, filename); return false; },
             });
         } catch (error) {
             if (!scope.disposed) this.subtitleError(preview ? "预览" : "下载", error);

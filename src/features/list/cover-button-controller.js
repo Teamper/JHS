@@ -24,11 +24,13 @@ const COVER_BUTTON_STYLES = `
 const COVER_MENU_STYLES = `
                 .more-tools-container { position:relative; }
                 .jhs-card-menu .jhs-btn, .jhs-card-menu .site-btn { width:100%; min-height:var(--jhs-control-height); justify-content:flex-start; margin:0; }
-                .jhs-card-menu__dot { width:8px; height:8px; flex:none; border-radius:50%; background:var(--jhs-border-strong); }
+                .jhs-card-menu__dot { width:var(--jhs-space-2); height:var(--jhs-space-2); flex:none; border-radius:50%; background:var(--jhs-border-strong); }
                 .jhs-card-menu__dot--watch { background:var(--jhs-status-watch); }
                 .jhs-card-menu__dot--down { background:var(--jhs-status-down); }
                 .jhs-card-menu__dot--fav { background:var(--jhs-status-fav); }
                 .jhs-card-menu__dot--filter { background:var(--jhs-status-filter); }
+                .jhs-card-status-item[aria-pressed="true"] { background:var(--jhs-surface-2); font-weight:var(--jhs-font-weight-semibold); }
+                .jhs-card-status-item[aria-pressed="true"]::after { content:"\\2713"; margin-left:auto; color:var(--jhs-accent); font-weight:var(--jhs-font-weight-semibold); }
                 .loading { opacity:.7; filter:blur(1px); }
                 .loading-spinner { position:absolute; top:50%; left:50%; width:64px; height:12px; transform:translate(-50%,-50%); z-index:var(--jhs-z-elevated); }
                 .loading-spinner .loading-animation { display:block; }
@@ -59,7 +61,7 @@ export class CoverButtonController {
         /** @type {OwnedPopover | null} */ this.activeCardPopover = null;
         this.started = false;
     }
-    getStyles() { return `<style>${COVER_BUTTON_STYLES}${this.isJavBus ? ".jhs-cover-tools .icon, .setting-label .icon{height:24px;width:24px}" : ""}${COVER_MENU_STYLES}</style>`; }
+    getStyles() { return `<style>${COVER_BUTTON_STYLES}${this.isJavBus ? ".jhs-cover-tools .icon, .setting-label .icon{height:var(--jhs-icon-lg);width:var(--jhs-icon-lg)}" : ""}${COVER_MENU_STYLES}</style>`; }
     async start() {
         this.scope.assertActive();
         if (this.started) return;
@@ -103,10 +105,10 @@ export class CoverButtonController {
                 <div class="more-tools-container handleSvg">
                     <button type="button" title="鉴定处理" aria-label="鉴定处理" aria-haspopup="menu" aria-expanded="false" class="jhs-btn jhs-icon-btn jhs-card-menu-trigger">${this.icons.handleSvg}</button>
                     <div class="jhs-popover jhs-card-menu" role="menu">
-                        <button type="button" role="menuitem" class="jhs-btn jhs-btn--ghost jhs-card-status-item hasWatchBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--watch"></span><span>${k}</span></button>
-                        <button type="button" role="menuitem" class="jhs-btn jhs-btn--ghost jhs-card-status-item hasDownBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--down"></span><span>${y}</span></button>
-                        <button type="button" role="menuitem" class="jhs-btn jhs-btn--ghost jhs-card-status-item favoriteBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--fav"></span><span>${v}</span></button>
-                        <button type="button" role="menuitem" class="jhs-btn jhs-btn--ghost jhs-card-status-item filterBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--filter"></span><span>${m}</span></button>
+                        <button type="button" role="menuitem" aria-pressed="false" class="jhs-btn jhs-btn--ghost jhs-card-status-item filterBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--filter"></span><span>${m}</span></button>
+                        <button type="button" role="menuitem" aria-pressed="false" class="jhs-btn jhs-btn--ghost jhs-card-status-item favoriteBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--fav"></span><span>${v}</span></button>
+                        <button type="button" role="menuitem" aria-pressed="false" class="jhs-btn jhs-btn--ghost jhs-card-status-item hasDownBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--down"></span><span>${y}</span></button>
+                        <button type="button" role="menuitem" aria-pressed="false" class="jhs-btn jhs-btn--ghost jhs-card-status-item hasWatchBtn"><span class="jhs-card-menu__dot jhs-card-menu__dot--watch"></span><span>${k}</span></button>
                     </div>
                 </div>
                 <div class="more-tools-container siteSvg">
@@ -214,7 +216,14 @@ export class CoverButtonController {
             const trigger = $(event.currentTarget), menu = trigger.siblings(".jhs-card-menu"), open = !menu.hasClass("is-open");
             this.closeCardMenus();
             if (open) {
-                menu.data("jhsCardOwner",trigger.closest(".item")[0]);
+                const owner = trigger.closest(".item")[0];
+                menu.data("jhsCardOwner", owner);
+                /** @type {Record<string, boolean>} */ let flags = {};
+                try { flags = JSON.parse(owner?.getAttribute?.("data-jhs-flags") || "{}"); } catch {}
+                menu.find(".filterBtn").attr("aria-pressed", String(!!flags.blocked));
+                menu.find(".favoriteBtn").attr("aria-pressed", String(!!flags.favorite));
+                menu.find(".hasDownBtn").attr("aria-pressed", String(!!flags.downloaded));
+                menu.find(".hasWatchBtn").attr("aria-pressed", String(!!flags.watched));
                 this.activeCardPopover = new OwnedPopover(trigger[0],menu[0]); this.activeCardPopover.open();
             }
         })).on("keydown.jhsCoverButton", ".jhs-card-menu [role='menuitem']", ((/** @type {KeyboardEvent} */ event) => {
@@ -282,7 +291,7 @@ export class CoverButtonController {
                         if (ownsFocus && (this.document.activeElement === anchor || this.document.activeElement === this.document.body)) this.focusCard(anchor, card[0]);
                     }
                 };
-                button.hasClass("filterBtn") ? this.ui.confirm(event, `屏蔽「${escapeHtml(carNum)}」？`, () => applyState(d), { confirmText: "屏蔽" }) : button.hasClass("favoriteBtn") ? void applyState(h) : button.hasClass("hasDownBtn") ? void applyState(g) : button.hasClass("hasWatchBtn") && void applyState(p);
+                button.hasClass("filterBtn") ? this.ui.confirm(event, `屏蔽「${escapeHtml(carNum)}」？`, () => applyState(d), { confirmText: "屏蔽", tone: "danger" }) : button.hasClass("favoriteBtn") ? void applyState(h) : button.hasClass("hasDownBtn") ? void applyState(g) : button.hasClass("hasWatchBtn") && void applyState(p);
             } catch (error) {
                 this.recordError("按钮点击处理失败", error);
                 if (!scope.disposed && /** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY") this.notifications.error(`已跳过 1 项：${/** @type {Error} */ (error).message}`);

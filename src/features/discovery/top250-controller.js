@@ -28,7 +28,7 @@ export class Top250Controller {
         const listRoot = this.hostAdapter.locateListRoot?.(), container = this.hostAdapter.getTop250FilterContainer?.();
         if (!listRoot || !container || container.querySelector(".jhs-top250-subtitle")) return;
 
-        const releaseStyle = this.styles.register("jhs-top250-subtitle-feature", ".jhs-top250-subtitle{display:flex;gap:var(--jhs-space-2);max-width:100%;overflow-x:auto;margin:var(--jhs-space-3) 0}.jhs-top250-subtitle .jhs-btn{flex-shrink:0;white-space:nowrap}.jhs-top250-subtitle-hidden{display:none!important}");
+        const releaseStyle = this.styles.register("jhs-top250-subtitle-feature", ".jhs-top250-subtitle{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;gap:var(--jhs-space-2);max-width:100%;margin:var(--jhs-space-3) 0}.jhs-top250-subtitle .jhs-btn{flex-shrink:0;white-space:nowrap}.jhs-top250-subtitle .jhs-btn[aria-pressed=\"true\"]{border-color:var(--jhs-accent);background:var(--jhs-accent-tint);color:var(--jhs-accent-text)}.jhs-top250-subtitle-hidden{display:none!important}");
         this.scope.addCleanup(releaseStyle);
 
         const controls = this.document.createElement("div");

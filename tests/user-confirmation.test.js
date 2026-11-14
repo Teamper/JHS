@@ -42,20 +42,21 @@ describe("user confirmation actions", () => {
         });
     }
 
-    it("preserves the fourth legacy cancellation callback", () => {
+    it("unifies unnamed confirmations to cancel-left and preserves the fourth cancellation callback", () => {
         const { utils, layer } = loadUtils(false), accept = vi.fn(), cancel = vi.fn();
         utils.q(null, "旧确认", accept, cancel);
         const [, options, first, second] = layer.confirm.mock.calls[0];
         expect(options.ui).toEqual({ focus: "caller" });
-        expect(options.btn).toEqual(["确定", "取消"]);
-        expect(options).not.toHaveProperty("skin");
-        second();
+        expect(options.btn).toEqual(["取消", "确定"]);
+        expect(options.skin).toBe("jhs-confirm-actions");
+        first();
         expect(cancel).toHaveBeenCalledOnce();
         expect(accept).not.toHaveBeenCalled();
-        first();
+        second();
         expect(accept).not.toHaveBeenCalled();
-        utils.q(null, "旧确认", accept, cancel);
-        layer.confirm.mock.calls[1][2]();
+        utils.q(null, "旧确认", accept, cancel, { tone: "danger" });
+        expect(layer.confirm.mock.calls[1][1].skin).toBe("jhs-confirm-actions jhs-confirm-actions--danger");
+        layer.confirm.mock.calls[1][3]();
         expect(accept).toHaveBeenCalledOnce();
     });
 
@@ -79,14 +80,15 @@ describe("user confirmation actions", () => {
         expect(accept).not.toHaveBeenCalled();
         second(8);
         expect(accept).toHaveBeenCalledWith(8);
-        service.confirm("旧确认", { icon: 3 }, accept);
-        expect(layer.confirm.mock.calls[1][2]).toBe(accept);
-        expect(layer.confirm.mock.calls[1]).toHaveLength(3);
-        expect(layer.confirm.mock.calls[1][1]).not.toHaveProperty("skin");
+        service.confirm("高危确认", { icon: 3, tone: "danger" }, accept);
+        expect(layer.confirm.mock.calls[1][3]).toBe(accept);
+        expect(layer.confirm.mock.calls[1][1].skin).toBe("jhs-confirm-actions jhs-confirm-actions--danger");
+        expect(layer.confirm.mock.calls[1][1].btn).toEqual(["取消", "确定"]);
+        expect(layer.confirm.mock.calls[1][1]).not.toHaveProperty("tone");
         service.confirm("默认确认", undefined, accept);
-        expect(layer.confirm.mock.calls[2][2]).toBe(accept);
-        expect(layer.confirm.mock.calls[2]).toHaveLength(3);
-        expect(layer.confirm.mock.calls[2][1]).not.toHaveProperty("skin");
+        expect(layer.confirm.mock.calls[2][3]).toBe(accept);
+        expect(layer.confirm.mock.calls[2][1].skin).toBe("jhs-confirm-actions");
+        expect(layer.confirm.mock.calls[2][1].btn).toEqual(["取消", "确定"]);
     });
 
     it("prefers the injected DialogService and cleans up each close without canceling twice", () => {

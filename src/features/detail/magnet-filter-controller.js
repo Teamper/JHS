@@ -69,7 +69,7 @@ export class MagnetFilterController {
             const signals = getMagnetQualitySignals(title, boundary.hasSubtitleTag(row));
             row.classList.remove("high-quality", "jhs-magnet-filter-hidden");
             row.classList.add("magnet-row");
-            if (title.includes("4k")) titleTarget.style.setProperty("color", "var(--jhs-status-filter-text)");
+            if (title.includes("4k")) titleTarget.style.setProperty("color", "var(--jhs-danger-text)");
             if (signals.highQuality) {
                 hasMatch = true;
                 row.classList.add("high-quality");
@@ -90,8 +90,8 @@ export class MagnetFilterController {
         const badge = this.document.createElement("span");
         badge.className = "jhs-magnet-score";
         badge.title = `分辨率:${score.resolution}/25 字幕:${score.subtitle}/20 做种:${score.seeders}/35 新鲜度:${score.freshness}/15`;
-        badge.style.color = score.total >= 70 ? "var(--jhs-status-down-on)" : score.total >= 40 ? "var(--jhs-status-watch-on)" : "var(--jhs-text-muted)";
-        badge.style.backgroundColor = score.total >= 70 ? "var(--jhs-status-down)" : score.total >= 40 ? "var(--jhs-status-watch)" : "var(--jhs-surface-2)";
+        badge.style.color = score.total >= 70 ? "var(--jhs-success-text)" : score.total >= 40 ? "var(--jhs-warning-text)" : "var(--jhs-text-muted)";
+        badge.style.backgroundColor = score.total >= 70 ? "var(--jhs-success-tint)" : score.total >= 40 ? "var(--jhs-warning-tint)" : "var(--jhs-surface-2)";
         badge.textContent = `${label} ${score.total}`;
         target.append(badge);
     }

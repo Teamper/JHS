@@ -415,7 +415,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 if (resourceResult.status === "rejected") {
                     this.logger.error("resource-settings 加载失败", resourceResult.reason), this.getRuntimeService("diagnostics").recordError({ source: "resource-settings", message: resourceResult.reason?.message || String(resourceResult.reason) }), this.notifications.error("资源设置加载失败，请重试");
                     layerRoot.find("#saveBtn").prop("disabled", true).attr("data-jhs-settings-ready", "false");
-                    const retry = this.jquery('<button type="button" class="jhs-btn">重试加载资源</button>');
+                    const retry = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary">重试加载资源</button>');
                     layerRoot.find("#settings-hydration-status").empty().append(retry);
                     retry.on("click", async () => {
                         retry.prop("disabled", true);
@@ -458,7 +458,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         if (!draft?.count && !draft?.pending) { instance.closing = true; return dialog.close(instance.id); }
         const previousFocus = this.document.activeElement;
         instance.closeConfirmation = dialog.confirm("放弃尚未保存的修改？", {
-            title: "放弃修改？", confirmText: "放弃修改", cancelText: "继续编辑",
+            title: "放弃修改？", confirmText: "放弃修改", cancelText: "继续编辑", tone: "danger", ui: { size: "sm", body: "scroll", initialFocus: ".layui-layer-btn0" },
             success: (element, id) => { this.utils.setupEscClose(id); this.jquery(element).find(".layui-layer-btn0").trigger("focus"); },
             end: () => {
                 const id = instance.closeConfirmation; instance.closeConfirmation = null;
@@ -836,7 +836,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         for (const [key,title] of [["general","通用设置"],["123","123 云盘"],["115","115"]]) {
             const group = this.jquery('<section class="jhs-setting-section jhs-cloud-section"></section>').attr("data-jhs-cloud-group", key);
             group.append(this.jquery('<header class="jhs-setting-section__header"></header>').append(this.jquery("<h4></h4>").text(title)));
-            if (key === "115") group.append(this.jquery('<div class="jhs-toolbar"></div>').append(this.jquery("<span></span>").text("登录状态：").append(this.jquery('<span id="one-one-five-state" class="jhs-badge" role="status"></span>').text("未知")), '<button type="button" id="check-one-one-five-login" class="jhs-btn">检测登录</button>'));
+            if (key === "115") group.append(this.jquery('<div class="jhs-toolbar"></div>').append(this.jquery("<span></span>").text("登录状态：").append(this.jquery('<span id="one-one-five-state" class="jhs-badge" role="status"></span>').text("未知")), '<button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--secondary">检测登录</button>'));
             host.append(group); groups.set(key,group);
         }
         const valueFor = (key) => key === "offlineProviderMode" ? cloud.providerMode : key === "oneOneFiveConcurrency" ? cloud.concurrency : key === "oneOneFiveCacheMinutes" ? cloud.cacheMinutes : cloud[key];
@@ -857,8 +857,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             const node = this.jquery('<article class="jhs-card jhs-resource-card"></article>');
             const defaultType = "magnet" === kind ? "磁力来源" : "截图来源";
             node.append(this.jquery('<div class="jhs-setting-row jhs-setting-row--action"></div>').append(this.jquery('<div></div>').append(this.jquery("<strong></strong>").text(source.name), source.experimental ? '<span class="jhs-badge">实验性</span>' : "", this.jquery("<small></small>").text(`${source.type || defaultType} · ${source.domain || (() => { try { return new URL(source.searchUrlTemplate).hostname; } catch { return "未配置域名"; } })()} · 优先级 ${source.priority}`)), this.jquery('<input type="checkbox" class="jhs-switch jhs-source-toggle" role="switch">').prop("checked", source.enabled)));
-            const actions = this.jquery('<div class="jhs-toolbar"></div>').append('<button type="button" class="jhs-btn jhs-source-test">测试</button>');
-            if (custom) actions.append('<button type="button" class="jhs-btn jhs-source-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-source-delete">删除</button>');
+            const actions = this.jquery('<div class="jhs-toolbar"></div>').append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-source-test">测试</button>');
+            if (custom) actions.append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-source-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-source-delete">删除</button>');
             const row = node.children(".jhs-setting-row"), toggle = row.children("input").attr("aria-label", `启用 ${source.name}`);
             actions.prepend(toggle).addClass("jhs-setting-row__control"); row.append(actions);
             node.on("change", ".jhs-source-toggle", async event => {
@@ -905,7 +905,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                     this.resourceState.custom = custom;
                     this.renderResourceSettings(root);
                 } catch (error) { this.logger?.error?.("资源设置操作失败", error), this.notifications.error("资源设置保存失败，请重试"); }
-            }), null, { confirmText: "删除", cancelText: "取消" })));
+            }), null, { confirmText: "删除", cancelText: "取消", tone: "danger" })));
             return node;
         };
         root.find("#builtin-magnet-source-list").empty().append(this.resourceState.builtIn.map((source => card(source, false, "magnet"))));
@@ -923,7 +923,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         const list = "tag" === kind ? this.resourceState.tags : this.resourceState.filters, host = root.find("#magnet-" + kind + "-rule-list").empty();
         if (!list.length) host.append('<p class="jhs-setting-help">暂无规则</p>');
         list.forEach((rule => {
-            const node = this.jquery('<article class="jhs-card jhs-record-card"></article>').append(this.jquery("<strong></strong>").text(rule.name), this.jquery("<p></p>").text(`${"regex" === rule.type ? "正则" : "包含"}：${rule.pattern}${"tag" === kind ? ` · 权重 ${Number(rule.weight) >= 0 ? "+" : ""}${rule.weight || 0}` : ` · ${"hide" === rule.action ? "隐藏" : `降权 ${rule.penalty || -20}`}`}`), '<div class="jhs-toolbar"><button class="jhs-btn jhs-rule-edit">编辑</button><button class="jhs-btn jhs-btn--danger jhs-rule-delete">删除</button></div>');
+            const node = this.jquery('<article class="jhs-card jhs-record-card"></article>').append(this.jquery("<strong></strong>").text(rule.name), this.jquery("<p></p>").text(`${"regex" === rule.type ? "正则" : "包含"}：${rule.pattern}${"tag" === kind ? ` · 权重 ${Number(rule.weight) >= 0 ? "+" : ""}${rule.weight || 0}` : ` · ${"hide" === rule.action ? "隐藏" : `降权 ${rule.penalty || -20}`}`}`), '<div class="jhs-toolbar"><button type="button" class="jhs-btn jhs-btn--secondary jhs-rule-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-rule-delete">删除</button></div>');
             node.on("click", ".jhs-rule-edit", (() => this.openRuleDialog(kind, rule, root))).on("click", ".jhs-rule-delete", (event => this.utils.q(event, `删除规则“${escapeHtml(rule.name)}”？`, (async () => {
                 try {
                     await resources.updateArray("tag" === kind ? "magnetTagRules" : "magnetFilterRules", (list) => list.filter((item => item.id !== rule.id)));
@@ -932,7 +932,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                     this.resourceState["tag" === kind ? "tags" : "filters"] = rules;
                     this.renderRules(kind, root);
                 } catch (error) { this.logger?.error?.("资源设置操作失败", error), this.notifications.error("资源设置保存失败，请重试"); }
-            }), null, { confirmText: "删除", cancelText: "取消" })));
+            }), null, { confirmText: "删除", cancelText: "取消", tone: "danger" })));
             host.append(node);
         }));
     }
@@ -965,7 +965,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         });
         content.on("change", '[name="parserType"]', renderFields), renderFields(), content.appendTo("body").hide();
         let saving = false, releaseOwner;
-        const editorId = dialog.open({ type: 1, title: existing ? "编辑自定义磁力源" : "添加自定义磁力源", content, ui: { size: "md", body: "scroll" }, area: this.utils.getDialogArea("md"), btn: ["确定", "取消"], success: () => content.show(), end: () => { releaseOwner?.(); content.remove(); }, yes: async index => {
+        const editorId = dialog.open({ type: 1, title: existing ? "编辑自定义磁力源" : "添加自定义磁力源", content, skin: "jhs-confirm-actions", ui: { size: "md", body: "scroll" }, btn: ["取消", "保存"], success: () => content.show(), end: () => { releaseOwner?.(); content.remove(); }, btn2: async index => {
             if (saving || root && !this.jquery(root)[0]?.isConnected) return;
             saving = true;
             try {
@@ -997,7 +997,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         this.normalizeEditorRows(content);
         content.appendTo("body").hide();
         let saving = false, releaseOwner;
-        const editorId = dialog.open({ type: 1, title: `${existing ? "编辑" : "新建"}${isTag ? "标签" : "过滤"}规则`, content, ui: { size: "sm", body: "scroll" }, area: this.utils.getDialogArea("sm"), btn: ["确定", "取消"], success: () => content.show(), end: () => { releaseOwner?.(); content.remove(); }, yes: async index => {
+        const editorId = dialog.open({ type: 1, title: `${existing ? "编辑" : "新建"}${isTag ? "标签" : "过滤"}规则`, content, skin: "jhs-confirm-actions", ui: { size: "sm", body: "scroll" }, btn: ["取消", "保存"], success: () => content.show(), end: () => { releaseOwner?.(); content.remove(); }, btn2: async index => {
             if (saving || root && !this.jquery(root)[0]?.isConnected) return;
             saving = true;
             try {

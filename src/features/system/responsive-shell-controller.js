@@ -13,10 +13,10 @@ const RESPONSIVE_SHELL_STYLES = `
             /* FAB 浮动操作按钮 */
             #jhs-fab {
                 position: fixed;
-                bottom: calc(24px + env(safe-area-inset-bottom, 0px) + var(--jhs-batch-clearance, 0px));
-                right: 20px;
-                width: 56px;
-                height: 56px;
+                bottom: calc(var(--jhs-fab-offset) + env(safe-area-inset-bottom, 0px));
+                right: var(--jhs-space-5);
+                width: var(--jhs-fab-size);
+                height: var(--jhs-fab-size);
                 border: 0;
                 border-radius: 50%;
                 background: var(--jhs-accent);
@@ -77,7 +77,7 @@ const RESPONSIVE_SHELL_STYLES = `
             .jhs-fab-menu {
                 position: fixed;
                 bottom: calc(92px + env(safe-area-inset-bottom, 0px) + var(--jhs-batch-clearance, 0px));
-                right: 16px;
+                right: var(--jhs-space-4);
                 max-height: calc(100vh - 108px - var(--jhs-batch-clearance, 0px) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
                 max-height: calc(100dvh - 108px - var(--jhs-batch-clearance, 0px) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
                 max-width: calc(100vw - 32px);
@@ -126,11 +126,11 @@ const RESPONSIVE_SHELL_STYLES = `
                 padding:var(--jhs-space-3) var(--jhs-space-4);
                 background: var(--jhs-surface);
                 border: 1px solid var(--jhs-border);
-                border-radius: 24px;
+                border-radius: var(--jhs-radius-pill);
                 box-shadow: var(--jhs-shadow-md);
                 cursor: pointer;
                 white-space: nowrap;
-                min-height: 44px;
+                min-height: var(--jhs-touch-target);
                 font-size:var(--jhs-font-size-md);
                 font-family: inherit;
                 font-weight:var(--jhs-font-weight-semibold);
@@ -154,11 +154,19 @@ const RESPONSIVE_SHELL_STYLES = `
 
             /* FAB 状态色块 */
             .jhs-fab-status-dot {
-                width: 8px;
-                height: 8px;
+                width: var(--jhs-space-2);
+                height: var(--jhs-space-2);
                 border-radius: 50%;
                 flex-shrink: 0;
                 background: var(--jhs-border-strong);
+            }
+            .jhs-fab-status-dot--filter.is-active { background: var(--jhs-status-filter); }
+            .jhs-fab-status-dot--fav.is-active { background: var(--jhs-status-fav); }
+            .jhs-fab-status-dot--down.is-active { background: var(--jhs-status-down); }
+            .jhs-fab-status-dot--watch.is-active { background: var(--jhs-status-watch); }
+            .jhs-fab-menu-item.jhs-state-action[aria-pressed="true"] {
+                border-color: var(--jhs-btn-fg, var(--jhs-accent));
+                box-shadow: var(--jhs-shadow-md), inset 0 0 0 1px var(--jhs-btn-fg, var(--jhs-accent));
             }
 
             .jhs-page-commandbar {
@@ -198,11 +206,14 @@ const RESPONSIVE_SHELL_STYLES = `
                 .jhs-commandbar__left { flex-basis:100%; }
                 .jhs-commandbar__right { margin-left:auto; }
             }
+            html.jhs-fab-mounted .jhs-page-commandbar { display: none; }
             @media (max-width: 767px) {
-                .jhs-page-commandbar { display: none; }
+                html.jhs-fab-mounted .jhs-page-commandbar { display: none; }
+                .jhs-page-commandbar { flex-wrap: wrap; gap: var(--jhs-space-2); }
+                .jhs-commandbar__left, .jhs-commandbar__right { flex-basis: 100%; margin-left: 0; }
             }
             .jhs-fab-menu-item[hidden] { display:none; }
-            .jhs-mobile-batch-menu { display:none; min-width:220px; padding:var(--jhs-space-2); background:var(--jhs-surface); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); }
+            .jhs-mobile-batch-menu { display:none; min-width:220px; padding:var(--jhs-space-2); background:var(--jhs-surface); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); box-shadow:var(--jhs-shadow-md); }
             .jhs-mobile-batch-menu .jhs-btn { width:100%; justify-content:flex-start; }
             .jhs-fab-menu.jhs-fab-batch-open > .jhs-fab-group, .jhs-fab-menu.jhs-fab-batch-open > .jhs-fab-divider { display:none; }
             .jhs-fab-menu.jhs-fab-batch-open > .jhs-mobile-batch-menu { display:grid; gap:var(--jhs-space-1); }
@@ -603,17 +614,15 @@ export class ResponsiveShellController {
             if (!carNum) return;
             const car = await this.services.state.getState(carNum);
             if (this._disposed || generation !== this._fabGeneration || !menu[0]?.isConnected) return;
-            const colors = { filter: "var(--jhs-status-filter)", fav: "var(--jhs-status-fav)", down: "var(--jhs-status-down)", watch: "var(--jhs-status-watch)" };
             const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set();
             flags.blocked && activeKeys.add("filter"), flags.favorite && activeKeys.add("fav"), flags.downloaded && activeKeys.add("down"), flags.watched && activeKeys.add("watch");
             menu.find(".jhs-fab-status-dot").each(((/** @type {number} */ index, /** @type {HTMLElement} */ element) => {
-                const key = String(this.jquery(element).data("status-key") || ""), item = this.jquery(element).closest(".jhs-fab-menu-item");
+                const key = String(this.jquery(element).data("status-key") || ""), dot = this.jquery(element), item = dot.closest(".jhs-fab-menu-item");
                 item.addClass(`jhs-state-action jhs-btn--${key}`);
-                if (activeKeys.has(key)) {
-                    this.jquery(element).css({ background: colors[/** @type {keyof typeof colors} */ (key)] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
-                } else {
-                    this.jquery(element).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
-                }
+                if (key) dot.addClass(`jhs-fab-status-dot--${key}`);
+                const active = activeKeys.has(key);
+                dot.toggleClass("is-active", active);
+                item.attr("aria-pressed", active ? "true" : "false");
             }));
         } catch (e) { this.services.logger.warn("移动端详情状态刷新失败", e); }
     }
@@ -696,7 +705,7 @@ export class ResponsiveShellController {
         };
         // FAB 点击切换
         fab.on("click", toggleMenu);
-        menu.on("keydown", (/** @type {any} */ event) => { if (event.key === "Tab") closeMenu(!0); });
+        menu.on("keydown", (/** @type {any} */ event) => { if (event.key === "Tab") { event.preventDefault(); closeMenu(!0); } });
         // 遮罩点击关闭
         backdrop.on("click", (() => closeMenu(!0)));
         const bindKeys = (/** @type {any} */ root, /** @type {string} */ selector, /** @type {(focus: boolean) => void} */ close) => root.on("keydown", selector, (/** @type {any} */ event) => {

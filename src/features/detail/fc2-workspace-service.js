@@ -177,7 +177,7 @@ export class Fc2WorkspaceService {
         source = [ "fc2", "123av" ].includes(source) ? source : "";
         /** @type {Fc2DetailContext | null} */
         let context = null;
-        return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', ui: { size: "workspace", body: "scroll" }, area: utils.getDialogArea("workspace"), skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
+        return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', ui: { size: "workspace", body: "scroll" }, skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
             success: (/** @type {HTMLElement} */ layerRoot, /** @type {number} */ layerIndex) => { context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog", initialMovie }), utils.setupEscClose(layerIndex); },
             end: () => context?.destroy()
         });

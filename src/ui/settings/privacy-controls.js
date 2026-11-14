@@ -9,13 +9,13 @@ html[data-jhs-privacy-active] [data-jhs-privacy-media] { visibility:hidden!impor
 .jhs-privacy-config { display:flex; flex-direction:column; gap:var(--jhs-space-3); padding:var(--jhs-space-4); color:var(--jhs-text); background:var(--jhs-bg); }
 .jhs-privacy-config label { display:flex; gap:var(--jhs-space-2); align-items:center; }
 .jhs-privacy-config label.jhs-privacy-config__shortcut { flex-direction:column; align-items:stretch; }
-.jhs-privacy-config input[type=text] { min-width:0; width:100%; font:inherit; color:var(--jhs-text); background:var(--jhs-surface); border:1px solid var(--jhs-border); padding:var(--jhs-space-2); }
+.jhs-privacy-config .jhs-field { min-width:0; width:100%; }
 `;
 
 /** @param {{document: Document, scope: any, settings: any, onClose: () => void, embedded?:boolean, bindDraft?:(editor:any)=>void}} options */
 export function createPrivacyPreferences({ document, scope, settings, onClose, embedded, bindDraft }) {
     const root = document.createElement("div");
-    root.className = "jhs-privacy-config";
+    root.className = "jhs-privacy-config jhs-ui";
     const values = settings.snapshot();
     const selected = Array.isArray(values.privacyTargets) ? values.privacyTargets : ["title", "code", "actors", "images", "video"];
     /** @type {Map<string, HTMLInputElement>} */ const inputs = new Map();
@@ -32,6 +32,7 @@ export function createPrivacyPreferences({ document, scope, settings, onClose, e
     const label = document.createElement("label"), shortcut = document.createElement("input");
     let binding = values.privacyShortcut || null;
     shortcut.type = "text";
+    shortcut.className = "jhs-field";
     shortcut.readOnly = true;
     shortcut.placeholder = "按键录制，Backspace 清除";
     shortcut.value = shortcutLabel(binding);
@@ -47,6 +48,7 @@ export function createPrivacyPreferences({ document, scope, settings, onClose, e
         root.dispatchEvent(new (/** @type {any} */ (document.defaultView)).Event("input", { bubbles: true }));
     });
     const note = document.createElement("p");
+    note.className = "jhs-helper-text";
     note.textContent = "遮罩从脚本运行后生效。首次加载可能短暂显示内容。临时查看松开后恢复，视频需手动继续播放。";
     const status = document.createElement("p"), save = document.createElement("button");
     status.setAttribute("role", "status");
@@ -56,14 +58,17 @@ export function createPrivacyPreferences({ document, scope, settings, onClose, e
     scope.listen(save, "click", async () => {
         save.disabled = true;
         try {
+            status.className = "";
+            status.textContent = "";
             if (binding && Object.values(readDetailShortcuts(settings.snapshot().detailShortcuts)).some(value => shortcutMatches(value, binding))) {
+                status.className = "jhs-field-error";
                 status.textContent = "该快捷键已用于影片状态操作，请换一个快捷键";
                 save.disabled = false;
                 return;
             }
             await settings.patch({ privacyTargets: [...inputs].filter(([, input]) => input.checked).map(([key]) => key), privacyShortcut: binding });
             if (!scope.disposed) onClose();
-        } catch { if (!scope.disposed) { status.textContent = "保存失败，请重试"; save.disabled = false; } }
+        } catch { if (!scope.disposed) { status.className = "jhs-field-error"; status.textContent = "保存失败，请重试"; save.disabled = false; } }
     });
     save.hidden = embedded === true;
     if (embedded) enhanceSettingRows(root);

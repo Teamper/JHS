@@ -85,7 +85,7 @@ test("external updates merge clean fields, preserve dirty fields and resource dr
     await dialog.locator("#add-magnet-tag-rule").click();
     const editor = page.locator(".layui-layer").filter({ has: page.locator(".jhs-rule-form") });
     await editor.locator('[name="name"]').fill("本地规则"); await editor.locator('[name="pattern"]').fill("local");
-    await editor.getByText("确定", { exact: true }).click(); await expect(editor).toHaveCount(0);
+    await editor.getByText("保存", { exact: true }).click(); await expect(editor).toHaveCount(0);
     expect((await snapshot(page)).magnetTagRules).not.toContain("本地规则");
     await dialog.locator("#saveBtn").click();
     await expect.poll(async () => (await snapshot(page)).magnetTagRules).toContain("本地规则");

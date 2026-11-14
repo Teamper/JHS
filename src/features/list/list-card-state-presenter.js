@@ -6,7 +6,7 @@ import { isHardHidden } from "./list-filters.js";
 import { evaluateListItem, findMatchedTitleKeyword } from "./list-evaluator.js";
 import { OwnedPopover } from "../../core/owned-popover.js";
 
-export const LIST_CARD_STATE_STYLES = `.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.jhs-card-reason{position:absolute;bottom:var(--jhs-space-2);right:var(--jhs-space-2);z-index:var(--jhs-z-content);min-height:var(--jhs-touch-target)}.jhs-card-reason-owner{position:relative}.jhs-card-reasons{padding:var(--jhs-space-3);gap:var(--jhs-space-2);overflow:auto}.jhs-card-reasons p{margin:0;overflow-wrap:anywhere}`;
+export const LIST_CARD_STATE_STYLES = `.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:var(--jhs-space-1);display:flex;flex-wrap:wrap;gap:var(--jhs-space-1);max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 var(--jhs-space-1);border-radius:var(--jhs-radius-pill)}.status-tag--blocked{background:var(--jhs-status-filter);color:var(--jhs-status-filter-on)}.status-tag--favorite{background:var(--jhs-status-fav);color:var(--jhs-status-fav-on)}.status-tag--downloaded{background:var(--jhs-status-down);color:var(--jhs-status-down-on)}.status-tag--watched{background:var(--jhs-status-watch);color:var(--jhs-status-watch-on)}.jhs-card-reason{position:absolute;bottom:var(--jhs-space-2);right:var(--jhs-space-2);z-index:var(--jhs-z-content);min-height:var(--jhs-touch-target)}.jhs-card-reason-owner{position:relative}.jhs-card-reasons{padding:var(--jhs-space-3);gap:var(--jhs-space-2);overflow:auto}.jhs-card-reasons p{margin:0;overflow-wrap:anywhere}`;
 
 const BADGES = Object.freeze({
     blocked: { text: u, color: "var(--jhs-status-filter)", on: "var(--jhs-status-filter-on)", tip: "单番号屏蔽" },
@@ -98,12 +98,11 @@ export class ListCardStatePresenter {
         for (const [key, , tip = ""] of definitions) {
             const definition = BADGES[/** @type {keyof typeof BADGES} */ (key)];
             const badge = this.document.createElement("span");
-            badge.className = `jhs-badge ${isJavDb ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag`;
+            const toneClass = ["keyword", "actorBlacklist", "actressBlacklist"].includes(String(key)) ? "status-tag--blocked" : `status-tag--${key}`;
+            badge.className = `jhs-badge ${isJavDb ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag ${toneClass}`;
             badge.dataset.tip = tip;
             badge.title = "";
             badge.textContent = definition.text;
-            badge.style.color = definition.on;
-            badge.style.backgroundColor = definition.color;
             box.append(badge);
         }
 

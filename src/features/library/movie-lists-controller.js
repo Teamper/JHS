@@ -4,13 +4,13 @@ import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { readOwnedMovieContext } from "../../core/movie-context.js";
 
 export const MOVIE_LISTS_STYLES = `
-.jhs-movie-lists{padding:var(--jhs-space-4);box-sizing:border-box;display:grid;gap:12px;color:var(--jhs-text)}
+.jhs-movie-lists{padding:var(--jhs-space-4);box-sizing:border-box;display:grid;gap:var(--jhs-space-3);color:var(--jhs-text)}
 .jhs-movie-lists [hidden]{display:none!important}
-.jhs-list-controls,.jhs-list-task-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.jhs-list-controls,.jhs-list-task-actions{display:flex;flex-wrap:wrap;gap:var(--jhs-space-2);align-items:center}
 .jhs-list-directory,.jhs-list-range,.jhs-list-task-results{max-height:220px;overflow:auto;overscroll-behavior:contain}
-.jhs-list-directory{display:grid;gap:8px;padding:8px;border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md)}
-.jhs-list-directory label{display:flex;gap:8px;align-items:center;overflow-wrap:anywhere}
-.jhs-list-task{display:grid;gap:8px;padding:12px;border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md)}
+.jhs-list-directory{display:grid;gap:var(--jhs-space-2);padding:var(--jhs-space-2);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md)}
+.jhs-list-directory label{display:flex;gap:var(--jhs-space-2);align-items:center;overflow-wrap:anywhere}
+.jhs-list-task{display:grid;gap:var(--jhs-space-2);padding:var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md)}
 .jhs-list-task summary,.jhs-list-task p{overflow-wrap:anywhere}
 `;
 
@@ -44,7 +44,7 @@ export class MovieListsController {
                     const context = readOwnedMovieContext(element);
                     const id = context?.movieId;
                     const movie = context ? {carNum:context.carNum,url:typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? `${this.document.location.origin}/v/${id}` : context.detailUrl} : this.host.readMovieRef();
-                    void this.open([movie]).catch(error => { if (!scope.disposed) this.dialog.alert(error.message || "清单打开失败，请重试"); });
+                    void this.open([movie]).catch(error => { if (!scope.disposed) this.dialog.alert(error.message || "清单打开失败，请重试", { ui: { size: "sm", body: "scroll" } }); });
                 });
                 mountEnhancementAction(element, button, scope);
                 entries.set(element,{button,scope});
@@ -86,7 +86,7 @@ export class MovieListsController {
             node.type = "button";
             node.className = "jhs-btn jhs-btn--secondary";
             node.textContent = label;
-            scope.listen(node, "click", () => Promise.resolve().then(action).catch(error => { if (!scope.disposed) status.textContent = error.message || "清单操作失败"; }));
+            scope.listen(node, "click", () => Promise.resolve().then(action).catch(error => { if (!scope.disposed) { status.className = "jhs-field-error"; status.textContent = error.message || "清单操作失败"; } }));
             parent.append(node);
             return node;
         };
@@ -135,7 +135,7 @@ export class MovieListsController {
             for (const task of await this.service.listTasks()) {
                 scope.assertActive();
                 try { renderTask(await this.service.inspect(task)); }
-                catch { if (!scope.disposed) status.textContent = "部分清单恢复记录无法安全读取，已保留记录"; }
+                catch { if (!scope.disposed) { status.className = "jhs-field-error"; status.textContent = "部分清单恢复记录无法安全读取，已保留记录"; } }
             }
         };
         root.append(status, controls, directory, preview, taskArea);
@@ -155,6 +155,7 @@ export class MovieListsController {
         const load = async () => {
             const current = ++generation;
             preview.hidden = true;
+            status.className = "";
             status.textContent = "正在核对账号与清单目录";
             try {
                 const nextAccess = await this.service.access(scope);
@@ -163,13 +164,16 @@ export class MovieListsController {
                 if (access?.account?.fingerprint !== nextAccess.account?.fingerprint) selectedLists.clear();
                 access = nextAccess;
                 try { selectedMovies = movies.length ? this.service.normalizeMovies(movies, access.origin) : []; }
-                catch (error) { selectedMovies = []; status.textContent = /** @type {Error} */ (error).message; }
+                catch (error) { selectedMovies = []; status.className = "jhs-field-error"; status.textContent = /** @type {Error} */ (error).message; }
                 movieSelect.replaceChildren();
                 for (const movie of selectedMovies) { const option = this.document.createElement("option"); option.value = movie.videoId; option.textContent = movie.carNum; movieSelect.append(option); }
                 movieSelect.disabled = !selectedMovies.length;
                 await loadDirectory();
-                if (!scope.disposed && current === generation) status.textContent = `${access.account?.label || "账号未核对"}。${access.reason || `已选 ${selectedMovies.length} 部影片，每部影片按所选清单依次处理`}${movies.length && !selectedMovies.length ? "。所选影片缺少当前 JavDB 链接，成员操作保持只读" : ""}`;
-            } catch (error) { if (!scope.disposed && current === generation) status.textContent = /** @type {Error} */ (error).message; }
+                if (!scope.disposed && current === generation) {
+                    status.className = "";
+                    status.textContent = `${access.account?.label || "账号未核对"}。${access.reason || `已选 ${selectedMovies.length} 部影片，每部影片按所选清单依次处理`}${movies.length && !selectedMovies.length ? "。所选影片缺少当前 JavDB 链接，成员操作保持只读" : ""}`;
+                }
+            } catch (error) { if (!scope.disposed && current === generation) { status.className = "jhs-field-error"; status.textContent = /** @type {Error} */ (error).message; } }
         };
         const loadDirectory = async () => {
             if (!access) return;

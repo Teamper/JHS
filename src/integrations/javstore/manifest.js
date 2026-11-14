@@ -1,8 +1,9 @@
 // @ts-check
 import { defineIntegration } from "../../contracts/manifests.js";
 import { normalizeCarNum } from "../../core/movie-identity.js";
+import { JhsError } from "../../core/jhs-error.js";
 import { CACHE, SERVICE } from "../../contracts/tokens.js";
-import { parseJavStorePreview, parseJavStoreSearch } from "./parser.js";
+import { inspectJavStorePreview, inspectJavStoreSearch } from "./parser.js";
 
 /** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http */
 export function createJavStoreAdapter(http) {
@@ -24,17 +25,29 @@ export function createJavStoreAdapter(http) {
         /** @param {{carNum: string}} movieRef @param {{scope?: any, refreshCache?: boolean}} [options] */
         async getImages(movieRef, options = {}) {
             const searchUrl = this.getSearchUrl(movieRef);
-            const search = await request(searchUrl, options, response => parseJavStoreSearch(response.data, movieRef.carNum, response.finalUrl || searchUrl).length > 0);
-            const candidates = parseJavStoreSearch(search.data, movieRef.carNum, search.finalUrl || searchUrl);
-            if (!candidates.length) return [];
+            const search = await request(searchUrl, options, response => inspectJavStoreSearch(response.data, movieRef.carNum, response.finalUrl || searchUrl).candidates.length > 0);
+            const inspected = inspectJavStoreSearch(search.data, movieRef.carNum, search.finalUrl || searchUrl);
+            const { candidates } = inspected;
+            let identityRejected = candidates.length ? 0 : inspected.identityRejected;
+            let unrecognizedCount = candidates.length ? 0 : inspected.unrecognizedCount;
             for (const candidate of candidates) {
                 try {
-                    const detail = await request(candidate, options, response => !!parseJavStorePreview(response.data, response.finalUrl || candidate, movieRef.carNum));
-                    const imageUrl = parseJavStorePreview(detail.data, detail.finalUrl || candidate, movieRef.carNum);
-                    if (imageUrl) return [Object.freeze({ url: imageUrl, providerId: "javstore" })];
+                    const inspect = (/** @type {any} */ response) => inspectJavStorePreview(response.data, response.finalUrl || candidate.url, movieRef.carNum, candidate.requiresDetailIdentity);
+                    const detail = await request(candidate.url, options, response => Boolean(inspect(response).url));
+                    const preview = inspect(detail);
+                    if (preview.url) return [Object.freeze({ url: preview.url, providerId: "javstore" })];
+                    if (preview.reason === "identity") identityRejected++;
+                    if (preview.reason === "structure") unrecognizedCount++;
                 } catch (error) {
                     if (!(error && typeof error === "object" && "code" in error && error.code === "NOT_FOUND")) throw error;
                 }
+            }
+            if (identityRejected || unrecognizedCount) {
+                throw new JhsError("INVALID_RESPONSE", "JavStore 缩略图候选核验失败", { source: "javstore", details: {
+                    stage: candidates.length ? "detail" : "search",
+                    reason: unrecognizedCount ? "structure" : "identity",
+                    candidateCount: inspected.candidateCount, identityRejected, unrecognizedCount,
+                } });
             }
             return [];
         },

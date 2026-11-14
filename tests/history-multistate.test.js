@@ -28,7 +28,7 @@ async function openAndSubmit(state, next) {
     const layerRoot = loaded.$('<div class="layui-layer"></div>').append(options.content).appendTo("body");
     options.success(layerRoot, 9);
     for (const [flag, value] of Object.entries(next)) loaded.$(`#edit-${flag}`).prop("checked", value);
-    await options.yes(9);
+    await options.btn2(9);
     await vi.waitFor(() => expect(loaded.patch).toHaveBeenCalledOnce());
     return loaded;
 }

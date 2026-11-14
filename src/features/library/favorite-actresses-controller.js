@@ -89,7 +89,7 @@ export class FavoriteActressesController {
         const rawWidth = Number(settings.highlightedTagNumber);
         const width = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1;
         const rawColor = typeof settings.highlightedTagColor === "string" ? settings.highlightedTagColor : "";
-        const color = /^#[\da-f]{3,8}$/iu.test(rawColor) ? rawColor : "var(--jhs-status-filter)";
+        const color = /^#[\da-f]{3,8}$/iu.test(rawColor) ? rawColor : "var(--jhs-danger)";
         this.releaseHighlightStyle = this.styles.register("jhs-favorite-actresses-feature", `a.${HIGHLIGHT_CLASS}.highlighted{border:${width}px solid ${color}}`);
         const actresses = await this.state.getFavoriteActressList();
         if (this.disposed || this.scope.disposed || generation !== this.highlightGeneration) return;

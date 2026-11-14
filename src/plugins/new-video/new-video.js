@@ -267,7 +267,7 @@ export class NewVideoWorkspaceService {
             title: '<span class="jhs-dialog-title" data-tip="数据来自演员首页，含磁力分类">新作品检测</span>',
             content: o,
             scrollbar: !1,
-            ui: { size: "workspace", body: "scroll" }, area: this.utils.getDialogArea("workspace"),
+            ui: { size: "workspace", body: "scroll" },
             anim: -1,
             success: async (e, t) => {
                 if (this.disposed || generation !== this.nvDialogGeneration || ended) return;
@@ -402,9 +402,9 @@ export class NewVideoWorkspaceService {
         })), this.jquery("#toSetting").on("click", (e => {
             this.getOptionalDependency("SettingPlugin")?.openSettingDialog?.("task-panel", (() => {
                 this.jquery("#setting-checkFavoriteActress").css({
-                    border: "1px solid var(--jhs-status-filter)"
+                    border: "1px solid var(--jhs-accent)"
                 }), this.jquery("#setting-checkNewVideo").css({
-                    border: "1px solid var(--jhs-status-filter)"
+                    border: "1px solid var(--jhs-accent)"
                 });
             }));
         }));
@@ -582,12 +582,12 @@ export class NewVideoWorkspaceService {
             actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
             const publishText = String(latestPublishTime || "暂无记录"), noteText = isPaused ? `停更 ${ruleTime / 24 / 365} 年以上，下轮任务不再检测` : remark || "暂无备注";
             const card = this.jquery('<article class="actress-card"></article>').toggleClass("is-paused", isPaused).attr("data-starId", starId), badges = this.jquery('<div class="actress-card__badges"></div>');
-            badges.append(this.jquery("<span class=\"jhs-badge jhs-badge--soft card-new-count-tag\"></span>").attr("data-tip", `新作品数量：${newVideoCount}`).text(`${newVideoCount} 新`), this.jquery("<span class=\"jhs-badge card-tag\"></span>").addClass(typeClass).text(typeLabel)), isPaused && badges.append('<span class="jhs-badge jhs-badge--neutral">停更</span>');
+            badges.append(this.jquery("<span class=\"jhs-badge jhs-badge--accent card-new-count-tag\"></span>").attr("data-tip", `新作品数量：${newVideoCount}`).text(`${newVideoCount} 新`), this.jquery("<span class=\"jhs-badge card-tag\"></span>").addClass(typeClass).text(typeLabel)), isPaused && badges.append('<span class="jhs-badge jhs-badge--neutral">停更</span>');
             const profile = this.jquery('<a class="actress-card__profile" target="_blank" rel="noopener noreferrer"></a>').attr("href", profileUrl || "#"), identity = this.jquery("<span></span>").append(this.jquery("<span class=\"actress-card-name\"></span>").text(name), this.jquery("<span class=\"actress-card-allname\"></span>").attr("title", allNames).text(allNames || "暂无别名"));
             profile.append(this.jquery("<img class=\"actress-card-avatar\" loading=\"lazy\">").attr({ src: avatarUrl, alt: allNames }), identity);
             const meta = this.jquery('<dl class="actress-card__meta"></dl>').append(this.jquery("<div class=\"actress-card__meta-row\"><dt>最近影片</dt></div>").append(this.jquery("<dd></dd>").attr("title", publishText).text(publishText)), this.jquery('<div class="actress-card__meta-row"><dt>上次检测</dt></div>').append(this.jquery("<dd></dd>").text(formatUiDateTime(actress.lastCheckTime)))), actions = this.jquery('<div class="actress-card__actions"></div>');
-            const check = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary btn-check-actress"><span>重新检测</span></button>').attr("data-starId", starId).prepend(this.checkSvg), remove = this.jquery('<button type="button" class="jhs-btn jhs-btn--icon jhs-btn--ghost btn-delete-actress" title="取消收藏"></button>').attr({ "aria-label": `取消收藏 ${name}`, "data-starId": starId }).append(this.deleteSvg), edit = this.jquery('<button type="button" class="jhs-btn jhs-btn--ghost btn-edit-actress" role="menuitem"><span>编辑资料</span></button>').attr("data-starId", starId).prepend(this.editSvg);
-            actions.append(check, remove, this.jquery('<div class="actress-card__menu"><button type="button" class="jhs-btn jhs-btn--icon jhs-btn--ghost" aria-label="更多操作" title="更多操作" aria-haspopup="menu" aria-expanded="false">•••</button><div class="jhs-popover actress-card__menu-popover" role="menu"></div></div>').find(".actress-card__menu-popover").append(edit).end());
+            const check = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary btn-check-actress"><span>重新检测</span></button>').attr("data-starId", starId).prepend(this.checkSvg), remove = this.jquery('<button type="button" class="jhs-btn jhs-icon-btn jhs-btn--ghost btn-delete-actress" title="取消收藏"></button>').attr({ "aria-label": `取消收藏 ${name}`, "data-starId": starId }).append(this.deleteSvg), edit = this.jquery('<button type="button" class="jhs-btn jhs-btn--ghost btn-edit-actress" role="menuitem"><span>编辑资料</span></button>').attr("data-starId", starId).prepend(this.editSvg);
+            actions.append(check, remove, this.jquery(`<div class="actress-card__menu"><button type="button" class="jhs-btn jhs-icon-btn jhs-btn--ghost" aria-label="更多操作" title="更多操作" aria-haspopup="menu" aria-expanded="false">${getIcon("ellipsis")}</button><div class="jhs-popover actress-card__menu-popover" role="menu"></div></div>`).find(".actress-card__menu-popover").append(edit).end());
             return card.append(badges, profile, meta, this.jquery("<p class=\"actress-card__note\"></p>").attr("title", noteText).text(noteText), actions)[0];
         }));
         e.empty().append(cards), this.jquery(".btn-delete-actress").off("click").on("click", (e => {
@@ -598,7 +598,7 @@ export class NewVideoWorkspaceService {
                 const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
                 result.success ? (await this.legacyStorage.removeFavoriteActress(t), await this.notifyCommittedNewVideoChange("favorite-actress-removed")) : (this.notifications.error("取消收藏失败，请重试"),
                 this.logger.error("移除失败,返回值:", result));
-            }), undefined, { confirmText: "取消收藏" });
+            }), undefined, { confirmText: "取消收藏", tone: "danger" });
         })), this.jquery(".btn-edit-actress").off("click").on("click", (e => {
             e.preventDefault();
             const t = this.jquery(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
@@ -725,7 +725,7 @@ export class NewVideoWorkspaceService {
         if (id === "batchSnooze") return void this.runBatchMutation("snooze", items => this.getRuntimeService("state").setNewVideoDecision(items.map(item => item.carNum), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString()), "已暂缓");
         if (id === "batchRestore") return void this.runBatchMutation("restore", items => this.getRuntimeService("state").setNewVideoDecision(items.map(item => item.carNum), null), "已恢复");
         const items = this.selectedItems();
-        if (id === "batchRemoveFromNewVideo" && items.length) this.utils.q(event, `从新作品列表移除 ${items.length} 部影片？<br>保留影片状态记录`, () => void this.runBatchMutation("remove", selected => this.getRuntimeService("state").removeFromNewVideoList(selected.map(item => item.carNum), "manual"), "已移除"), undefined, { confirmText: "移除" });
+        if (id === "batchRemoveFromNewVideo" && items.length) this.utils.q(event, `从新作品列表移除 ${items.length} 部影片？<br>保留影片状态记录`, () => void this.runBatchMutation("remove", selected => this.getRuntimeService("state").removeFromNewVideoList(selected.map(item => item.carNum), "manual"), "已移除"), undefined, { confirmText: "移除", tone: "danger" });
     }
     renderBatchBar() {
         const active = this.document.activeElement, restoreFocus = this.batchPopover?.opened && this.batchPopover.menu.contains(active);
@@ -923,7 +923,7 @@ export class NewVideoWorkspaceService {
             <div class="jhs-form-field"><label class="jhs-form-label" for="actressType">演员类别</label><select id="actressType" class="jhs-select-source"><option value="">未知</option><option value="censored">有码</option><option value="uncensored">无码</option></select></div>
             <div class="jhs-form-field"><label class="jhs-form-label" for="edit-actress-newvideolist">新作品番号（用逗号分隔）</label><textarea id="edit-actress-newvideolist" class="jhs-textarea">${safe(videos)}</textarea></div>
             <div class="jhs-form-field"><label class="jhs-form-label" for="edit-remark">备注</label><textarea id="edit-remark" class="jhs-textarea">${safe(record.remark)}</textarea></div>
-            <p id="edit-actress-error" class="jhs-helper-text is-danger" role="alert" hidden></p>
+            <p id="edit-actress-error" class="jhs-field-error" role="alert" hidden></p>
         </div>`);
         root.find("#actressType").val(record.actressType || "");
         const editor = this.editor = { scope, generation, root, record, id: null, search: null, searchGeneration: 0, avatarChild: null, savePending: false };
@@ -939,11 +939,11 @@ export class NewVideoWorkspaceService {
         root.on("click.jhsActressEditor", "#search-avatar-btn", () => void this.searchAvatar(editor));
         root.on("click.jhsActressEditor", "#select-cdn-btn", () => {
             this.openEditorChild(editor, {
-                type: 1, title: `选择 ${PRODUCT_NAMES.cdn} 来源`, area: this.utils.getResponsiveArea(["400px", "auto"]),
-                content: this.jquery('<div class="jhs-form-dialog"></div>').append(this.avatarSources.map((source, index) => this.jquery('<label class="jhs-option-row"></label>').append(this.jquery('<input type="radio" name="cdn-source">').val(index).prop("checked", index === this.avatarSourceIndex), this.jquery('<span></span>').text(`${source.name}${source.recommended ? "（推荐）" : ""}`)))).append(this.jquery('<p class="jhs-helper-text"></p>').text("切换后将在下次搜索时使用所选来源。"))[0],
-                btn: ["选择", "取消"],
+                type: 1, title: `选择 ${PRODUCT_NAMES.cdn} 来源`, ui: { size: "sm", body: "scroll" }, skin: "jhs-confirm-actions",
+                content: this.jquery('<div class="jhs-form-dialog jhs-ui"></div>').append(this.avatarSources.map((source, index) => this.jquery('<label class="jhs-option-row"></label>').append(this.jquery('<input type="radio" name="cdn-source">').val(index).prop("checked", index === this.avatarSourceIndex), this.jquery('<span></span>').text(`${source.name}${source.recommended ? "（推荐）" : ""}`)))).append(this.jquery('<p class="jhs-helper-text"></p>').text("切换后将在下次搜索时使用所选来源。"))[0],
+                btn: ["取消", "选择"],
                 success: (layer, id, child) => { child.root = this.jquery(layer); },
-                yes: id => {
+                btn2: id => {
                     if (!this.isEditorCurrent(editor)) return false;
                     const value = this.jquery(`#layui-layer${id}`).find('input[name="cdn-source"]:checked').val(), index = Number(value);
                     if (value != null && this.avatarSources[index] && index !== this.avatarSourceIndex) {
@@ -958,7 +958,7 @@ export class NewVideoWorkspaceService {
         const dialog = this.getRuntimeService("dialog");
         root.hide().appendTo(this.document.body);
         const id = dialog.open({
-            type: 1, title: `编辑演员：${safe(record.name)}`, ui: { size: "sm", body: "scroll" }, area: this.utils.getDialogArea("sm"), content: root, btn: ["保存", "取消"],
+            type: 1, title: `编辑演员：${safe(record.name)}`, ui: { size: "sm", body: "scroll" }, skin: "jhs-confirm-actions", content: root, btn: ["取消", "保存"],
             success: (layer, id) => {
                 editor.id = id;
                 editor.mounted = true;
@@ -969,7 +969,7 @@ export class NewVideoWorkspaceService {
                 observer.observe(this.document.body, { childList: true, subtree: true }); scope.ownObserver(observer);
             },
             end: () => { editor.id = null; this.closeActressEditor(editor); root.remove(); editor.layer?.remove(); },
-            yes: async id => {
+            btn2: async id => {
                 if (!this.isEditorCurrent(editor) || editor.savePending || editor.saved) return false;
                 const value = selector => String(root.find(selector).val() || "").trim(), name = value("#edit-actress-name");
                 root.find("#edit-actress-name").attr("aria-invalid", name ? null : "true");
@@ -977,7 +977,7 @@ export class NewVideoWorkspaceService {
                 if (!name) { root.find("#edit-actress-name").trigger("focus"); return false; }
                 const split = text => text.split(/[，,]/).map(item => item.trim()).filter(Boolean);
                 const updated = { ...record, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")).map(car => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
-                editor.savePending = true; editor.layer?.find(".layui-layer-btn0").attr("aria-disabled", "true");
+                editor.savePending = true; editor.layer?.find(".layui-layer-btn1").attr("aria-disabled", "true");
                 try {
                     const saved = await this.legacyStorage.updateFavoriteActress(updated);
                     if (saved === false) throw new Error("演员记录已不存在");
@@ -988,7 +988,7 @@ export class NewVideoWorkspaceService {
                     return false;
                 } finally {
                     editor.savePending = false;
-                    if (this.isEditorCurrent(editor)) editor.layer?.find(".layui-layer-btn0").removeAttr("aria-disabled");
+                    if (this.isEditorCurrent(editor)) editor.layer?.find(".layui-layer-btn1").removeAttr("aria-disabled");
                 }
                 // The committed change must still invalidate the workspace when the editor closed during its write.
                 if (this.isEditorCurrent(editor)) Object.assign(record, updated);
@@ -1056,12 +1056,12 @@ export class NewVideoWorkspaceService {
         this.openAvatarCandidates(editor, urls, generation);
     }
     openAvatarCandidates(editor, urls, generation) {
-        const root = this.jquery('<div id="gfriends-image-list-container"><p id="gfriends-prompt"></p><div id="gfriends-image-list" role="group" aria-label="头像候选"></div></div>');
+        const root = this.jquery('<div id="gfriends-image-list-container" class="jhs-ui"><p id="gfriends-prompt"></p><div id="gfriends-image-list" role="group" aria-label="头像候选"></div></div>');
         root.find("#gfriends-prompt").text(`点击图片即可选择（初始共 ${urls.length} 张）`);
         for (const [index, url] of urls.entries()) root.find("#gfriends-image-list").append(this.jquery('<button type="button" class="jhs-btn gfriends-image-item-wrapper" aria-pressed="false"></button>').attr({ "data-url": url, "aria-label": `选择第 ${index + 1} 张头像` }).append(this.jquery('<img class="gfriends-selectable-img" alt="">').attr("src", url), this.jquery('<span class="gfriends-size-tag">载入中</span>')));
         let failed = 0, selected = false;
         const child = this.openEditorChild(editor, {
-            type: 1, title: `选择演员头像（${urls.length} 张）`, area: this.utils.getResponsiveArea(["900px", "85%"]), content: root[0], btn: ["关闭"],
+            type: 1, title: `选择演员头像（${urls.length} 张）`, ui: { size: "lg", body: "scroll" }, content: root[0], btn: ["关闭"],
             success: (_layer, _id, child) => {
                 const current = () => this.isEditorCurrent(editor) && !child.scope.disposed && editor.searchGeneration === generation;
                 child.scope.addCleanup(() => root.find("*").addBack().off(".jhsAvatarCandidate"));

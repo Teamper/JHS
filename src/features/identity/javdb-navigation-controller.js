@@ -1,5 +1,6 @@
 // @ts-check
 
+import { getIcon } from "../../core/icons.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 
 const SEARCH_TYPES = Object.freeze([
@@ -133,10 +134,9 @@ export class JavDbNavigationController {
         const advanced = this.document.createElement("a");
         advanced.href = "/search_advanced?noFold=1";
         advanced.title = "高级检索";
-        advanced.className = "jhs-btn jhs-btn--secondary";
-        const advancedText = this.document.createElement("span");
-        advancedText.textContent = "…";
-        advanced.append(advancedText);
+        advanced.setAttribute("aria-label", "高级检索");
+        advanced.className = "jhs-btn jhs-btn--secondary jhs-icon-btn";
+        advanced.innerHTML = getIcon("ellipsis");
         controls.append(type, keyword, advanced);
 
         if (this.searchImage) {

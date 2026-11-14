@@ -9,6 +9,7 @@ export function createSubtitleUploadView({ document, scope }) {
     note.setAttribute("aria-live", "polite");
     note.textContent = "正在核对 115 账号和影片目录…";
     const form = document.createElement("label"), filename = document.createElement("input");
+    filename.className = "jhs-field";
     form.append("最终字幕文件名", filename);
     const targets = document.createElement("div"), results = document.createElement("div"), actions = document.createElement("div");
     targets.className = "jhs-subtitles__results";
@@ -33,6 +34,7 @@ export function createSubtitleUploadView({ document, scope }) {
             const label = document.createElement("label"), checkbox = document.createElement("input"), text = document.createElement("span");
             label.className = "jhs-subtitles__row jhs-subtitles__actions";
             checkbox.type = "checkbox";
+            checkbox.className = "jhs-checkbox";
             text.textContent = `${match.name} · 目录 ${match.folderId}`;
             label.append(checkbox, text);
             targets.append(label);

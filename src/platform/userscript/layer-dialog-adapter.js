@@ -13,10 +13,12 @@ export class LayerDialogAdapter {
     close(id) { this.layer.close(id); }
     /** @param {string} message @param {Record<string, unknown>} options @param {(id: number) => void} yes @param {(id: number) => void} [onCancel] */
     confirm(message, options = {}, yes, onCancel) {
-        const { confirmText, cancelText, ...dialogOptions } = options;
-        if (confirmText == null && cancelText == null) return onCancel ? this.layer.confirm(message, this.withDefaultLayer(options), yes, onCancel) : this.layer.confirm(message, this.withDefaultLayer(options), yes);
-        const skin = [ dialogOptions.skin, "jhs-confirm-actions" ].filter(Boolean).join(" ");
-        return this.layer.confirm(message, this.withDefaultLayer({ ...dialogOptions, skin, btn: [ cancelText || "取消", confirmText || "确定" ] }), (id) => { try { onCancel?.(id); } finally { this.layer.close(id); } }, yes);
+        const { confirmText, cancelText, tone, ...dialogOptions } = options;
+        const classes = String(dialogOptions.skin || "").split(/\s+/).filter(Boolean);
+        for (const cls of ["jhs-confirm-actions", tone === "danger" ? "jhs-confirm-actions--danger" : ""]) {
+            if (cls && !classes.includes(cls)) classes.push(cls);
+        }
+        return this.layer.confirm(message, this.withDefaultLayer({ ...dialogOptions, skin: classes.join(" "), btn: [ cancelText || "取消", confirmText || "确定" ] }), (id) => { try { onCancel?.(id); } finally { this.layer.close(id); } }, yes);
     }
     /** @param {string} message @param {Record<string, unknown>} [options] */
     alert(message, options) { return this.layer.alert(message, this.withDefaultLayer(options)); }
@@ -30,7 +32,8 @@ export class LayerDialogAdapter {
                 if (z >= baseZ) baseZ = z + 2;
             }
         }
-        const value = { zIndex: baseZ, ...options };
-        return options.ui ? prepareDialogOptions(value, /** @type {any} */ (globalThis).utils) : value;
+        /** @type {Record<string, unknown>} */ const value = { zIndex: baseZ, ...options };
+        if (options.ui === false) { const { ui: _ignored, ...plain } = value; return plain; }
+        return prepareDialogOptions(value, /** @type {any} */ (globalThis).utils);
     }
 }

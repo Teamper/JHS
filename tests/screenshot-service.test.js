@@ -206,3 +206,13 @@ describe("multiple enabled screenshot integrations", () => {
         expect(h.calls).toEqual(["javstore"]);
     });
 });
+
+it("retains bounded JavStore failure stages in provider diagnostics", async () => {
+    const details = { stage: "search", reason: "identity", candidateCount: 2, identityRejected: 2 };
+    const error = Object.assign(new Error("JavStore 缩略图候选核验失败"), { code: "INVALID_RESPONSE", source: "javstore", details });
+    const diagnostics = { updateProvider: vi.fn() };
+    const integrations = { list: () => [{ id: "javstore" }], getAdapter: () => ({ getImages: async () => { throw error; } }) };
+    const service = new ScreenshotService({ get: () => null }, integrations, diagnostics);
+    await expect(service.resolve({ carNum: "MSFH-021" }, { providerId: "javstore" })).rejects.toBe(error);
+    expect(diagnostics.updateProvider).toHaveBeenCalledWith("javstore", expect.objectContaining({ ok: false, details }));
+});

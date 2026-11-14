@@ -36,6 +36,7 @@ export class Fc2CatalogController {
         this.heading = null;
         this.headingSnapshot = null;
         this.ownedHeading = false;
+        this.controls = null;
         this.searchInput = null;
         this.pageBox = null;
         this.paginationList = null;
@@ -92,10 +93,8 @@ export class Fc2CatalogController {
             container.prepend(this.heading);
             this.ownedHeading = true;
         }
-        this.heading.style.marginBottom = "0";
-
-        const controls = this.document.createElement("div");
-        controls.className = "jhs-layout-f5f47b30";
+        const controls = this.controls = this.document.createElement("div");
+        controls.className = "jhs-ui jhs-layout-f5f47b30";
         this.searchInput = this.document.createElement("input");
         this.searchInput.id = "search-123av-keyword";
         this.searchInput.type = "text";
@@ -105,7 +104,7 @@ export class Fc2CatalogController {
         const searchButton = this.createButton("搜索", "jhs-btn jhs-btn--primary jhs-layout-21a4fe43");
         const clearButton = this.createButton("重置", "jhs-btn jhs-btn--secondary jhs-layout-21a4fe43");
         controls.append(this.searchInput, searchButton, clearButton);
-        this.heading.append(controls);
+        this.heading.after(controls);
 
         this.catalogRoot = this.hostAdapter.createOwnedListRoot(["jhs-123av-list", "jhs-layout-d2c171b1"]);
         this.hostAdapter.mountExternalFc2Catalog(this.catalogRoot);
@@ -396,11 +395,13 @@ export class Fc2CatalogController {
             else this.catalogRoot.remove();
         }
         this.pageBox?.remove();
+        this.controls?.remove();
         if (this.heading && this.headingSnapshot && this.heading.parentNode) this.heading.replaceWith(this.headingSnapshot);
         else if (this.ownedHeading) this.heading?.remove();
         this.categoryLink?.remove();
         this.catalogRoot = null;
         this.pageBox = null;
+        this.controls = null;
         this.heading = null;
         this.categoryLink = null;
         this.started = false;

@@ -135,10 +135,9 @@ export class TranslationToolsController {
         const update = () => { if (!scope.disposed)
             status.textContent = `成功 ${rows.filter(row => row.state === "success").length} · 失败 ${rows.filter(row => row.state === "error").length} · 未完成 ${rows.filter(row => ["pending", "loading", "cancelled"].includes(row.state)).length}${stopped ? " · 已停止调度" : ""}`; };
         const start = this.document.createElement("button"), stop = this.document.createElement("button"), configure = this.document.createElement("button");
-        for (const button of [start, stop, configure]) {
-            button.type = "button";
-            button.className = "jhs-btn jhs-btn--secondary";
-        }
+        start.type = stop.type = configure.type = "button";
+        start.className = "jhs-btn jhs-btn--primary";
+        stop.className = configure.className = "jhs-btn jhs-btn--secondary";
         start.textContent = "翻译所列标题";
         stop.textContent = "停止";
         stop.disabled = true;
@@ -172,17 +171,20 @@ export class TranslationToolsController {
                     const row = rows[cursor++];
                     if (!row.title) {
                         row.state = "error";
+                        row.meta.classList.add("jhs-field-error");
                         row.meta.textContent = "缺少原始标题";
                         update();
                         continue;
                     }
                     row.meta.hidden = false; row.state = "loading";
+                    row.meta.classList.remove("jhs-field-error");
                     row.meta.textContent = "翻译中…";
                     try {
                         const result = await this.service.translateDetailed(`${row.carNum} ${row.title}`, { cacheAlias: row.carNum, scope: owner });
                         if (scope.disposed || owner.disposed)
                             return;
                         row.output.textContent = result.text;
+                        row.meta.classList.remove("jhs-field-error");
                         row.meta.textContent = ""; row.meta.hidden = true;
                         row.state = "success";
                     }
@@ -190,6 +192,7 @@ export class TranslationToolsController {
                         if (scope.disposed)
                             return;
                         row.state = owner.disposed ? "cancelled" : "error";
+                        row.meta.classList.toggle("jhs-field-error", row.state === "error");
                         row.meta.textContent = owner.disposed ? "已取消" : translationErrorLabel(error);
                         if (["AUTH_REQUIRED", "RATE_LIMITED", "QUOTA_EXCEEDED", "UNSUPPORTED"].includes(/** @type {any} */ (error)?.code))
                             stopped = true;

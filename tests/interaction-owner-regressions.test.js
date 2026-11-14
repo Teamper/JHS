@@ -99,19 +99,19 @@ function historyHarness(patch) {
     let options;const close=vi.fn(), errors=vi.fn();
     const controller=new HistoryDialogController({document,window,jquery,domUi:{getDialogArea:()=>[],confirm:(_e,_m,accept)=>accept()},dialog:{open:value=>{options=value;return 1;},close},notifications:{error:errors},logger:{error:vi.fn()},clipboard:{},movie:{},settings:{snapshot:()=>({})},storage:{},state:{},repository:{patch},site:"javdb"});
     controller.tableObj={setData:vi.fn(async()=>{})};
-    const open=async()=>{await controller.editRecord({carNum:"ABC-1",stateFlags:{favorite:true}});const root=jquery('<div><a class="layui-layer-btn0"></a></div>').append(options.content).appendTo(document.body);options.success(root,1);return root;};
+    const open=async()=>{await controller.editRecord({carNum:"ABC-1",stateFlags:{favorite:true}});const root=jquery('<div><a class="layui-layer-btn1"></a></div>').append(options.content).appendTo(document.body);options.success(root,1);return root;};
     return {controller,close,errors,open,get options(){return options;}};
 }
 describe("history and detail action ownership",()=>{
     it.each(["closed", "replaced", "view"])("keeps a committed history edit successful after parent changes (%s)",async change=>{
         const pending=deferred(), patch=vi.fn(()=>pending.promise), harness=historyHarness(patch);await harness.open();
-        const save=harness.options.yes(1);await harness.options.yes(1);expect(patch).toHaveBeenCalledOnce();const replacement={setData:vi.fn()};if(change==="closed"){harness.controller.tableObj=null;harness.controller.historyDialogGeneration++;}else if(change==="replaced")harness.controller.tableObj=replacement;else harness.controller.historyViewGeneration++;
+        const save=harness.options.btn2(1);await harness.options.btn2(1);expect(patch).toHaveBeenCalledOnce();const replacement={setData:vi.fn()};if(change==="closed"){harness.controller.tableObj=null;harness.controller.historyDialogGeneration++;}else if(change==="replaced")harness.controller.tableObj=replacement;else harness.controller.historyViewGeneration++;
         pending.resolve();await save;expect(harness.errors).not.toHaveBeenCalled();expect(harness.close).toHaveBeenCalledWith(1);expect(replacement.setData).not.toHaveBeenCalled();
     });
     it("retains history drafts on write failure and permits a later retry",async()=>{
         const patch=vi.fn().mockRejectedValueOnce(Error("failed")).mockResolvedValueOnce(), harness=historyHarness(patch), root=await harness.open();root.find("#edit-remark").val("draft");
-        await harness.options.yes(1);expect(harness.close).not.toHaveBeenCalled();expect(root.find("#edit-remark").val()).toBe("draft");expect(harness.errors).toHaveBeenCalledWith("记录保存失败，请重试");
-        await harness.options.yes(1);expect(harness.close).toHaveBeenCalledWith(1);
+        await harness.options.btn2(1);expect(harness.close).not.toHaveBeenCalled();expect(root.find("#edit-remark").val()).toBe("draft");expect(harness.errors).toHaveBeenCalledWith("记录保存失败，请重试");
+        await harness.options.btn2(1);expect(harness.close).toHaveBeenCalledWith(1);
     });
     it("does not prompt or write when the detail owner closes during its state read",async()=>{
         const pending=deferred(), confirm=vi.fn(), toggle=vi.fn();document.body.innerHTML='<div id="owner"><button id="filterBtn"></button></div>';
@@ -183,7 +183,7 @@ describe("backup window ownership",()=>{
         deps.legacyStorage.createSnapshot=vi.fn();
         deps.legacyStorage.importData=vi.fn(async (_data,guard)=>{await pending.promise;guard.assertActive();committed=true;});
         showDiffPreview({summary:{added:1},stores:{setting:{status:"modified",oldCount:1,newCount:1,added:[],removed:[],modified:[1]}}},{setting:{}},null,{open:value=>{options=value;return 1;},close:()=>options.end()},deps);
-        const action=options.yes(1);await options.yes(1);expect(deps.legacyStorage.importData).toHaveBeenCalledOnce();options.end();pending.resolve();await action;
+        const action=options.btn2(1);await options.btn2(1);expect(deps.legacyStorage.importData).toHaveBeenCalledOnce();options.end();pending.resolve();await action;
         expect(committed).toBe(false);expect(deps.legacyStorage.createSnapshot).not.toHaveBeenCalled();expect(deps.closeLoading).toHaveBeenCalledOnce();scope.dispose();
     });;
 });

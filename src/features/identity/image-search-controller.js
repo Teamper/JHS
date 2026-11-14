@@ -5,18 +5,18 @@ import { LifecycleScope } from "../../core/lifecycle-scope.js";
 const SELECTED_SITES_KEY = "jhs_selectedSites";
 
 export const IMAGE_SEARCH_CSS = `
-.jhs-image-search__upload { border:2px dashed var(--jhs-status-down); border-radius:8px; padding:32px 20px; text-align:center; margin-bottom:16px; background:var(--jhs-surface-2); }
-.jhs-image-search__upload.highlight { border-color:var(--jhs-status-fav); background:var(--jhs-status-fav-tint); }
-.jhs-image-search__preview { display:flex; flex-direction:column; align-items:center; gap:12px; }
+.jhs-image-search__upload { border:2px dashed var(--jhs-border-strong); border-radius:var(--jhs-radius-md); padding:var(--jhs-space-6) var(--jhs-space-4); text-align:center; margin-bottom:var(--jhs-space-4); background:var(--jhs-surface-2); }
+.jhs-image-search__upload.highlight { border-color:var(--jhs-accent); background:var(--jhs-accent-tint); }
+.jhs-image-search__preview { display:flex; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }
 .jhs-image-search__preview-image { display:block; max-width:100%; max-height:360px; object-fit:contain; }
-.jhs-image-search__actions { display:flex; flex-wrap:wrap; gap:8px; }
-.jhs-image-search__results { margin-top:16px; }
-.jhs-image-search__results-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.jhs-image-search__targets { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
-.jhs-image-search__target { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--jhs-surface-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); color:var(--jhs-text); }
-.jhs-image-search__target a { display:flex; align-items:center; gap:6px; color:inherit; text-decoration:none; }
+.jhs-image-search__actions { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); }
+.jhs-image-search__results { margin-top:var(--jhs-space-4); }
+.jhs-image-search__results-heading { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-2); }
+.jhs-image-search__targets { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-3); }
+.jhs-image-search__target { display:flex; align-items:center; gap:var(--jhs-space-2); padding:var(--jhs-space-2) var(--jhs-space-3); background:var(--jhs-surface-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); color:var(--jhs-text); }
+.jhs-image-search__target a { display:flex; align-items:center; gap:var(--jhs-space-1); color:inherit; text-decoration:none; }
 .jhs-image-search__target a:hover { text-decoration:underline; }
-.jhs-image-search__target img { width:16px; height:16px; }
+.jhs-image-search__target img { width:var(--jhs-icon-sm); height:var(--jhs-icon-sm); }
 .jhs-image-search__file { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 .jhs-image-search [hidden] { display:none !important; }
 `;
@@ -26,7 +26,7 @@ const DIALOG_CONTENT = `
   <div class="jhs-image-search__upload" data-role="upload-area">
     <p>拖拽图片到此处或点击按钮选择图片</p>
     <p>也可以直接 Ctrl+V 粘贴图片或图片链接</p>
-    <button type="button" class="jhs-btn" data-action="select-image">选择图片</button>
+    <button type="button" class="jhs-btn jhs-btn--primary" data-action="select-image">选择图片</button>
     <input type="file" accept="image/*" class="jhs-image-search__file" data-role="image-file">
   </div>
   <div data-role="url-input-container">
@@ -303,6 +303,7 @@ export class ImageSearchController {
         item.className = "jhs-image-search__target";
         const checkbox = this.document.createElement("input");
         checkbox.type = "checkbox";
+        checkbox.className = "jhs-checkbox";
         checkbox.checked = selections[target.name] !== false;
         checkbox.dataset.siteName = target.name;
         checkbox.setAttribute("aria-label", `选择 ${target.name}`);

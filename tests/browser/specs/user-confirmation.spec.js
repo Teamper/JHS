@@ -78,3 +78,20 @@ test("Escape ends the WebDAV authorization save without persisting the profile, 
     return { profile: await plugin.getRuntimeService("webdav").getProfile(), reviewCount: snapshot.reviewCount, origins: snapshot.trustedLocalOrigins ?? [] };
   })).toEqual({ profile: { url: "", username: "", password: "" }, reviewCount: "20", origins: [] });
 });
+
+test("danger confirmation uses Cancel-left / Confirm-right order and danger token colors", async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project verifies danger confirmation styling");
+  await boot(page, context);
+  await page.evaluate(() => {
+    window.utils.q(null, "确认屏蔽此条目？", () => {}, () => {}, { confirmText: "屏蔽", cancelText: "取消", tone: "danger" });
+  });
+  const confirmation = page.locator(".layui-layer-dialog");
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).toHaveClass(/jhs-confirm-actions/);
+  await expect(confirmation).toHaveClass(/jhs-confirm-actions--danger/);
+  await expect(confirmation.locator(".layui-layer-btn a")).toHaveText(["取消", "屏蔽"]);
+  await expect(confirmation.locator(".layui-layer-btn1")).toHaveCSS("background-color", "rgb(192, 43, 43)");
+  await expect(confirmation.locator(".layui-layer-btn1")).toHaveCSS("color", "rgb(255, 255, 255)");
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toHaveCount(0);
+});

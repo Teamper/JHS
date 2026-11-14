@@ -401,7 +401,7 @@ describe("new video workspace snapshot", () => {
 
         await plugin.editActress(actresses[0]);
         $("#edit-actress-name").val("Alice Updated");
-        await dialog.open.mock.calls[0][0].yes(1);
+        await dialog.open.mock.calls[0][0].btn2(1);
 
         expect(storageManager.updateFavoriteActress).toHaveBeenCalledOnce();
         expect(plugin.events.emit).toHaveBeenCalledOnce();
@@ -420,7 +420,7 @@ describe("new video workspace snapshot", () => {
 
         await plugin.editActress(actresses[0]);
         $("#edit-actress-name").val("Alice Updated");
-        await dialog.open.mock.calls[0][0].yes(1);
+        await dialog.open.mock.calls[0][0].btn2(1);
 
         expect(actresses[0].name).toBe("Alice");
         expect(plugin.notifications.error).toHaveBeenCalledWith("演员信息保存失败，请重试");
@@ -438,7 +438,7 @@ describe("new video workspace snapshot", () => {
 
         await plugin.editActress(actresses[0]);
         $("#edit-actress-name").val("Alice Updated");
-        await dialog.open.mock.calls[0][0].yes(1);
+        await dialog.open.mock.calls[0][0].btn2(1);
 
         expect(actresses[0].name).toBe("Alice");
         expect(plugin.notifications.error).toHaveBeenCalledWith("演员信息保存失败，请重试");
@@ -457,7 +457,7 @@ describe("new video workspace snapshot", () => {
 
         await plugin.editActress(actresses[0]);
         $("#edit-actress-name").val("Alice Updated");
-        await dialog.open.mock.calls[0][0].yes(1);
+        await dialog.open.mock.calls[0][0].btn2(1);
 
         expect(storageManager.updateFavoriteActress).toHaveBeenCalledOnce();
         expect(plugin.notifications.error).not.toHaveBeenCalled();
@@ -592,7 +592,7 @@ describe("new video interaction ownership", () => {
         const harness = createHarness(), { plugin, actresses, storageManager, dom } = harness, { dialogs, dialog } = installOwnedDialogs(harness);
         let finishSave; storageManager.updateFavoriteActress = vi.fn(() => new Promise(resolve => finishSave = resolve)); plugin.events.emit = vi.fn(async () => {});
         await plugin.editActress(actresses[0]); const old = plugin.editor, oldOptions = dialogs.get(old.id).options;
-        old.root.find("#edit-actress-name").val("Old write"); const pending = oldOptions.yes(old.id); await oldOptions.yes(old.id);
+        old.root.find("#edit-actress-name").val("Old write"); const pending = oldOptions.btn2(old.id); await oldOptions.btn2(old.id);
         expect(storageManager.updateFavoriteActress).toHaveBeenCalledOnce(); dialog.close(old.id);
         await plugin.editActress({ starId: "new", name: "New editor" }); const current = plugin.editor;
         finishSave(true); await pending;

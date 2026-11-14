@@ -121,7 +121,7 @@ export class BlacklistWorkspaceController {
             .on("change.jhsBlacklist", "#dataType,#statusType,#urlType", () => void this.reloadTable(generation))
             .on("click.jhsBlacklist", "#toSetting", () => {
                 Promise.resolve(this.openSettings()).then(() => {
-                    if (this.isCurrent(generation)) this.$("#setting-blacklist").css({ border: "1px solid var(--jhs-status-filter)" });
+                    if (this.isCurrent(generation)) this.$("#setting-blacklist").css({ border: "1px solid var(--jhs-accent)" });
                 }).catch((error) => this.logger?.warn?.("黑名单设置入口打开失败", error));
             }).on("click.jhsBlacklist", ".open-url", (/** @type {any} */ event) => {
                 event.preventDefault();

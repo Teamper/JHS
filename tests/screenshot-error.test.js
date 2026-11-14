@@ -7,3 +7,9 @@ describe("screenshot upstream availability", () => {
         expect(screenshotErrorMessage(new Error("private source URL"))).toBe("缩略图加载失败");
     });
 });
+
+it.each([["identity", "番号核验"], ["structure", "页面格式"]])("labels JavStore %s failures without exposing upstream messages", (reason, label) => {
+    const error = { code: "INVALID_RESPONSE", source: "javstore", details: { reason }, message: "private upstream html" };
+    expect(screenshotErrorMessage(error)).toContain(label);
+    expect(screenshotErrorMessage(error)).not.toContain("private");
+});

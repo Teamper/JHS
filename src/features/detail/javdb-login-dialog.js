@@ -23,8 +23,8 @@ export function openJavDbLoginDialog({ dialog, account, credential, getScope, on
     const alive = () => loginOwner === owner && !scope.disposed;
     try {
         return dialog.open({
-            type: 1, title: PRODUCT_NAMES.javdb, closeBtn: 1, area: utils.getResponsiveArea(["360px", "auto"]), shadeClose: false,
-            content: '<div class="jhs-layout-e32cff7f"><div class="jhs-layout-598afa5a"><input type="text" id="username" name="username" placeholder="用户名或邮箱" class="jhs-field"></div><div class="jhs-layout-da303dcf"><input type="password" id="password" name="password" placeholder="密码" class="jhs-field"></div><button id="loginBtn" class="jhs-btn jhs-layout-c4eb15bf" type="button">登录</button></div>',
+            type: 1, title: PRODUCT_NAMES.javdb, closeBtn: 1, ui: { size: "sm", body: "scroll" }, shadeClose: false,
+            content: '<div class="jhs-form-dialog jhs-ui jhs-layout-e32cff7f"><div class="jhs-form-field jhs-layout-598afa5a"><label class="jhs-form-label" for="username">用户名或邮箱</label><input type="text" id="username" name="username" placeholder="用户名或邮箱" class="jhs-field" autocomplete="username"></div><div class="jhs-form-field jhs-layout-da303dcf"><label class="jhs-form-label" for="password">密码</label><input type="password" id="password" name="password" placeholder="密码" class="jhs-field" autocomplete="current-password"></div><button id="loginBtn" class="jhs-btn jhs-btn--primary jhs-layout-c4eb15bf" type="button">登录</button></div>',
             success: (/** @type {Element} */ element, /** @type {number} */ index) => {
                 const button = $(element).find("#loginBtn");
                 scope.addCleanup(() => button.off(".jhsLogin"));

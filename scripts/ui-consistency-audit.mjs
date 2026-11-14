@@ -170,7 +170,7 @@ requireMatch(commandbar, /jhs-mobile-filter-menu[\s\S]*jhs-mobile-filter-option/
 forbidMatch(commandbar, /\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/, "command bar filters must not clip popovers");
 forbidMatch(commandbar, /@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/, "tablet command bar must wrap instead of scroll");
 requireMatch(commandbar, /@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/, "tablet command bar must wrap with visible popovers");
-requireMatch(commandbar, /@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/, "mobile command bar must stay hidden");
+requireMatch(commandbar, /@media \(max-width:\s*767px\)[\s\S]*?html\.jhs-fab-mounted\s+\.jhs-page-commandbar\s*\{[^}]*display:\s*none/, "mobile command bar must stay hidden only when FAB is mounted");
 forbidMatch(commandbar, /\$\("#waitCheckBtn"\)\.click\(\)/, "mobile identification must call its business API directly");
 requireMatch(commandbar, /\[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" \]/, "command bar must expose exactly the three primary entries");
 requireMatch(commandbar, /\[ "#statsBtn", "#blacklistBtn" \][\s\S]*jhs-commandbar__menu/, "statistics and blacklist must be grouped in more menu");
@@ -232,7 +232,7 @@ for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Escape"])
   requireMatch(listButtons, new RegExp(key), `sort control is missing ${key} keyboard behavior`);
 forbidMatch(listButtons, /<select[^>]+sort-toggle-btn/, "native sort select must not return");
 requireMatch(coverButtons, /new OwnedPopover\(trigger\[0\],menu\[0\]\)/, "card menus must use the shared viewport-constrained portal");
-requireMatch(coverButtons, /jhs-card-menu__dot[^}]*width:8px/, "card status menu must use 8px state dots");
+requireMatch(coverButtons, /jhs-card-menu__dot[^}]*width:(?:8px|var\(--jhs-space-2\))/, "card status menu must use 8px state dots");
 for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Escape"])
   requireMatch(coverButtons, new RegExp(key), `card menus are missing ${key} keyboard behavior`);
 forbidMatch(coverButtons, /elastic|jelly|right:\s*-/, "card menus must not use bounce animation or negative offsets");
@@ -298,19 +298,38 @@ requireBehavior(() => {
   finally { dom.window.close(); }
 }, "JavStore must match full numbers, reject external details and deduplicate old/grid candidates in DOM order");
 requireMatch(javstoreIntegration, /for \(const candidate of candidates\)[\s\S]*await request\(candidate/, "JavStore detail URLs must be checked sequentially");
-requireMatch(parsers, /normalizeJavStoreAssetUrl\(previewHref, detailUrl\)/, "JavStore preview URLs must be resolved and normalized against the detail page");
-requireMatch(parsers, /"javstore\.net" === hostname \|\| hostname\.endsWith\("\.javstore\.net"\)[\s\S]{0,100}url\.protocol = "https:"/, "JavStore HTTP preview URLs must be upgraded selectively");
-requireMatch(parsers, /previewUrl\.replace\("\.th", ""\)/, "JavStore preview URLs must retain .th compatibility");
 requireMatch(screenshot, /this\.screenshot\.resolve\(\{ carNum \}/, "screenshots must resolve through ScreenshotService");
 requireMatch(screenshot, /this\.screenshot\.normalizeAssetUrl\(rawUrl/, "screenshot rendering must normalize assets through ScreenshotService");
 requireBehavior(() => {
   for (const label of ["CLICK HERE!","CLICK HERE"]) {
-    const dom = new JSDOM(`<main><img src="/ABC-123_s.jpg"><a href="/ABC-123.th.jpg">${label}</a></main>`);
-    try { assert.equal(parseJavStorePreview(dom.window.document,"https://javstore.net/ABC-123-pn.html","ABC-123"),"https://javstore.net/ABC-123.jpg"); }
-    finally { dom.window.close(); }
+    for (const [href, expected] of [
+      ["/ABC-123.th.jpg", "https://javstore.net/ABC-123.jpg"],
+      ["http://img.javstore.net/ABC-123.th.jpg", "https://img.javstore.net/ABC-123.jpg"],
+      ["http://outside.test/ABC-123.th.jpg", "http://outside.test/ABC-123.jpg"],
+    ]) {
+      const dom = new JSDOM(`<main><img src="/ABC-123_s.jpg"><a href="${href}">${label}</a></main>`);
+      try { assert.equal(parseJavStorePreview(dom.window.document,"https://javstore.net/ABC-123-pn.html","ABC-123"),expected); }
+      finally { dom.window.close(); }
+    }
   }
-}, "JavStore explicit preview links must take priority and retain both punctuation forms");
-requireMatch(javstoreIntegration, /if \(imageUrl\) return[\s\S]*return \[\]/, "JavStore must continue after a candidate without CLICK HERE!");
+}, "JavStore explicit links must take priority, resolve relative URLs, upgrade only owned HTTP assets and retain .th and punctuation compatibility");
+{
+  const pages = [
+    new JSDOM('<a href="/ABC-123-first-pn.html">ABC-123</a><a href="/ABC-123-second-pn.html">ABC-123</a>'),
+    new JSDOM('<main><article><img src="/ordinary-photo.jpg"></article></main>'),
+    new JSDOM('<a href="/ABC-123.th.jpg">CLICK HERE!</a>'),
+  ];
+  try {
+    const calls = [];
+    const adapter = createJavStoreAdapter({ request: async options => {
+      calls.push(options.url);
+      return { data: pages[calls.length - 1].window.document, finalUrl: options.url };
+    } });
+    assert.deepEqual(await adapter.getImages({ carNum: "ABC-123" }), [{ url: "https://javstore.net/ABC-123.jpg", providerId: "javstore" }]);
+    assert.deepEqual(calls, ["https://javstore.net/search?q=ABC-123", "https://javstore.net/ABC-123-first-pn.html", "https://javstore.net/ABC-123-second-pn.html"]);
+  } catch (error) { failures.push(`JavStore must continue after a candidate without a contact sheet: ${error.message}`); }
+  finally { pages.forEach(page => page.window.close()); }
+}
 forbidMatch(screenshot, /javstore\.net\/search\/|img\[src\*=['"]_s\.jpg/, "legacy JavStore search or detail fallback must not return");
 requireMatch(otherSite, /跳过第三方站点解析：番号不可用/, "external sites must fail fast without a car number");
 for (const entry of ["checkNewVideo", "checkFavoriteActress", "checkOneNewVideo"])
@@ -342,6 +361,20 @@ const zIndexBody = theme.match(/const JHS_Z_INDEX = Object\.freeze\(\{([\s\S]*?)
 const zIndexKeys = new Set([...zIndexBody.matchAll(/^\s*([A-Za-z][\w]*)\s*:/gm)].map((match => match[1])));
 const toKebab = value => value.replace(/[A-Z]/g, (letter => `-${letter.toLowerCase()}`));
 for (const key of zIndexKeys) requireMatch(theme, new RegExp(`--jhs-z-${toKebab(key)}\\s*:`), `z-index constant ${key} is missing its CSS token`);
+const STATUS_TOKEN_ALLOWLIST = new Set([
+  "src/core/constants.js",
+  "src/core/theme.js",
+  "src/core/ui-primitives.js",
+  "src/features/list/cover-button-controller.js",
+  "src/features/list/list-card-state-presenter.js",
+  "src/features/list/list-compatibility-service.js",
+  "src/features/system/responsive-shell-controller.js",
+  "src/features/system/stats-controller.js",
+]);
+const declaredTokens = new Set();
+const referencedTokens = new Map();
+const definedModifiers = new Set();
+const referencedModifiers = new Map();
 let inlineStyleCount = 0;
 let selectCount = 0;
 for (const file of sourceFiles) {
@@ -349,6 +382,20 @@ for (const file of sourceFiles) {
   const count = source.match(/\sstyle\s*=\s*["'`]/g)?.length ?? 0;
   inlineStyleCount += count;
   const path = relative(repoRoot, file).replaceAll("\\", "/");
+  for (const m of source.matchAll(/(--jhs-[a-z0-9-]+)\s*:/g)) declaredTokens.add(m[1]);
+  for (const m of source.matchAll(/var\((--jhs-[a-z0-9-]+)\)/g)) if (!referencedTokens.has(m[1])) referencedTokens.set(m[1], path);
+  for (const m of source.matchAll(/\.(jhs-(?:btn|badge)--[a-z0-9-]+)\b/g)) definedModifiers.add(m[1]);
+  for (const m of source.matchAll(/\bjhs-(?:btn|badge)--[a-z0-9-]+\b/g)) if (!referencedModifiers.has(m[0])) referencedModifiers.set(m[0], path);
+  if (path !== "src/core/theme.js") {
+    forbidMatch(source, /\b44px\b/, `${path} uses raw 44px instead of var(--jhs-touch-target)`);
+    forbidMatch(source, /(?:^|[;{\s])color\s*:\s*var\(--jhs-(?:[a-z0-9-]+)-tint\)/, `${path} uses a tint token as foreground color`);
+    forbidMatch(source, /(?:^|[;{\s])color\s*:\s*var\(--jhs-(?:success|danger|warning)\)/, `${path} uses base feedback token as foreground color instead of -text or -text-on`);
+  }
+  if (!STATUS_TOKEN_ALLOWLIST.has(path)) forbidMatch(source, /--jhs-status-/, `${path} uses movie 4-state token --jhs-status-* outside allowed state owners`);
+  if (!path.includes("compatibility-controller") && /role=["']tablist["']/.test(source) && !/role=["']tab["']/.test(source)) {
+    failures.push(`${path} declares role="tablist" without role="tab"`);
+  }
+  forbidMatch(source, /\bbtn\s*:\s*\[\s*["'](?:确定|确认|保存|删除|重置|继续|导出|上传|屏蔽)["']\s*,\s*["'](?:取消|关闭)["']\s*\]/, `${path} uses legacy reversed confirm button order`);
   for (const match of source.matchAll(/\.(jhs-layout-[a-f0-9]{8})\s*\{/g)) layoutDefinitions.add(match[1]);
   for (const match of source.matchAll(/\bjhs-layout-[a-f0-9]{8}\b/g)) layoutReferences.set(match[0], path);
   const selects = source.match(/<select\b[^>]*>/g) || [];
@@ -389,6 +436,8 @@ for (const file of sourceFiles) {
   forbidMatch(source, /(?:search|searchstr)[^\n]{0,80}undefined(?:\.html)?/i, `${path} can construct an undefined search URL`);
 }
 for (const [name, path] of layoutReferences) if (!layoutDefinitions.has(name)) failures.push(`${path} references undefined layout utility ${name}`);
+for (const [token, path] of referencedTokens) if (!declaredTokens.has(token)) failures.push(`${path} references undeclared CSS token ${token}`);
+for (const [modifier, path] of referencedModifiers) if (!definedModifiers.has(modifier)) failures.push(`${path} references undeclared modifier class ${modifier}`);
 requireMatch(settingRenderer, /descriptor\.type === "select"[\s\S]*<select class="jhs-select-source"/, "descriptor selects must use the enhanced source class");
 const settingController = await readFile(join(srcRoot, "plugins", "backup", "setting.js"), "utf8");
 requireMatch(settingController, /JhsSelect\.refreshAll\(e\)/, "all rendered settings selects must be enhanced after hydration");

@@ -71,3 +71,23 @@ test("narrow cards keep all enabled cover actions inside the tag area", async ({
   expect(geometry).toHaveLength(5);
   expect(geometry.every(({ right, tagRight }) => right <= tagRight + 1)).toBe(true);
 });
+
+test("card status menu preserves 4-state order and active aria-pressed indicator", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers card status menu ordering");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await page.evaluate(() => window.stateService.patch("ABC-123", { favorite: true }, {
+    record: { carNum: "ABC-123", url: "https://javdb.com/v/abc-123", names: "Fixture Actor", publishTime: "2026-08-25" },
+  }));
+  await expect(page.locator(".movie-list .item").first()).toHaveAttribute("data-jhs-flags", /"favorite":true/);
+  await page.locator('#jhs-quick-filter [data-jhs-filter="all"]').click();
+  await page.addStyleTag({ content: ".movie-list .item .tags { display: flex !important; }" });
+
+  await page.locator(".movie-list .item .jhs-cover-tools .handleSvg .jhs-card-menu-trigger").first().click();
+  const items = page.locator(".jhs-owned-popover .jhs-card-status-item");
+  await expect(items).toHaveCount(4);
+  await expect(items).toHaveText(["屏蔽", "收藏", "已下载", "已观看"]);
+  const pressed = await items.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-pressed")));
+  expect(pressed).toEqual(["false", "true", "false", "false"]);
+});

@@ -8,11 +8,11 @@ import { requestHostPage } from "../../core/host-page-request.js";
 export const AUTO_PAGE_STYLES = `
     .jhs-scroll { text-align:center; padding-top:var(--jhs-space-5); font-size:var(--jhs-font-size-md); }
     .jhs-scroll.waterfall-loading { color:var(--jhs-text); }
-    .jhs-scroll.waterfall-error { color:var(--jhs-status-filter); cursor:pointer; }
-    .jhs-scroll.waterfall-stopped { color:var(--jhs-status-filter); }
+    .jhs-scroll.waterfall-error { color:var(--jhs-danger-text); }
+    .jhs-scroll.waterfall-stopped { color:var(--jhs-warning-text); }
     .jhs-scroll.waterfall-paused { color:var(--jhs-text); }
-    .jhs-scroll__continue { display:inline-flex; margin-inline-start:var(--jhs-space-2); }
-    .jhs-scroll.waterfall-no-more { color:var(--jhs-status-down); }
+    .jhs-scroll__continue, .jhs-scroll__retry { display:inline-flex; margin-inline-start:var(--jhs-space-2); }
+    .jhs-scroll.waterfall-no-more { color:var(--jhs-success-text); }
 `;
 
 /** Feature-owned waterfall pagination; all list access crosses injected capabilities. */
@@ -212,6 +212,16 @@ export class AutoPageController {
         }
     }
 
+    renderErrorState() {
+        if (!this.loader) return;
+        this.setState("waterfall-error", "加载失败");
+        const button = this.document.createElement("button");
+        button.type = "button";
+        button.className = "jhs-btn jhs-btn--secondary jhs-scroll__retry";
+        button.textContent = "点击重试";
+        this.loader.append(" ", button);
+    }
+
     renderPausedState() {
         if (!this.loader || this.isLoading) return;
         if (!this.hasMore) return this.loader.classList.contains("waterfall-stopped") ? undefined : this.setState("waterfall-no-more", "已经到底了");
@@ -285,7 +295,7 @@ export class AutoPageController {
             if (!this.hasMore) this.setState("waterfall-no-more", "已经到底了");
         } catch (error) {
             if (!this.isCurrent(generation, scope)) return;
-            this.setState("waterfall-error", "加载失败，点击重试");
+            this.renderErrorState();
             this.log("error", "加载失败:", error);
         } finally {
             if (generation === this.generation) {
@@ -304,7 +314,7 @@ export class AutoPageController {
             void this.loadNextPage({ manual: true }).catch((/** @type {unknown} */ error) => this.log("error", "手动加载下一页失败", error));
             return;
         }
-        if (this.loader.classList.contains("waterfall-error")) {
+        if (this.loader.classList.contains("waterfall-error") || (event.target instanceof Element && event.target.closest(".jhs-scroll__retry"))) {
             void this.loadNextPage({ manual: Boolean(this.pausedFilter) }).catch((/** @type {unknown} */ error) => this.log("error", "瀑布流重试失败", error));
         }
     }

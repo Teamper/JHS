@@ -82,9 +82,13 @@ export function buildThemeCss() {
         --jhs-font-size-md: 14px;
         --jhs-font-size-lg: 16px;
         --jhs-font-size-xl: 18px;
+        --jhs-font-size-2xl: 20px;
+        --jhs-line-height-display: 28px;
         --jhs-control-height-sm: 32px;
         --jhs-control-height: 36px;
         --jhs-touch-target: 44px;
+        --jhs-fab-size: 56px;
+        --jhs-fab-offset: 24px;
         --jhs-icon-sm: 16px;
         --jhs-icon-md: 18px;
         --jhs-icon-lg: 24px;
@@ -122,14 +126,19 @@ export function buildThemeCss() {
         --jhs-accent: #3b6ea5;
         --jhs-accent-hover: #2f5b8a;
         --jhs-accent-tint: #e7eef6;
+        --jhs-accent-text: var(--jhs-accent);
         --jhs-accent-text-on: #ffffff;
 
         /* 通用反馈语义（不得代替影片状态色） */
+        --jhs-success-text: var(--jhs-success);
+        --jhs-success-text-on: #ffffff;
         --jhs-danger: #c02b2b;
         --jhs-danger-tint: #fde8e8;
+        --jhs-danger-text: var(--jhs-danger);
         --jhs-danger-text-on: #ffffff;
         --jhs-warning: #826207;
         --jhs-warning-tint: #faf3df;
+        --jhs-warning-text: var(--jhs-warning);
         --jhs-warning-text-on: #ffffff;
 
         /* 状态语义色 (品牌, 保持可辨识): red=屏蔽 cyan=收藏 green=下载 amber=观看
@@ -207,6 +216,7 @@ export function buildThemeCss() {
         --jhs-loading-overlay: rgba(20, 24, 29, .6);
         --jhs-success: #93d357;
         --jhs-success-tint: #25341a;
+        --jhs-success-text-on: #14181d;
 
         --jhs-accent: #7ca6d4;
         --jhs-accent-hover: #8db3de;
@@ -244,6 +254,15 @@ export function buildThemeCss() {
         /* 品牌色 */
         --jhs-brand-javdb: #e37ab6;
         --jhs-brand-javbus: #f0c040;
+        --jhs-site-javtrailers: #e5be53;
+        --jhs-site-av123: #ee7d66;
+        --jhs-site-jable: #e06c7b;
+        --jhs-site-avgle: #6b96e0;
+        --jhs-site-missav: #a78bfa;
+        --jhs-site-supjav: #f58c60;
+        --jhs-site-javdb: #5c9eff;
+        --jhs-site-javbus: #e86b6b;
+        --jhs-site-dmm: #f174a4;
 
         /* 代码查看器 (终端语义, 亮暗一致, 不随主题) */
         --jhs-code-bg: #1e1e1e;
@@ -280,13 +299,13 @@ export function buildThemeCss() {
     }
 
     /* JHS 表面基础字体 */
-    .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box {
+    .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, #jhs-fab, .jhs-fab, .menu-box {
         font-family: var(--jhs-font);
     }
 
-    :where(.jhs-ui, .jhs-dialog, .jhs-btn, .jhs-field, .jhs-switch, .mini-switch, .jhs-icon-btn, .card-btn) { color-scheme:var(--jhs-color-scheme); }
-    :where(.jhs-ui) :focus-visible,
-    :where(.jhs-btn, .jhs-icon-btn, .card-btn, .jhs-link):focus-visible {
+    :where(.jhs-ui, .jhs-dialog, .jhs-btn, .jhs-field, .jhs-switch, .mini-switch, .jhs-icon-btn, .card-btn, .jhs-checkbox, .jhs-radio) { color-scheme:var(--jhs-color-scheme); }
+    :where(.jhs-ui, .jhs-dialog .layui-layer-content, .jhs-popover, .jhs-owned-popover) :focus-visible,
+    :where(.jhs-btn, .jhs-icon-btn, .card-btn, .jhs-link, .jhs-checkbox, .jhs-radio, .jhs-switch, .mini-switch, .jhs-field, .jhs-textarea, .jhs-select-trigger):focus-visible {
         outline:2px solid var(--jhs-focus);
         outline-offset:2px;
     }
@@ -316,8 +335,8 @@ export function buildThemeCss() {
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box,
-        .jhs-ui *, .jhs-dialog .layui-layer-content *, .tabulator *, .toastify *, .jhs-fab *, .menu-box * {
+        .jhs-ui, .jhs-dialog .layui-layer-content, .tabulator, .toastify, #jhs-fab, .jhs-fab, .menu-box,
+        .jhs-ui *, .jhs-dialog .layui-layer-content *, .tabulator *, .toastify *, #jhs-fab *, .jhs-fab *, .menu-box * {
             transition: none !important;
             animation: none !important;
         }
@@ -329,7 +348,7 @@ export function buildThemeCss() {
         color: var(--jhs-text);
         box-shadow: var(--jhs-shadow-lg);
     }
-    :root[data-jhs-theme="dark"] .layui-layer-title {
+    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-title {
         background-color: var(--jhs-surface-2);
         color: var(--jhs-text);
         border-bottom: 1px solid var(--jhs-border);

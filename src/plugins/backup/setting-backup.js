@@ -207,7 +207,7 @@ export function openFileListDialog(files, client, label, folderName, showDiffPre
     };
     const buttons = (/** @type {BackupFile} */ file) => `<div data-backup-file="${escapeHtml(file.fileId)}">${[["delete","删除","danger"],["download","下载","secondary"],["import","导入","primary"]].map(([action,text,kind]) => `<button type="button" class="jhs-btn jhs-btn--${kind} backup-${action} jhs-backup-btn jhs-backup-btn-${kind}" data-action="${action}" data-backup-action="${action}">${text}</button>`).join(" ")}</div>`;
     const mobile = utils.isMobileMode();
-    const renderCards = () => files.length ? files.map(file => `<article class="jhs-backup-card"><div class="jhs-backup-card-name">${escapeHtml(file.name)}</div><div class="jhs-backup-card-meta">${formatSize(file.size)} · ${formatUiDateTime(file.createTime)}</div><div class="jhs-backup-card-actions">${buttons(file)}</div></article>`).join("") : '<div class="jhs-backup-empty">暂无备份</div>';
+    const renderCards = () => files.length ? files.map(file => `<article class="jhs-card jhs-record-card jhs-backup-card"><div class="jhs-backup-card-name">${escapeHtml(file.name)}</div><div class="jhs-backup-card-meta">${formatSize(file.size)} · ${formatUiDateTime(file.createTime)}</div><div class="jhs-backup-card-actions">${buttons(file)}</div></article>`).join("") : '<div class="jhs-state jhs-state--empty jhs-backup-empty"><div class="jhs-state__content"><p class="jhs-state__title">暂无备份</p></div></div>';
     const perform = async (/** @type {string} */ action, /** @type {BackupFile} */ file) => {
         if (!active() || busy) return;
         busy = true;
@@ -275,7 +275,7 @@ export function openFileListDialog(files, client, label, folderName, showDiffPre
                 /** @type {number | null} */ let confirmation = null;
                 const release = scope.addCleanup(() => { if (confirmation != null) dialog.close(confirmation); });
                 confirmation = dialog.confirm(`删除备份“${escapeHtml(file.name)}”？此操作无法撤销`, {
-                    icon:3,title:"提示",confirmText:"删除",cancelText:"取消",end:()=>{confirmation=null;release();},
+                    icon:3,title:"提示",confirmText:"删除",cancelText:"取消",tone:"danger",ui:{size:"sm",body:"scroll"},end:()=>{confirmation=null;release();},
                 }, (/** @type {number} */ id) => { dialog.close(id); if (active()) void perform("delete",file); });
             });
         },

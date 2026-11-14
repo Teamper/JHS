@@ -96,17 +96,26 @@ for (const theme of Object.values(themes)) {
     assertPair(theme, `${s}-on on ${s}`, `status-${s}-on`, `status-${s}`, TEXT_TARGET);
     assertPair(theme, `${s}-on on ${s}-hover`, `status-${s}-on`, `status-${s}-hover`, TEXT_TARGET);
     assertPair(theme, `${s}-text on ${s}-tint`, `status-${s}-text`, `status-${s}-tint`, TEXT_TARGET);
+    assertPair(theme, `${s}-text on surface`, `status-${s}-text`, "surface", TEXT_TARGET);
   }
   // 主操作色
   assertPair(theme, "accent-text-on on accent", "accent-text-on", "accent", TEXT_TARGET);
   assertPair(theme, "accent-text-on on accent-hover", "accent-text-on", "accent-hover", TEXT_TARGET);
   assertPair(theme, "accent on accent-tint", "accent", "accent-tint", TEXT_TARGET);
+  assertPair(theme, "accent-text on accent-tint", "accent-text", "accent-tint", TEXT_TARGET);
+  assertPair(theme, "accent-text on surface", "accent-text", "surface", TEXT_TARGET);
   // 通用反馈语义
   assertPair(theme, "danger-text-on on danger", "danger-text-on", "danger", TEXT_TARGET);
   assertPair(theme, "danger on danger-tint", "danger", "danger-tint", TEXT_TARGET);
+  assertPair(theme, "danger-text on danger-tint", "danger-text", "danger-tint", TEXT_TARGET);
+  assertPair(theme, "danger-text on surface", "danger-text", "surface", TEXT_TARGET);
   assertPair(theme, "warning-text-on on warning", "warning-text-on", "warning", TEXT_TARGET);
   assertPair(theme, "warning on warning-tint", "warning", "warning-tint", TEXT_TARGET);
+  assertPair(theme, "warning-text on warning-tint", "warning-text", "warning-tint", TEXT_TARGET);
+  assertPair(theme, "warning-text on surface", "warning-text", "surface", TEXT_TARGET);
   assertPair(theme, "success on success-tint", "success", "success-tint", TEXT_TARGET);
+  assertPair(theme, "success-text on success-tint", "success-text", "success-tint", TEXT_TARGET);
+  assertPair(theme, "success-text on surface", "success-text", "surface", TEXT_TARGET);
   // 品牌色
   assertPair(theme, "brand-javdb on surface", "brand-javdb", "surface", TEXT_TARGET);
   assertPair(theme, "brand-javbus on surface", "brand-javbus", "surface", TEXT_TARGET);

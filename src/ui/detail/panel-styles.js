@@ -14,13 +14,13 @@ export function buildDetailPanelCss() {
         .jhs-review-author { color:var(--jhs-text); font-size:var(--jhs-font-size-md); font-weight:var(--jhs-font-weight-semibold); }
         .jhs-review-floor { margin-left:auto; color:var(--jhs-text-faint); }
         .jhs-review-content { margin:var(--jhs-space-3) 0 0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); line-height:var(--jhs-line-height-read); overflow-wrap:anywhere; white-space:pre-wrap; }
-        .jhs-review-link { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); padding:var(--jhs-space-1) var(--jhs-space-2); border:0; border-radius:var(--jhs-radius-pill); background:var(--jhs-accent-tint); color:var(--jhs-accent); font:inherit; font-size:var(--jhs-font-size-sm); line-height:var(--jhs-line-height-ui); text-decoration:none; vertical-align:baseline; cursor:pointer; }
+        .jhs-review-link { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); padding:var(--jhs-space-1) var(--jhs-space-2); border:0; border-radius:var(--jhs-radius-pill); background:var(--jhs-accent-tint); color:var(--jhs-accent-text); font:inherit; font-size:var(--jhs-font-size-sm); line-height:var(--jhs-line-height-ui); text-decoration:none; vertical-align:baseline; cursor:pointer; }
         .jhs-review-link-copy { color:var(--jhs-text-muted); }
         .jhs-review-link-wrap { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-2); width:100%; margin:var(--jhs-space-1) 0; }
         .jhs-review-inline-controls { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); }
         .jhs-review-link-main { display:inline-flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
         .jhs-review-link-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin-left:auto; flex-shrink:0; }
-        .jhs-review-offline-btn { background:var(--jhs-accent-tint); color:var(--jhs-accent); }
+        .jhs-review-offline-btn { background:var(--jhs-accent-tint); color:var(--jhs-accent-text); }
         .jhs-panel-state { padding:var(--jhs-space-4) 0; color:var(--jhs-text-muted); text-align:center; }
         .jhs-panel-footer { display:flex; justify-content:center; padding-top:var(--jhs-space-3); }
         .jhs-panel-end { color:var(--jhs-text-faint); font-size:var(--jhs-font-size-sm); }

@@ -103,3 +103,24 @@ test("backup loading feedback stays above the full settings layer", async ({ pag
   await page.evaluate(() => window.__jhsLoadingFixture.close());
   await expect(loading).toHaveCount(0);
 });
+
+test("mobileMode off keeps commandbar visible and wrapping cleanly at 375px", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "one compact viewport covers mobileMode off layout");
+  await page.setViewportSize({ width: 375, height: 844 });
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { settingOverrides: { mobileMode: "off" } });
+  await expect(page.locator("#jhs-fab")).toHaveCount(0);
+  await expect(page.locator("html")).not.toHaveClass(/jhs-fab-mounted/);
+  const bar = page.locator("#jhs-page-commandbar");
+  await expect(bar).toBeVisible();
+  const layout = await bar.evaluate((node) => {
+    const cs = getComputedStyle(node);
+    return {
+      flexWrap: cs.flexWrap,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    };
+  });
+  expect(layout.flexWrap).toBe("wrap");
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+});

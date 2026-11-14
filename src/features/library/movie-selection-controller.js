@@ -107,10 +107,17 @@ export class MovieSelectionController {
         this.status = status;
     }
     /** @param {unknown} error */
-    report(error) { if (this.status) this.status.textContent = error instanceof Error ? error.message : String(error); }
+    report(error) {
+        if (!this.status) return;
+        this.status.className = "jhs-field-error";
+        this.status.textContent = error instanceof Error ? error.message : String(error);
+    }
     render() {
         const count = this.service.values().length;
-        if (this.status) this.status.textContent = `已选择 ${count} 部影片，可跨页保留。${this.service.warning || ""}`;
+        if (this.status) {
+            this.status.className = "jhs-helper-text";
+            this.status.textContent = `已选择 ${count} 部影片，可跨页保留。${this.service.warning || ""}`;
+        }
         for (const card of this.cards.values()) { card.input.checked = this.service.has(card.movie); card.input.disabled = this.service.readOnly; }
         this.buttons.forEach((button, index) => {
             const command = ["", "", "library.rating.open", "translation.selection", "library.lists.open"][index];

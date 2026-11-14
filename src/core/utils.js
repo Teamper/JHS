@@ -267,7 +267,7 @@ export class Utils {
     /** 显式动作标签使用取消在前；保留旧调用的确认与取消回调顺序。 */
     q(e, t, n, a, options = {}) {
         let index = null, decided = false, releaseUi = null;
-        const namedAction = options.confirmText != null || options.cancelText != null;
+
         const service = this.dialogService;
         const close = (id = index) => { if (id != null) service ? service.close(id) : layer.close(id); };
         const accept = (id = index) => {
@@ -280,7 +280,7 @@ export class Utils {
             decided = true;
             a?.();
         };
-        const buttons = namedAction ? [ options.cancelText || "取消", options.confirmText || "确定" ] : [ "确定", "取消" ];
+        const buttons = [ options.cancelText || "取消", options.confirmText || "确定" ];
         const dialogOptions = {
             title: "提示", btn: buttons, shade: 0, zIndex: JHS_Z_INDEX.layer,
             ui: { focus: "caller" },
@@ -294,14 +294,15 @@ export class Utils {
                 root.setAttribute("aria-modal", "true");
                 root.setAttribute("aria-label", "提示");
                 const releaseButtons = enhanceDialogButtons(root);
-                const releaseFocus = this.trapFocus(root, root.querySelector(`.layui-layer-btn${namedAction ? "0" : "1"}`));
+                const releaseFocus = this.trapFocus(root, root.querySelector(".layui-layer-btn0"));
                 releaseUi = () => { releaseButtons(); releaseFocus?.(); };
             },
             end: () => { const release = releaseUi; releaseUi = null; release?.(); if (index != null) this.releaseEscClose(index); cancel(); },
         };
         if (!this.isMobileMode()) dialogOptions.offset = [ e ? e.clientY - 120 : window.innerHeight / 2 - 120, e ? e.clientX - 130 : window.innerWidth / 2 - 120 ];
-        if (service) index = service.confirm(t, { ...dialogOptions, ...(namedAction ? { confirmText: options.confirmText, cancelText: options.cancelText } : {}) }, accept, cancel);
-        else index = layer.confirm(t, namedAction ? { ...dialogOptions, skin: [ options.skin, "jhs-confirm-actions" ].filter(Boolean).join(" ") } : dialogOptions, namedAction ? (id) => { try { cancel(); } finally { close(id ?? index); } } : accept, namedAction ? accept : cancel);
+        const dangerSkin = options.tone === "danger" ? "jhs-confirm-actions--danger" : "";
+        if (service) index = service.confirm(t, { ...dialogOptions, confirmText: options.confirmText, cancelText: options.cancelText, ...(options.tone ? { tone: options.tone } : {}) }, accept, cancel);
+        else index = layer.confirm(t, { ...dialogOptions, skin: [ options.skin, "jhs-confirm-actions", dangerSkin ].filter(Boolean).join(" ") }, (id) => { try { cancel(); } finally { close(id ?? index); } }, accept);
     }
     /** Inject the existing dialog service while keeping bootstrap-free utility callers compatible. */
     setDialogService(dialog) { this.dialogService = dialog; }

@@ -1,6 +1,7 @@
 // @ts-check
 
 import { normalizeCarNum } from "../../core/movie-identity.js";
+import { movieCodeKey } from "../../core/movie-code-evidence.js";
 
 /** @param {any} page */
 function resolveDocument(page) {
@@ -32,18 +33,21 @@ export function normalizeJavStoreAssetUrl(value, baseUrl = "https://javstore.net
     }
 }
 
-/** 仅把编号的大小写、宽度和分隔符作为等价形式；FC2 的 PPV 段可省略。 @param {string} value */
-function javStoreIdentityKey(value) {
-    const normalized = value.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-").toUpperCase();
-    const fc2 = normalized.match(/^FC2[\s_-]*(?:PPV[\s_-]*)?(\d+)$/);
-    return fc2 ? `FC2-${fc2[1]}` : normalized.replace(/[\s_-]+/g, "");
+/** Complete display-code tokens; CID aliases are decoded separately. @param {string} value */
+function identityTokens(value) {
+    const text = value.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-").toUpperCase();
+    return [...text.matchAll(/(?<![A-Z0-9])(?:FC2[\s_-]*(?:PPV[\s_-]*)?\d+|(?:[A-Z]{2,10}|\d{1,3}[A-Z]{2,8})[\s_-]*\d{2,}|\d{6}[\s_-]+\d{2,})(?![A-Z0-9])/g)].map(match => movieCodeKey(match[0]));
 }
 
-/** 提取完整编号，不以查询参数或编号子串作为匹配证据。 @param {string} value */
-function javStoreIdentityTokens(value) {
-    const text = value.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-").toUpperCase();
-    // Bare numeric path segments are article/image IDs, not independent movie-number evidence.
-    return [...text.matchAll(/(?<![A-Z0-9])(?:FC2[\s_-]*(?:PPV[\s_-]*)?\d+|(?:[A-Z]{2,10}|\d{1,3}[A-Z]{2,8})[\s_-]*\d{2,}|\d{6}[\s_-]+\d{2,})(?![A-Z0-9])/g)].map(match => javStoreIdentityKey(match[0]));
+/** Titles and article slugs contain prose after the primary movie code. */
+/** @param {string} value */
+function proseIdentityTokens(value) {
+    value = value.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-");
+    const tokens = identityTokens(value.replace(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g, " "));
+    // Compact chapter labels after a movie code are metadata. A leading code or
+    // an explicit separated code (CASE-01) retains its identity significance.
+    const explicit = identityTokens(value.replace(/\b(?:CASE|PART|VOL(?:UME)?|CHAPTER|DISC|CD|EPISODE|SEASON)[ ]*\d{1,3}\b/gi, " "));
+    return tokens.filter((token, index) => index === 0 || !/^(?:CASE|PART|VOL(?:UME)?|CHAPTER|DISC|CD|EPISODE|SEASON)\d{1,3}$/.test(token) || explicit.includes(token));
 }
 
 /** @param {string} value @param {string} baseUrl */
@@ -55,25 +59,31 @@ function javStoreUrlPath(value, baseUrl) {
     } catch { return ""; }
 }
 
-/** DMM 封面 CID 可带 maker 前缀或数字补零；仅认可固定域、目录与同名封面文件。 @param {string} value @param {string} baseUrl @param {string} target */
-function javStoreCoverPath(value, baseUrl, target) {
+/** Decode aliases only inside a trusted, complete DMM cover URL. */
+/** @param {string} value @param {string} baseUrl @param {string} target */
+function coverIdentity(value, baseUrl, target) {
     const path = javStoreUrlPath(value, baseUrl);
+    const tokens = identityTokens(path);
     try {
         const url = new URL(value, baseUrl);
-        if (url.hostname !== "pics.dmm.co.jp" || url.username || url.password) return path;
-        const cid = path.match(/^\/mono\/movie\/adult\/(\d{1,3}([a-z]{2,10}\d{2,}))\/\1(?:pl|ps)\.jpg$/i);
-        if (cid && cid[2].toUpperCase() === target) return target;
-        const digitalCid = path.match(/^\/digital\/video\/(([a-z]{2,10})(\d{5}))\/\1(?:pl|ps)\.jpg$/i);
-        const movie = target.match(/^([A-Z]{2,10})(\d{2,5})$/);
-        return digitalCid && movie && digitalCid[2].toUpperCase() === movie[1] && digitalCid[3] === movie[2].padStart(5, "0") ? target : path;
-    } catch { return path; }
+        const cover = path.match(/^\/(digital\/video|mono\/movie\/adult)\/([a-z0-9_]+)\/\2(?:pl|ps)\.jpg$/i);
+        if (url.hostname === "pics.dmm.co.jp" && !url.username && !url.password && cover) {
+            const cid = cover[2].toUpperCase();
+            if (cid === target) return { tokens: [target], unknown: false };
+            const movie = target.match(/^([A-Z]{2,10})(\d{2,5})$/);
+            const parts = cid.match(/^(?:H_\d{1,4}|\d{1,3})?([A-Z]{2,10})(\d{2,5})$/);
+            const validWidth = cover[1].toLowerCase() !== "digital/video" || parts?.[2].length === 5;
+            if (movie && parts && validWidth) {
+                const matches = parts[1] === movie[1] && parts[2].padStart(5, "0") === movie[2].padStart(5, "0");
+                return { tokens: matches ? [target] : [parts[1] + parts[2]], unknown: false };
+            }
+        }
+    } catch { /* Opaque cover names require confirmation on the detail page. */ }
+    return { tokens, unknown: Boolean(value) && tokens.length === 0 };
 }
 
-/** 全部可识别编号必须一致，且至少存在一项目标编号证据。 @param {string[]} evidence @param {string} target */
-function matchesJavStoreIdentity(evidence, target) {
-    const tokens = evidence.flatMap(javStoreIdentityTokens);
-    return tokens.length > 0 && tokens.every(token => token === target);
-}
+/** @param {string[]} tokens @param {string} target */
+function hasConflict(tokens, target) { return tokens.some(token => token !== target); }
 
 /** 与现有 builtin-public 请求策略相同的 HTTPS 自有域范围，并拒绝 URL 用户信息。 @param {string} value @param {string} baseUrl */
 function javStoreDetailUrl(value, baseUrl) {
@@ -84,48 +94,107 @@ function javStoreDetailUrl(value, baseUrl) {
     } catch { return null; }
 }
 
-/** 提取 JavStore 搜索页中按原始 DOM 顺序排列的匹配候选。 */
-/** @param {any} $searchPage @param {unknown} carNum @param {string} [baseUrl] */
-export function parseJavStoreSearch($searchPage, carNum, baseUrl = "https://javstore.net") {
-    const normalizedCarNum = normalizeCarNum(carNum);
-    if (!normalizedCarNum) return [];
-    const target = javStoreIdentityKey(normalizedCarNum), candidates = new Set();
-    for (const anchor of queryJavStoreElements($searchPage, "a[href]")) {
+/** Inspect structured card evidence without changing the legacy URL-array contract. */
+/** @param {any} page @param {unknown} carNum @param {string} [baseUrl] */
+export function inspectJavStoreSearch(page, carNum, baseUrl = "https://javstore.net") {
+    const normalized = normalizeCarNum(carNum);
+    /** @type {{url: string, requiresDetailIdentity: boolean}[]} */
+    const candidates = [];
+    const result = { candidates, candidateCount: 0, identityRejected: 0, unrecognizedCount: 0 };
+    if (!normalized) return result;
+    const target = movieCodeKey(normalized), seen = new Set();
+    for (const anchor of queryJavStoreElements(page, "a[href]")) {
+        if (anchor.closest("aside, nav, header, footer")) continue;
         const url = javStoreDetailUrl(anchor.getAttribute("href") || "", baseUrl);
-        if (!url || !(/-pn\.html$/i.test(url.pathname) || anchor.matches("main .grid a"))) continue;
-        // Publication dates are card metadata. Otherwise an English title tail
-        // and its day ("Yuka\n05/11/2026") become the false movie code YUKA05.
-        const text = (anchor.textContent || "").replace(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g, " ");
+        if (!url) continue;
+        const title = anchor.querySelector("h3")?.textContent ?? anchor.textContent ?? "";
+        const titleTokens = proseIdentityTokens(title);
         const path = javStoreUrlPath(url.href, baseUrl).replace(/^(\/\d+-)\[?(?:FHD(?:\/?SD)?|SD|[48]K)\]?[-_ ]?(?=[A-Z]{2,10}[-_]?\d)/i, "$1");
-        const evidence = [path, text, anchor.getAttribute("title") || ""];
-        for (const image of anchor.querySelectorAll("img")) evidence.push(image.getAttribute("alt") || "", image.getAttribute("title") || "", javStoreCoverPath(image.getAttribute("src") || "", baseUrl, target));
-        if (matchesJavStoreIdentity(evidence, target)) candidates.add(url.href);
+        const pathTokens = proseIdentityTokens(path);
+        const primaryTokens = [...pathTokens, ...titleTokens, ...proseIdentityTokens(anchor.getAttribute("title") || "")];
+        if (!(/-pn\.html$/i.test(url.pathname) || anchor.matches("main .grid a"))) {
+            if (primaryTokens.includes(target) && anchor.querySelector("h3")) result.unrecognizedCount++;
+            continue;
+        }
+        result.candidateCount++;
+        const tokens = [...primaryTokens];
+        let unknownCover = false;
+        for (const image of anchor.querySelectorAll("img")) {
+            const cover = coverIdentity(image.getAttribute("src") || image.getAttribute("data-src") || "", baseUrl, target);
+            tokens.push(...proseIdentityTokens(image.getAttribute("alt") || ""), ...proseIdentityTokens(image.getAttribute("title") || ""), ...cover.tokens);
+            unknownCover ||= cover.unknown;
+        }
+        if (!tokens.includes(target)) continue;
+        if (hasConflict(tokens, target)) { result.identityRejected++; continue; }
+        if (unknownCover && !(titleTokens.includes(target) && pathTokens.includes(target))) {
+            result.unrecognizedCount++;
+            continue;
+        }
+        if (seen.has(url.href)) continue;
+        seen.add(url.href);
+        candidates.push({ url: url.href, requiresDetailIdentity: unknownCover });
     }
-    return [...candidates];
+    // A recognizable search shell without cards or an explicit empty state
+    // indicates a layout change. Detached legacy fragments retain their contract.
+    if (!result.candidateCount && !result.unrecognizedCount && queryJavStoreElements(page, "main h1").some(node => /search/i.test(node.textContent || ""))) {
+        const text = queryJavStoreElements(page, "main").map(node => node.textContent).join(" ");
+        if (!/no (?:results|posts|videos)|nothing found|0 results/i.test(text)) result.unrecognizedCount++;
+    }
+    return result;
 }
-/** 提取 JavStore 详情页 CLICK HERE! 对应的绝对预览图地址。 */
-/** @param {any} $detailPage @param {string} detailUrl @param {unknown} [carNum] */
-export function parseJavStorePreview($detailPage, detailUrl, carNum) {
-    const normalizedCarNum = normalizeCarNum(carNum);
-    const target = normalizedCarNum ? javStoreIdentityKey(normalizedCarNum) : null;
-    for (const anchor of queryJavStoreElements($detailPage, "a")) {
-        if (!/^CLICK HERE!?$/.test(anchor.textContent?.trim() || "")) continue;
-        const previewHref = anchor.getAttribute("href"), previewUrl = normalizeJavStoreAssetUrl(previewHref, detailUrl);
-        if (!previewUrl) continue;
-        const tokens = javStoreIdentityTokens(javStoreUrlPath(previewHref || "", detailUrl) + " " + (anchor.getAttribute("title") || ""));
-        if (target && tokens.some(token => token !== target)) continue;
-        return previewUrl.replace(".th", "");
+
+/** @param {any} page @param {unknown} carNum @param {string} [baseUrl] */
+export function parseJavStoreSearch(page, carNum, baseUrl = "https://javstore.net") {
+    return inspectJavStoreSearch(page, carNum, baseUrl).candidates.map(candidate => candidate.url);
+}
+
+/** @param {any} page @param {string} detailUrl @param {unknown} [carNum] @param {boolean} [requireIdentity] */
+export function inspectJavStorePreview(page, detailUrl, carNum, requireIdentity = false) {
+    const normalized = normalizeCarNum(carNum);
+    const target = normalized ? movieCodeKey(normalized) : null;
+    const articles = queryJavStoreElements(page, "main article");
+    const body = articles.find(article => article.querySelector("h1")) || articles[0] || page;
+    const titleTokens = queryJavStoreElements(body, "h1").flatMap(node => proseIdentityTokens(node.textContent || ""));
+    if (target && hasConflict(titleTokens, target)) return { url: null, reason: "identity" };
+    const confirmed = Boolean(target && titleTokens.includes(target));
+    let reason = null;
+    for (const anchor of queryJavStoreElements(body, "a[href]")) {
+        if (anchor.closest("aside, nav, header, footer")) continue;
+        const href = anchor.getAttribute("href") || "";
+        const previewUrl = normalizeJavStoreAssetUrl(href, detailUrl);
+        const explicit = /^CLICK HERE!?$/i.test(anchor.textContent?.trim() || "");
+        if (!explicit) {
+            if (previewUrl && /_s\.jpg$/i.test(new URL(previewUrl).pathname)) reason ||= "structure";
+            continue;
+        }
+        if (!previewUrl) { reason ||= "structure"; continue; }
+        const tokens = [...identityTokens(javStoreUrlPath(href, detailUrl)), ...proseIdentityTokens(anchor.getAttribute("title") || "")];
+        if (target && (hasConflict(tokens, target) || requireIdentity && !confirmed && !tokens.includes(target))) {
+            reason = "identity";
+            continue;
+        }
+        return { url: previewUrl.replace(/\.th(?=\.[a-z]+(?:[?#]|$))/i, ""), reason: null };
     }
-    if (!target) return null;
+    if (!target) return { url: null, reason };
     const candidates = new Set();
-    for (const image of queryJavStoreElements($detailPage, "main img[src]")) {
+    const selector = articles.length ? "img[src]" : "main img[src]";
+    for (const image of queryJavStoreElements(body, selector)) {
         if (image.closest("aside, nav, header, footer")) continue;
         const url = normalizeJavStoreAssetUrl(image.getAttribute("src"), detailUrl);
         if (!url || !/_s\.jpg$/i.test(new URL(url).pathname)) continue;
         const anchor = image.closest("a[href]");
-        const evidence = [javStoreUrlPath(url, detailUrl), image.getAttribute("alt") || "", image.getAttribute("title") || ""];
-        if (anchor) evidence.push(javStoreUrlPath(anchor.getAttribute("href") || "", detailUrl), anchor.getAttribute("title") || "");
-        if (matchesJavStoreIdentity(evidence, target)) candidates.add(url);
+        const tokens = [...identityTokens(javStoreUrlPath(url, detailUrl)), ...proseIdentityTokens(image.getAttribute("alt") || ""), ...proseIdentityTokens(image.getAttribute("title") || "")];
+        if (anchor) tokens.push(...identityTokens(javStoreUrlPath(anchor.getAttribute("href") || "", detailUrl)), ...proseIdentityTokens(anchor.getAttribute("title") || ""));
+        if (!tokens.includes(target) || hasConflict(tokens, target)) { reason = "identity"; continue; }
+        candidates.add(url);
     }
-    return candidates.size === 1 ? [...candidates][0] : null;
+    if (candidates.size === 1) return { url: [...candidates][0], reason: null };
+    if (candidates.size > 1) reason = "identity";
+    if (!articles.length && queryJavStoreElements(body, "main h1").length) reason ||= "structure";
+    return { url: null, reason };
+}
+
+/** @param {any} page @param {string} detailUrl @param {unknown} [carNum] */
+export function parseJavStorePreview(page, detailUrl, carNum) {
+    return inspectJavStorePreview(page, detailUrl, carNum).url;
 }

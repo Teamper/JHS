@@ -118,7 +118,7 @@ function showWebDavCredentialError(root, dependencies, error) {
     root.data("jhsWebDavCredentialError", error);
     root.find("#jhs-webdav-credential-error").remove();
     root.find("#webDavPassword").attr({ "aria-invalid": "true", "aria-describedby": "jhs-webdav-credential-error" }).closest(".jhs-setting-row")
-        .after(dependencies.jquery('<p id="jhs-webdav-credential-error" class="jhs-setting-help" role="alert"></p>').text(error.message));
+        .after(dependencies.jquery('<p id="jhs-webdav-credential-error" class="jhs-field-error" role="alert"></p>').text(error.message));
 }
 
 /** Load all settings from storage into the main settings dialog form fields. */
@@ -542,7 +542,7 @@ function addLabelTag(dependencies, container, text, root) {
             current.closest(".keyword-label").remove();
             root.data(dirtyKey, true);
             root.data("jhsSettingsDraft")?.refresh();
-        }), null, { confirmText: "移除", cancelText: "取消" });
+        }), null, { confirmText: "移除", cancelText: "取消", tone: "danger" });
     }));
     target.append(node);
 }

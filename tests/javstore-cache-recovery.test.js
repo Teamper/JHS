@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import manifest, { createJavStoreAdapter } from "../src/integrations/javstore/manifest.js";
 import { createIntegrationRequestFacade } from "../src/app/integration-registry.js";
@@ -47,4 +49,14 @@ it("revalidates invalid HTML persisted by an older build before returning it", a
     recovered = true;
     expect((await adapter.getImages({carNum:"ABC-123"}))[0].url).toContain("ABC-123_s.jpg");
     expect(request).toHaveBeenCalledTimes(3);
+});
+
+it.each([["MSFH-021", "msfh", 3], ["TENN-052", "tenn", 1]])("revalidates cached raw search HTML for %s with structured evidence", async (code, name, detailCount) => {
+    const read = suffix => readFileSync(join(import.meta.dirname, `fixtures/integrations/javstore/${name}-${suffix}.html`), "utf8");
+    let nextDetail = 0;
+    const { adapter, facade, request } = chain(url => url.includes("/search?") ? read("search") : read(`detail-${++nextDetail}`));
+    await facade.request({ providerId: "javstore", capability: "movie.images", method: "GET", url: adapter.getSearchUrl({ carNum: code }), responseType: "text", urlPolicy: { trustClass: "builtin-public", hosts: ["javstore.net"] } });
+    const images = await adapter.getImages({ carNum: code });
+    expect(images[0].url.toUpperCase()).toContain(code);
+    expect(request).toHaveBeenCalledTimes(detailCount + 1);
 });

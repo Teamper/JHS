@@ -166,7 +166,7 @@ export async function renderSnapshotPanel(dependencies) {
                                     try { clog.error("快照已删除，但列表刷新失败", t); } catch { /* committed deletion wins */ }
                                     try { show.error("已删除恢复点，请重新打开设置"); } catch { /* committed deletion wins */ }
                                 }
-                            }), null, { confirmText: "删除", cancelText: "取消" });
+                            }), null, { confirmText: "删除", cancelText: "取消", tone: "danger" });
                         }));
                     })), '<button type="button" class="jhs-btn jhs-btn--secondary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
                 }
@@ -219,11 +219,12 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
         content: s,
         area: utils.getResponsiveArea(["700px", "auto"]),
         scrollbar: false,
+        ...(hasChanges ? { skin: "jhs-confirm-actions" } : {}),
         ui: { body: "scroll" },
-        btn: hasChanges ? ["导入", "取消"] : ["关闭"],
+        btn: hasChanges ? ["取消", "导入"] : ["关闭"],
         anim: -1,
         end: () => { index = null; scope.dispose(); },
-        yes: async (/** @type {number} */ s) => {
+        ...(hasChanges ? { btn2: async (/** @type {number} */ s) => {
             if (!hasChanges) return void dialog.close(s);
             if (busy || scope.disposed || dependencies.isActive?.() === false) return;
             busy = true;
@@ -244,7 +245,7 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
             } finally { busy = false; try { releaseLoading(); } catch (r) { try { clog.warn("导入操作加载层关闭失败", r); } catch { /* committed data wins */ } } }
             if (scope.disposed || dependencies.isActive?.() === false) return;
             finishCommittedDataChange(dependencies, "已导入，页面即将刷新");
-        }
+        } } : {})
     });
     index = r;
 }
@@ -293,7 +294,7 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
             if (isCore) {
                 html += '<span class="jhs-badge jhs-badge--neutral">核心</span>';
             } else {
-                html += `<input type="checkbox" class="jhs-switch pm-toggle" role="switch" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
+                html += `<input type="checkbox" class="jhs-switch pm-toggle" role="switch" aria-label="启用 ${escapeHtml(productName)}" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
             }
             html += `</div>`;
         }

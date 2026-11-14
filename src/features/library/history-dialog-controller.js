@@ -94,7 +94,7 @@ export function buildActionButtons(record, documentRuntime = document) {
 
 /** Static edit-record form; values are back-filled via .val()/.text() so imported data stays inert. @param {{favorite?: boolean, downloaded?: boolean, watched?: boolean, blocked?: boolean}} flags */
 export function buildEditRecordForm(flags) {
-    return `\n            <div class="jhs-layout-8cddc29a">\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">番号</label>\n                    <input type="text" id="edit-carNum" class="jhs-field jhs-history-edit-field" readonly>\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">演员（用空格分隔）</label>\n                    <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field"></textarea>\n                </div>\n                <fieldset class="jhs-layout-da303dcf"><legend class="jhs-layout-27f87d75">状态</legend>\n                    <label class="jhs-option-row">收藏 <input type="checkbox" id="edit-favorite" class="jhs-checkbox" ${flags.favorite ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已下载 <input type="checkbox" id="edit-downloaded" class="jhs-checkbox" ${flags.downloaded ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已观看 <input type="checkbox" id="edit-watched" class="jhs-checkbox" ${flags.watched ? "checked" : ""}></label>\n                    <label class="jhs-option-row">屏蔽 <input type="checkbox" id="edit-blocked" class="jhs-checkbox" ${flags.blocked ? "checked" : ""}></label>\n                </fieldset>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">链接</label>\n                    <input type="text" id="edit-url" class="jhs-field jhs-history-edit-field">\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">备注</label>\n                    <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field"></textarea>\n                </div>\n            </div>\n        `;
+    return `\n            <div class="jhs-form-dialog jhs-ui jhs-layout-8cddc29a">\n                <div class="jhs-form-field jhs-layout-da303dcf">\n                    <label class="jhs-form-label jhs-layout-27f87d75" for="edit-carNum">番号</label>\n                    <input type="text" id="edit-carNum" class="jhs-field jhs-history-edit-field" readonly>\n                </div>\n                <div class="jhs-form-field jhs-layout-da303dcf">\n                    <label class="jhs-form-label jhs-layout-27f87d75" for="edit-names">演员（用空格分隔）</label>\n                    <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field"></textarea>\n                </div>\n                <fieldset class="jhs-form-field jhs-layout-da303dcf"><legend class="jhs-form-label jhs-layout-27f87d75">状态</legend>\n                    <label class="jhs-option-row">收藏 <input type="checkbox" id="edit-favorite" class="jhs-checkbox" ${flags.favorite ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已下载 <input type="checkbox" id="edit-downloaded" class="jhs-checkbox" ${flags.downloaded ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已观看 <input type="checkbox" id="edit-watched" class="jhs-checkbox" ${flags.watched ? "checked" : ""}></label>\n                    <label class="jhs-option-row">屏蔽 <input type="checkbox" id="edit-blocked" class="jhs-checkbox" ${flags.blocked ? "checked" : ""}></label>\n                </fieldset>\n                <div class="jhs-form-field jhs-layout-da303dcf">\n                    <label class="jhs-form-label jhs-layout-27f87d75" for="edit-url">链接</label>\n                    <input type="text" id="edit-url" class="jhs-field jhs-history-edit-field">\n                </div>\n                <div class="jhs-form-field jhs-layout-da303dcf">\n                    <label class="jhs-form-label jhs-layout-27f87d75" for="edit-remark">备注</label>\n                    <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field"></textarea>\n                </div>\n            </div>\n        `;
 }
 
 export class HistoryDialogController {
@@ -167,15 +167,14 @@ export class HistoryDialogController {
             ["hasDown", "down", "标记下载"], ["favorite", "fav", "标记收藏"], ["filter", "filter", "标记屏蔽"]
         ].map(([action, tone, label]) => `<button type="button" class="jhs-btn jhs-btn--${tone} multiple-history-${action}Btn jhs-layout-${action === "delete" ? "7daea5fa" : "2e003268"}">${label}</button>`).join("");
         let e = `\n            <div class="jhs-history-layout jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source" aria-label="按影片状态筛选记录">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号、标题或演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    ${batchActions}\n                </div>\n                <div id="table-container"></div>\n            </div>\n        `;
-        e = e.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">影片状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
+        e = e.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist" aria-label="记录视图"><button type="button" class="jhs-btn jhs-segmented__item active" role="tab" aria-selected="true" tabindex="0" data-history-view="state">影片状态</button><button type="button" class="jhs-btn jhs-segmented__item" role="tab" aria-selected="false" tabindex="-1" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" role="tab" aria-selected="false" tabindex="-1" data-history-view="offline">离线任务</button></div><div id="filterBox"');
         this.dialogId = this.dialog.open({
             type: 1,
             title: "鉴定记录",
-            ui: { body: "table" },
+            ui: { size: "xl", body: "table" },
             content: e,
             scrollbar: !1,
             shadeClose: !0,
-            area: this.domUi.getDialogArea("xl"),
             anim: -1,
             success: async (/** @type {any} */ e) => {
                 if (this.disposed || generation !== this.historyDialogGeneration) return;
@@ -220,9 +219,17 @@ export class HistoryDialogController {
                 })).on("change.jhsHistory", "#dataType", (async () => {
                     await this.reloadTable();
                 })).on("click.jhsHistory", "[data-history-view]", (async (/** @type {any} */ event) => {
-                    const view = this.jquery(event.currentTarget).data("history-view");
-                    root.find("[data-history-view]").removeClass("active"), this.jquery(event.currentTarget).addClass("active"), await this.showHistoryView(view);
-                })).on("click.jhsHistory", ".jhs-undo-activity", (async (/** @type {any} */ event) => {
+                    const tab = this.jquery(event.currentTarget), view = tab.data("history-view");
+                    root.find("[data-history-view]").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
+                    tab.addClass("active").attr({ "aria-selected": "true", tabindex: "0" });
+                    await this.showHistoryView(view);
+                })).on("keydown.jhsHistory", "#historyViewTabs [role='tab']", (/** @type {any} */ event) => {
+                    const tabs = root.find("#historyViewTabs [role='tab']"), index = tabs.index(event.currentTarget);
+                    if (index < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                    event.preventDefault();
+                    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : event.key === "ArrowRight" ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
+                    tabs.eq(next).trigger("focus").trigger("click");
+                }).on("click.jhsHistory", ".jhs-undo-activity", (async (/** @type {any} */ event) => {
                     const viewGeneration = this.historyViewGeneration;
                     try {
                         const result = await this.historyRepository.undo(this.jquery(event.currentTarget).data("transaction"));
@@ -306,9 +313,9 @@ export class HistoryDialogController {
         history.slice().reverse().forEach((/** @type {HistoryRecord} */ item) => {
             const offline = this.resolveLegacy("UnifiedOfflinePlugin"), provider = offline?.registry?.providers?.get?.(item.providerId);
             const unknown = item.status === "pending" || item.submissionOutcome === "unknown" || !item.submissionOutcome && item.status === "failed" && ["TIMEOUT", "NETWORK_ERROR", "ABORTED"].includes(item.errorCode);
-            const actions = this.jquery("<div class=\"jhs-toolbar\"></div>").append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-copy-offline\">复制资源</button>").attr("data-resource", item.resource));
-            if (offline && provider) actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-retry-offline\"></button>").text(unknown ? "核实后重试" : "重试").attr("data-id", item.id));
-            if (provider && typeof provider.openUrl === "function") actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-open-offline\">打开服务</button>").attr("data-id", item.id));
+            const actions = this.jquery("<div class=\"jhs-toolbar\"></div>").append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary jhs-copy-offline\">复制资源</button>").attr("data-resource", item.resource));
+            if (offline && provider) actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary jhs-retry-offline\"></button>").text(unknown ? "核实后重试" : "重试").attr("data-id", item.id));
+            if (provider && typeof provider.openUrl === "function") actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary jhs-open-offline\">打开服务</button>").attr("data-id", item.id));
             actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-btn--danger jhs-delete-offline\">移除记录</button>").attr("data-id", item.id));
             const statuses = { submitted: "已提交", success: "已完成", failed: "提交失败", pending: "待提交" };
             const status = unknown ? "提交结果待确认" : item.submissionOutcome === "exists" ? "云端任务已存在" : statuses[/** @type {keyof typeof statuses} */ (item.status)] || "状态待确认";
@@ -345,7 +352,7 @@ export class HistoryDialogController {
     }
     createHistorySelectAllCheckbox() {
         const checkbox = this.document.createElement("input");
-        return checkbox.type = "checkbox", checkbox.className = "jhs-history-select-all", checkbox.setAttribute("aria-label", "选择当前筛选条件下的全部记录"),
+        return checkbox.type = "checkbox", checkbox.className = "jhs-checkbox jhs-history-select-all", checkbox.setAttribute("aria-label", "选择当前筛选条件下的全部记录"),
         checkbox.addEventListener("change", (() => {
             checkbox.checked ? (this.historySelectionModel.selectAllFiltered(), this.syncHistoryPageSelection()) : this.resetHistorySelection();
         })), checkbox;
@@ -411,7 +418,7 @@ export class HistoryDialogController {
             };
             if (t.hasClass("history-filterBtn")) {
                 const record = this.tableObj?.getRow(a)?.getData(), isBlocked = normalizeStateFlags(record?.stateFlags).blocked;
-                isBlocked ? void s(d) : this.domUi.confirm(e, `屏蔽「${escapeHtml(a)}」？`, (() => s(d)), { confirmText: "屏蔽" });
+                isBlocked ? void s(d) : this.domUi.confirm(e, `屏蔽「${escapeHtml(a)}」？`, (() => s(d)), { confirmText: "屏蔽", tone: "danger" });
             } else t.hasClass("history-favoriteBtn") ? void s(h) : t.hasClass("history-hasDownBtn") ? void s(g) : t.hasClass("history-hasWatchBtn") ? void s(p) : t.hasClass("history-deleteBtn") ? this.handleDelete(e, a) : t.hasClass("history-detailBtn") && void this.handleClickDetail(e, {
                 carNum: a,
                 url: i
@@ -450,7 +457,7 @@ export class HistoryDialogController {
                 } finally {
                     e.close();
                 }
-            }), { confirmText: "delete" === i ? "移除" : `标记${a}` });
+            }), { confirmText: "delete" === i ? "移除" : `标记${a}`, ...("delete" === i || i === d ? { tone: "danger" } : {}) });
         }));
     }
     /** 返回应用当前搜索、状态筛选和排序后的完整 History 数据。 */
@@ -686,7 +693,7 @@ export class HistoryDialogController {
                     const flags = normalizeStateFlags(e.getData().stateFlags);
                     /** @type {Array<[boolean, string, string]>} */
                     const badgeItems = [ [ flags.blocked, "filter", u ], [ flags.favorite, "fav", b ], [ flags.downloaded, "down", y ], [ flags.watched, "watch", k ] ];
-                    const badges = badgeItems.filter((item => item[0])).map((item => `<span class="jhs-badge jhs-badge--soft jhs-badge--${item[1]}">${item[2]}</span>`));
+                    const badges = badgeItems.filter((item => item[0])).map((item => `<span class="jhs-badge jhs-badge--${item[1]}">${item[2]}</span>`));
                     return badges.join(" ") || '<span class="jhs-badge jhs-badge--neutral">待鉴定</span>';
                 }
             }, {
@@ -769,7 +776,7 @@ export class HistoryDialogController {
             } catch (error) {
                 this.logger.error("移除历史记录失败:", error), this.notifications.error("记录移除失败，请重试");
             }
-        }), { confirmText: "移除" });
+        }), { confirmText: "移除", tone: "danger" });
     }
     /** @param {any} e @param {HistoryRecord} t */
     async handleClickDetail(e, t) {
@@ -804,9 +811,10 @@ export class HistoryDialogController {
         this.dialog.open({
             type: 1,
             title: `编辑记录：${carNum}`,
-            area: this.domUi.getDialogArea("sm"),
+            ui: { size: "sm", body: "scroll", initialFocus: ".layui-layer-btn0" },
+            skin: "jhs-confirm-actions",
             content: c,
-            btn: [ "保存", "取消" ],
+            btn: [ "取消", "保存" ],
             end: () => { closed = true; editRoot.find("textarea").off("input"); },
             success: (/** @type {any} */ layerEl, /** @type {number} */ _index) => {
                 editRoot = this.jquery(layerEl);
@@ -821,7 +829,7 @@ export class HistoryDialogController {
                 const remarkField = editRoot.find("#edit-remark");
                 remarkField.on("input", ((/** @type {any} */ event) => resize(this.jquery(event.currentTarget)))), resize(remarkField);
             },
-            yes: async (/** @type {number} */ index) => {
+            btn2: async (/** @type {number} */ index) => {
                 if (saving || !active()) return;
                 const nextNames = String(editRoot.find("#edit-names").val() || "").trim(), nextUrl = String(editRoot.find("#edit-url").val() || "").trim(), nextRemark = String(editRoot.find("#edit-remark").val() || "").trim(), nextFlags = {
                     favorite: editRoot.find("#edit-favorite").prop("checked"), downloaded: editRoot.find("#edit-downloaded").prop("checked"), watched: editRoot.find("#edit-watched").prop("checked"), blocked: editRoot.find("#edit-blocked").prop("checked")
@@ -829,7 +837,7 @@ export class HistoryDialogController {
                 const save = async () => {
                     if (saving || !active()) return;
                     saving = true;
-                    const button = editRoot.find(".layui-layer-btn0").attr("aria-disabled", "true").attr("aria-busy", "true");
+                    const button = editRoot.find(".layui-layer-btn1").attr("aria-disabled", "true").attr("aria-busy", "true");
                     try {
                         await this.historyRepository.patch(e.carNum, nextFlags, { type: "history-edit", replaceMetadata: !0, record: { ...e, names: nextNames, url: nextUrl, remark: nextRemark } });
                     } catch (error) {
@@ -844,7 +852,7 @@ export class HistoryDialogController {
                     try { if (active()) this.dialog.close(index); }
                     finally { saving = false; button.removeAttr("aria-disabled aria-busy"); }
                 };
-                if (!flags.blocked && nextFlags.blocked) return this.domUi.confirm(null, `屏蔽「${escapeHtml(e.carNum)}」？`, (() => void save()), { confirmText: "屏蔽" }), !1;
+                if (!flags.blocked && nextFlags.blocked) return this.domUi.confirm(null, `屏蔽「${escapeHtml(e.carNum)}」？`, (() => void save()), { confirmText: "屏蔽", tone: "danger" }), !1;
                 await save();
             }
         });

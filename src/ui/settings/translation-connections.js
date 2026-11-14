@@ -8,7 +8,6 @@ export const TRANSLATION_SETTINGS_STYLES = `
 .jhs-translation-settings fieldset,.jhs-translation-row{display:grid;gap:var(--jhs-space-3);min-width:0;padding:var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md)}
 .jhs-translation-settings label{display:grid;gap:var(--jhs-space-1);min-width:0}
 .jhs-translation-settings label.jhs-translation-choice{display:flex;align-items:center;gap:var(--jhs-space-2)}
-.jhs-translation-choice input[type=checkbox]{flex:none;width:18px;height:18px;margin:0}
 .jhs-translation-settings .jhs-field{width:100%;min-width:0;box-sizing:border-box}
 .jhs-translation-settings textarea{min-height:100px;resize:vertical}
 .jhs-translation-actions,.jhs-translation-fallback{display:flex;flex-wrap:wrap;align-items:center;gap:var(--jhs-space-2)}
@@ -18,7 +17,6 @@ export const TRANSLATION_SETTINGS_STYLES = `
 .jhs-translation-row > strong{color:var(--jhs-text)}
 .jhs-translation-output{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--jhs-text)}
 .jhs-translation-workspace[data-jhs-translation-masked] .jhs-translation-output{color:transparent!important;text-shadow:none!important;user-select:none;background:var(--jhs-surface-2)}
-.jhs-translation-meta{font-size:var(--jhs-font-size-sm);color:var(--jhs-text-muted)}
 .jhs-translation-range{max-height:220px;overflow:auto;overscroll-behavior:contain}
 `;
 /** Encrypted connection editing is separate from portable preferences and the durable request ledger. @param {{document:Document, scope:LifecycleScope, state:any, preferences:any, onSave:(value:any,revision:string|null)=>Promise<any>, onTest:(value:any,scope:LifecycleScope)=>Promise<any>, onPreferences:(value:any)=>Promise<any>, embedded?:boolean, bindDraft?:(editor:any)=>void}} options */
@@ -30,7 +28,7 @@ export function createTranslationConnections(options) {
     const button = (/** @type {HTMLElement} */ host, /** @type {string} */ label, /** @type {()=>any} */ run, owner = scope) => {
         const node = document.createElement("button");
         node.type = "button";
-        node.className = "jhs-btn jhs-btn--secondary";
+        node.className = label === "删除" ? "jhs-btn jhs-btn--danger jhs-btn--sm" : ["保存服务", "保存翻译偏好"].includes(label) ? "jhs-btn jhs-btn--primary" : "jhs-btn jhs-btn--secondary";
         node.textContent = label;
         let pending = false;
         owner.listen(node, "click", () => {
@@ -134,14 +132,13 @@ export function createTranslationConnections(options) {
         rowScope.listen(type, "change", renderType);
         rowScope.listen(name, "input", () => { legend.textContent = name.value || "新服务"; refreshChoices(); });
         rowScope.listen(enabled, "change", refreshChoices);
-        button(footer, "测试连接", async () => { result.textContent = "连接中…"; try {
+        button(footer, "测试连接", async () => { result.className = ""; result.textContent = "连接中…"; try {
             await options.onTest(read(), rowScope);
             if (!rowScope.disposed)
                 result.textContent = "连接成功";
         }
         catch (error) {
-            if (!rowScope.disposed)
-                result.textContent = translationErrorLabel(error);
+            if (!rowScope.disposed) { result.className = "jhs-field-error"; result.textContent = translationErrorLabel(error); }
         } }, rowScope);
         button(footer, "删除", () => { entries.splice(entries.findIndex(item => item.root === row), 1); rowScope.dispose(); row.closest("details")?.remove(); refreshChoices(); add.focus(); }, rowScope);
         row.append(footer, result);

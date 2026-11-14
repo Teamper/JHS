@@ -65,9 +65,9 @@ export class OtherSitesController {
                 [data-jhs-site-id="missAvBtn"],#missAvBtn { --jhs-brand-color:var(--jhs-site-missav); } [data-jhs-site-id="supJavBtn"],#supJavBtn { --jhs-brand-color:var(--jhs-site-supjav); }
                 [data-jhs-site-id="javDbBtn"],#javDbBtn { --jhs-brand-color:var(--jhs-site-javdb); } [data-jhs-site-id="javBusBtn"],#javBusBtn { --jhs-brand-color:var(--jhs-site-javbus); } [data-jhs-site-id="fanzaBtn"],#fanzaBtn { --jhs-brand-color:var(--jhs-site-dmm); }
                 .site-btn.is-checking { opacity:.65; pointer-events:none; }
-                .site-btn.is-available { border-color:var(--jhs-status-down-text); background:var(--jhs-status-down-tint); }
-                .site-btn.is-unavailable { border-color:var(--jhs-status-filter-text); background:var(--jhs-status-filter-tint); }
-                .site-btn.is-domain-error { border-color:var(--jhs-status-watch-text); background:var(--jhs-status-watch-tint); }
+                .site-btn.is-available { border-color:var(--jhs-success-text); background:var(--jhs-success-tint); color:var(--jhs-success-text); }
+                .site-btn.is-unavailable { border-color:var(--jhs-danger-text); background:var(--jhs-danger-tint); color:var(--jhs-danger-text); }
+                .site-btn.is-domain-error { border-color:var(--jhs-warning-text); background:var(--jhs-warning-tint); color:var(--jhs-warning-text); }
                 .site-tag { margin-left:var(--jhs-space-1); padding:var(--jhs-space-half) var(--jhs-space-1); border-radius:var(--jhs-radius-pill); background:var(--jhs-surface-2); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
                 .jhs-site-option { display:flex; align-items:center; gap:var(--jhs-space-2); }
             </style>`;
@@ -171,9 +171,9 @@ export class OtherSitesController {
     async detectOtherSites(e, view = { root: this.$(this.document), configs: this.siteConfigs, isActive: () => !0 }) {
         const t = view.root.find('[data-jhs-role="detect-sites"],#detectOtherSiteBtn').first(), n = t.text();
         if (!(e = normalizeCarNum(e))) return t.prop("disabled", !0), void this.log("跳过第三方站点检测：番号不可用");
-        return t.text("检测中").prop("disabled", !0).addClass("is-checking"), await mapLimit(view.configs, 4, (async (t) => {
+        return t.text("检测中").prop("disabled", !0).attr("aria-busy", "true").addClass("is-checking"), await mapLimit(view.configs, 4, (async (t) => {
             t.condition && !1 === t.condition(t.sourceCarNum) || await this.handleSite(e, t, view);
-        })), view.isActive?.() !== false && t.text(n).prop("disabled", !1).removeClass("is-checking");
+        })), view.isActive?.() !== false && t.text(n).prop("disabled", !1).removeAttr("aria-busy").removeClass("is-checking");
     }
     /** @param {JQueryHandle} e @param {string} t */
     setSiteState(e, t) {
@@ -286,7 +286,7 @@ export class OtherSitesController {
     renderSettingsArea(view = { root: this.$(this.document), configs: this.siteConfigs }) {
         const enabled = this.getEnabledSites(), target = view.root.find('[data-jhs-role="site-checkboxes"],#siteCheckboxes').first().empty();
         view.configs.forEach((config => {
-            const input = this.$('<input type="checkbox">').attr("data-site-id", config.id).prop("checked", enabled.includes(config.id));
+            const input = this.$('<input type="checkbox" class="jhs-checkbox">').attr("data-site-id", config.id).prop("checked", enabled.includes(config.id));
             target.append(this.$('<label class="jhs-site-option"></label>').append(input, this.$("<span></span>").text(SITE_NAMES[config.id] ?? "第三方站点")));
         }));
     }

@@ -5,7 +5,7 @@ export const SUBTITLE_WORKSPACE_STYLES = `
 .jhs-subtitles > :not(.jhs-subtitles__results) { flex-shrink:0; }
 .jhs-subtitles__filters,.jhs-subtitles__actions { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); align-items:center; }
 .jhs-subtitles__filters label { display:flex; flex:1 1 160px; flex-direction:column; gap:var(--jhs-space-1); }
-.jhs-subtitles input { min-width:0; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); color:var(--jhs-text); background:var(--jhs-surface); font:inherit; }
+.jhs-subtitles .jhs-field { min-width:0; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); color:var(--jhs-text); background:var(--jhs-surface); font:inherit; }
 .jhs-subtitles__results { min-height:144px; overflow-y:auto; overscroll-behavior:contain; flex:1; }
 .jhs-subtitles__row { padding:var(--jhs-space-3) 0; border-bottom:1px solid var(--jhs-border); overflow-wrap:anywhere; }
 .jhs-subtitles strong { color:var(--jhs-text); }
@@ -26,6 +26,7 @@ export function createSubtitleWorkspace(options) {
         const wrapper = document.createElement("label"), input = document.createElement("input");
         wrapper.append(label, input);
         input.type = "search";
+        input.className = "jhs-field";
         input.placeholder = placeholder;
         filters.append(wrapper);
         return input;

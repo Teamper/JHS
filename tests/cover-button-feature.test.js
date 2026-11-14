@@ -334,8 +334,9 @@ describe("native list card actions Feature", () => {
         trigger.click();
         expect(trigger.getAttribute("aria-expanded")).toBe("true");
         const first = current.document.querySelector(".jhs-owned-popover [role='menuitem']");
+        expect(first.textContent).toContain("屏蔽");
         first.dispatchEvent(new current.window.KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
-        expect(current.document.activeElement.textContent).toContain("屏蔽");
+        expect(current.document.activeElement.textContent).toContain("已观看");
 
         const siteLink = current.document.querySelector(".site-jable");
         siteLink.dispatchEvent(new current.window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));

@@ -9,7 +9,7 @@ import { createPrivacyPreferences, PRIVACY_STYLES } from "./privacy-controls.js"
 export const ENHANCEMENT_SETTINGS_STYLES = TRANSLATION_SETTINGS_STYLES + MEDIA_LIBRARY_STYLES + PRIVACY_STYLES + `
 .jhs-setting-section .jhs-media-connections,.jhs-setting-section .jhs-translation-settings,.jhs-setting-section .jhs-privacy-config{padding:0;background:transparent}
 .jhs-setting-section .jhs-media-connections fieldset,.jhs-setting-section .jhs-translation-settings fieldset{border:0;padding:0;grid-template-columns:minmax(0,1fr)}
-.jhs-setting-section :is(.jhs-media-connections,.jhs-translation-settings,.jhs-privacy-config) label.jhs-setting-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(100px,280px);align-items:center;gap:var(--jhs-space-3);width:auto;padding:var(--jhs-space-2) 0;border-bottom:1px solid var(--jhs-border)}
+.jhs-setting-section :is(.jhs-media-connections,.jhs-translation-settings,.jhs-privacy-config) label.jhs-setting-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(100px,280px);align-items:center;gap:var(--jhs-space-3);width:auto;padding:var(--jhs-space-2) 0;border-bottom:0}
 .jhs-setting-section [hidden]{display:none!important}
 .jhs-setting-section .jhs-select-trigger>.jhs-select-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .jhs-setting-section .jhs-translation-settings summary{cursor:pointer;padding:var(--jhs-space-2);color:var(--jhs-text);font-weight:var(--jhs-font-weight-semibold)}

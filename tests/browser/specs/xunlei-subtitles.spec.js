@@ -110,11 +110,11 @@ for (const theme of ["light", "dark"]) test(`Xunlei frozen records render, previ
     const preview = page.locator(".layui-layer").filter({ has: page.locator(".jhs-code-viewer") });
     await expect(preview).toContainText(extension === "srt" ? "literal text" : "Dialogue:");
     await expect(preview.locator(".jhs-code-viewer b")).toHaveCount(0);
-    await expectDownload(page, preview.locator(".layui-layer-btn0"), extension);
+    await expectDownload(page, preview.locator(".layui-layer-btn1"), extension);
     if (extension === "srt") {
       await preview.locator(".layui-layer-close").focus();
       await page.keyboard.press("Enter");
-    } else await preview.locator(".layui-layer-btn1").click();
+    } else await preview.locator(".layui-layer-btn0").click();
     await expect(preview).toHaveCount(0);
     await expect(previewButton).toBeFocused();
   }

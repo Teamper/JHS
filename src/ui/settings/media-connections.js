@@ -9,9 +9,9 @@ export const MEDIA_LIBRARY_STYLES = `
 .jhs-media-connection-editor { margin-bottom:var(--jhs-space-3); }
 .jhs-media-connection-editor > summary { padding:var(--jhs-space-2); cursor:pointer; color:var(--jhs-text); }
 .jhs-media-connections label { display:flex; flex-direction:column; gap:var(--jhs-space-1); min-width:0; width:100%; }
-.jhs-media-connections input:not([type=checkbox]) { width:100%; box-sizing:border-box; min-width:0; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); font:inherit; color:var(--jhs-text); background:var(--jhs-surface); }
+.jhs-media-connections .jhs-field { width:100%; box-sizing:border-box; min-width:0; }
 .jhs-media-connections input[aria-invalid="true"] { border-color:var(--jhs-danger); }
-.jhs-media-result--error { color:var(--jhs-danger); }
+.jhs-media-result--error { color:var(--jhs-danger-text); }
 .jhs-media-connections legend { color:var(--jhs-text); font-weight:var(--jhs-font-weight-semibold); }
 .jhs-media-connections .jhs-media-choice { flex-direction:row; align-items:center; }
 .jhs-media-connections__wide { grid-column:1/-1; }
@@ -28,7 +28,7 @@ export const MEDIA_LIBRARY_STYLES = `
 export function createMediaConnections(options) {
     const { document, scope } = options;
     const root = document.createElement("div");
-    root.className = "jhs-media-connections";
+    root.className = "jhs-media-connections jhs-ui";
     const enabledLabel = document.createElement("label"), enabled = document.createElement("input");
     enabled.type = "checkbox";
     enabled.className = "jhs-switch";
@@ -43,7 +43,7 @@ export function createMediaConnections(options) {
     const button = (/** @type {HTMLElement} */ host, /** @type {string} */ text, /** @type {() => void} */ action, owner = scope) => {
         const node = document.createElement("button");
         node.type = "button";
-        node.className = "jhs-btn jhs-btn--secondary jhs-btn--sm";
+        node.className = text === "移除此服务器" ? "jhs-btn jhs-btn--danger jhs-btn--sm" : text === "保存连接与启用状态" ? "jhs-btn jhs-btn--primary" : "jhs-btn jhs-btn--secondary jhs-btn--sm";
         node.textContent = text;
         owner.listen(node, "click", () => { action(); root.dispatchEvent(new (/** @type {any} */ (document.defaultView)).Event("input", { bubbles: true })); });
         host.append(node);

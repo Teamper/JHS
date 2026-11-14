@@ -19,7 +19,7 @@ export class ListBatchUi {
         this.disposed = false;
     }
 
-    /** @param {string} message @param {{confirmText?: string}} [options] */
+    /** @param {string} message @param {{confirmText?: string, tone?: string}} [options] */
     confirm(message, options = {}) {
         if (this.disposed) return Promise.resolve(false);
         return new Promise((resolve) => {
@@ -46,6 +46,8 @@ export class ListBatchUi {
                     title: "提示",
                     confirmText: options.confirmText || "开始处理",
                     cancelText: "取消",
+                    ...(options.tone ? { tone: options.tone } : {}),
+                    ui: { size: "sm", body: "scroll" },
                     shade: 0,
                     end: () => finish(false),
                 }, accept);

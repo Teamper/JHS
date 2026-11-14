@@ -3,7 +3,7 @@
 export function buildUiGeometryCss() {
     return `
     :is(.jhs-setting-layout,.jhs-resource-form,.jhs-rule-form,.jhs-record-list,.jhs-media-card,.jhs-metric) :where(h2,h3,h4,p,label,strong,dl,dt,dd) { margin:0; color:inherit; font-family:var(--jhs-font); line-height:var(--jhs-line-height-ui); }
-    :is(.jhs-setting-row,.jhs-form-field,.jhs-resource-form,.jhs-rule-form) :where(input,textarea,button) { font-weight:var(--jhs-font-weight-normal); }
+    :is(.jhs-setting-row,.jhs-form-field,.jhs-resource-form,.jhs-rule-form) :where(input,textarea) { font-weight:var(--jhs-font-weight-normal); }
     .jhs-setting-row { min-width:0; grid-template-columns:minmax(0,1fr) minmax(0,280px); gap:var(--jhs-space-4); }
     .jhs-setting-row__copy { display:grid; min-width:0; gap:var(--jhs-space-1); }
     .jhs-setting-row__control { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; min-width:0; gap:var(--jhs-space-2); }
@@ -22,11 +22,11 @@ export function buildUiGeometryCss() {
     .jhs-setting-layout .jhs-setting-subheading { margin-top:var(--jhs-space-3); }
     .jhs-choice-group { display:flex; flex-wrap:wrap; gap:var(--jhs-space-3); margin:0; padding:0; min-width:0; border:0; }
     .jhs-choice-group legend { padding:0; font-size:var(--jhs-font-size-sm); }
-    .jhs-choice { display:inline-flex; align-items:center; justify-content:center; min-height:44px; gap:var(--jhs-space-2); padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); cursor:pointer; color:var(--jhs-text); }
+    .jhs-choice { display:inline-flex; align-items:center; justify-content:center; min-height:var(--jhs-touch-target); gap:var(--jhs-space-2); padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); cursor:pointer; color:var(--jhs-text); }
     .jhs-choice:has(:checked) { background:var(--jhs-accent-tint); border-color:var(--jhs-accent); }
     .jhs-choice:has(:focus-visible) { outline:2px solid var(--jhs-focus); outline-offset:2px; }
     .jhs-owned-popover.jhs-popover { box-sizing:border-box; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; padding:var(--jhs-space-1); background:var(--jhs-surface); color:var(--jhs-text); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); box-shadow:var(--jhs-shadow-md); }
-    .jhs-owned-popover :is(button,a,[role=menuitem]) { min-width:0; max-width:100%; width:100%; white-space:normal; overflow-wrap:anywhere; height:auto; min-height:var(--jhs-control-height); text-align:left; justify-content:flex-start; }
+    .jhs-owned-popover :is(button,a,[role=menuitem],[role=menuitemradio]) { min-width:0; max-width:100%; width:100%; white-space:normal; overflow-wrap:anywhere; height:auto; min-height:var(--jhs-control-height); text-align:left; justify-content:flex-start; }
     .jhs-owned-popover .jhs-select-group { display:grid; gap:var(--jhs-space-1); }
     .jhs-task-times { display:grid; gap:var(--jhs-space-1); min-width:0; margin:var(--jhs-space-2) 0 0; font-size:var(--jhs-font-size-xs); color:var(--jhs-text-muted); }
     .jhs-task-times > div { display:grid; grid-template-columns:6em minmax(0,1fr); gap:var(--jhs-space-2); align-items:start; }
@@ -55,7 +55,7 @@ export function buildUiGeometryCss() {
     button.jhs-metric { cursor:pointer; }
     button.jhs-metric:hover { border-color:var(--jhs-border-strong); background:var(--jhs-surface-hover); }
     button.jhs-metric:focus-visible { outline:2px solid var(--jhs-focus); outline-offset:2px; }
-    @media(max-width:600px) { .jhs-setting-row,.jhs-task-setting-status { grid-template-columns:minmax(0,1fr); } .jhs-setting-row__control { width:100%; } .jhs-setting-row--action { grid-template-columns:minmax(0,1fr); } }
-    @media(max-width:767px),(pointer:coarse) { .jhs-owned-popover :is(button,a,[role=menuitem]) { min-height:44px; } }
+    @media(max-width:767px) { .jhs-setting-row,.jhs-task-setting-status { grid-template-columns:minmax(0,1fr); } .jhs-setting-row__control { width:100%; } .jhs-setting-row--action { grid-template-columns:minmax(0,1fr); } }
+    @media(max-width:767px),(pointer:coarse) { .jhs-owned-popover :is(button,a,[role=menuitem],[role=menuitemradio]) { min-height:var(--jhs-touch-target); } }
     `;
 }

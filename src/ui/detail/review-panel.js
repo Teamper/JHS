@@ -179,7 +179,7 @@ export class ReviewPanel {
             const text = String(this.window.getSelection()?.toString() || ""); if (!text) return;
             event.preventDefault();
             const confirm = this.ui?.confirm ?? ((/** @type {any} */ position, /** @type {string} */ message, /** @type {() => unknown} */ callback, /** @type {any} */ options) => /** @type {any} */ (globalThis).utils.q(position, message, callback, undefined, options));
-            await confirm(event, `屏蔽评论关键词「${escapeHtml(text)}」？<br>刷新页面后生效`, async () => { await this.saveKeyword(text); this.notify("ok", "已屏蔽，刷新页面后生效"); }, { confirmText: "屏蔽" });
+            await confirm(event, `屏蔽评论关键词「${escapeHtml(text)}」？<br>刷新页面后生效`, async () => { await this.saveKeyword(text); this.notify("ok", "已屏蔽，刷新页面后生效"); }, { confirmText: "屏蔽", tone: "danger" });
         });
     }
 

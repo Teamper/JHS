@@ -151,7 +151,7 @@ window.loading = function() {
                 content: "加载中…";
                 transform: translate(-50%, -50%);
             }
-            .image-hover-preview__error { padding: var(--jhs-space-3); color: var(--jhs-danger); }
+            .image-hover-preview__error { padding: var(--jhs-space-3); color: var(--jhs-danger-text); }
         `;
         document.head.appendChild(style);
     }

@@ -27,11 +27,11 @@ export const MAGNET_HUB_STYLES = `
     .magnet-title { overflow:hidden; margin-bottom:var(--jhs-space-1); padding-right:80px; font-weight:var(--jhs-font-weight-semibold); text-overflow:ellipsis; white-space:nowrap; }
     .magnet-info { display:flex; justify-content:space-between; margin-bottom:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
     .magnet-loading { padding:var(--jhs-space-4); text-align:center; }
-    .magnet-error { padding:var(--jhs-space-2); color:var(--jhs-danger); }
+    .magnet-error { padding:var(--jhs-space-2); color:var(--jhs-danger-text); }
     .jhs-magnet-view .magnet-result { padding:var(--jhs-space-3) var(--jhs-space-4)!important; }
     .jhs-magnet-view .magnet-copy { position:static!important; transform:none; display:flex; gap:var(--jhs-space-2); flex-wrap:wrap; margin-top:var(--jhs-space-2); }
     .jhs-magnet-controls { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-3); padding:var(--jhs-space-2); }
-    .jhs-magnet-controls label { display:flex; align-items:center; gap:var(--jhs-space-1); min-height:44px; cursor:pointer; }
+    .jhs-magnet-controls label { display:flex; align-items:center; gap:var(--jhs-space-1); min-height:var(--jhs-touch-target); cursor:pointer; }
     .magnet-info,.magnet-tags { overflow-wrap:anywhere; }
     @media (max-width:600px) { .magnet-info { display:block; } .magnet-title { padding-right:0; white-space:normal; } }
 `;
@@ -230,7 +230,10 @@ export class MagnetHubController {
             panel.empty().append(this.jquery('<div class="magnet-error" role="status"></div>').text("磁力查询结果处理失败，请检查资源规则后重试 ").append(this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" data-jhs-action="retry-magnets">重试</button>')));
         } finally {
             queryScope.dispose();
-            if (state.queryScope === queryScope) { state.releaseQuery?.(); state.releaseQuery = undefined; }
+            if (state.queryScope === queryScope) {
+                state.releaseQuery?.();
+                state.releaseQuery = undefined;
+            }
         }
     }
     /** Keep source failures separate from successful empty searches. */

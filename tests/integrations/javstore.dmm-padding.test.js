@@ -38,7 +38,7 @@ it.each([
     "https://pics.dmm.co.jp/digital/video/sone00918/sone00917pl.jpg",
     "https://pics.dmm.co.jp/digital/video/sone00917/sone00917-other.jpg",
     "https://pics.dmm.co.jp/digital/video/sone000917/sone000917pl.jpg",
-    "https://pics.dmm.co.jp/digital/video/1sone00917/1sone00917pl.jpg",
+    "https://pics.dmm.co.jp/digital/video/1sone00918/1sone00918pl.jpg",
 ])("retains conflicting image evidence from %s", src => {
     expect(parseJavStoreSearch(html.replace(cover, src), "SONE-917")).toEqual([]);
 });

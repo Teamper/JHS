@@ -223,7 +223,7 @@ export class UnifiedOfflineController {
         if (preferred) return preferred;
         const $ = this.getJQuery();
         return new Promise((resolve) => {
-            const content = $('<div class="jhs-form-dialog"><p>选择离线服务</p><div class="jhs-toolbar"></div></div>'), toolbar = content.find(".jhs-toolbar");
+            const content = $('<div class="jhs-form-dialog jhs-ui"><p>选择离线服务</p><div class="jhs-toolbar"></div></div>'), toolbar = content.find(".jhs-toolbar");
             let settled = false;
             let closed = false;
             /** @type {number|null} */ let index = null;
@@ -241,7 +241,7 @@ export class UnifiedOfflineController {
             };
             releaseScope = this.ownCleanup(() => { close(); finish(null); });
             candidates.forEach((candidate) => toolbar.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(`${candidate.provider.name} · ${candidate.availability.authState === "ready" ? "已就绪" : "状态未知"}`).on("click", () => finish(candidate, true))));
-            index = this.dialog.open({ type: 1, title: "选择离线服务", content, area: this.ui.getDialogArea?.("sm"), cancel: () => { closed = true; finish(null); }, end: () => { closed = true; finish(null); } });
+            index = this.dialog.open({ type: 1, title: "选择离线服务", content, ui: { size: "sm", body: "scroll" }, cancel: () => { closed = true; finish(null); }, end: () => { closed = true; finish(null); } });
         });
     }
 
@@ -289,9 +289,9 @@ export class UnifiedOfflineController {
     confirmRetry(provider) {
         if (this.scope.disposed) return Promise.resolve(false);
         return new Promise((resolve) => {
-            const $ = this.getJQuery(), content = $("<div></div>")
-                .append($("<div></div>").text(`请先在 ${provider.name} 核实任务。重新提交可能产生重复任务。`));
-            if (provider.openUrl) content.append($('<a target="_blank" rel="noopener noreferrer">打开云盘核实</a>').attr("href", provider.openUrl()));
+            const $ = this.getJQuery(), content = $('<div class="jhs-form-dialog jhs-ui"></div>')
+                .append($("<p></p>").text(`请先在 ${provider.name} 核实任务。重新提交可能产生重复任务。`));
+            if (provider.openUrl) content.append($('<a class="jhs-link" target="_blank" rel="noopener noreferrer">打开云盘核实</a>').attr("href", provider.openUrl()));
             let settled = false, release = () => {};
             /** @type {number|null} */ let index = null;
             /** @param {boolean} value */
@@ -304,7 +304,7 @@ export class UnifiedOfflineController {
             };
             release = this.ownCleanup(() => finish(false));
             index = this.dialog.open({
-                type: 0, title: "确认重新提交", content: content[0].outerHTML, ui: { initialFocus: ".layui-layer-btn0" },
+                type: 0, title: "确认重新提交", content: content[0].outerHTML, ui: { size: "sm", body: "scroll", initialFocus: ".layui-layer-btn0" },
                 skin: "jhs-confirm-actions", scrollbar: false, anim: -1, area: [this.ui.getDialogArea?.("sm")?.[0] || "480px", ""],
                 btn: ["取消", "已核实，重新提交"],
                 yes: () => finish(false), btn2: () => { finish(true); return false; },

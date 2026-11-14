@@ -54,7 +54,7 @@ export class MagnetResultsView {
         }
         for (const [value, label] of [["subtitle", "字幕"], ["4k", "4K"], ["uncensored", "无码/破解"]]) {
             const field = jquery("<label></label>").appendTo(controls);
-            jquery('<input type="checkbox">').val(value).appendTo(field);
+            jquery('<input type="checkbox" class="jhs-checkbox">').val(value).appendTo(field);
             field.append(panel[0].ownerDocument.createTextNode(label));
         }
         this.summary = jquery('<div class="magnet-query-status" role="status"></div>').appendTo(this.root);
@@ -88,7 +88,7 @@ export class MagnetResultsView {
             keys.add(key);
             let row = this.rows.get(key);
             if (!row) {
-                row = this.jquery('<div class="magnet-result"><div class="magnet-title"><span class="magnet-score"></span> <a></a></div><div class="magnet-info"></div><div class="magnet-tags"></div><div class="magnet-copy"><button type="button" class="jhs-btn jhs-btn--secondary copy-btn">复制链接</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button></div></div>');
+                row = this.jquery('<div class="magnet-result"><div class="magnet-title"><span class="magnet-score"></span> <a></a></div><div class="magnet-info"></div><div class="magnet-tags"></div><div class="magnet-copy"><button type="button" class="jhs-btn jhs-btn--secondary magnet-hub-btn copy-btn">复制链接</button><button type="button" class="jhs-btn jhs-btn--secondary magnet-hub-btn jhs-offline-btn">离线</button></div></div>');
                 this.rows.set(key, row);
             }
             const score = record._score.total;

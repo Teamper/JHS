@@ -773,7 +773,7 @@ export class ListPageCompatibilityService {
                         if (current.carNum !== n) throw new Error("影片信息已变化，请重试");
                         o || (o = await this.parseActressName(a)), await this.getRuntimeService("state").patch(n, { blocked: !0 }, { record: { ...this.findCarNumAndHref(t), carNum: n, url: a, names: o, publishTime: i, fc2Source } }), show.ok("已屏蔽");
                     } catch (s) { this.logger.error("屏蔽操作失败:", s), show.error("屏蔽失败，请重试"); }
-                }), undefined, { confirmText: "屏蔽" });
+                }), undefined, { confirmText: "屏蔽", tone: "danger" });
             } catch (t) { this.logger.error("右键菜单处理失败:", t); }
         }));
     }

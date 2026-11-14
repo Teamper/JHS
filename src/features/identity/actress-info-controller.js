@@ -2,7 +2,7 @@
 
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
-export const INFO_TAG_CSS = ".info-tag{background-color:var(--jhs-status-fav-tint);display:inline-flex;align-items:center;min-height:var(--jhs-control-height-sm);padding:0 var(--jhs-space-2);line-height:var(--jhs-line-height-tight);font-size:var(--jhs-font-size-xs);color:var(--jhs-status-fav-text);border:1px solid var(--jhs-status-fav-tint);border-radius:var(--jhs-radius-xs);box-sizing:border-box;white-space:nowrap}";
+export const INFO_TAG_CSS = ".info-tag{background-color:var(--jhs-accent-tint);display:inline-flex;align-items:center;min-height:var(--jhs-control-height-sm);padding:0 var(--jhs-space-2);line-height:var(--jhs-line-height-tight);font-size:var(--jhs-font-size-xs);color:var(--jhs-accent-text);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-xs);box-sizing:border-box;white-space:nowrap}";
 
 /** Manage optional actress information and cancel lookups when the setting or feature turns off. */
 export class ActressInfoController {

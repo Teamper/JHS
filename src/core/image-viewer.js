@@ -67,6 +67,10 @@ export function createImageViewer(runtimeScope) {
         /** @type {any} */ let releaseRuntime;
         /** @type {any} */ let releaseOwner;
         let adjusted = false, applying = false;
+        /** @type {Map<string, HTMLButtonElement>} */ const fitButtons = new Map();
+        const setFitState = (activeMode = "") => {
+            for (const [name, node] of fitButtons) node.setAttribute("aria-pressed", String(name === activeMode));
+        };
         const wasInert = workspace?.inert;
         if (workspace) workspace.inert = true;
         const session = { close(restoreFocus = true) {
@@ -99,6 +103,8 @@ export function createImageViewer(runtimeScope) {
             viewer.zoomTo(camera.ratio); viewer.moveTo(camera.x, camera.y);
             applying = false;
             adjusted = mode !== "default";
+            const wide = mode === "width" || mode === "default" && (imageKind === "contact-sheet" || imageKind !== "photo" && naturalHeight / naturalWidth >= 2);
+            setFitState(mode === "natural" ? "natural" : wide ? "width" : "contain");
         };
         /** @param {number} direction */
         const navigate = direction => direction < 0 ? viewer?.prev(false) : viewer?.next(false);
@@ -129,11 +135,12 @@ export function createImageViewer(runtimeScope) {
                 button("上一张", "chevron-left", "jhs-image-viewer-nav jhs-image-viewer-prev", () => navigate(-1), root);
                 button("下一张", "chevron-right", "jhs-image-viewer-nav jhs-image-viewer-next", () => navigate(1), root);
             }
-            button("放大图片", "放大", "", () => viewer.zoom(.1));
-            button("缩小图片", "缩小", "", () => viewer.zoom(-.1));
-            button("完整显示", "完整显示", "", () => applyView("contain"));
-            button("按宽度显示", "按宽度", "", () => applyView("width"));
-            button("原尺寸", "原尺寸", "", () => applyView("natural"));
+            button("放大图片", "放大", "", () => { viewer.zoom(.1); });
+            button("缩小图片", "缩小", "", () => { viewer.zoom(-.1); });
+            fitButtons.set("contain", button("完整显示", "完整显示", "", () => applyView("contain")));
+            fitButtons.set("width", button("按宽度显示", "按宽度", "", () => applyView("width")));
+            fitButtons.set("natural", button("原尺寸", "原尺寸", "", () => applyView("natural")));
+            setFitState("");
             counter = document.createElement("span"); counter.className = "jhs-image-viewer-count";
             counter.setAttribute("aria-live", "polite"); toolbar.appendChild(counter); viewer.footer.appendChild(toolbar);
             status = document.createElement("div"); status.className = "jhs-image-viewer-status"; status.setAttribute("role", "status"); status.hidden = true;
@@ -211,7 +218,7 @@ export function createImageViewer(runtimeScope) {
                 shown() { if (!scope.disposed) { viewer.viewer.removeAttribute("aria-labelledby"); viewer.viewer.querySelector(".jhs-image-viewer-close")?.focus({ preventScroll:true }); } },
                 view(/** @type {any} */ event) { if (!scope.disposed) { adjusted = false; updateNavigation(event.detail.index); if (status) status.hidden = true; if (counter) counter.textContent = `${event.detail.index + 1} / ${images.length}`; } },
                 viewed() { if (!scope.disposed) applyView(); },
-                zoom() { if (!applying) adjusted = true; }, move() { if (!applying) adjusted = true; },
+                zoom() { if (!applying) { adjusted = true; setFitState(""); } }, move() { if (!applying) { adjusted = true; setFitState(""); } },
                 hidden() { session.close(); }
             });
             // The shared scroll lock owns compensation and nested locks, not Viewer's body padding.

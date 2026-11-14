@@ -25,15 +25,18 @@ describe("dialog service", () => {
         expect(service.confirm("confirm", { icon: 3 }, yes)).toBe(2);
         expect(service.alert("done")).toBe(3);
         expect(layer.close).toHaveBeenCalledWith(1);
-        expect(layer.open).toHaveBeenCalledWith({ title: "dialog", zIndex: JHS_Z_INDEX.layer });
-        expect(layer.confirm).toHaveBeenCalledWith("confirm", { icon: 3, zIndex: JHS_Z_INDEX.layer }, yes);
-        expect(layer.alert).toHaveBeenCalledWith("done", { zIndex: JHS_Z_INDEX.layer });
+        expect(layer.open).toHaveBeenCalledWith(expect.objectContaining({ title: "dialog", zIndex: JHS_Z_INDEX.layer, success: expect.any(Function), end: expect.any(Function) }));
+        const [, confirmOptions, onCancel, onConfirm] = layer.confirm.mock.calls[0];
+        expect(confirmOptions).toMatchObject({ icon: 3, zIndex: JHS_Z_INDEX.layer, skin: "jhs-confirm-actions", btn: ["取消", "确定"] });
+        expect(onConfirm).toBe(yes);
+        expect(typeof onCancel).toBe("function");
+        expect(layer.alert).toHaveBeenCalledWith("done", expect.objectContaining({ zIndex: JHS_Z_INDEX.layer, success: expect.any(Function), end: expect.any(Function) }));
     });
 
-    it("preserves an explicit caller z-index", () => {
+    it("supports an explicit ui: false opt-out and preserves caller z-index", () => {
         const layer = { open: vi.fn(() => 1), close: vi.fn(), confirm: vi.fn(), alert: vi.fn() };
         const service = new DialogService(new LayerDialogAdapter(layer));
-        service.open({ zIndex: 42 });
+        service.open({ zIndex: 42, ui: false });
         expect(layer.open).toHaveBeenCalledWith({ zIndex: 42 });
     });
 });

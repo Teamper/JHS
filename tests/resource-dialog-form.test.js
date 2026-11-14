@@ -120,7 +120,7 @@ describe("resource settings dialogs", () => {
         form.find('[name="enabled"]').prop("checked", false);
         form.find('[name="priority"]').val("73");
         form.find('[name="searchUrlTemplate"]').val("https://example.org/search?q={keyword}");
-        const first = options.yes(1), repeated = options.yes(1);
+        const first = options.btn2(1), repeated = options.btn2(1);
         await Promise.all([first, repeated]);
         expect(test.resourceSettings.updateArray).toHaveBeenCalledOnce();
         expect(test.records.customMagnetSources[0]).toMatchObject({ name: "测试来源", enabled: false, priority: 73 });
@@ -128,7 +128,7 @@ describe("resource settings dialogs", () => {
         test.plugin.openSourceDialog(test.records.customMagnetSources[0]);
         const edit = test.dialog.open.mock.calls[1][0];
         edit.content.find('[name="name"]').val("修改来源");
-        await edit.yes(2);
+        await edit.btn2(2);
         expect(test.records.customMagnetSources).toHaveLength(1);
         expect(test.records.customMagnetSources[0]).toMatchObject({ id: originalId, name: "修改来源" });
     });
@@ -139,7 +139,7 @@ describe("resource settings dialogs", () => {
         const options = test.dialog.open.mock.calls[0][0];
         options.content.find('[name="name"]').val("坏地址");
         options.content.find('[name="searchUrlTemplate"]').val("javascript:void(0)");
-        await options.yes(1);
+        await options.btn2(1);
         expect(test.resourceSettings.updateArray).not.toHaveBeenCalled();
         expect(test.dialog.close).not.toHaveBeenCalled();
         expect(options.content.find('[name="name"]').val()).toBe("坏地址");
@@ -153,11 +153,11 @@ describe("resource settings dialogs", () => {
         const options = test.dialog.open.mock.calls[0][0];
         options.content.find('[name="name"]').val("重试来源");
         options.content.find('[name="searchUrlTemplate"]').val("https://example.org/search?q={keyword}");
-        await options.yes(1);
+        await options.btn2(1);
         expect(test.dialog.close).not.toHaveBeenCalled();
         expect(options.content.find('[name="name"]').val()).toBe("重试来源");
         expect(test.records.customMagnetSources).toHaveLength(0);
-        await options.yes(1);
+        await options.btn2(1);
         expect(test.records.customMagnetSources).toHaveLength(1);
         expect(test.dialog.close).toHaveBeenCalledExactlyOnceWith(1);
     });
@@ -169,7 +169,7 @@ describe("resource settings dialogs", () => {
         const options = test.dialog.open.mock.calls[0][0];
         options.content.find('[name="name"]').val("重试来源");
         options.content.find('[name="searchUrlTemplate"]').val("https://example.org/search?q={keyword}");
-        await options.yes(1);
+        await options.btn2(1);
         expect(logger.error).toHaveBeenCalledWith("资源设置操作失败", error);
         expect(test.notifications.error).toHaveBeenCalledExactlyOnceWith("资源设置保存失败，请重试");
         expect(test.dialog.close).not.toHaveBeenCalled();
@@ -185,14 +185,14 @@ describe("resource settings dialogs", () => {
         form.find('[name="enabled"]').prop("checked", false);
         form.find('[name="weight"]').val("15");
         form.find('[name="penalty"]').val("-12");
-        await options.yes(1);
+        await options.btn2(1);
         const key = kind === "tag" ? "magnetTagRules" : "magnetFilterRules";
         expect(test.records[key][0]).toMatchObject({ name: "测试规则", enabled: false, ...(kind === "tag" ? { weight: 15 } : { penalty: -12 }) });
         const id = test.records[key][0].id;
         test.plugin.openRuleDialog(kind, test.records[key][0]);
         const edit = test.dialog.open.mock.calls[1][0];
         edit.content.find('[name="name"]').val("修改规则");
-        await edit.yes(2);
+        await edit.btn2(2);
         expect(test.records[key]).toHaveLength(1);
         expect(test.records[key][0]).toMatchObject({ id, name: "修改规则" });
     });
@@ -204,7 +204,7 @@ describe("resource settings dialogs", () => {
         options.content.find('[name="name"]').val("错误正则");
         options.content.find('[name="type"]').val("regex");
         options.content.find('[name="pattern"]').val("[");
-        await options.yes(1);
+        await options.btn2(1);
         expect(test.resourceSettings.updateArray).not.toHaveBeenCalled();
         expect(test.dialog.close).not.toHaveBeenCalled();
         expect(options.content.find('[name="pattern"]').val()).toBe("[");

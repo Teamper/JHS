@@ -249,7 +249,7 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers disabled optional settings dependencies");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
-  await injectUserscriptRuntime(page, { disabledPlugins: ["OtherSitePlugin", "BusImgPlugin", "UnknownLegacyPlugin"] });
+  await injectUserscriptRuntime(page, { disabledPlugins: ["OtherSitePlugin", "BusImgPlugin", "UnknownLegacyPlugin"], settingOverrides: { enableMediaLibrary: true } });
   await page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.recordError({ source: "feature-runtime", featureId: "list", message: "synthetic feature failure" }));
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");

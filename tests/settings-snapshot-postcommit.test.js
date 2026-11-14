@@ -37,7 +37,7 @@ describe("settings backup post-commit boundary", () => {
         const backup = { data_version: 3, setting: { themeMode: "dark" } };
         showDiffPreview(diff, backup, null, dialog, deps);
 
-        await options.yes(7);
+        await options.btn2(7);
 
         expect(storage.createSnapshot).not.toHaveBeenCalled();
         expect(storage.importData).toHaveBeenCalledExactlyOnceWith(backup, expect.objectContaining({ signal: expect.any(AbortSignal), assertActive: expect.any(Function) }));
@@ -88,7 +88,7 @@ describe("settings backup post-commit boundary", () => {
         const diff = { summary: { added: 1, removed: 0, modified: 0, unchanged: 0 }, stores: { appData: { status: "added", oldCount: 0, newCount: 1, added: [1], removed: [], modified: [] } } };
         showDiffPreview(diff, { data_version: 3 }, null, dialog, deps);
 
-        await options.yes(7);
+        await options.btn2(7);
 
         expect(deps.notifications.error).toHaveBeenCalledWith("数据导入失败，请检查文件");
         expect(deps.logger.error).toHaveBeenCalledWith(expect.objectContaining({ message: "synthetic write failure" }));

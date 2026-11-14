@@ -98,7 +98,7 @@ const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-act
         expect(commandbar).not.toMatch(/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/);
         expect(commandbar).not.toMatch(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/);
         expect(commandbar).toMatch(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/);
-        expect(commandbar).toMatch(/@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/);
+        expect(commandbar).toMatch(/@media \(max-width:\s*767px\)[\s\S]*?html\.jhs-fab-mounted\s+\.jhs-page-commandbar\s*\{[^}]*display:\s*none/);
     });
 
     it("keeps playback on the native list and scopes its page meaning", () => {

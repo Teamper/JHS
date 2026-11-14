@@ -72,7 +72,7 @@ for(const theme of ["light","dark"]){
     await capture(page,info,`records-expanded-${theme}`);
     const lastPage=dialog.locator('.tabulator-page[data-page=last]'); await lastPage.scrollIntoViewIfNeeded(); await expect(lastPage).toBeInViewport({ratio:1});
     for(const [label,scene] of [['操作记录','activity'],['离线任务','offline']]){
-      await dialog.getByRole('button',{name:label,exact:true}).click(); await expect(dialog.locator('.jhs-record-card')).toHaveCount(8);
+      await dialog.getByRole('tab',{name:label,exact:true}).click(); await expect(dialog.locator('.jhs-record-card')).toHaveCount(8);
       await expect.poll(()=>dialog.locator('.jhs-record-card').evaluateAll(nodes=>nodes[1].getBoundingClientRect().top-nodes[0].getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(12);
       await contained(dialog); await capture(page,info,`${scene}-${theme}`);
     }

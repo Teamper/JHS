@@ -298,9 +298,9 @@ export class OneOneFiveMatchController {
     openMatchesDialog(carNum, matches) {
         const links = matches.map((/** @type {any} */ match) => {
             const url = this.safePlayUrl(match);
-            return url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(match.name)}</a>` : `<span>${escapeHtml(match.name)} · 不可播放</span>`;
+            return url ? `<a class="jhs-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(match.name)}</a>` : `<span>${escapeHtml(match.name)} · 不可播放</span>`;
         }).join("<br>");
-        this.dialog.open({ type: 1, title: `${carNum} ${PRODUCT_NAMES.one115} 匹配`, content: `<div class="jhs-dialog-content">${links}</div>`, area: ["560px", "auto"] });
+        this.dialog.open({ type: 1, title: `${carNum} ${PRODUCT_NAMES.one115} 匹配`, ui: { size: "md", body: "scroll" }, content: `<div class="jhs-dialog-content jhs-ui">${links}</div>` });
     }
 
     /** @param {any[]} matches @param {string} carNum @param {HTMLElement} trigger */

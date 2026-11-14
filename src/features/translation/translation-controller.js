@@ -7,7 +7,7 @@ import { translationErrorLabel } from "../../core/translation-model.js";
 
 const TRANSLATION_STYLES = `
     .translated-title { margin-top:var(--jhs-space-2); color:var(--jhs-text); font-size:var(--jhs-font-size-lg); font-weight:var(--jhs-font-weight-normal); line-height:var(--jhs-line-height-ui); }
-    .translated-title.is-error { color:var(--jhs-danger); }
+    .translated-title.is-error { color:var(--jhs-danger-text); }
 `;
 
 /** Feature-owned detail and list title translation with a narrow legacy attachment point. */

@@ -86,10 +86,20 @@ export function buildUiPrimitivesCss() {
         color: var(--jhs-accent-text-on);
     }
 
-    :is(.jhs-btn--secondary, .jhs-btn--muted, .site-btn) {
+    :is(.jhs-btn--secondary, .site-btn) {
         border-color: var(--jhs-border);
         background: var(--jhs-surface);
         color: var(--jhs-text);
+    }
+    .jhs-btn--muted {
+        border-color: var(--jhs-border);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text-muted);
+    }
+    .jhs-btn--ghost {
+        border-color: transparent;
+        background: transparent;
+        color: var(--jhs-text-muted);
     }
     .jhs-btn--danger {
         border-color: var(--jhs-danger);
@@ -102,10 +112,16 @@ export function buildUiPrimitivesCss() {
         color: var(--jhs-danger-text-on);
         filter: brightness(.92);
     }
-    .jhs-btn--ghost {
+    .jhs-btn--ghost.jhs-btn--danger {
         border-color: transparent;
         background: transparent;
-        color: var(--jhs-text-muted);
+        color: var(--jhs-danger-text);
+    }
+    .jhs-btn--ghost.jhs-btn--danger:hover {
+        border-color: var(--jhs-danger);
+        background: var(--jhs-danger-tint);
+        color: var(--jhs-danger-text);
+        filter: none;
     }
     .jhs-btn--dark {
         border-color: var(--jhs-border-strong);
@@ -535,13 +551,17 @@ export function buildUiPrimitivesCss() {
         background: var(--jhs-accent-tint);
         color: var(--jhs-accent);
     }
-    .jhs-badge--danger, .card-tag {
-        background: var(--jhs-status-filter-tint);
-        color: var(--jhs-status-filter-text);
+    .jhs-badge--danger {
+        background: var(--jhs-danger-tint);
+        color: var(--jhs-danger-text);
     }
     .jhs-badge--success {
-        background: var(--jhs-status-down-tint);
-        color: var(--jhs-status-down-text);
+        background: var(--jhs-success-tint);
+        color: var(--jhs-success-text);
+    }
+    .card-tag {
+        background: var(--jhs-status-filter-tint);
+        color: var(--jhs-status-filter-text);
     }
     .jhs-badge--neutral { border-color: var(--jhs-border); background: var(--jhs-surface-2); color: var(--jhs-text-muted); }
     .jhs-badge--filter { background: var(--jhs-status-filter-tint); color: var(--jhs-status-filter-text); }
@@ -564,6 +584,7 @@ export function buildUiPrimitivesCss() {
         padding-inline: var(--jhs-space-2);
     }
     :where(.jhs-pagination, #actress-pagination, #nv-pagination-bar) .pagination-btn.active,
+    :where(.jhs-pagination, #actress-pagination, #nv-pagination-bar) .pagination-btn.is-current,
     :where(.jhs-pagination, #actress-pagination, #nv-pagination-bar) .pagination-btn[aria-current="page"] {
         border-color: var(--jhs-accent);
         background: var(--jhs-accent);
@@ -584,14 +605,23 @@ export function buildUiPrimitivesCss() {
         text-align: center;
     }
     .jhs-state--error, .magnet-error {
-        border-color: var(--jhs-status-filter-text);
-        background: var(--jhs-status-filter-tint);
-        color: var(--jhs-status-filter-text);
+        border-color: var(--jhs-danger);
+        background: var(--jhs-danger-tint);
+        color: var(--jhs-danger-text);
     }
     .jhs-state__content { display:grid; gap:var(--jhs-space-1); justify-items:center; }
     .jhs-state__title { margin:0; color:inherit; font-size:var(--jhs-font-size-md); font-weight:var(--jhs-font-weight-semibold); }
     .jhs-state__description { margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
     .jhs-panel-state { padding:var(--jhs-space-4) 0; color:var(--jhs-text-muted); text-align:center; }
+    .jhs-panel-state.is-error { color:var(--jhs-danger-text); }
+    .jhs-dialog-content { padding:var(--jhs-space-4); }
+    .jhs-form-dialog { display:grid; gap:var(--jhs-space-3); padding:var(--jhs-space-4); min-width:0; }
+    .jhs-form-dialog__body, .jhs-form-field { display:grid; gap:var(--jhs-space-1); min-width:0; }
+    .jhs-form-label, .jhs-form-dialog__title { color:var(--jhs-text); font-size:var(--jhs-font-size-sm); font-weight:var(--jhs-font-weight-semibold); }
+    .jhs-form-dialog :where(.jhs-field,.jhs-select,.jhs-textarea) { width:100%; }
+    .jhs-option-row { display:flex; align-items:center; gap:var(--jhs-space-2); min-height:var(--jhs-control-height); cursor:pointer; }
+    .jhs-list-btn-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); margin:var(--jhs-space-2) 0; }
+    .jhs-translation-meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
     .jhs-task-status { padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
     .jhs-task-status__name { color:var(--jhs-text); font-weight:var(--jhs-font-weight-semibold); }
     .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
@@ -652,9 +682,9 @@ export function buildUiPrimitivesCss() {
     .jhs-dialog .layui-layer-title {
         display: flex;
         align-items: center;
-        min-height: 48px;
+        min-height: var(--jhs-touch-target);
         box-sizing: border-box;
-        padding: 0 52px 0 var(--jhs-space-4);
+        padding: 0 var(--jhs-touch-target) 0 var(--jhs-space-4);
         border-bottom: 1px solid var(--jhs-border);
         background: var(--jhs-surface);
         color: var(--jhs-text);
@@ -698,6 +728,11 @@ export function buildUiPrimitivesCss() {
         background: var(--jhs-accent) !important;
         color: var(--jhs-accent-text-on) !important;
     }
+    .layui-layer.jhs-confirm-actions.jhs-confirm-actions--danger .layui-layer-btn .layui-layer-btn1 {
+        border-color: var(--jhs-danger) !important;
+        background: var(--jhs-danger) !important;
+        color: var(--jhs-danger-text-on) !important;
+    }
 
     .tabulator {
         overflow: hidden;
@@ -716,7 +751,7 @@ export function buildUiPrimitivesCss() {
         color: var(--jhs-text) !important;
     }
     .tabulator .tabulator-row {
-        min-height: 44px;
+        min-height: var(--jhs-touch-target);
         border-color: var(--jhs-border) !important;
         background: var(--jhs-surface) !important;
         color: var(--jhs-text) !important;
@@ -726,7 +761,7 @@ export function buildUiPrimitivesCss() {
     }
     .tabulator .tabulator-cell {
         display: inline-flex;
-        min-height: 44px;
+        min-height: var(--jhs-touch-target);
         align-items: center;
         border-right: 0 !important;
         color: var(--jhs-text) !important;
@@ -810,6 +845,7 @@ export function buildUiPrimitivesCss() {
         background: var(--jhs-surface);
     }
     .magnet-result {
+        position: relative;
         min-height: 68px;
         padding: var(--jhs-space-3) 190px var(--jhs-space-3) var(--jhs-space-4) !important;
         border-bottom: 1px solid var(--jhs-border) !important;
@@ -828,7 +864,7 @@ export function buildUiPrimitivesCss() {
     }
     .magnet-title a {
         display: inline-block;
-        max-width: calc(100% - 52px);
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         vertical-align: bottom;
@@ -842,6 +878,7 @@ export function buildUiPrimitivesCss() {
         color: var(--jhs-text-muted) !important;
     }
     .magnet-copy {
+        position: absolute;
         top: 50% !important;
         right: var(--jhs-space-3) !important;
         display: flex;
@@ -861,8 +898,8 @@ export function buildUiPrimitivesCss() {
     }
     .magnet-hub-btn.copied {
         border-color: transparent !important;
-        background: var(--jhs-status-down-tint) !important;
-        color: var(--jhs-status-down-text) !important;
+        background: var(--jhs-success-tint) !important;
+        color: var(--jhs-success-text) !important;
     }
 
     @media (max-width: 767px) {
@@ -1091,7 +1128,10 @@ export function buildUiPrimitivesCss() {
 
         .jhs-layout-f4e719ae { margin:var(--jhs-space-2) 0 }
 
-        .jhs-layout-f5f47b30 { margin-left:calc(var(--jhs-space-5) * 4);width:400px; }
+        .jhs-layout-f5f47b30 { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); width:min(100%, 440px); max-width:100%; margin:var(--jhs-space-3) 0; }
+        .jhs-layout-f5f47b30 .jhs-field { flex:1 1 200px; min-width:0; }
+        .page-box .pagination { flex-wrap:wrap; gap:var(--jhs-space-2); max-width:100%; }
+        .page-box .pagination-list { flex-wrap:wrap; gap:var(--jhs-space-1); }
 
     @media (prefers-reduced-motion: reduce) {
         :where(.jhs-ui, .jhs-dialog .layui-layer-content, .menu-box, .jhs-fab-menu) *,
@@ -1118,7 +1158,7 @@ export function buildUiPrimitivesCss() {
     .jhs-btn[aria-busy="true"] { cursor:progress; }
     .jhs-table .tabulator-cell .jhs-btn { min-height:var(--jhs-control-height-sm); font-size:var(--jhs-font-size-xs); padding:0 var(--jhs-space-2); }
     .jhs-dialog.layui-layer { display:flex; flex-direction:column; box-sizing:border-box; overflow:hidden; border-radius:var(--jhs-radius-lg); }
-    .jhs-dialog > .layui-layer-title { flex:0 0 auto; padding-right:52px; }
+    .jhs-dialog > .layui-layer-title { flex:0 0 auto; padding-right:var(--jhs-touch-target); }
     .jhs-dialog > .layui-layer-content { min-height:0; min-width:0; flex:1 1 auto; overflow:auto; }
     .jhs-dialog[data-jhs-dialog-body="table"] > .layui-layer-content { display:flex; flex-direction:column; overflow:hidden; }
     .jhs-dialog[data-jhs-dialog-body="media"] > .layui-layer-content { display:flex; flex-direction:column; overflow:hidden; }
@@ -1126,15 +1166,14 @@ export function buildUiPrimitivesCss() {
     .jhs-dialog > .layui-layer-btn { flex:0 0 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--jhs-space-2); padding:var(--jhs-space-4); }
     .jhs-dialog > .layui-layer-btn > a { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:var(--jhs-control-height); margin:0; padding:0 var(--jhs-space-3); border-radius:var(--jhs-radius-sm); font-size:var(--jhs-font-size-sm); }
     .jhs-dialog .layui-layer-setwin { top:0; right:0; }
-    .jhs-dialog .layui-layer-setwin .layui-layer-close { display:block; width:44px; height:44px; margin:0; background-position:center; }
+    .jhs-dialog .layui-layer-setwin .layui-layer-close { display:block; margin:0; background-position:center; }
     :is(.jhs-ui,.jhs-dialog) label:not(.jhs-setting-row):has(> :is(input[type="checkbox"],.jhs-switch,.mini-switch)) { display:inline-flex; align-items:center; min-height:var(--jhs-control-height); gap:var(--jhs-space-2); }
     @media (max-width:767px), (pointer:coarse) {
         ${fieldSelector}:not(textarea),
-        :is(.jhs-btn,.jhs-filter-btn,.jhs-select-trigger,.jhs-icon-btn,.card-btn), .jhs-table .tabulator-cell .jhs-btn,
+        :is(.jhs-btn,.jhs-filter-btn,.site-btn,.magnet-hub-btn,.pagination-btn,.jhs-select-trigger,.jhs-icon-btn,.card-btn,.jhs-option-row), .jhs-table .tabulator-cell .jhs-btn,
         .jhs-dialog > .layui-layer-btn > a { min-height:var(--jhs-touch-target); }
         :is(.jhs-ui,.jhs-dialog) label:not(.jhs-setting-row):has(> :is(input[type="checkbox"],.jhs-switch,.mini-switch)) { min-height:var(--jhs-touch-target); }
-        .jhs-dialog .layui-layer-close { width:44px!important; height:44px!important; }
-        .jhs-dialog .layui-layer-close::before,.jhs-dialog .layui-layer-close::after { top:21px; left:13px; }
+        :where(.jhs-icon-btn, .card-btn) { width:var(--jhs-touch-target); min-width:var(--jhs-touch-target); height:var(--jhs-touch-target); }
     }
     ${buildFeedbackCss()}
     ${buildUiGeometryCss()}
@@ -1145,14 +1184,15 @@ export function buildUiPrimitivesCss() {
 /**
  * 在现有容器内渲染安全的 loading、empty 或 error 状态。
  * @param {any} container
- * @param {{ type?: string, title?: string, description?: string, actionLabel?: string, onAction?: (() => unknown) | null }} [options]
+ * @param {{ type?: string, title?: string, description?: string, actionLabel?: string, onAction?: (() => unknown) | null, jquery?: (value: any) => any }} [options]
  */
-export function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
-    const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
+export function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null, jquery = undefined } = {}) {
+    const jq = jquery ?? /** @type {any} */ (globalThis).$;
+    const root = container?.jquery ? container : jq(container), state = jq('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = jq('<div class="jhs-state__content"></div>');
     root.attr("aria-busy", String(type === "loading"));
     if (type === "loading" && !title) title = "加载中…";
-    title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
-    if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
+    title && content.append(jq('<p class="jhs-state__title"></p>').text(title)), description && content.append(jq('<p class="jhs-state__description"></p>').text(description));
+    if (actionLabel && "function" == typeof onAction) content.append(jq('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
     return state.append(content), root.empty().append(state), state;
 }
 

@@ -188,6 +188,15 @@ export function prepareDialogOptions(options = {}, utils = {}) {
         catch (error) { scope?.dispose(); throw error; }
     };
     shellMounts.set(vendor.success, mount);
+    for (const key of ["btn2", "btn3", "btn4"]) {
+        const handler = vendor[key];
+        if (typeof handler !== "function") continue;
+        vendor[key] = function(/** @type {any[]} */ ...args) {
+            const result = handler.apply(this, args);
+            if (result && typeof result.then === "function") { void result.catch(() => {}); return false; }
+            return result;
+        };
+    }
     vendor.end = function(/** @type {any[]} */ ...args) {
         ended = true;
         scope?.dispose();

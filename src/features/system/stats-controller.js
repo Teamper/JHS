@@ -65,7 +65,8 @@ export class StatsController {
             .jhs-stats__label { overflow:hidden; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); text-align:right; text-overflow:ellipsis; white-space:nowrap; }
             .jhs-stats__track { height:10px; overflow:hidden; border-radius:var(--jhs-radius-pill); background:var(--jhs-surface-2); }
             .jhs-stats__bar { display:block; width:var(--jhs-value,0%); height:100%; border-radius:inherit; background:var(--jhs-bar,var(--jhs-accent)); }
-            .jhs-stats__value { color:var(--jhs-text-faint); font-size:var(--jhs-font-size-xs); }
+            .jhs-stats__value { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); font-variant-numeric:tabular-nums; }
+            .jhs-stats .jhs-metric strong { font-variant-numeric:tabular-nums; }
             @media (max-width:767px) {  .jhs-stats__row { grid-template-columns:72px minmax(0,1fr) 58px; gap:var(--jhs-space-2); } }
         `;
         this.scope.addCleanup(this.styles.register("feature-stats-dashboard", css));
@@ -176,7 +177,7 @@ export class StatsController {
         </div>`;
         const dialogId = this.dialog.open({
             type: 1, title: "统计", content: dialogHtml, scrollbar: false,
-            ui: { size: "lg", body: "scroll" }, area: this.ui.getDialogArea("lg"), anim: -1,
+            ui: { size: "lg", body: "scroll" }, anim: -1,
             success: (/** @type {any} */ layerHandle, /** @type {number} */ layerIndex) => {
                 if (this.scope.disposed || generation !== this.dialogGeneration) return;
                 this.dialogId = layerIndex;

@@ -68,7 +68,6 @@ test("new capabilities are manageable and configuration is reachable while disab
     await expect(page.locator("#saveBtn")).toHaveCount(0);
     await page.evaluate(()=>document.dispatchEvent(new CustomEvent("click",{bubbles:true})));
     await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("resources-panel"));
-    await page.locator('[data-jhs-open="translation"]').click();
     await expect(page.locator(".jhs-translation-settings")).toBeVisible();
     await expect(page.locator(".jhs-translation-settings")).not.toContainText("预算");
     await expect(page.getByRole("button",{name:"打开预算协调页",exact:true})).toHaveCount(0);

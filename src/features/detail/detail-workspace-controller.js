@@ -61,10 +61,10 @@ export class DetailWorkspaceController {
                 [data-jhs-workspace-site="javdb"] #magnets-content [data-jhs-magnet-row] { grid-template-columns:minmax(0,1fr) max-content max-content; grid-template-areas:"info date actions"; gap:var(--jhs-space-4); }
             }
             @container jhs-magnets (max-width:767px) {
-                [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { height:44px!important; min-height:44px!important; }
+                [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { height:var(--jhs-touch-target)!important; min-height:var(--jhs-touch-target)!important; }
             }
             @media (pointer:coarse) {
-                [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { height:44px!important; min-height:44px!important; }
+                [data-jhs-workspace-site="javdb"] [data-jhs-magnet-part="actions"] > :is(a,button) { height:var(--jhs-touch-target)!important; min-height:var(--jhs-touch-target)!important; }
             }
         </style>`;
     }
