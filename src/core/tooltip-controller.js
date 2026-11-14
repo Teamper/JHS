@@ -47,7 +47,7 @@ export function initializeTooltips(scope, doc) {
     };
     const position = () => {
         if (!trigger || !tooltip) return;
-        if (!trigger.isConnected) return hide();
+        if (!trigger.isConnected || trigger.closest("[hidden], .jhs-is-hidden") || view.getComputedStyle(trigger).display === "none" || view.getComputedStyle(trigger).visibility === "hidden") return hide();
         const anchor = trigger.getBoundingClientRect(), rect = tooltip.getBoundingClientRect();
         const direction = ["bottom", "left", "right", "top"].find(side => trigger?.hasAttribute(`data-tip-${side}`)) || "top";
         let left = anchor.left + (anchor.width - rect.width) / 2;
@@ -104,6 +104,7 @@ export function initializeTooltips(scope, doc) {
     });
     scope.listen(doc, "focusin", event => { const element = candidate(event.target, true); if (element) show(element); });
     scope.listen(doc, "focusout", scheduleHide);
+    scope.listen(doc, "pointerdown", () => hide(), true);
     scope.listen(doc, "keydown", event => {
         const key = /** @type {KeyboardEvent} */ (event).key;
         if (key === "Escape" && dismissActiveTooltip(doc)) { event.preventDefault(); event.stopImmediatePropagation(); }

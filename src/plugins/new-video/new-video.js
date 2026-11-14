@@ -594,7 +594,7 @@ export class NewVideoWorkspaceService {
             e.preventDefault();
             const t = this.jquery(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             this.utils.q(e, `取消收藏演员「${escapeHtml(n.name)}」？`, (async () => {
-                const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await this.legacyStorage.getSetting()), csrfToken = this.document.querySelector("meta[name=csrf-token]").content;
+                const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await this.legacyStorage.getSetting()), csrfToken = this.document.querySelector("meta[name=csrf-token]")?.getAttribute("content") || "";
                 const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
                 result.success ? (await this.legacyStorage.removeFavoriteActress(t), await this.notifyCommittedNewVideoChange("favorite-actress-removed")) : (this.notifications.error("取消收藏失败，请重试"),
                 this.logger.error("移除失败,返回值:", result));
@@ -976,7 +976,7 @@ export class NewVideoWorkspaceService {
                 root.find("#edit-actress-error").prop("hidden", !!name).text(name ? "" : "请输入演员主名称");
                 if (!name) { root.find("#edit-actress-name").trigger("focus"); return false; }
                 const split = text => text.split(/[，,]/).map(item => item.trim()).filter(Boolean);
-                const updated = { ...record, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")), actressType: value("#actressType"), remark: value("#edit-remark") };
+                const updated = { ...record, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")).map(car => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
                 editor.savePending = true; editor.layer?.find(".layui-layer-btn0").attr("aria-disabled", "true");
                 try {
                     const saved = await this.legacyStorage.updateFavoriteActress(updated);

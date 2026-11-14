@@ -140,7 +140,9 @@ export class OtherSitesController {
         if (!e) return box.find(".site-btn").removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), box.find('[data-jhs-role="detect-sites"]').prop("disabled", !0), this.renderSettingsArea(view), this.setupEventListeners(view), void this.log("跳过第三方站点解析：番号不可用");
         box.find('[data-jhs-site-id="javTrailersBtn"]').on("click", ((/** @type {JQuerySiteEvent} */ event) => {
             event.preventDefault();
-            const original = this.$(event.currentTarget).attr("href"), destination = event.ctrlKey || event.metaKey ? original : original + "?handle=1";
+            const original = this.$(event.currentTarget).attr("href");
+            if (!original) return;
+            const destination = event.ctrlKey || event.metaKey ? original : original + "?handle=1";
             this.ui.openPage(destination, e, !1, event);
         })), await mapLimit(configs, 4, (async (config) => {
             config.condition && !1 === config.condition(config.sourceCarNum) || await this.prepareSiteLink(e, config, view);
@@ -180,9 +182,11 @@ export class OtherSitesController {
     /** @param {string} e @param {SiteConfig} t @param {OtherSiteView} [view] */
     async handleSite(e, t, view = { root: this.$(this.document), configs: [], isActive: () => !0 }) {
         const n = view.root.find(`[data-jhs-site-id="${t.id}"],#${t.id}`).first();
+        if (!n.length || this.ui.isHidden(n)) return;
         n.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n, "checking");
         if (t.noHandle && !0 === t.noHandle) {
-            n.attr("href", this.movie.searchUrl(t.providerId, { carNum: e }) || "");
+            const fallbackUrl = this.movie.searchUrl(t.providerId, { carNum: e });
+            fallbackUrl ? n.attr("href", fallbackUrl) : n.removeAttr("href");
             const cacheKey = "jhs_other_site_dmm", raw = this.storage.getLocal(cacheKey);
             let a = null;
             try {
@@ -194,15 +198,13 @@ export class OtherSitesController {
             const scope = this.scope;
             const result = await this.movie.resolve({ carNum: e, providerId: t.providerId }, { scope });
             if (view.isActive?.() === false) return;
-            const searchUrl = this.movie.searchUrl(t.providerId, { carNum: e });
-            n.attr("href", result?.url || searchUrl || "");
+            const resolvedUrl = result?.url || this.movie.searchUrl(t.providerId, { carNum: e });
+            resolvedUrl ? n.attr("href", resolvedUrl) : n.removeAttr("href");
             this.setSiteState(n, result?.url ? "available" : "unavailable");
             if (!result?.url) n.attr("title", "未找到影片，点击前往搜索页");
         } catch (error) {
             if (view.isActive?.() !== false) n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), this.log(`检测第三方资源失败, ${t.id.replace("Btn", "")}`, error);
         } else try {
-            if (n.attr("href")) return void this.setSiteState(n, "idle");
-            if (this.ui.isHidden(n)) return;
             const a = "jhs_other_site", storage = this.storage, raw = storage.getLocal(a), i = raw ? JSON.parse(raw) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
             if (o && o.time && m - o.time < 864e5) return void (n.attr("href", o.url), "multiple" === o.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available"));
             const scope = this.scope, result = await this.movie.searchExternalSite(t.id, e, { settings: await this.getSettingCache(), scope }), l = result.searchUrl;

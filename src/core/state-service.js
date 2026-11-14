@@ -393,6 +393,22 @@ export class StateService {
         if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
         return true;
     }
+    /** Persist an undo mutation atomically with sync/backup receipts under the shared lock.
+     * @param {StateRecord} nextState @param {StateRecord} log @param {string[]} touchedDomains @param {string[]} reverted @param {string} undoJournalId */
+    async _commitUndoAtomic(nextState, log, touchedDomains, reverted, undoJournalId) {
+        if (!this.mutationCoordinator || !this.storage.atomicStorage?.commitLockedBatch) return false;
+        const puts = Object.fromEntries(touchedDomains.map(key => [this.domains[key].storageKey, key === "activity" ? log : nextState[key]]));
+        const undoNotice = { id: undoJournalId, changes: [], commitState: "committed" };
+        const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), undoNotice, log.entries);
+        const backup = await this.storage.backupChanges?.prepareCommittedMutation?.(reverted);
+        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts, ...backup?.puts }, deletes: [] })) return false;
+        for (const receipt of [sync, backup]) {
+            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch {} }
+        }
+        try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
+        this._listSnapshot = null;
+        return true;
+    }
     /** @param {StateRecord} journal */
     async _recoverJournal(journal) {
         if (journal.dataVersion !== undefined && (!Number.isInteger(journal.dataVersion) || journal.dataVersion < 0 || journal.dataVersion > CURRENT_DATA_VERSION)) throw new Error("状态恢复日志来自不支持的数据版本，请更新 JHS");
@@ -644,20 +660,27 @@ export class StateService {
             }
             transaction.undoAttemptedAt = new Date().toISOString();
             const log = this._prepareActivity(domains.activity), nextCars = [ ...carMap.values() ], touchedDomains = [...touched];
-            const select = (/** @type {StateRecord} */ source) => Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(source[key])]));
-            const journal = { schema: 2, dataVersion: CURRENT_DATA_VERSION, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: select(before), after: select({ carList: nextCars, actresses, decisions, ratings: domains.ratings, activity: log }) };
-            try {
-                await this.storage.forage.setItem("mutation_journal", journal);
-                for (const key of touchedDomains) {
-                    if (key === "activity") await this._writeActivity(log, true);
-                    else await this.domains[key].write(journal.after[key]);
+            /** @type {Record<string, any>} */
+            const nextState = { carList: nextCars, actresses, decisions, ratings: domains.ratings, activity: log };
+            /** @type {Record<string, any>} */
+            const beforeMap = before;
+            const journal = { schema: 2, dataVersion: CURRENT_DATA_VERSION, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(beforeMap[key])])), after: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(nextState[key])])) };
+            const committedAtomically = await this._commitUndoAtomic(nextState, log, touchedDomains, reverted, journal.id);
+            if (!committedAtomically) {
+                try {
+                    await this.storage.forage.setItem("mutation_journal", journal);
+                    for (const key of touchedDomains) {
+                        if (key === "activity") await this._writeActivity(log, true);
+                        else await this.domains[key].write(journal.after[key]);
+                    }
+                    await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+                    this._listSnapshot = null;
+                } catch (error) {
+                    await this._recoverWithoutLock();
+                    throw error;
                 }
-                await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
-            } catch (error) {
-                await this._recoverWithoutLock();
-                throw error;
+                this.storage.backupChanges?.primary(reverted);
             }
-            this.storage.backupChanges?.primary(reverted);
             reverted.length && await this._notifyCommitted("car-state-changed", { carNums: reverted, transactionId: journal.id, undoOf: transactionId });
             if (touched.has("ratings")) await this._notifyCommitted("personal-rating-changed", { carNums: reverted, transactionId: journal.id, undoOf: transactionId });
             await this._notifyCommitted("activity-log-changed", { transactionId, undo: !0 });

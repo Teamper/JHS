@@ -55,13 +55,25 @@ function atomicImportUnavailable() {
     return Object.assign(new Error("当前存储不支持安全导入，数据未修改；仍可导出备份"), { code: "ATOMIC_IMPORT_UNAVAILABLE" });
 }
 
+/** @type {Map<string, Promise<IDBDatabase>>} */
+const openDbCache = new Map();
+
 /** Open the existing localforage store without creating or upgrading a database. @param {any} forage */
 async function openExisting(forage) {
     await forage.ready?.();
     if (!globalThis.indexedDB || forage.driver?.() !== "asyncStorage") throw atomicImportUnavailable();
     const name = forage.config?.("name"), storeName = forage.config?.("storeName");
     if (name !== "JAV-JHS" || storeName !== "appData") throw atomicImportUnavailable();
-    const db = await new Promise((/** @type {(db: IDBDatabase) => void} */ resolve, reject) => {
+    const cacheKey = `${name}:${storeName}`;
+    const existing = openDbCache.get(cacheKey);
+    if (existing) {
+        try {
+            const db = await existing;
+            if (db.objectStoreNames.contains(storeName)) return { db, storeName };
+        } catch { /* Fall through to reopen */ }
+        openDbCache.delete(cacheKey);
+    }
+    const pending = new Promise((/** @type {(db: IDBDatabase) => void} */ resolve, reject) => {
         const request = indexedDB.open(name);
         let settled = false;
         const timer = setTimeout(() => fail(atomicImportUnavailable()), 5000);
@@ -74,30 +86,37 @@ async function openExisting(forage) {
             if (settled) return request.result.close();
             settled = true; clearTimeout(timer);
             const db = request.result;
-            db.onversionchange = () => db.close();
-            if (!db.objectStoreNames.contains(storeName)) { db.close(); reject(atomicImportUnavailable()); }
+            const evict = () => { if (openDbCache.get(cacheKey) === pending) openDbCache.delete(cacheKey); };
+            db.onversionchange = () => { evict(); db.close(); };
+            db.onclose = evict;
+            if (!db.objectStoreNames.contains(storeName)) { evict(); db.close(); reject(atomicImportUnavailable()); }
             else resolve(db);
         };
     });
-    return { db, storeName };
+    openDbCache.set(cacheKey, pending);
+    try {
+        const db = await pending;
+        return { db, storeName };
+    } catch (error) {
+        if (openDbCache.get(cacheKey) === pending) openDbCache.delete(cacheKey);
+        throw error;
+    }
 }
 
 /** @param {any} forage @param {string[]} keys @returns {Promise<Snapshot>} */
 async function readAtomicSnapshot(forage, keys) {
     const { db, storeName } = await openExisting(forage);
-    try {
-        return await new Promise((resolve, reject) => {
-            const tx = db.transaction(storeName, "readonly"), store = tx.objectStore(storeName);
-            /** @type {Snapshot} */ const entries = Object.create(null);
-            tx.oncomplete = () => resolve(entries);
-            tx.onabort = () => reject(tx.error ?? new Error("读取导入基线失败"));
-            tx.onerror = () => { /* onabort owns the result */ };
-            for (const key of new Set(keys)) {
-                const request = store.openCursor(key);
-                request.onsuccess = () => { entries[key] = request.result ? { exists: true, value: request.result.value } : { exists: false }; };
-            }
-        });
-    } finally { db.close(); }
+    return await new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readonly"), store = tx.objectStore(storeName);
+        /** @type {Snapshot} */ const entries = Object.create(null);
+        tx.oncomplete = () => resolve(entries);
+        tx.onabort = () => reject(tx.error ?? new Error("读取导入基线失败"));
+        tx.onerror = () => { /* onabort owns the result */ };
+        for (const key of new Set(keys)) {
+            const request = store.openCursor(key);
+            request.onsuccess = () => { entries[key] = request.result ? { exists: true, value: request.result.value } : { exists: false }; };
+        }
+    });
 }
 
 /** Values at this boundary are the existing JSON business domains, not arbitrary binary caches. @param {any} value @returns {string} */
@@ -109,43 +128,43 @@ function signature(value) {
 
 /** @param {any} forage @param {{expected: Snapshot, puts: Record<string, any>, deletes: string[], signal?: AbortSignal}} batch */
 async function commitAtomicBatch(forage, { expected, puts, deletes, signal }) {
+    const keys = Object.keys(expected);
+    const expectedSignatures = Object.fromEntries(keys.map(key => [key, expected[key].exists ? signature(expected[key].value) : null]));
     const { db, storeName } = await openExisting(forage);
-    try {
-        await new Promise((resolve, reject) => {
-            const tx = db.transaction(storeName, "readwrite"), store = tx.objectStore(storeName);
-            const keys = Object.keys(expected);
-            let remaining = keys.length, failure = /** @type {unknown} */ (null);
-            /** @param {unknown} error */
-            const abort = error => { failure ??= error; try { tx.abort(); } catch { /* terminal transaction */ } };
-            const onAbort = () => abort(new DOMException("导入已取消", "AbortError"));
-            signal?.addEventListener("abort", onAbort, { once: true });
-            const cleanup = () => signal?.removeEventListener("abort", onAbort);
-            tx.oncomplete = () => { cleanup(); resolve(undefined); };
-            tx.onabort = () => { cleanup(); reject(failure ?? tx.error ?? new Error("导入事务已中止，原数据保持不变")); };
-            tx.onerror = () => { /* request errors abort the whole transaction */ };
-            // All writes are queued synchronously in an active request callback.
-            // Awaiting localforage, migration or network work here would auto-commit.
-            const write = () => {
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readwrite"), store = tx.objectStore(storeName);
+        let remaining = keys.length, failure = /** @type {unknown} */ (null);
+        /** @param {unknown} error */
+        const abort = error => { failure ??= error; try { tx.abort(); } catch { /* terminal transaction */ } };
+        const onAbort = () => abort(new DOMException("导入已取消", "AbortError"));
+        const timeoutId = setTimeout(() => abort(new Error("IndexedDB 写入事务超时，原数据保持不变")), 15_000);
+        signal?.addEventListener("abort", onAbort, { once: true });
+        const cleanup = () => { clearTimeout(timeoutId); signal?.removeEventListener("abort", onAbort); };
+        tx.oncomplete = () => { cleanup(); resolve(undefined); };
+        tx.onabort = () => { cleanup(); reject(failure ?? tx.error ?? new Error("导入事务已中止，原数据保持不变")); };
+        tx.onerror = () => { /* request errors abort the whole transaction */ };
+        // All writes are queued synchronously in an active request callback.
+        // Awaiting localforage, migration or network work here would auto-commit.
+        const write = () => {
+            if (failure) return;
+            try {
+                for (const [key, value] of Object.entries(puts)) store.put(value, key);
+                for (const key of deletes) store.delete(key);
+            } catch (error) { abort(error); }
+        };
+        if (signal?.aborted) { onAbort(); return; }
+        if (!remaining) { write(); return; }
+        for (const key of keys) {
+            const request = store.openCursor(key);
+            request.onsuccess = () => {
                 if (failure) return;
-                try {
-                    for (const [key, value] of Object.entries(puts)) store.put(value, key);
-                    for (const key of deletes) store.delete(key);
-                } catch (error) { abort(error); }
+                const entry = expected[key], cursor = request.result;
+                if (Boolean(cursor) !== entry.exists || cursor && signature(cursor.value) !== expectedSignatures[key]) {
+                    abort(Object.assign(new Error("数据已被其他页面修改，请重新预览后导入"), { code: "ATOMIC_IMPORT_CONFLICT" }));
+                    return;
+                }
+                if (--remaining === 0) write();
             };
-            if (signal?.aborted) { onAbort(); return; }
-            if (!remaining) { write(); return; }
-            for (const key of keys) {
-                const request = store.openCursor(key);
-                request.onsuccess = () => {
-                    if (failure) return;
-                    const entry = expected[key], cursor = request.result;
-                    if (Boolean(cursor) !== entry.exists || cursor && signature(cursor.value) !== signature(entry.value)) {
-                        abort(Object.assign(new Error("数据已被其他页面修改，请重新预览后导入"), { code: "ATOMIC_IMPORT_CONFLICT" }));
-                        return;
-                    }
-                    if (--remaining === 0) write();
-                };
-            }
-        });
-    } finally { db.close(); }
+        }
+    });
 }

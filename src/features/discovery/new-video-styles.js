@@ -69,7 +69,7 @@ export const NEW_VIDEO_STYLES = `.newVideoToolBox { display:flex; flex-direction
                 .jhs-form-dialog__body, .jhs-form-field { display:grid; gap:var(--jhs-space-1); }
                 .jhs-form-label, .jhs-form-dialog__title { color:var(--jhs-text); font-size:var(--jhs-font-size-sm); font-weight:var(--jhs-font-weight-semibold); }
                 .jhs-form-dialog :where(.jhs-field,.jhs-select,.jhs-textarea) { width:100%; }
-                .jhs-form-dialog .jhs-textarea { min-height:60px; overflow-y:hidden; }
+                .jhs-form-dialog .jhs-textarea { min-height:60px; overflow-y:auto; resize:vertical; }
                 .jhs-option-row { display:flex; align-items:center; gap:var(--jhs-space-2); min-height:36px; }
                 #actress-pagination { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
 

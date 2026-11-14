@@ -76,7 +76,7 @@ export class StatsController {
 
     mountButton() {
         if (this.button?.isConnected || this.document.querySelector("#statsBtn")) return;
-        const anchor = this.document.querySelector("#newVideoBtn");
+        const anchor = this.document.querySelector("#newVideoBtn") || this.document.querySelector("#waitCheckBtn") || this.document.querySelector("#historyBtn") || this.document.querySelector("#blacklistBtn") || this.document.querySelector("#settingBtn");
         if (!anchor?.parentNode) return;
         const button = this.document.createElement("button");
         button.type = "button";

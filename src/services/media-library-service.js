@@ -4,7 +4,7 @@ import { assertMovieStateEligible, normalizeCarNum } from "../core/movie-identit
 import { MEDIA_CONNECTIONS_KEY, normalizeMediaConnection, mediaConnectionErrorLabel, mediaItemCode, mediaItemLink } from "../core/media-library-model.js";
 import { movieCodeKey } from "../core/movie-code-evidence.js";
 
-const CACHE_MS = 600000;
+const CACHE_MS = 600000, MAX_RESULT_ENTRIES = 500;
 
 /** Account/config-bound local cache and shared two-request scheduler. */
 export class MediaLibraryService extends EventTarget {
@@ -20,6 +20,7 @@ export class MediaLibraryService extends EventTarget {
         /** @type {Map<string, any>} */ this.indexes = new Map();
         /** @type {Map<string, any>} */ this.loading = new Map();
         /** @type {Map<string, any>} */ this.results = new Map();
+        /** @type {Map<string, number>} */ this.resultExpiry = new Map();
         /** @type {any[]} */ this.queue = [];
         this.active = 0;
         this.generation = 0;
@@ -115,10 +116,19 @@ export class MediaLibraryService extends EventTarget {
         this.loading.clear();
         this.indexes.clear();
         this.results.clear();
+        this.resultExpiry.clear();
         this.dispatchEvent(new Event("media.changed"));
     }
     /** @param {string} carNum */
-    peek(carNum) { return this.results.get(carNum) || { status: "unknown", servers: [], hits: [] }; }
+    peek(carNum) {
+        const expiresAt = this.resultExpiry.get(carNum);
+        if (expiresAt !== undefined && expiresAt <= Date.now()) {
+            this.results.delete(carNum);
+            this.resultExpiry.delete(carNum);
+            return { status: "unknown", servers: [], hits: [] };
+        }
+        return this.results.get(carNum) || { status: "unknown", servers: [], hits: [] };
+    }
     /** @param {() => Promise<any>} run @param {LifecycleScope} scope */
     schedule(run, scope) {
         scope.assertActive();
@@ -217,7 +227,15 @@ export class MediaLibraryService extends EventTarget {
             options.scope?.assertActive();
             if (generation !== this.generation) throw new DOMException("媒体库配置已变化", "AbortError");
             const result = snapshot();
+            if (this.results.has(carNum)) this.results.delete(carNum);
             this.results.set(carNum, result);
+            this.resultExpiry.set(carNum, Date.now() + CACHE_MS);
+            while (this.results.size > MAX_RESULT_ENTRIES) {
+                const oldest = this.results.keys().next().value;
+                if (oldest === undefined) break;
+                this.results.delete(oldest);
+                this.resultExpiry.delete(oldest);
+            }
             options.onUpdate?.(result);
             this.dispatchEvent(new CustomEvent("media.result", { detail: { carNum, result } }));
         };

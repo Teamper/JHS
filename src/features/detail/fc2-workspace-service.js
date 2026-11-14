@@ -360,8 +360,9 @@ export class Fc2WorkspaceService {
             context.translationCleanupRegistered = true;
             context.addObserver({disconnect:() => { context.releaseTranslationScope?.(); context.translationObserver?.disconnect(); }});
             if (window.IntersectionObserver) context.translationObserver = new window.IntersectionObserver((/** @type {IntersectionObserverEntry[]} */ entries) => {
-                if (entries.some(entry => entry.isIntersecting)) this.applyFc2Translation(context);
-                else this.revertFc2Translation(context);
+                if (entries.some(entry => entry.isIntersecting)) {
+                    if (!context.releaseTranslationScope && !context.root.find(".translated-title").length) this.applyFc2Translation(context);
+                } else this.revertFc2Translation(context);
             });
         }
         if (context.translationVisibilityTarget !== title) {

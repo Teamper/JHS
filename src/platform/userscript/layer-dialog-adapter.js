@@ -21,5 +21,16 @@ export class LayerDialogAdapter {
     /** @param {string} message @param {Record<string, unknown>} [options] */
     alert(message, options) { return this.layer.alert(message, this.withDefaultLayer(options)); }
     /** @param {Record<string, unknown> | undefined} options */
-    withDefaultLayer(options = {}) { if (typeof document !== "undefined") closeOwnedPopover(document); const value = { zIndex: JHS_Z_INDEX.layer, ...options }; return options.ui ? prepareDialogOptions(value, /** @type {any} */ (globalThis).utils) : value; }
+    withDefaultLayer(options = {}) {
+        let baseZ = JHS_Z_INDEX.layer;
+        if (typeof document !== "undefined") {
+            closeOwnedPopover(document);
+            for (const el of document.querySelectorAll(".layui-layer")) {
+                const z = Number(/** @type {HTMLElement} */ (el).style?.zIndex || 0);
+                if (z >= baseZ) baseZ = z + 2;
+            }
+        }
+        const value = { zIndex: baseZ, ...options };
+        return options.ui ? prepareDialogOptions(value, /** @type {any} */ (globalThis).utils) : value;
+    }
 }

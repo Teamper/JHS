@@ -178,7 +178,7 @@ export class Utils {
         if (!container) return () => {};
         const previous = document.activeElement;
         const selector = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
-        const visible = () => [ ...container.querySelectorAll(selector), ...ownedPopoverRoots(container).flatMap(root => [...root.querySelectorAll(selector)]) ].filter((element => !element.hidden && "true" !== element.getAttribute("aria-hidden") && null !== element.offsetParent));
+        const visible = () => [ ...container.querySelectorAll(selector), ...ownedPopoverRoots(container).flatMap(root => [...root.querySelectorAll(selector)]) ].filter((element => !element.hidden && !element.closest("[inert]") && "true" !== element.getAttribute("aria-hidden") && null !== element.offsetParent));
         const handleKeydown = (/** @type {KeyboardEvent} */ event) => {
             if ("Tab" !== event.key || !container.contains(event.target) && !ownedPopoverRoots(container).some(root => root.contains(event.target))) return;
             const items = visible();

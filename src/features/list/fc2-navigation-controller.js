@@ -62,20 +62,28 @@ export class Fc2NavigationController {
 
     ensureAttached() {
         if (this.disposed || this.scope.disposed) return Promise.resolve(false);
-        if (this.attachPromise) return this.attachPromise;
+        if (this.attachPromise) {
+            this.pendingReattach = true;
+            return this.attachPromise;
+        }
         this.attachPromise = (async () => {
-            const current = this.hostAdapter?.locateListRoot?.();
-            if (!current) return false;
-            const root = this.ui.jquery(current).first();
-            if (!root.length) return false;
-            await this.protectFc2Navigation(root);
-            if (this.disposed || this.scope.disposed || !current.isConnected) return false;
-            if (this.boundRoot !== current) {
-                this.releaseBoundRoot();
-                this.boundRoot = current;
-            }
-            this.bindFc2Navigation(root);
-            return true;
+            let result = false;
+            do {
+                this.pendingReattach = false;
+                const current = this.hostAdapter?.locateListRoot?.();
+                if (!current) { result = false; continue; }
+                const root = this.ui.jquery(current).first();
+                if (!root.length) { result = false; continue; }
+                await this.protectFc2Navigation(root);
+                if (this.disposed || this.scope.disposed || !current.isConnected) { result = false; break; }
+                if (this.boundRoot !== current) {
+                    this.releaseBoundRoot();
+                    this.boundRoot = current;
+                }
+                this.bindFc2Navigation(root);
+                result = true;
+            } while (this.pendingReattach && !this.disposed && !this.scope.disposed);
+            return result;
         })().finally(() => { this.attachPromise = null; });
         return this.attachPromise;
     }

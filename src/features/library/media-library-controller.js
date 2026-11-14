@@ -55,7 +55,8 @@ export class MediaLibraryController {
             const selectors = this.host.getListSelectors();
             for (const element of this.document.querySelectorAll(selectors.itemSelector)) {
                 if (this.cards.has(element)) continue;
-                const movie = readListItem(element, this.ui.jquery);
+                let movie;
+                try { movie = readListItem(element, this.ui.jquery); } catch { continue; }
                 if (!movie.stateEligibility.eligible) continue;
                 const card = this.attach(element, movie, scope, element.matches(this.host.getLiveListSelectors?.().itemSelector || selectors.itemSelector));
                 observer.observe(element);

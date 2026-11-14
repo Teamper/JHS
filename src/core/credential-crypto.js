@@ -15,11 +15,30 @@ function getInstallationSecret() {
     return secret;
 }
 
+/** @type {WeakMap<SubtleCrypto, Map<string, Promise<CryptoKey>>>} */
+const derivedKeyCache = new WeakMap();
+
 /** @param {string} secret */
-async function getEncryptionKey(secret) {
+function getEncryptionKey(secret) {
+    const subtle = crypto.subtle;
+    let bucket = derivedKeyCache.get(subtle);
+    if (!bucket) derivedKeyCache.set(subtle, bucket = new Map());
+    const existing = bucket.get(secret);
+    if (existing) {
+        bucket.delete(secret);
+        bucket.set(secret, existing);
+        return existing;
+    }
     const encoder = new TextEncoder();
-    const material = await crypto.subtle.importKey("raw", encoder.encode(`${secret}.jhs.v1`), { name: "PBKDF2" }, false, ["deriveKey"]);
-    return crypto.subtle.deriveKey({ name: "PBKDF2", salt: encoder.encode("jhs-backup"), iterations: 100_000, hash: "SHA-256" }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    const pending = subtle.importKey("raw", encoder.encode(`${secret}.jhs.v1`), { name: "PBKDF2" }, false, ["deriveKey"])
+        .then(material => subtle.deriveKey({ name: "PBKDF2", salt: encoder.encode("jhs-backup"), iterations: 100_000, hash: "SHA-256" }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]))
+        .catch(error => { if (bucket?.get(secret) === pending) bucket.delete(secret); throw error; });
+    if (bucket.size >= 32) {
+        const oldest = bucket.keys().next().value;
+        if (oldest !== undefined) bucket.delete(oldest);
+    }
+    bucket.set(secret, pending);
+    return pending;
 }
 
 /** @param {ArrayBuffer} buffer */

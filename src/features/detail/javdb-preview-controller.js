@@ -394,7 +394,7 @@ export class JavDbPreviewController {
             $toolbar.find("#video-filterBtn,#video-favoriteBtn").off("click.jhsVideo");
             const config = controller.bind({ root: $toolbar[0], closeRoot: document.documentElement, carNum: this.getPageInfo().carNum, layerIndex: utils.getOwningLayerIndex({ root: document.documentElement }), getRecord: () => detail.getStateRecord(), selectors: { blocked: "#video-filterBtn", favorite: "#video-favoriteBtn" } });
             session.stateCleanup?.();
-            session.stateCleanup = this.getRuntimeService("events")?.on("car-state-changed", (/** @type {any} */ payload) => { if (payload.carNums?.includes(config.carNum) && this.isSessionOpen(session)) return controller.render(config); });
+            session.stateCleanup = this.getRuntimeService("events")?.on("car-state-changed", (/** @type {any} */ payload) => { if ((payload?.scope === "all" || payload?.carNums?.includes(config.carNum)) && this.isSessionOpen(session)) return controller.render(config); });
             if (session.stateCleanup) session.scope.addCleanup(session.stateCleanup);
         }
     }

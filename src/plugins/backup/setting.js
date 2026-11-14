@@ -327,8 +327,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         }
         const instance = { panel: e, root: null, id: null, generation: ++this._settingsDialogGeneration, scope: new LifecycleScope("full-settings"), formReady: false, resourcesReady: false };
         instance.closed = new Promise(resolve => { instance.resolveClosed = resolve; });
-        const defaults = Object.fromEntries(this.getRuntimeService("settingsRegistry").list({ surfaces: ["full"] }).filter(item => item.defaultValue !== undefined).map(item => [item.key, item.defaultValue]));
-        instance.session = new FullSettingsSession(this.getRuntimeService("settings"), { detailShortcuts: {}, disabledPlugins: "[]", customMagnetSources: "[]", magnetTagRules: "[]", magnetFilterRules: "[]", magnetBuiltInSources: "[]", screenshotProviders: "[]", ...defaults }, { magnetBuiltInSources: [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...(this.getRuntimeService("magnet")?.getBuiltInSources?.() || [])], screenshotProviders: BUILT_IN_SCREENSHOT_SOURCES });
+        const defaults = Object.fromEntries(this.getRuntimeService("settingsRegistry").list().filter(item => item.defaultValue !== undefined).map(item => [item.key, item.defaultValue]));
+        instance.session = new FullSettingsSession(this.getRuntimeService("settings"), { detailShortcuts: {}, disabledPlugins: "[]", customMagnetSources: "[]", magnetTagRules: "[]", magnetFilterRules: "[]", magnetBuiltInSources: "[]", screenshotProviders: "[]", screenshotMode: "auto", privacyTargets: ["title", "code", "actors", "images", "video"], privacyShortcut: null, translationConcurrency: 2, enableMediaLibrary: false, ...defaults }, { magnetBuiltInSources: [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...(this.getRuntimeService("magnet")?.getBuiltInSources?.() || [])], screenshotProviders: BUILT_IN_SCREENSHOT_SOURCES });
         instance.resources = new ResourceSettingsService({
             getSetting: async (key, fallback) => instance.session.snapshot()[key] ?? fallback,
             saveSettingItem: (key, value) => instance.session.set(key, value),
@@ -499,7 +499,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             selector: "#themeMode",
             key: "themeMode",
             getValue: () => root.find("#themeMode").val(),
-            setValue: (value) => root.find("#themeMode").val(String(value ?? "")),
+            setValue: (value) => { const el = root.find("#themeMode"); if (el[0]) JhsSelect.setValue(el[0], String(value ?? ""), false); else el.val(String(value ?? "")); },
             fallback: "light",
             label: "主题",
         });
@@ -507,7 +507,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             selector: "#mobileMode",
             key: "mobileMode",
             getValue: () => root.find("#mobileMode").val(),
-            setValue: (value) => root.find("#mobileMode").val(String(value ?? "")),
+            setValue: (value) => { const el = root.find("#mobileMode"); if (el[0]) JhsSelect.setValue(el[0], String(value ?? ""), false); else el.val(String(value ?? "")); },
             fallback: "auto",
             label: "移动模式",
         });
@@ -539,7 +539,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             selector: "#defaultQuickFilterTab",
             key: "defaultQuickFilterTab",
             getValue: () => normalizeQuickFilterKey(root.find("#defaultQuickFilterTab").val()),
-            setValue: (value) => root.find("#defaultQuickFilterTab").val(normalizeQuickFilterKey(value)),
+            setValue: (value) => { const el = root.find("#defaultQuickFilterTab"); const normalized = normalizeQuickFilterKey(value); if (el[0]) JhsSelect.setValue(el[0], normalized, false); else el.val(normalized); },
             fallback: "waitCheck",
             label: "默认筛选",
         });
@@ -698,7 +698,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                     const key = input.closest("[data-jhs-setting]")?.dataset.jhsSetting || input.id;
                     return changed.has(key) && !input.disabled && input.willValidate && !input.checkValidity();
                 });
-                if (invalid) { this.activateSettingPanel(root, invalid.closest(".content-panel")?.id); invalid.reportValidity(); return; }
+                if (invalid) { $(invalid).parents("details").prop("open", true); this.activateSettingPanel(root, invalid.closest(".content-panel")?.id); invalid.focus?.(); invalid.reportValidity(); return; }
                 const result = await saveSettingForm(dependencies, root);
                 if (result?.canceled) return;
                 if (dependencies.isActive?.() === false) return;

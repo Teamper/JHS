@@ -18,7 +18,7 @@ export const TRANSLATION_SETTINGS_STYLES = `
 .jhs-translation-row > strong{color:var(--jhs-text)}
 .jhs-translation-output{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--jhs-text)}
 .jhs-translation-workspace[data-jhs-translation-masked] .jhs-translation-output{color:transparent!important;text-shadow:none!important;user-select:none;background:var(--jhs-surface-2)}
-.jhs-translation-meta{font-size:var(--jhs-font-size-sm);color:var(--jhs-text-secondary)}
+.jhs-translation-meta{font-size:var(--jhs-font-size-sm);color:var(--jhs-text-muted)}
 .jhs-translation-range{max-height:220px;overflow:auto;overscroll-behavior:contain}
 `;
 /** Encrypted connection editing is separate from portable preferences and the durable request ledger. @param {{document:Document, scope:LifecycleScope, state:any, preferences:any, onSave:(value:any,revision:string|null)=>Promise<any>, onTest:(value:any,scope:LifecycleScope)=>Promise<any>, onPreferences:(value:any)=>Promise<any>, embedded?:boolean, bindDraft?:(editor:any)=>void}} options */

@@ -52,7 +52,8 @@ export class MovieSelectionController {
         if (!this.toolbar?.isConnected) this.mount(list);
         for (const element of this.host.locateListItems()) {
             if (this.cards.has(element)) continue;
-            const movie = readListItem(element, this.ui.jquery);
+            let movie;
+            try { movie = readListItem(element, this.ui.jquery); } catch { continue; }
             if (!movie.stateEligibility.eligible) continue;
             const label = this.document.createElement("label"), input = this.document.createElement("input"), text = this.document.createElement("span");
             label.className = "jhs-movie-choice";

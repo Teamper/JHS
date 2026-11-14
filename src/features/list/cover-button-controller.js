@@ -73,12 +73,15 @@ export class CoverButtonController {
                 this.previewGeneration++;
                 if (canUseCardPreview(settingsService.snapshot())) void this.addSvgBtn().catch((error => this.recordError("卡片预览重新挂载失败", error)));
                 else {
-                    this.stopAllPreviews();
+                    this.stopAllPreviews(), this.closeCardMenus();
                     void this.enableSvgBtn();
                 }
             }
             // 长缩略图与卡片按钮开关即时重建工具箱，不保留死按钮。
-            if (names.some((name) => [ "enableScreenSvg", "enableVideoSvg", "enableHandleSvg", "enableSiteSvg", "enableCopySvg" ].includes(name))) void this.enableSvgBtn();
+            if (names.some((name) => [ "enableScreenSvg", "enableVideoSvg", "enableHandleSvg", "enableSiteSvg", "enableCopySvg" ].includes(name))) {
+                if (names.includes("enableVideoSvg") && !canUseCardPreview(settingsService.snapshot())) { this.previewGeneration++; this.stopAllPreviews(); }
+                void this.enableSvgBtn();
+            }
         };
         // 6.5：listener 只注册一次，避免 ON→OFF→ON 循环累积；重新开启只重建按钮，不再递归 handle()。
         settingsService.addEventListener("settings.changed", onSettingsChanged);
@@ -86,7 +89,7 @@ export class CoverButtonController {
             settingsService.removeEventListener("settings.changed", onSettingsChanged);
             this.started = false;
             this.previewGeneration += 1;
-            this.stopAllPreviews();
+            this.stopAllPreviews(), this.closeCardMenus();
         });
         await this.addSvgBtn();
         await this.bindClick(scope);
@@ -126,6 +129,22 @@ export class CoverButtonController {
             </div>`;
     }
     /** @param {JQueryHandle | Element | null} [items] */
+    updateSiteLinks(items = null) {
+        if (!this.list) return;
+        const $ = this.ui.jquery, list = this.list, settings = this.settings.snapshot(), movie = this.movie;
+        const missAv = movie.externalSiteOrigin("missAvBtn", settings), jable = movie.externalSiteOrigin("jableBtn", settings), avgle = movie.externalSiteOrigin("avgleBtn", settings), av123 = movie.providerOrigin("av123") || "";
+        (items ? $(items) : $(list.getSelector().itemSelector)).each(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
+            const card = $(element);
+            if (this.isJavBus && card.find(".avatar-box").length) return;
+            let carNum;
+            try { ({ carNum } = list.findCarNumAndHref(card)); } catch { return; }
+            card.find(".site-jable").attr({ href: `${jable}/search/${carNum}/`, target: "_blank", rel: "noopener noreferrer" });
+            card.find(".site-avgle").attr({ href: `${avgle}/vod/search.html?wd=${carNum}`, target: "_blank", rel: "noopener noreferrer" });
+            card.find(".site-miss-av").attr({ href: `${missAv}/search/${carNum}`, target: "_blank", rel: "noopener noreferrer" });
+            card.find(".site-123-av").attr({ href: `${av123}/cn/search?keyword=${encodeURIComponent(carNum)}`, target: "_blank", rel: "noopener noreferrer" });
+        }));
+    }
+    /** @param {JQueryHandle | Element | null} [items] */
     async addSvgBtn(items = null) {
         const $ = this.ui.jquery;
         if (!this.list) return;
@@ -134,7 +153,7 @@ export class CoverButtonController {
             if (item.find(".tool-box").length || this.isJavBus && item.find(".avatar-box").length) return;
             const host = !this.isJavBus ? item.find(".tags").first() : item.find(".photo-info").first();
             host.length && host.append(this.buildToolBox());
-        })), this.enableSvgBtn(items);
+        })), this.updateSiteLinks(items), this.enableSvgBtn(items);
     }
     /** @param {JQueryHandle | Element | null} [items] */
     async enableSvgBtn(items = null) {
@@ -213,7 +232,7 @@ export class CoverButtonController {
             const card = $(event.currentTarget).closest(".item"), button = card.find(".videoSvg"), image = card.find("img").first();
             const {carNum} = list.findCarNumAndHref(card);
             if (this.activePreview?.card === card[0]) return void this.showImg(button, image, carNum);
-            this.stopAllPreviews();
+            this.stopAllPreviews(), this.closeCardMenus();
             button.html(this.icons.recoveryVideoSvg).attr({title:"切回封面", "aria-label":"切回封面"});
             if (!image.length) return void this.notifications.error("没有找到封面");
             void this.showVideo(button, image, carNum).catch(error => this.recordError("卡片预览视频打开失败", error));
@@ -269,22 +288,13 @@ export class CoverButtonController {
                 if (!scope.disposed && /** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY") this.notifications.error(`已跳过 1 项：${/** @type {Error} */ (error).message}`);
             }
         }));
-        const settings = this.settings.snapshot(), movie = this.movie;
-        const missAv = movie.externalSiteOrigin("missAvBtn", settings), jable = movie.externalSiteOrigin("jableBtn", settings), avgle = movie.externalSiteOrigin("avgleBtn", settings), av123 = movie.providerOrigin("av123") || "";
-        $(this.list.getSelector().itemSelector).each(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
-            const card = $(element);
-            if (this.isJavBus && card.find(".avatar-box").length) return;
-            let carNum;
-            try { ({ carNum } = list.findCarNumAndHref(card)); } catch { return; }
-            card.find(".site-jable").attr({ href: `${jable}/search/${carNum}/`, target: "_blank", rel: "noopener noreferrer" });
-            card.find(".site-avgle").attr({ href: `${avgle}/vod/search.html?wd=${carNum}`, target: "_blank", rel: "noopener noreferrer" });
-            card.find(".site-miss-av").attr({ href: `${missAv}/search/${carNum}`, target: "_blank", rel: "noopener noreferrer" });
-            card.find(".site-123-av").attr({ href: `${av123}/cn/search?keyword=${encodeURIComponent(carNum)}`, target: "_blank", rel: "noopener noreferrer" });
-        }));
+        this.updateSiteLinks();
         documentRoot.on("click.jhsCoverButton", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", ((/** @type {CardActionEvent} */ event) => {
             try {
                 event.preventDefault(); event.stopPropagation();
                 const button = $(event.currentTarget), { carNum } = list.findCarNumAndHref(this.cardForButton(button));
+                const liveSettings = this.settings.snapshot(), liveMovie = this.movie;
+                const missAv = liveMovie.externalSiteOrigin("missAvBtn", liveSettings), jable = liveMovie.externalSiteOrigin("jableBtn", liveSettings), avgle = liveMovie.externalSiteOrigin("avgleBtn", liveSettings), av123 = liveMovie.providerOrigin("av123") || "";
                 const url = button.hasClass("site-jable") ? `${jable}/search/${carNum}/`
                     : button.hasClass("site-avgle") ? `${avgle}/vod/search.html?wd=${carNum}`
                         : button.hasClass("site-miss-av") ? `${missAv}/search/${carNum}`

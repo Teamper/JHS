@@ -320,28 +320,42 @@ export class OneOneFiveMatchController {
             view.submit.disabled = true;
             for (const entry of view.entries) entry.checkbox.disabled = true;
             let succeeded = 0, failed = 0;
-            for (const entry of selected) {
-                if (scope.disposed) break;
-                entry.status.textContent = "处理中";
-                try {
-                    await this.offline.renameFile("one115", entry.record.fileId, entry.record.nextName, { scope, expectedAccountId: entry.record.accountId });
-                    this.match.clear();
+            try {
+                for (const entry of selected) {
                     if (scope.disposed) break;
-                    entry.status.textContent = "成功";
-                    succeeded++;
-                    const original = matches.find(match => match.fileId === entry.record.fileId);
-                    if (original) original.name = entry.record.nextName;
-                    for (const row of this.document.querySelectorAll("[data-jhs115-file-id]")) {
-                        if (/** @type {HTMLElement} */ (row).dataset.jhs115FileId !== entry.record.fileId) continue;
-                        const link = row.querySelector("a");
-                        if (link) link.textContent = `${entry.record.nextName}（${format115Size(entry.record.size)}）`;
+                    entry.status.textContent = "处理中";
+                    try {
+                        await this.offline.renameFile("one115", entry.record.fileId, entry.record.nextName, { scope, expectedAccountId: entry.record.accountId });
+                        this.match.clear();
+                        if (scope.disposed) break;
+                        entry.status.textContent = "成功";
+                        entry.checkbox.dataset.done = "1";
+                        succeeded++;
+                        const original = matches.find(match => match.fileId === entry.record.fileId);
+                        if (original) original.name = entry.record.nextName;
+                        for (const row of this.document.querySelectorAll("[data-jhs115-file-id]")) {
+                            if (/** @type {HTMLElement} */ (row).dataset.jhs115FileId !== entry.record.fileId) continue;
+                            const link = row.querySelector("a");
+                            if (link) link.textContent = `${entry.record.nextName}（${format115Size(entry.record.size)}）`;
+                        }
+                    } catch (error) {
+                        if (scope.disposed) break;
+                        failed++;
+                        entry.status.textContent = `失败 ${error instanceof Error ? error.message : String(error)}`;
                     }
-                } catch (error) {
-                    if (scope.disposed) break;
-                    failed++;
-                    entry.status.textContent = `失败 ${error instanceof Error ? error.message : String(error)}`;
+                    view.progress.textContent = `成功 ${succeeded} · 失败 ${failed} · 未开始 ${selected.length - succeeded - failed}`;
                 }
-                view.progress.textContent = `成功 ${succeeded} · 失败 ${failed} · 未开始 ${selected.length - succeeded - failed}`;
+            } finally {
+                running = false;
+                if (!scope.disposed) {
+                    let remaining = 0;
+                    for (const entry of view.entries) {
+                        const done = entry.checkbox.dataset.done === "1";
+                        entry.checkbox.disabled = done;
+                        if (!done) remaining++;
+                    }
+                    view.submit.disabled = remaining === 0;
+                }
             }
         });
         scope.addCleanup(() => { if (index !== null) { const id = index; index = null; this.dialog.close(id); } view.root.remove(); if (trigger.isConnected) trigger.focus({ preventScroll: true }); });

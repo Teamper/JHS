@@ -115,9 +115,19 @@ export class StorageManager {
     /** 跨标签页互斥；Web Locks 不可用时退化为直接执行（仍保留页内互斥） */
     async _withCrossTabLock(e, t) {
         if (this.mutationCoordinator?.runExclusive) return this.mutationCoordinator.runExclusive(async () => {
-            // Actress writes reread their own domain under the lock. Other domains
-            // retain their caches; cross-tab state/rule events invalidate them separately.
-            this._invalidateCache(e === "jhs_actress_lock" ? this.favorite_actresses_key : null);
+            /** @type {Record<string, string[]>} */
+            const lockTargets = {
+                jhs_actress_lock: [this.favorite_actresses_key],
+                jhs_blacklist_lock: [this.blacklist_key, this.blacklist_car_list_key],
+                jhs_setting_lock: [this.setting_key],
+                jhs_keyword_lock: [this.filter_keyword_title_key, this.favorite_actresses_key],
+                jhs_highlighted_tags: [],
+                jhs_third_party_cache: [],
+                jhs_ttl_cache_lock: [],
+            };
+            const targets = Object.hasOwn(lockTargets, e) ? lockTargets[e] : null;
+            if (targets === null) this._invalidateCache(null);
+            else for (const key of targets) this._invalidateCache(key);
             return t();
         });
         const n = globalThis.navigator?.locks;

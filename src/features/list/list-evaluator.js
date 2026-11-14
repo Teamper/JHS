@@ -34,7 +34,7 @@ export function createListEvaluationContext(options = {}) {
  * @param {{ carNum?: string | null, title?: string, stateEligibility?: import("../../core/movie-identity.js").MovieStateEligibility }} record
  * @param {ReturnType<typeof createListEvaluationContext>} context
  * @param {{ filter?: unknown }} [options]
- * @returns {{ flags: StateFlags, visibilityReasons: VisibilityReasons, recent: boolean, hardHidden: boolean, matchesCurrentFilter: boolean }}
+ * @returns {{ flags: StateFlags, visibilityReasons: VisibilityReasons, matchedKeyword: string | null, recent: boolean, hardHidden: boolean, matchesCurrentFilter: boolean }}
  */
 export function evaluateListItem(record, context, { filter = "waitCheck" } = {}) {
     const carNum = record?.carNum;
@@ -52,6 +52,7 @@ export function evaluateListItem(record, context, { filter = "waitCheck" } = {})
     return {
         flags,
         visibilityReasons,
+        matchedKeyword: keyword,
         recent,
         hardHidden,
         matchesCurrentFilter: matchesQuickFilter(filter, flags, { visibilityReasons, recent }),

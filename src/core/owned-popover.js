@@ -31,7 +31,10 @@ export class OwnedPopover {
         };
         this.keyboard = (/** @type {KeyboardEvent} */ event) => {
             if (event.key === "Escape" && dismissActiveTooltip(this.menu.ownerDocument)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
-            if (this.options.manageKeyboard === false) return;
+            if (this.options.manageKeyboard === false) {
+                if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); this.close(true); }
+                return;
+            }
             if (event.key === "Escape") {
                 event.preventDefault(); event.stopImmediatePropagation(); this.close(true);
             } else if (event.key === "Tab" && this.menu.contains(/** @type {Node} */ (event.target))) this.close(true);

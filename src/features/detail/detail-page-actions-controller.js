@@ -129,9 +129,9 @@ export class DetailPageActionsController {
         if (this.route !== "detail") return false;
         this.hideVideoControls();
         if (!this.createMenuBtn()) return false;
-        const release = this.events?.on?.("car-state-changed", (/** @type {{carNums?: string[]}} */ payload) => {
+        const release = this.events?.on?.("car-state-changed", (/** @type {{carNums?: string[], scope?: string}} */ payload) => {
             const carNum = this.getPageInfo().carNum;
-            if (carNum && payload.carNums?.includes(carNum)) void this.showStatus(carNum);
+            if (carNum && (payload.scope === "all" || payload.carNums?.includes(carNum))) void this.showStatus(carNum);
         });
         if (typeof release === "function") this.scope.addCleanup(release);
         return true;

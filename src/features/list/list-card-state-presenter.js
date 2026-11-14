@@ -62,31 +62,31 @@ export class ListCardStatePresenter {
      * @param {{item: Element, carNum: string, title: string, evaluation: any, context: any, tagPosition?: string}} options
      */
     presentCard({ item, carNum, title, evaluation, context, tagPosition = "rightTop" }) {
-        const { flags, visibilityReasons, recent, hardHidden } = evaluation;
+        const { flags, visibilityReasons, matchedKeyword = "", recent, hardHidden } = evaluation;
         item.setAttribute("data-jhs-flags", JSON.stringify(flags));
         item.setAttribute("data-jhs-visibility", JSON.stringify(visibilityReasons));
         item.setAttribute("data-jhs-recent", recent ? "yes" : "no");
         item.setAttribute("data-jhs-tag-position", tagPosition);
 
-        const signature = JSON.stringify({ flags, visibilityReasons, P: tagPosition, keyword: visibilityReasons.keyword ? findMatchedTitleKeyword(context.titleKeywords, title, carNum) : "", actors: context.actorCarNumToNameMap?.get(carNum), actresses: context.actressCarNumToNameMap?.get(carNum) });
+        const signature = JSON.stringify({ flags, visibilityReasons, P: tagPosition, keyword: visibilityReasons.keyword ? (matchedKeyword || findMatchedTitleKeyword(context.titleKeywords, title, carNum)) : "", actors: context.actorCarNumToNameMap?.get(carNum), actresses: context.actressCarNumToNameMap?.get(carNum) });
         if (item.getAttribute("data-jhs-state-signature") !== signature) {
             item.setAttribute("data-jhs-state-signature", signature);
             if (this.reasonPopover && item.contains(this.reasonPopover.anchor)) this.reasonPopover.close();
             item.querySelectorAll(".jhs-status-tags,.jhs-card-reason").forEach((node) => node.remove());
-            this.renderBadges(item, { carNum, title, flags, visibilityReasons, context, tagPosition });
+            this.renderBadges(item, { carNum, title, flags, visibilityReasons, matchedKeyword, context, tagPosition });
         }
         this.updateSummary(item);
         return hardHidden;
     }
 
-    /** @param {Element} item @param {{carNum: string, title: string, flags: any, visibilityReasons: any, context: any, tagPosition: string}} options */
-    renderBadges(item, { carNum, title, flags, visibilityReasons, context, tagPosition }) {
+    /** @param {Element} item @param {{carNum: string, title: string, flags: any, visibilityReasons: any, matchedKeyword?: string | null, context: any, tagPosition: string}} options */
+    renderBadges(item, { carNum, title, flags, visibilityReasons, matchedKeyword, context, tagPosition }) {
         const definitions = [
             [ "blocked", flags.blocked, "单番号屏蔽" ],
             [ "favorite", flags.favorite ],
             [ "downloaded", flags.downloaded ],
             [ "watched", flags.watched ],
-            [ "keyword", visibilityReasons.keyword, findMatchedTitleKeyword(context.titleKeywords, title, carNum) || "未知" ],
+            [ "keyword", visibilityReasons.keyword, matchedKeyword || findMatchedTitleKeyword(context.titleKeywords, title, carNum) || "未知" ],
             [ "actorBlacklist", visibilityReasons.actorBlacklist, context.actorCarNumToNameMap.get(carNum) || "" ],
             [ "actressBlacklist", visibilityReasons.actressBlacklist, context.actressCarNumToNameMap.get(carNum) || "" ],
         ].filter(([, enabled]) => enabled);

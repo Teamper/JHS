@@ -189,10 +189,10 @@ export class ListActionsController {
 
     /** @param {LifecycleScope} scope */
     bindTagBlacklistState(scope) {
-        const button = this.$("#addBlacklistBtn"), MutationObserverType = this.window.MutationObserver;
-        if (!this.document.body || !this.document.querySelector("#jhs-check-tag") || !MutationObserverType) return;
+        const tagEl = this.document.querySelector("#jhs-check-tag"), MutationObserverType = this.window.MutationObserver;
+        if (!this.document.body || !tagEl || !MutationObserverType) return;
         const update = async () => {
-            const tag = this.$("#jhs-check-tag").text().trim();
+            const button = this.$("#addBlacklistBtn"), tag = this.$("#jhs-check-tag").text().trim();
             if (!tag || scope.disposed) return false;
             button.attr("data-tip", "屏蔽此分类及其后续影片");
             const blacklisted = await this.isBlacklisted(`no-${tag}`);
@@ -203,7 +203,7 @@ export class ListActionsController {
         const observer = new MutationObserverType(() => {
             void update().then((ready) => ready && scope.releaseObserver(observer)).catch((error) => this.recordError("分类黑名单状态读取失败", error));
         });
-        observer.observe(this.document.body, { childList: true, characterData: true, subtree: true });
+        observer.observe(tagEl, { childList: true, characterData: true, subtree: true });
         scope.ownObserver(observer);
         void update().then((ready) => ready && scope.releaseObserver(observer)).catch((error) => this.recordError("分类黑名单状态读取失败", error));
     }

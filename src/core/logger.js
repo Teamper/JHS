@@ -1,4 +1,5 @@
 import { createImageViewer } from "./image-viewer.js";
+import { prepareDialogOptions } from "./dialog-shell.js";
 import { escapeHtml } from "./constants.js";
 import { JHS_Z_INDEX } from "./theme.js";
 import { LifecycleScope } from "./lifecycle-scope.js";
@@ -188,9 +189,9 @@ window.loading = function() {
     isOwnerUncovered() {
         const owner = this.resolveOwnerElement();
         if (!owner) return this.config.zIndexStrategy !== "owner";
-        if (!owner.isConnected || !this.currentTarget?.isConnected || !owner.contains(this.currentTarget)) return false;
+        if (!owner.isConnected || !this.currentTarget?.isConnected || !owner.contains(this.currentTarget) || !this.currentTarget.getClientRects().length) return false;
         const ownerLayer = owner.closest(".layui-layer"), ownerZ = Number(ownerLayer && window.getComputedStyle(ownerLayer).zIndex) || 0;
-        return ![...document.querySelectorAll(".layui-layer, .viewer-container, .fancybox-container, .loading-container")].some(root => {
+        return ![...document.querySelectorAll(".layui-layer, .viewer-container, .fancybox-container, .loading-container, .jhs-owned-popover.is-open, #quick-setting-box:not([hidden]), .jhs-fab-menu.jhs-fab-menu-open")].some(root => {
             if (root === ownerLayer || root.contains(owner)) return false;
             const style = window.getComputedStyle(root);
             if (!root.getClientRects().length || style.display === "none" || style.visibility === "hidden") return false;
@@ -644,19 +645,8 @@ window.loading = function() {
             if (!this.tryInitialize() || !this.window || "undefined" == typeof layer) return;
             const host = document.createElement("div"), originalParent = this.window.parentNode, originalStyle = this.window.getAttribute("style");
             host.className = "jhs-ui jhs-logger-dialog", host.style.height = "100%", this.window.classList.remove("collapsed", "maximized"), Object.assign(this.window.style, { width: "100%", height: "100%", border: "0", borderRadius: "0", boxShadow: "none" }), this.reRenderAllLogs();
-            layer.open({
-                type: 1,
-                title: "JHS 运行日志",
-                content: host.outerHTML,
-                area: utils.getDialogArea("md"),
-                anim: -1,
-                success: layerElement => {
-                    $(layerElement).find(".jhs-logger-dialog")[0]?.appendChild(this.window), this.content.scrollTop = this.content.scrollHeight;
-                },
-                end: () => {
-                    originalParent?.appendChild(this.window), null == originalStyle ? this.window.removeAttribute("style") : this.window.setAttribute("style", originalStyle), this.window.classList.add("collapsed"), this.toggleBtn.classList.add("collapsed");
-                }
-            });
+            let logLayerId = null;
+            layer.open(prepareDialogOptions({ type: 1, zIndex: JHS_Z_INDEX.layer, scrollbar: false, ui: { size: "md", body: "scroll" }, title: "JHS 运行日志", content: host.outerHTML, area: utils.getDialogArea("md"), anim: -1, success: (layerElement, id) => { logLayerId = id; utils.setupEscClose?.(id); $(layerElement).find(".jhs-logger-dialog")[0]?.appendChild(this.window), this.content.scrollTop = this.content.scrollHeight; }, end: () => { if (logLayerId != null) utils.releaseEscClose?.(logLayerId); originalParent?.appendChild(this.window), null == originalStyle ? this.window.removeAttribute("style") : this.window.setAttribute("style", originalStyle), this.window.classList.add("collapsed"), this.toggleBtn.classList.add("collapsed"); } }, utils));
         }
         show() {
             (this.isInitialized && this.container || this.tryInitialize() && this.container) && (this.container.style.display = "", document.body.setAttribute("data-jhs-debug-visible", "true"),

@@ -41,7 +41,17 @@ export class UserscriptHttpAdapter {
                 redirect: options.requestOptions?.redirect === "error" ? "error" : "follow",
                 cache: options.requestOptions?.cache === "no-store" ? "no-store" : "default",
             });
-            const responseText = await response.text(), data = "json" === options.responseType ? JSON.parse(responseText) : responseText;
+            const responseText = await response.text();
+            let data = responseText;
+            if ("json" === options.responseType) {
+                if (response.ok) {
+                    try { data = JSON.parse(responseText); }
+                    catch (cause) { throw new JhsError("PARSE_ERROR", "JSON 响应解析失败", { source: "UserscriptHttpAdapter", cause }); }
+                } else {
+                    try { data = responseText ? JSON.parse(responseText) : responseText; }
+                    catch { data = responseText; }
+                }
+            }
             return {
                 status: response.status, data, responseText, finalUrl: response.url || options.url,
                 responseHeaders: [ ...response.headers.entries() ].map((entry => entry.join(": "))).join("\r\n"),

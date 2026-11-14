@@ -53,8 +53,8 @@ export class GmHttp {
     /** @param {string} e @param {{affectsBreaker?: boolean}} [options] */
     _recordFailure(e, { affectsBreaker = true } = {}) {
         let t = this._circuitBreakers.get(e);
-        t && affectsBreaker && (t.failCount++, ("half-open" === t.state || t.failCount >= (t.threshold || 3)) && (t.state = "open", t.openTime = Date.now(), t.probing = !1,
-        clog.warn(`[熔断] ${e} 连续失败 ${t.failCount} 次，已熔断 ${t.cooldownMs / 1e3} 秒`)));
+        t && (affectsBreaker ? (t.failCount++, ("half-open" === t.state || t.failCount >= (t.threshold || 3)) && (t.state = "open", t.openTime = Date.now(), t.probing = !1,
+        clog.warn(`[熔断] ${e} 连续失败 ${t.failCount} 次，已熔断 ${t.cooldownMs / 1e3} 秒`))) : ("half-open" === t.state && (t.state = "closed", t.failCount = 0, t.probing = !1)));
         let n = this._domainStats.get(e);
         n || (n = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e, n)), n.count++, n.errors++, n.lastUsed = Date.now();
     }
@@ -135,14 +135,18 @@ export class GmHttp {
                 } : {}),
                 onload: (/** @type {LegacyHttpRecord} */ e) => {
                     try {
-                        if (404 === e.status && requestOptions.ignoreNotFound) return void a(null);
+                        if (404 === e.status && requestOptions.ignoreNotFound) return this._recordSuccess(o), void a(null);
                         if (this._isCloudflareChallenge(e.responseText, e.status)) {
                             recordBreakerFailure(!0);
                             const n = /** @type {Error & LegacyHttpRecord} */ (new Error(`Cloudflare challenge blocked: ${t}`));
                             return n._cfBlocked = !0, n.status = e.status, n.requestUrl = t, n.finalUrl = e.finalUrl,
                             n.cfDiagnostics = { status: e.status, requestUrl: t, finalUrl: e.finalUrl, contentLength: e.responseText?.length || 0 }, void r(n);
                         }
-                        if (s && e.finalUrl !== t && r("请求被重定向了,URL是:" + e.finalUrl), e.status >= 200 && e.status < 300) {
+                        if (s && e.finalUrl !== t) {
+                            "half-open" === u.state && (u.probing = !1);
+                            return void r("请求被重定向了,URL是:" + e.finalUrl);
+                        }
+                        if (e.status >= 200 && e.status < 300) {
                             this._recordSuccess(o);
                             if (e.responseText) try {
                                 a(JSON.parse(e.responseText));

@@ -125,6 +125,13 @@ export class Fc2CatalogController {
         this.updateUrlParameter("page", String(this.currentPage));
 
         this.listen(searchButton, "click", () => void this.search());
+        this.listen(this.searchInput, "keydown", (event) => {
+            const keyEvent = /** @type {KeyboardEvent} */ (event);
+            if (keyEvent.key === "Enter" && !keyEvent.isComposing) {
+                keyEvent.preventDefault();
+                void this.search();
+            }
+        });
         this.listen(clearButton, "click", () => void this.clearSearch());
         this.listen(previous, "click", (event) => {
             event.preventDefault();
@@ -158,7 +165,10 @@ export class Fc2CatalogController {
 
     async search() {
         const keyword = this.searchInput?.value.trim() ?? "";
-        if (!keyword) return;
+        if (!keyword) {
+            if (this.keyword) return this.clearSearch();
+            return;
+        }
         this.keyword = keyword;
         this.updateUrlParameter("keyword", keyword);
         this.currentPage = 1;
@@ -249,7 +259,10 @@ export class Fc2CatalogController {
             if (this.processAddedItems) await this.processAddedItems([...this.catalogRoot.querySelectorAll(".item")]);
             await this.ui.smoothScrollToTop?.();
         } catch (error) {
-            if (!this.scope.disposed && generation === this.queryGeneration) this.diagnostics.recordError({ source: "fc2-catalog", featureId: "external-bridge", contributionId: "detail.fc2-lookup", message: error instanceof Error ? error.message : String(error) });
+            if (!this.scope.disposed && generation === this.queryGeneration) {
+                this.diagnostics.recordError({ source: "fc2-catalog", featureId: "external-bridge", contributionId: "detail.fc2-lookup", message: error instanceof Error ? error.message : String(error) });
+                this.notifications?.error?.("获取 123AV 列表失败，请稍后重试");
+            }
         } finally {
             loading?.close?.();
         }

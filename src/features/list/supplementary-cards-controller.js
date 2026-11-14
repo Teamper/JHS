@@ -16,7 +16,7 @@ export class SupplementaryCardsController {
         this.roots = new Map();
         this.index = new ListItemIndex({ readCarNum: item => this.owner.readCardIdentity(item)?.carNum });
         this.presenter = new ListCardStatePresenter({ hostAdapter: this.owner.hostAdapter, readCardIdentity: item => this.owner.readCardIdentity(item) });
-        this.context = this.owner.filterContextProvider ?? new ListFilterContextProvider({ readSources: options => this.owner.readFilterSources(options) });
+        /** @type {any} */ this.context = null;
         /** @type {Map<HTMLElement, string>} */ this.displays = new Map();
         /** @type {Set<Element>} */ this.cards = new Set();
         this.generation = 0;
@@ -38,11 +38,16 @@ export class SupplementaryCardsController {
         this.started = true;
         owner.scope.addCleanup(() => this.dispose());
         const refresh = (/** @type {any} */ payload = {}, type = "structure") => {
+            if (type === "settings-changed") {
+                const names = Array.isArray(payload?.names) ? payload.names : Array.isArray(payload?.changedKeys) ? payload.changedKeys : null;
+                if (names && !names.some((/** @type {string} */ name) => name === "tagPosition" || name === "defaultQuickFilterTab")) return;
+            }
+            const context = this.getFilterContext();
             const scoped = type === "car-state-changed" && payload?.scope !== "all"
                 && Array.isArray(payload?.carNums) && payload.carNums.length > 0
                 && !payload.changedDomains?.some((/** @type {string} */ key) => ["setting", "blacklist", "blacklist_car_list", "filter_keyword_title"].includes(key));
-            if (this.context !== owner.filterContextProvider) {
-                if (scoped) this.context.invalidateState(); else this.context.invalidate();
+            if (context !== owner.filterContextProvider) {
+                if (scoped) context.invalidateState(); else context.invalidate();
             }
             void this.refreshQueue.request(scoped ? { items: this.index.get(payload.carNums) } : { full: true })
                 .catch(error => owner.logger.error("推荐卡片刷新失败", error));
@@ -71,6 +76,10 @@ export class SupplementaryCardsController {
         }, { childList: true, subtree: true });
     }
 
+    getFilterContext() {
+        return this.owner.filterContextProvider ?? (this.context ??= new ListFilterContextProvider({ readSources: options => this.owner.readFilterSources(options) }));
+    }
+
     /** @param {Element[] | null} [items] */
     async refresh(items = null) {
         const owner = this.owner, host = owner.hostAdapter;
@@ -95,7 +104,7 @@ export class SupplementaryCardsController {
             for (const [card, display] of this.displays) if (!this.cards.has(card)) { card.style.display = display; this.displays.delete(card); }
         }
         if (!cards.length) return true;
-        const context = await this.context.get();
+        const context = await this.getFilterContext().get();
         const isCurrent = () => !this.disposed && !owner.scope.disposed && generation === this.generation && owner.boundListRoot?.isConnected && roots.every((/** @type {Element} */ root) => root.isConnected);
         if (!isCurrent()) return false;
         const visible = await this.presenter.processItems(cards, { context, filter: "all", tagPosition: context.settings?.tagPosition, isCurrent });
@@ -117,7 +126,8 @@ export class SupplementaryCardsController {
         this.disposed = true; this.generation++; this.refreshQueue.dispose();
         for (const binding of this.roots.values()) { binding.view.dispose(); binding.menu.dispose(); }
         this.roots.clear(); this.cards.clear(); this.index.clear();
-        if (this.context !== this.owner.filterContextProvider) this.context.dispose();
+        if (this.context && this.context !== this.owner.filterContextProvider) this.context.dispose();
+        /** @type {any} */ this.context = null;
         this.presenter.dispose();
         for (const [card, display] of this.displays) card.style.display = display;
         this.displays.clear();

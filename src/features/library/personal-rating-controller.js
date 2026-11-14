@@ -45,7 +45,8 @@ export class PersonalRatingController {
         const selectors = this.host.getCardEnhancementSelectors?.() || this.host.getListSelectors();
         for (const element of this.document.querySelectorAll(`${selectors.itemSelector},a.tile-item[href]`)) {
             if (this.items.has(element)) continue;
-            const movie = readListItem(element, this.ui.jquery);
+            let movie;
+            try { movie = readListItem(element, this.ui.jquery); } catch { continue; }
             if (!movie.stateEligibility.eligible) continue;
             this.attach(element, movie, false);
         }

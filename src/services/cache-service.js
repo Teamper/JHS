@@ -1,6 +1,6 @@
 // @ts-check
 
-const PUBLIC_CACHE_MAX_ENTRIES = 500, PUBLIC_CACHE_MAX_AGE_MS = 30 * 864e5, PUBLIC_PRUNE_INTERVAL = 64;
+const PUBLIC_CACHE_MAX_ENTRIES = 500, PUBLIC_CACHE_MAX_AGE_MS = 30 * 864e5, PUBLIC_PRUNE_INTERVAL = 64, L1_CACHE_MAX_ENTRIES = 250;
 
 /** @param {string} value @returns {Promise<string>} */
 async function digestKey(value) {
@@ -27,6 +27,20 @@ export class CacheService {
         this.pruneRunning = false;
         /** @type {Promise<void> | null} */
         this.prunePromise = null;
+        /** @type {Map<string, {expiresAt: number, lastUsed: number}>} */
+        this.publicMetadataIndex = new Map();
+    }
+
+    /** @param {Map<string, {value: unknown, expiresAt: number, negative: boolean}> | null} store @param {string} cacheKey @param {{value: unknown, expiresAt: number, negative: boolean}} entry */
+    _setMemoryEntry(store, cacheKey, entry) {
+        if (!store) return;
+        if (store.has(cacheKey)) store.delete(cacheKey);
+        store.set(cacheKey, entry);
+        while (store.size > L1_CACHE_MAX_ENTRIES) {
+            const oldest = store.keys().next().value;
+            if (oldest === undefined) break;
+            store.delete(oldest);
+        }
     }
 
     get publicGeneration() { return this.publicGenerations.get("default") || 0; }
@@ -55,6 +69,8 @@ export class CacheService {
         const store = this.storeFor(policy.scope, policy.sessionScopeId), cacheKey = `${namespace}:${this.namespaceVersion}:${key}`, now = Date.now(), storage = this.storage;
         const memoryEntry = store?.get(cacheKey);
         if (memoryEntry && memoryEntry.expiresAt > now) {
+            store?.delete(cacheKey);
+            store?.set(cacheKey, memoryEntry);
             this.diagnostics?.recordCache(true);
             return { hit: true, value: memoryEntry.value, negative: memoryEntry.negative };
         }
@@ -75,6 +91,7 @@ export class CacheService {
                 return { hit: false, value: undefined, negative: false };
             }
             if (entry?.version !== this.namespaceVersion || !Number.isFinite(entry?.expiresAt) || entry.expiresAt <= now) {
+                this.publicMetadataIndex.delete(persistedKey);
                 if (entry) await storage.remove(persistedKey).catch(() => {});
                 this.diagnostics?.recordCache(false);
                 return { hit: false, value: undefined, negative: false };
@@ -84,7 +101,8 @@ export class CacheService {
                 return { hit: false, value: undefined, negative: false };
             }
             const normalized = { value: entry.value, expiresAt: entry.expiresAt, negative: entry.negative === true };
-            this.publicCache.set(cacheKey, normalized);
+            this.publicMetadataIndex.set(persistedKey, { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || now });
+            this._setMemoryEntry(this.publicCache, cacheKey, normalized);
             this.diagnostics?.recordCache(true);
             return { hit: true, value: normalized.value, negative: normalized.negative };
         })().finally(() => {
@@ -105,7 +123,7 @@ export class CacheService {
         const entry = { value, expiresAt: Date.now() + ttlMs, negative: policy.negative ?? false }, store = this.storeFor(policy.scope, policy.sessionScopeId), cacheKey = `${namespace}:${this.namespaceVersion}:${key}`;
         const storage = this.storage;
         if (policy.scope !== "public" || !storage) {
-            store?.set(cacheKey, entry);
+            this._setMemoryEntry(store, cacheKey, entry);
             return;
         }
         if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
@@ -113,12 +131,15 @@ export class CacheService {
         if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
         try {
             if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
-            await storage.set(persistedKey, { version: this.namespaceVersion, ...entry, lastUsed: Date.now() });
+            const lastUsed = Date.now();
+            await storage.set(persistedKey, { version: this.namespaceVersion, ...entry, lastUsed });
             if (policy.generation != null && policy.generation !== this.generation(namespace)) {
+                this.publicMetadataIndex.delete(persistedKey);
                 await storage.remove(persistedKey).catch(() => {});
                 return;
             }
-            store?.set(cacheKey, entry);
+            this.publicMetadataIndex.set(persistedKey, { expiresAt: entry.expiresAt, lastUsed });
+            this._setMemoryEntry(store, cacheKey, entry);
             this.publicWritesSincePrune++;
             this.schedulePublicPrune();
         } catch {
@@ -156,18 +177,32 @@ export class CacheService {
         if (!this.storage) return;
         let keys;
         try { keys = await this.storage.keys(); } catch { return; }
-        const now = Date.now(), candidates = [];
-        for (const key of /** @type {string[]} */ (keys).filter((/** @param {string} item */ item) => item.startsWith("jhs_http_public_cache:v"))) {
-            const entry = await this.storage.get(key).catch(() => null);
-            if (!entry || entry.version !== this.namespaceVersion || !Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) {
+        const now = Date.now(), candidates = [], cacheKeys = /** @type {string[]} */ (keys).filter((/** @param {string} item */ item) => item.startsWith("jhs_http_public_cache:v"));
+        const activeKeySet = new Set(cacheKeys);
+        for (const knownKey of this.publicMetadataIndex.keys()) if (!activeKeySet.has(knownKey)) this.publicMetadataIndex.delete(knownKey);
+        for (const key of cacheKeys) {
+            let meta = this.publicMetadataIndex.get(key);
+            if (!meta) {
+                const entry = await this.storage.get(key).catch(() => null);
+                if (!entry || entry.version !== this.namespaceVersion || !Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) {
+                    await this.storage.remove(key).catch(() => {});
+                    continue;
+                }
+                meta = { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || 0 };
+                this.publicMetadataIndex.set(key, meta);
+            } else if (!Number.isFinite(meta.expiresAt) || meta.expiresAt <= now) {
+                this.publicMetadataIndex.delete(key);
                 await this.storage.remove(key).catch(() => {});
                 continue;
             }
-            candidates.push({ key, lastUsed: Number(entry.lastUsed) || 0 });
+            candidates.push({ key, lastUsed: meta.lastUsed });
         }
         if (candidates.length > PUBLIC_CACHE_MAX_ENTRIES) {
             candidates.sort((left, right) => left.lastUsed - right.lastUsed);
-            for (const item of candidates.slice(0, candidates.length - PUBLIC_CACHE_MAX_ENTRIES)) await this.storage.remove(/** @type {any} */ (item).key).catch(() => {});
+            for (const item of candidates.slice(0, candidates.length - PUBLIC_CACHE_MAX_ENTRIES)) {
+                this.publicMetadataIndex.delete(/** @type {any} */ (item).key);
+                await this.storage.remove(/** @type {any} */ (item).key).catch(() => {});
+            }
         }
     }
 
@@ -178,6 +213,8 @@ export class CacheService {
         this.publicGenerations.set(namespace, this.generation(namespace) + 1);
         for (const key of this.publicCache.keys()) if (key.startsWith(`${namespace}:`)) this.publicCache.delete(key);
         for (const key of this.publicReads.keys()) if (key.startsWith(`${namespace}:`)) this.publicReads.delete(key);
+        const prefix = this._publicPrefix(namespace);
+        for (const key of this.publicMetadataIndex.keys()) if (key.startsWith(prefix)) this.publicMetadataIndex.delete(key);
         await this.waitForPrune();
         const storage = this.storage;
         if (!storage) return;
@@ -189,7 +226,7 @@ export class CacheService {
     async clearAll() {
         const namespaces = new Set(this.publicNamespaces);
         for (const namespace of namespaces) await this.clearNamespace(namespace);
-        this.publicCache.clear(), this.publicReads.clear(), this.sessionCaches.clear();
+        this.publicCache.clear(), this.publicReads.clear(), this.sessionCaches.clear(), this.publicMetadataIndex.clear();
         // Also remove persisted namespaces that were not touched in this tab.
         // This keeps the settings "clear all" action a true boundary across
         // tabs and avoids leaving stale v2 entries behind.

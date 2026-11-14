@@ -19,7 +19,7 @@ export const MEDIA_LIBRARY_STYLES = `
 .jhs-media-badge { display:inline-flex; gap:var(--jhs-space-1); flex-wrap:wrap; align-items:center; color:var(--jhs-text); background:var(--jhs-surface); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); padding:var(--jhs-space-1) var(--jhs-space-2); font-size:var(--jhs-font-size-sm); }
 .jhs-media-badge [hidden] { display:none!important; }
 .jhs-media-details { display:flex; flex-direction:column; gap:var(--jhs-space-2); padding:var(--jhs-space-3) 0; }
-.jhs-media-details a { color:var(--jhs-primary); overflow-wrap:anywhere; }
+.jhs-media-details a { color:var(--jhs-accent); overflow-wrap:anywhere; }
 [data-jhs-media-filtered] { display:none!important; }
 @media(max-width:480px) { .jhs-media-connections fieldset { grid-template-columns:minmax(0,1fr); } }
 `;

@@ -13,7 +13,7 @@ const RESPONSIVE_SHELL_STYLES = `
             /* FAB 浮动操作按钮 */
             #jhs-fab {
                 position: fixed;
-                bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+                bottom: calc(24px + env(safe-area-inset-bottom, 0px) + var(--jhs-batch-clearance, 0px));
                 right: 20px;
                 width: 56px;
                 height: 56px;
@@ -35,12 +35,12 @@ const RESPONSIVE_SHELL_STYLES = `
                 -webkit-user-select: none;
             }
             html.jhs-fab-mounted {
-                scroll-padding-bottom:calc(104px + env(safe-area-inset-bottom, 0px));
+                scroll-padding-bottom:calc(104px + env(safe-area-inset-bottom, 0px) + var(--jhs-batch-clearance, 0px));
             }
             #jhs-fab-safe-area {
                 display: block;
                 width: 100%;
-                height: calc(104px + env(safe-area-inset-bottom, 0px));
+                height: calc(104px + env(safe-area-inset-bottom, 0px) + var(--jhs-batch-clearance, 0px));
                 clear: both;
                 visibility: hidden;
                 pointer-events: none;

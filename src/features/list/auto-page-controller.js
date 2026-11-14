@@ -44,6 +44,8 @@ export class AutoPageController {
         this.hasMore = false;
         this.isLoading = false;
         this.pausedFilter = null;
+        /** @type {Element | null} */ this.knownCarContainer = null;
+        /** @type {Set<string> | null} */ this.knownCarNums = null;
         this.visibilitySnapshot = this.list?.getVisibilitySnapshot?.() ?? null;
         this.mounted = false;
         this.disposed = false;
@@ -99,6 +101,8 @@ export class AutoPageController {
         this.liveScope = null;
         this.isLoading = false;
         this.pausedFilter = null;
+        /** @type {Element | null} */ this.knownCarContainer = null;
+        /** @type {Set<string> | null} */ this.knownCarNums = null;
         this.loader?.remove();
         this.loader = undefined;
     }
@@ -110,8 +114,12 @@ export class AutoPageController {
         this.settingsListener = null;
         this.unsubscribeItems?.();
         this.unsubscribeItems = null;
+        this.unsubscribeVisibility?.();
+        this.unsubscribeVisibility = null;
         this.stop();
         this.container = undefined;
+        /** @type {Element | null} */ this.knownCarContainer = null;
+        /** @type {Set<string> | null} */ this.knownCarNums = null;
         this.pageItems = [];
         this.hiddenPages.clear();
         this.nextUrl = null;
@@ -244,7 +252,12 @@ export class AutoPageController {
             const boundary = this.hostAdapter.resolveListBoundary?.(parsedDocument);
             if (this.hostAdapter.resolveListBoundary && !boundary) throw new Error("下一页正式影片列表无法确定");
             const cards = boundary ? this.ui.jquery(boundary.root).children(".item") : page.find(selectors.requestDomItemSelector);
-            if (this.hasRepeatedCarNumbers(this.readCarNumbers(this.hostAdapter.resolveListBoundary ? this.ui.jquery(this.container).children(".item") : this.ui.jquery(selectors.itemSelector)), this.readCarNumbers(cards))) {
+            const nextCarNums = this.readCarNumbers(cards);
+            if (!this.knownCarNums || this.knownCarContainer !== this.container) {
+                this.knownCarContainer = this.container;
+                this.knownCarNums = new Set(this.readCarNumbers(this.hostAdapter.resolveListBoundary ? this.ui.jquery(this.container).children(".item") : this.ui.jquery(selectors.itemSelector)).filter(Boolean));
+            }
+            if (this.hasRepeatedCarNumbers(this.knownCarNums, nextCarNums)) {
                 this.nextUrl = null;
                 this.hasMore = false;
                 return this.setState("waterfall-stopped", "下一页包含重复内容，已停止自动翻页");
@@ -256,6 +269,7 @@ export class AutoPageController {
             const pageTop = container.getBoundingClientRect().top + this.window.scrollY + container.scrollHeight;
             this.list.replaceCoverImages?.(cards.find(selectors.coverImgSelector).toArray());
             this.ui.jquery(container).append(cards);
+            for (const carNum of nextCarNums) if (carNum) this.knownCarNums?.add(carNum);
             this.loadedPage++;
             this.pageItems.push({ page: this.loadedPage, top: pageTop, url: pageUrl, items: cards.toArray() });
             this.invalidatePagePositions();
@@ -304,10 +318,10 @@ export class AutoPageController {
     }
 
     /** Stops only after two consecutive numbers repeat from the current page. */
-    /** @param {string[]} current @param {string[]} next */
+    /** @param {string[] | Set<string>} current @param {string[]} next */
     hasRepeatedCarNumbers(current, next) {
-        if (!current.length || !next.length) return false;
-        const existing = new Set(current);
+        const existing = current instanceof Set ? current : new Set(current);
+        if (!existing.size || !next.length) return false;
         let consecutive = 0;
         for (const carNum of next) {
             if (carNum && existing.has(carNum)) {

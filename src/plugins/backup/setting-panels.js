@@ -218,6 +218,8 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
         title: "数据差异预览",
         content: s,
         area: utils.getResponsiveArea(["700px", "auto"]),
+        scrollbar: false,
+        ui: { body: "scroll" },
         btn: hasChanges ? ["导入", "取消"] : ["关闭"],
         anim: -1,
         end: () => { index = null; scope.dispose(); },

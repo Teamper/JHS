@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### 修复
 
+- 修复 HTTP 4xx 状态误计入熔断器及 `half-open` 探测状态死锁、原生 fetch 解析非 JSON 错误页崩溃的问题。
+- 修复 `undoTransaction` 优先通过单次原子事务提交并清理列表快照，增强 IndexedDB 连接复用、CAS 签名预计算、事务超时保护与按锁作用域精准失效缓存。
+- 修复外链按钮缺失链接、空标签页与畸形卡片读取异常、多视图/控制器（`list-view`、封面快捷按钮、分类折叠、`auto-page`、`fc2-navigation`、`fc2-workspace`、115 批量改名、字幕上传、详情状态同步）生命周期残留或同步遗漏的问题。
+- 修复设置面板草稿默认值与 `JhsSelect` 同步、保存校验失败自动展开父级折叠组、嵌套弹窗层级叠放、`OwnedPopover` 键盘 Esc 隔离、`trapFocus` 对 `[inert]` 节点的排除、悬浮预览与 Tooltip 在遮挡/隐藏后的残留、缺失 CSS 语义变量引用与移动端 FAB 避让批量操作栏。
+- 优化凭证派生密钥与修订键裁剪、LRU 有界缓存、媒体库条目过期淘汰、翻译配置序列化与写入调度、空闲状态跳过背景任务唤醒、自动翻页已知番号集合复用及列表关键词评估结果复用。
+
 - FC2 详情保留列表卡片已有的标题、封面与发行日期，加载、登录提示和失败重试期间持续显示，详情补全成功后更新。
 
 - FC2 详情复用脚本 JavDB 登录凭证，登录失效时提供登录及自动重载入口；JavStore 使用完整 FC2-PPV 检索格式，修复 FC2-4995326 长缩略图漏查。

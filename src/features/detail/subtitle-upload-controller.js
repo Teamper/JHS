@@ -110,7 +110,7 @@ export class SubtitleUploadController {
         const recover = view.button("核对待确认记录", async () => {
             recover.disabled = true;
             try {
-                const accountId = allMatches[0]?.accountId;
+                const accountId = allMatches[0]?.accountId || (await uploads.currentAccount?.({ scope }))?.accountId;
                 if (!accountId) throw new TypeError("请先确认当前账号与目录");
                 const records = await uploads.records({ carNum: input.movie.carNum, accountId });
                 for (const record of records.filter((/** @type {any} */ item) => ["pending", "dispatching"].includes(item.state))) {

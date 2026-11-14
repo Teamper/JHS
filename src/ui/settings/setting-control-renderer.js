@@ -135,10 +135,10 @@ export function syncSettingRows(root, descriptors, snapshot) {
     descriptors.forEach((descriptor) => {
         const row = root.find(`[data-jhs-setting="${descriptor.key}"]`).first();
         if (!row.length) return;
-        const control = row.find(".jhs-setting-row__control").children().first();
+        const control = row.find(".jhs-setting-row__control").find("input, select, textarea").first();
         const value = Object.prototype.hasOwnProperty.call(snapshot, descriptor.key) ? snapshot[descriptor.key] : descriptor.defaultValue;
         if (control.is('input[type="checkbox"]')) control.prop("checked", normalizeBooleanValue(descriptor.key, value));
-        else if (control.is("select")) control.val(String(value ?? ""));
+        else if (control.is("select")) { if (control[0]) JhsSelect.setValue(control[0], String(value ?? ""), false); else control.val(String(value ?? "")); }
         else control.val(value == null ? "" : String(value));
     });
 }

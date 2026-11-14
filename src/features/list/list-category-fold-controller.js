@@ -274,6 +274,7 @@ export class ListCategoryFoldController {
         this.disposed = true;
         this.foldWriter = null;
         this.foldButtons = [];
+        if (this.categoryBox) this.categoryBox.hidden = false;
         this.categoryBox = null;
         this.categoryToolbar?.remove();
         this.categoryToolbar = null;

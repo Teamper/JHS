@@ -21,6 +21,7 @@ export class TranslationService extends EventTarget {
         this.configurationError = "";
         this.configurationFailure = /** @type {any} */ (null);
         this.configurationRevision = /** @type {string|null} */ (null);
+        /** @type {string | null} */ this._serializedChain = null;
         this.loadSequence = 0;
         this.requestGeneration = 0;
         /** @type {any[]} */ this.queue = [];
@@ -52,6 +53,7 @@ export class TranslationService extends EventTarget {
             const next = normalizeTranslationConfiguration(entry.value ? JSON.parse(entry.value) : {schema:1,profiles:[],primary:"google",fallbacks:[]});
             if (this.disposed || sequence !== this.loadSequence) return;
             this.configuration = next;
+            this._serializedChain = null;
             this.configurationRevision = entry.revision;
             this.urlPolicy?.setLocalOriginOwner("translation",next.profiles.filter((/** @type {any} */ profile) => profile.enabled).map((/** @type {any} */ profile) => new URL(profile.endpoint).origin));
             if (notify) this.configurationChanged();
@@ -220,14 +222,15 @@ export class TranslationService extends EventTarget {
         const oldKey = this.cacheKey(text,sourceLanguage,targetLanguage), generation = this.cacheGeneration, requestGeneration = this.requestGeneration;
         const legacy = google && options.cacheAlias && sourceLanguage === "ja" && targetLanguage === "zh-CN" ? this.readLegacyCache()[options.cacheAlias] : null;
         if (typeof legacy === "string" && legacy) return this.cachedResult(this.remember(oldKey,legacy,generation));
-        const digest = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify([chain,prompt,sourceLanguage,targetLanguage,text])));
+        const serializedChain = this._serializedChain ??= JSON.stringify(chain);
+        const digest = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(`[${serializedChain},${JSON.stringify(prompt)},${JSON.stringify(sourceLanguage)},${JSON.stringify(targetLanguage)},${JSON.stringify(text)}]`));
         options.scope?.assertActive();
         if (!this.enabled || requestGeneration !== this.requestGeneration) throw new JhsError("ABORTED","翻译配置已变化");
         const key = `translation:v3:${Array.from(new Uint8Array(digest),byte => byte.toString(16).padStart(2,"0")).join("")}`;
         const readCached = () => {
             const entry = this.memoryCache.get(key) || (google ? this.memoryCache.get(oldKey) : null);
             if (!entry || entry.expiresAt <= Date.now()) return null;
-            entry.lastUsed = Date.now(); this.schedulePersist();
+            entry.lastUsed = Date.now();
             return this.cachedResult(entry.value,entry.details);
         };
         let cached = readCached();

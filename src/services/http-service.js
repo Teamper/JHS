@@ -171,7 +171,7 @@ export class HttpService {
                     return response;
                 }
                 if (response.status >= 400) {
-                    const code = [401, 403].includes(response.status) ? "AUTH_REQUIRED" : response.status === 404 ? "NOT_FOUND" : response.status === 429 ? "RATE_LIMITED" : "NETWORK_ERROR";
+                    const code = [401, 403].includes(response.status) ? "AUTH_REQUIRED" : response.status === 404 ? "NOT_FOUND" : response.status === 429 ? "RATE_LIMITED" : response.status >= 500 ? "NETWORK_ERROR" : "INVALID_RESPONSE";
                     const contentType = String(response.responseHeaders || "").match(/(?:^|\n)content-type:\s*([^;\r\n]+)/i)?.[1] || "";
                     const responseClass = /json/i.test(contentType) ? "json" : /html/i.test(contentType) ? "html" : "other";
                     throw new JhsError(code, `HTTP ${response.status}`, { source: options.providerId, retryable: response.status === 429 || response.status >= 500, details: { status: response.status, domain, transport: options.transport === "native-fetch" && !response.nativeFallbackCode && !options.onDispatch ? "native-fetch" : "gm-xhr", responseClass } });

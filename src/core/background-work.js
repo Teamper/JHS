@@ -11,7 +11,7 @@ export class BackgroundWork {
         this.disposed = false;
         /** @type {any[]} */ this.waiters = [];
         /** @type {ReturnType<typeof setTimeout> | null} */ this.timer = null;
-        const input = () => { this.lastInput = this.clock(); this.pump(); };
+        const input = () => { this.lastInput = this.clock(); if (this.waiters.length) this.pump(); };
         for (const event of ["pointerdown", "mousemove", "keydown", "wheel", "scroll"]) options.scope.listen(this.document, event, input, { capture: true, passive: true });
         options.scope.listen(this.document, "visibilitychange", () => this.pump());
         options.scope.addCleanup(() => this.dispose());

@@ -172,7 +172,8 @@ export class ListView {
         this.filterPopover?.close();
         if (this.filterPopover) $(this.filterPopover.menu).off(".jhsListView");
         this.filterPopover = null;
-        this.quickFilterRoot?.off(".jhsListView"), this.navigationRoot?.off("click.jhsMovieDetail auxclick.jhsMovieDetail", ".item img, .item .video-title");
+        this.quickFilterRoot?.off(".jhsListView");
+        this.navigationRoot?.off("click.jhsMovieDetail auxclick.jhsMovieDetail", ".item img, .item .video-title");
         this.videoRoot?.off("click.jhsListVideo", ".item video");
         typeof document !== "undefined" && typeof $ === "function" && $(document).off("click.jhsQuickFilter");
         this.quickFilterRoot = null, this.navigationRoot = null, this.videoRoot = null;

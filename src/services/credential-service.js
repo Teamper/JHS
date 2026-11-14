@@ -64,6 +64,7 @@ export class CredentialService extends EventTarget {
         for (const name of await this.storage.listValues?.() || []) {
             if (!name.startsWith(prefix)) continue;
             const entry = await this.readEntry(name);
+            if (!entry.exists || !entry.value) continue;
             const node = JSON.parse(entry.value);
             const revision = name.slice(prefix.length);
             if (node.schema !== 1 || !Array.isArray(node.parents) || !node.parents.every((/** @type {any} */ parent) => parent === null || typeof parent === "string") || node.parents.includes(revision) || typeof node.value !== "string") {
@@ -100,6 +101,13 @@ export class CredentialService extends EventTarget {
             catch { await this.notifyChanged(key); }
             const current = await this.readVersioned(key);
             if (current.revision !== revision) throw Object.assign(new Error("连接配置已变化，请重新读取"), { code: "CONFIG_CONFLICT" });
+            try {
+                const prefix = `${key}:revision:`, revKeys = (await this.storage.listValues?.() ?? []).filter((/** @type {string} */ k) => typeof k === "string" && k.startsWith(prefix));
+                if (revKeys.length > 8) {
+                    const keep = new Set([revision, ...parents.filter(Boolean)].map(id => `${prefix}${id}`));
+                    for (const oldKey of revKeys) if (!keep.has(oldKey)) await this.storage.removeValue?.(oldKey);
+                }
+            } catch { /* Old revision cleanup must never break a committed save. */ }
             return current;
         };
         const locks = /** @type {any} */ (globalThis.navigator?.locks);
