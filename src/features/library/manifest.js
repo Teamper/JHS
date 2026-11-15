@@ -113,7 +113,7 @@ export default defineFeature({
             const controller = new FavoriteActressesController({
                 document, location, hostAdapter: deps[PORT.host], jquery: /** @type {any} */ (globalThis).$,
                 state: deps[SERVICE.state], settings: deps[SERVICE.settings],
-                styles: deps[PORT.style],
+                styles: deps[PORT.style], events: deps[SERVICE.events],
                 scope: runtime.scope, diagnostics: runtime.diagnostics, isDetailPage: runtime.route === "detail",
             });
             controller.start();

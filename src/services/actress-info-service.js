@@ -45,6 +45,14 @@ export class ActressInfoService {
         if (typeof adapter?.listActorCollection !== "function") throw new TypeError(`Actor collection is unavailable: ${providerId}`);
         return adapter.listActorCollection(query, options);
     }
+    /** @param {string} providerId @param {Record<string, any>} query @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async searchActors(providerId, query, options = {}) {
+        const manifest = this.integrations.list("actor.search").find((item) => item.id === providerId);
+        if (!manifest) throw new TypeError(`Actor search provider is unavailable: ${providerId}`);
+        const adapter = this.integrations.getAdapter(manifest.id);
+        if (typeof adapter?.searchActors !== "function") throw new TypeError(`Actor search is unavailable: ${providerId}`);
+        return adapter.searchActors(query, options);
+    }
     /** @param {string} providerId @param {Record<string, any>} actorRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async uncollect(providerId, actorRef, options = {}) {
         const manifest = this.integrations.list("actor.uncollect").find((item) => item.id === providerId);

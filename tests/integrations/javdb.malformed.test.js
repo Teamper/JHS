@@ -11,8 +11,11 @@ it("classifies malformed JavDB actor pages", () => {
     expect(parseJavDbActorList(jquery(dom.window.document), "https://javdb.com").state).toBe("invalid");
 });
 
-it("rejects JavDB actor challenge pages", () => {
-    expect(() => new JavDbHostAdapter().parseActorMovies("<title>Just a moment...</title>", "https://javdb.com")).toThrow(/challenge/);
+it("rejects JavDB actor challenge pages and classifies challenge/invalid actor searches", () => {
+    const hostAdapter = new JavDbHostAdapter();
+    expect(() => hostAdapter.parseActorMovies("<title>Just a moment...</title>", "https://javdb.com")).toThrow(/challenge/);
+    expect(hostAdapter.parseActorSearch("<title>Just a moment...</title>", "https://javdb.com").state).toBe("challenge");
+    expect(hostAdapter.parseActorSearch("<main></main>", "https://javdb.com").state).toBe("invalid");
 });
 
 it("rejects malformed JavDB API contracts", async () => {

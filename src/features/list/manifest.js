@@ -110,20 +110,23 @@ export default defineFeature({
             const batchUi = new ListBatchUi({ dialog: deps[SERVICE.dialog], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics });
             const releaseBatchStyles = deps[PORT.style].register("jhs-list-batch-feature", LIST_BATCH_UI_STYLES);
             runtime.scope.addCleanup(() => { batchUi.dispose(); releaseBatchStyles(); });
+            const isFavoriteActressesFeatureEnabled = () => runtime.isContributionPreferenceEnabled?.("library", "library.favorite-actresses", "FavoriteActressesPlugin") ?? true;
             const readFilterSources = async ({ stateOnly = false } = {}) => {
                 if (stateOnly) {
                     const [carMap, activity] = await Promise.all([deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getListActivity()]);
                     return { carMap, activity };
                 }
-                const [titleKeywords, blacklistMap, blacklistCars, carMap, activity] = await Promise.all([
+                const [titleKeywords, blacklistMap, blacklistCars, carMap, activity, favoriteActresses] = await Promise.all([
                     deps[SERVICE.titleKeywords].getAll(), deps[SERVICE.legacyStorage].getBlacklistMap(),
                     deps[SERVICE.state].getBlacklistCarList(), deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getListActivity(),
+                    deps[SERVICE.state].getFavoriteActressList?.() ?? deps[SERVICE.legacyStorage]?.getFavoriteActressList?.() ?? [],
                 ]);
-                return { titleKeywords, blacklistMap, blacklistCars, settings: deps[SERVICE.settings].snapshot(), carMap, activity };
+                return { titleKeywords, blacklistMap, blacklistCars, settings: deps[SERVICE.settings].snapshot(), carMap, activity, favoriteActresses, favoriteActressesEnabled: isFavoriteActressesFeatureEnabled() };
             };
             controller = new ListController({
                 legacyPlugin, hostAdapter: deps[PORT.host], scope: runtime.scope, styles: deps[PORT.style],
                 state: deps[SERVICE.state], storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage], readFilterSources,
+                isFavoriteActressesFeatureEnabled,
                 readCardIdentity: (item) => readListItem(deps[SERVICE.domUi].jquery(item)), http: deps[SERVICE.http],
                 batchUi, settings: deps[SERVICE.settings], navigation: deps[SERVICE.navigation], sortController,
                 events: deps[SERVICE.events], coverButtons: coverButtonController, busImageLayout: deps[SERVICE.busImageLayout], logger: deps[SERVICE.clog],

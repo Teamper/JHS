@@ -17,10 +17,11 @@ import { ListNavigationController } from "./list-navigation-controller.js";
 import { ListTagExpansionController } from "./list-tag-expansion-controller.js";
 import { normalizeQuickFilterKey } from "./list-filters.js";
 import { ListRefreshCoordinator } from "./list-refresh-coordinator.js";
+import { resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
 
 /** Own ListPagePlugin startup while its implementation migrates into FeatureRuntime. */
 export class ListController {
-    /** @param {{legacyPlugin: any, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, legacyStorage?: any, readFilterSources?: (options?: {stateOnly?: boolean}) => Promise<any>, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug">, window?: any}} options */
+    /** @param {{legacyPlugin: any, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, legacyStorage?: any, readFilterSources?: (options?: {stateOnly?: boolean}) => Promise<any>, isFavoriteActressesFeatureEnabled?: () => boolean, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug">, window?: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin;
         this.hostAdapter = options.hostAdapter;
@@ -31,6 +32,7 @@ export class ListController {
         this.state = options.state ?? null;
         this.legacyStorage = options.legacyStorage ?? null;
         this.readFilterSources = options.readFilterSources ?? null;
+        this.isFavoriteActressesFeatureEnabled = options.isFavoriteActressesFeatureEnabled ?? null;
         this.readCardIdentity = options.readCardIdentity ?? ((item) => this.legacyPlugin.findCarNumAndHref?.($(item)));
         this.http = options.http ?? null;
         this.settings = options.settings ?? null;
@@ -147,6 +149,7 @@ export class ListController {
         this.hasVisibilitySnapshot = false;
         this.sortController = options.sortController ?? null;
         this.styleRelease = null;
+        this.favoriteActressStyleRelease = null;
         /** @type {ListView | null} */ this.view = null;
         /** @type {ListItemIndex | null} */ this.itemIndex = null;
         /** @type {ListDomObserver | null} */ this.domObserver = null;
@@ -155,6 +158,7 @@ export class ListController {
         this.supplementaryCards = new SupplementaryCardsController({ owner: this, ui: options.ui, notifications: options.notifications, diagnostics: options.diagnostics });
         this.started = false;
         this.scope.addCleanup(() => this.cancelScheduledRecount());
+        this.scope.addCleanup(() => { this.favoriteActressStyleRelease?.(); this.favoriteActressStyleRelease = null; });
     }
 
     start() {
@@ -190,6 +194,29 @@ export class ListController {
                 contextProvider.dispose();
                 if (this.filterContextProvider === contextProvider) this.filterContextProvider = null;
             });
+        }
+        if (this.settings?.addEventListener) {
+            const onHighlightSettingsChanged = (/** @type {any} */ event) => {
+                const names = Array.isArray(event?.detail?.names) ? event.detail.names : [];
+                if (names.some((/** @type {string} */ name) => name === "enableFavoriteActresses" || name === "highlightedTagNumber" || name === "highlightedTagColor")) {
+                    this.refreshFavoriteActressHighlightStyle();
+                }
+            };
+            this.settings.addEventListener("settings.changed", onHighlightSettingsChanged);
+            this.scope.addCleanup(() => this.settings.removeEventListener?.("settings.changed", onHighlightSettingsChanged));
+        }
+        const doc = this.hostAdapter?.document;
+        if (doc?.addEventListener) {
+            const onActressStateChanged = () => {
+                if (this.listRefreshController.disposed || this.scope.disposed) return;
+                if (typeof this.legacyPlugin.requestListRefresh === "function") {
+                    void this.legacyPlugin.requestListRefresh({ reason: "actress-state-changed", full: true });
+                } else {
+                    void this.listRefreshController.request({ full: true });
+                }
+            };
+            doc.addEventListener("actress-state-changed", onActressStateChanged);
+            this.scope.addCleanup(() => doc.removeEventListener?.("actress-state-changed", onActressStateChanged));
         }
         this.legacyPlugin.setSortController?.(this.sortController);
         this.hostMarkupController.normalizeInitialMarkup();
@@ -443,10 +470,25 @@ export class ListController {
         return true;
     }
 
+    refreshFavoriteActressHighlightStyle() {
+        this.favoriteActressStyleRelease?.();
+        this.favoriteActressStyleRelease = null;
+        if (!this.styles?.register) return;
+        const featureEnabled = this.isFavoriteActressesFeatureEnabled?.() ?? true;
+        if (!featureEnabled) return;
+        const { enabled, width, color } = resolveFavoriteActressHighlightStyle(this.settings?.snapshot?.());
+        if (!enabled) return;
+        this.favoriteActressStyleRelease = this.styles.register(
+            "jhs-list-favorite-actresses-feature",
+            `[data-jhs-card-list] > .item[data-jhs-favorite-actress="yes"]:not(.do-hide),[data-jhs-primary-list] > .item[data-jhs-favorite-actress="yes"]:not(.do-hide),.masonry > .item[data-jhs-favorite-actress="yes"]:not(.do-hide){box-shadow:0 0 0 ${width}px ${color};border-radius:var(--jhs-radius-sm)}`
+        );
+    }
+
     async registerStyles() {
         if (!this.styles) return;
         if (!this.cardStateStyleRelease) this.cardStateStyleRelease = this.styles.register("jhs-list-card-state-feature", LIST_CARD_STATE_STYLES);
         if (!this.paginationStyleRelease) this.paginationStyleRelease = this.styles.register("jhs-list-pagination-feature", LIST_PAGINATION_STYLES);
+        this.refreshFavoriteActressHighlightStyle();
         if (this.styleRelease || !this.legacyPlugin.initCss) return;
         const css = await this.legacyPlugin.initCss();
         if (!css) return;
@@ -475,6 +517,8 @@ export class ListController {
         this.legacyPlugin.setSortController?.(null);
         this.styleRelease?.();
         this.styleRelease = null;
+        this.favoriteActressStyleRelease?.();
+        this.favoriteActressStyleRelease = null;
         this.cardStateStyleRelease?.();
         this.cardStateStyleRelease = null;
         this.paginationStyleRelease?.();

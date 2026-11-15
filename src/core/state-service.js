@@ -296,6 +296,10 @@ export class StateService {
     async updateFavoriteActress(update) {
         return this.storage.updateFavoriteActress(update);
     }
+    /** Atomically migrate or merge a favorite actress record onto a new starId under the actress lock. @param {StateRecord} payload */
+    async rebindFavoriteActress(payload) {
+        return this.storage.rebindFavoriteActress(payload);
+    }
     /** @param {unknown} starId */
     async removeFavoriteActress(starId) {
         return this.storage.removeFavoriteActress(starId);

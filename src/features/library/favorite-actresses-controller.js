@@ -1,6 +1,7 @@
 // @ts-check
 
 import { _ } from "../../core/constants.js";
+import { resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
 
 const CONFIRM_SELECTOR = 'a[href*="/actors/"][href*="/uncollect"]';
 const ACTOR_ACTION = /\/actors\/(\w+)\/(collect|uncollect)/u;
@@ -9,7 +10,7 @@ const HIGHLIGHT_CLASS = "jhs-favorite-actress-highlight";
 
 /** Own JavDB actress decoration and collection events while preserving the 6.5.1 storage contract. */
 export class FavoriteActressesController {
-    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, jquery: any, state: any, settings: any, styles: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, isDetailPage: boolean}} options */
+    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, jquery: any, state: any, settings: any, styles: any, events?: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, isDetailPage: boolean}} options */
     constructor(options) {
         this.document = options.document;
         this.location = options.location;
@@ -18,6 +19,7 @@ export class FavoriteActressesController {
         this.state = options.state;
         this.settings = options.settings;
         this.styles = options.styles;
+        this.events = options.events ?? null;
         this.releaseHighlightStyle = () => {};
         this.highlightGeneration = 0;
         this.scope = options.scope;
@@ -82,14 +84,10 @@ export class FavoriteActressesController {
     async highlightActress() {
         if (!this.isDetailPage || this.disposed || this.scope.disposed) return;
         const generation = ++this.highlightGeneration;
-        const settings = this.settings.snapshot();
         this.releaseHighlightStyle();
         this.releaseHighlightStyle = () => {};
-        if ((settings.enableFavoriteActresses ?? _) !== _) return this.clearHighlights();
-        const rawWidth = Number(settings.highlightedTagNumber);
-        const width = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1;
-        const rawColor = typeof settings.highlightedTagColor === "string" ? settings.highlightedTagColor : "";
-        const color = /^#[\da-f]{3,8}$/iu.test(rawColor) ? rawColor : "var(--jhs-danger)";
+        const { enabled, width, color } = resolveFavoriteActressHighlightStyle(this.settings.snapshot());
+        if (!enabled) return this.clearHighlights();
         this.releaseHighlightStyle = this.styles.register("jhs-favorite-actresses-feature", `a.${HIGHLIGHT_CLASS}.highlighted{border:${width}px solid ${color}}`);
         const actresses = await this.state.getFavoriteActressList();
         if (this.disposed || this.scope.disposed || generation !== this.highlightGeneration) return;
@@ -212,9 +210,11 @@ export class FavoriteActressesController {
     /** @param {string} actorId */
     dispatchActressStateChanged(actorId) {
         if (this.scope.disposed) return;
+        const normalizedId = String(actorId);
+        void Promise.resolve(this.events?.emit?.("actress-changed", { starId: normalizedId })).catch(() => {});
         const CustomEventConstructor = this.document.defaultView?.CustomEvent;
         if (!CustomEventConstructor) return;
-        this.document.dispatchEvent(new CustomEventConstructor("actress-state-changed", { detail: { starId: String(actorId) } }));
+        this.document.dispatchEvent(new CustomEventConstructor("actress-state-changed", { detail: { starId: normalizedId } }));
     }
 
     /** @param {any} event */

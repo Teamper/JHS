@@ -387,8 +387,9 @@ describe("List FeatureRuntime ownership", () => {
         expect(register).toHaveBeenCalledWith("jhs-list-feature-style", ".jhs-list{color:red}");
         expect(register).toHaveBeenCalledWith("jhs-list-card-state-feature", expect.stringContaining(".jhs-status-tags"));
         expect(register).toHaveBeenCalledWith("jhs-list-pagination-feature", expect.stringContaining(".jhs-jump-page-input"));
+        expect(register).toHaveBeenCalledWith("jhs-list-favorite-actresses-feature", expect.stringContaining("box-shadow"));
         expect(handle).toHaveBeenCalledWith({ scope, view: expect.any(Object), itemIndex: expect.any(Object), observer: expect.any(Object), batchController: expect.any(Object), featureOwnsStartup: true });
-        expect(release).toHaveBeenCalledTimes(3);
+        expect(release).toHaveBeenCalledTimes(4);
         scope.dispose();
     });
 
@@ -400,7 +401,7 @@ describe("List FeatureRuntime ownership", () => {
         });
 
         await expect(controller.start()).rejects.toThrow("mount failed");
-        expect(release).toHaveBeenCalledTimes(3);
+        expect(release).toHaveBeenCalledTimes(4);
         expect(controller.started).toBe(false);
         scope.dispose();
     });

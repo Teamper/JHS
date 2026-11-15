@@ -502,6 +502,76 @@ export class StorageManager {
     async updateFavoriteActress(e) {
         return this.withActressLock(() => this._rawUpdateFavoriteActress(e));
     }
+    async rebindFavoriteActress(payload) {
+        return this.withActressLock(async () => {
+            const fromStarId = String(payload?.fromStarId || "").trim(), toStarId = String(payload?.toStarId || "").trim();
+            if (!fromStarId || !toStarId) throw new Error("缺失starId");
+            const stripTag = (value) => String(value || "").replace(/\(無碼\)/gu, "").trim();
+            const incomingName = stripTag(payload?.name);
+            const incomingNames = Array.isArray(payload?.allName) ? payload.allName.map(stripTag).filter(Boolean) : [];
+            if (fromStarId === toStarId) {
+                const updated = await this._rawUpdateFavoriteActress({
+                    starId: toStarId, name: incomingName || undefined, allName: incomingNames.length ? incomingNames : undefined,
+                    avatar: payload?.avatar || undefined, actressType: payload?.actressType ?? undefined,
+                });
+                if (!updated) return { ok: false, merged: false, actress: null };
+                const current = (await this.getFavoriteActressList()).find(item => item.starId === toStarId) || null;
+                return { ok: true, merged: false, actress: current };
+            }
+            const list = await this.getFavoriteActressList();
+            const source = list.find(item => item.starId === fromStarId);
+            if (!source) return { ok: false, merged: false, actress: null };
+            const target = list.find(item => item.starId === toStarId) || null;
+            const mergeNames = (...groups) => [...new Set(groups.flat().map(stripTag).filter(Boolean))];
+            const mergeVideos = (...lists) => {
+                const merged = new Map();
+                for (const items of lists) {
+                    for (const item of Array.isArray(items) ? items : []) {
+                        const key = normalizeCarNum(typeof item === "string" ? item : item?.carNum);
+                        if (!key) continue;
+                        const prev = merged.get(key);
+                        if (!prev || (typeof prev === "string" && item && typeof item === "object")) merged.set(key, item);
+                    }
+                }
+                return prepareNewVideoRecords([...merged.values()], [...(Array.isArray(target?.newVideoList) ? target.newVideoList : []), ...(Array.isArray(source.newVideoList) ? source.newVideoList : [])]);
+            };
+            const mergedNames = mergeNames(incomingName ? [incomingName] : [], incomingNames, target?.allName, target?.name ? [target.name] : [], source.allName, source.name ? [source.name] : []);
+            const now = utils.getNowStr();
+            const pickLatest = (left, right) => [left, right].map(v => String(v || "").trim()).filter(Boolean).sort().at(-1) || "";
+            const mergeRemark = (left, right) => {
+                const a = String(left || "").trim(), b = String(right || "").trim();
+                if (!a) return b;
+                if (!b || a === b || a.includes(b)) return a;
+                if (b.includes(a)) return b;
+                return `${a}；${b}`;
+            };
+            const nextRecord = target ? {
+                ...target,
+                name: incomingName || target.name || source.name,
+                allName: mergedNames.length ? mergedNames : target.allName,
+                avatar: payload?.avatar || target.avatar || source.avatar,
+                actressType: payload?.actressType || target.actressType || source.actressType,
+                remark: mergeRemark(target.remark, source.remark),
+                lastPublishTime: pickLatest(target.lastPublishTime, source.lastPublishTime) || target.lastPublishTime || source.lastPublishTime,
+                lastCheckTime: null,
+                newVideoList: mergeVideos(target.newVideoList, source.newVideoList),
+                updateDate: now,
+            } : {
+                ...source,
+                starId: toStarId,
+                name: incomingName || source.name,
+                allName: mergedNames.length ? mergedNames : source.allName,
+                avatar: payload?.avatar || source.avatar,
+                actressType: payload?.actressType || source.actressType,
+                lastCheckTime: null,
+                newVideoList: mergeVideos(source.newVideoList),
+                updateDate: now,
+            };
+            const nextList = target ? list.filter(item => item !== source).map(item => item === target ? nextRecord : item) : list.map(item => item === source ? nextRecord : item);
+            await this._setItemAndInvalidate(this.favorite_actresses_key, nextList);
+            return { ok: true, merged: Boolean(target), actress: nextRecord };
+        });
+    }
     async getHighlightedTags() {
         return await this.forage.getItem(this.highlighted_tags_key) || [];
     }

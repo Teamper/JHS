@@ -89,6 +89,21 @@ it("normalizes JavDB host actor collections with absolute URLs", () => {
     }] });
 });
 
+it("normalizes JavDB actor search results including empty search results", async () => {
+    const hostAdapter = new JavDbHostAdapter();
+    const empty = hostAdapter.parseActorSearch('<div class="empty-message">沒有找到相關演員</div>', "https://javdb.com/search?q=missing&f=actor");
+    expect(empty).toMatchObject({ state: "valid", isEmpty: true, actors: [] });
+    const request = vi.fn(async () => ({
+        data: '<div id="actors"><div class="actor-box"><a title="Merged, Old" href="/actors/merged-1"><img src="/avatars/m1.jpg"><span class="info">有碼</span></a></div></div>',
+        finalUrl: "https://javdb.com/search?q=Merged&f=actor"
+    }));
+    const adapter = createJavDbAdapter({ request }, () => "signature", hostAdapter);
+    await expect(adapter.searchActors({ keyword: "Merged", baseUrl: "https://javdb.com" })).resolves.toMatchObject({
+        state: "valid", isEmpty: false, actors: [{ starId: "merged-1", name: "Merged", allName: ["Merged", "Old"], avatar: "https://javdb.com/avatars/m1.jpg", actressType: "censored" }]
+    });
+    expect(request.mock.calls[0][0]).toMatchObject({ capability: "actor.search", url: "https://javdb.com/search?q=Merged&f=actor" });
+});
+
 it("normalizes JavDB login without caching credentials", async () => {
     const request = vi.fn(async options => ({ data: { success: 1, data: { token: "token" } }, finalUrl: options.url }));
     const adapter = createJavDbAdapter({ request }, () => "signature");

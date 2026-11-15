@@ -2,6 +2,7 @@
 
 import { b, k, u, y } from "../../core/constants.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
+import { readCardNames, readCardStarIds } from "../../core/list-item-reader.js";
 import { isHardHidden } from "./list-filters.js";
 import { evaluateListItem, findMatchedTitleKeyword } from "./list-evaluator.js";
 import { OwnedPopover } from "../../core/owned-popover.js";
@@ -16,6 +17,7 @@ const BADGES = Object.freeze({
     keyword: { text: "关键词屏蔽", color: "var(--jhs-status-filter)", on: "var(--jhs-status-filter-on)" },
     actorBlacklist: { text: "男演员屏蔽", color: "var(--jhs-status-filter)", on: "var(--jhs-status-filter-on)" },
     actressBlacklist: { text: "女演员屏蔽", color: "var(--jhs-status-filter)", on: "var(--jhs-status-filter-on)" },
+    favoriteActress: { text: "收藏演员", color: "var(--jhs-accent-tint)", on: "var(--jhs-accent)" },
 });
 
 /** Own list-card state attributes, status badges, and the current-page state summary. */
@@ -51,7 +53,10 @@ export class ListCardStatePresenter {
             const item = items[index];
             if (this.hostAdapter?.site === "javbus" && item.querySelector(".avatar-box")) continue;
             const record = this.readCardIdentity(item), { carNum, title } = record;
-            const evaluation = evaluateListItem(record, context, { filter });
+            const enrichedRecord = context.favoriteActressHighlightEnabled && context.favoriteActressIndex?.hasActresses && (record.cardNames === undefined || record.cardStarIds === undefined)
+                ? { ...record, cardNames: record.cardNames ?? readCardNames(item), cardStarIds: record.cardStarIds ?? readCardStarIds(item) }
+                : record;
+            const evaluation = evaluateListItem(enrichedRecord, context, { filter });
             this.presentCard({ item, carNum, title, evaluation, context, tagPosition });
             if (!evaluation.hardHidden) visibleItems.push(item);
         }
@@ -63,24 +68,32 @@ export class ListCardStatePresenter {
      */
     presentCard({ item, carNum, title, evaluation, context, tagPosition = "rightTop" }) {
         const { flags, visibilityReasons, matchedKeyword = "", recent, hardHidden } = evaluation;
+        const favoriteActresses = !hardHidden && Array.isArray(evaluation.favoriteActresses) ? evaluation.favoriteActresses : [];
         item.setAttribute("data-jhs-flags", JSON.stringify(flags));
         item.setAttribute("data-jhs-visibility", JSON.stringify(visibilityReasons));
         item.setAttribute("data-jhs-recent", recent ? "yes" : "no");
         item.setAttribute("data-jhs-tag-position", tagPosition);
+        if (favoriteActresses.length) {
+            item.setAttribute("data-jhs-favorite-actress", "yes");
+            item.setAttribute("data-jhs-favorite-actress-names", favoriteActresses.join("，"));
+        } else {
+            item.removeAttribute("data-jhs-favorite-actress");
+            item.removeAttribute("data-jhs-favorite-actress-names");
+        }
 
-        const signature = JSON.stringify({ flags, visibilityReasons, P: tagPosition, keyword: visibilityReasons.keyword ? (matchedKeyword || findMatchedTitleKeyword(context.titleKeywords, title, carNum)) : "", actors: context.actorCarNumToNameMap?.get(carNum), actresses: context.actressCarNumToNameMap?.get(carNum) });
+        const signature = JSON.stringify({ flags, visibilityReasons, P: tagPosition, keyword: visibilityReasons.keyword ? (matchedKeyword || findMatchedTitleKeyword(context.titleKeywords, title, carNum)) : "", actors: context.actorCarNumToNameMap?.get(carNum), actresses: context.actressCarNumToNameMap?.get(carNum), favoriteActresses });
         if (item.getAttribute("data-jhs-state-signature") !== signature) {
             item.setAttribute("data-jhs-state-signature", signature);
             if (this.reasonPopover && item.contains(this.reasonPopover.anchor)) this.reasonPopover.close();
             item.querySelectorAll(".jhs-status-tags,.jhs-card-reason").forEach((node) => node.remove());
-            this.renderBadges(item, { carNum, title, flags, visibilityReasons, matchedKeyword, context, tagPosition });
+            this.renderBadges(item, { carNum, title, flags, visibilityReasons, matchedKeyword, context, tagPosition, favoriteActresses });
         }
         this.updateSummary(item);
         return hardHidden;
     }
 
-    /** @param {Element} item @param {{carNum: string, title: string, flags: any, visibilityReasons: any, matchedKeyword?: string | null, context: any, tagPosition: string}} options */
-    renderBadges(item, { carNum, title, flags, visibilityReasons, matchedKeyword, context, tagPosition }) {
+    /** @param {Element} item @param {{carNum: string, title: string, flags: any, visibilityReasons: any, matchedKeyword?: string | null, context: any, tagPosition: string, favoriteActresses?: string[]}} options */
+    renderBadges(item, { carNum, title, flags, visibilityReasons, matchedKeyword, context, tagPosition, favoriteActresses = [] }) {
         const definitions = [
             [ "blocked", flags.blocked, "单番号屏蔽" ],
             [ "favorite", flags.favorite ],
@@ -89,6 +102,7 @@ export class ListCardStatePresenter {
             [ "keyword", visibilityReasons.keyword, matchedKeyword || findMatchedTitleKeyword(context.titleKeywords, title, carNum) || "未知" ],
             [ "actorBlacklist", visibilityReasons.actorBlacklist, context.actorCarNumToNameMap.get(carNum) || "" ],
             [ "actressBlacklist", visibilityReasons.actressBlacklist, context.actressCarNumToNameMap.get(carNum) || "" ],
+            [ "favoriteActress", favoriteActresses.length > 0, favoriteActresses.length ? `收藏演员：${favoriteActresses.join("，")}` : "" ],
         ].filter(([, enabled]) => enabled);
         if (!definitions.length) return;
 
@@ -98,8 +112,8 @@ export class ListCardStatePresenter {
         for (const [key, , tip = ""] of definitions) {
             const definition = BADGES[/** @type {keyof typeof BADGES} */ (key)];
             const badge = this.document.createElement("span");
-            const toneClass = ["keyword", "actorBlacklist", "actressBlacklist"].includes(String(key)) ? "status-tag--blocked" : `status-tag--${key}`;
-            badge.className = `jhs-badge ${isJavDb ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag ${toneClass}`;
+            const toneClass = ["keyword", "actorBlacklist", "actressBlacklist"].includes(String(key)) ? "status-tag--blocked" : key === "favoriteActress" ? "status-tag--favorite-actress" : `status-tag--${key}`;
+            badge.className = `jhs-badge ${key === "favoriteActress" ? "jhs-badge--accent" : isJavDb ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag ${toneClass}`;
             badge.dataset.tip = tip;
             badge.title = "";
             badge.textContent = definition.text;
@@ -108,7 +122,7 @@ export class ListCardStatePresenter {
 
         if (isJavDb) item.querySelector(".tags")?.append(box);
         else if (this.hostAdapter?.site === "javbus") {
-            const target = item.querySelector(".item-tag") ?? item.querySelector(".photo-info > span > div");
+            const target = item.querySelector(".item-tag") ?? item.querySelector(".photo-info > span > div") ?? item.querySelector(".photo-info > span") ?? item.querySelector("a") ?? item;
             target?.append(box);
         }
         const reasons = definitions.filter(([key]) => ["keyword", "actorBlacklist", "actressBlacklist"].includes(String(key)));

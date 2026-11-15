@@ -40,19 +40,19 @@ export class SupplementaryCardsController {
         const refresh = (/** @type {any} */ payload = {}, type = "structure") => {
             if (type === "settings-changed") {
                 const names = Array.isArray(payload?.names) ? payload.names : Array.isArray(payload?.changedKeys) ? payload.changedKeys : null;
-                if (names && !names.some((/** @type {string} */ name) => name === "tagPosition" || name === "defaultQuickFilterTab")) return;
+                if (names && !names.some((/** @type {string} */ name) => name === "tagPosition" || name === "defaultQuickFilterTab" || name === "enableFavoriteActresses")) return;
             }
             const context = this.getFilterContext();
             const scoped = type === "car-state-changed" && payload?.scope !== "all"
                 && Array.isArray(payload?.carNums) && payload.carNums.length > 0
-                && !payload.changedDomains?.some((/** @type {string} */ key) => ["setting", "blacklist", "blacklist_car_list", "filter_keyword_title"].includes(key));
+                && !payload.changedDomains?.some((/** @type {string} */ key) => ["setting", "blacklist", "blacklist_car_list", "filter_keyword_title", "favorite_actresses"].includes(key));
             if (context !== owner.filterContextProvider) {
                 if (scoped) context.invalidateState(); else context.invalidate();
             }
             void this.refreshQueue.request(scoped ? { items: this.index.get(payload.carNums) } : { full: true })
                 .catch(error => owner.logger.error("推荐卡片刷新失败", error));
         };
-        for (const type of ["car-state-changed", "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed"]) {
+        for (const type of ["car-state-changed", "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed", "new-video-changed", "actress-changed"]) {
             const release = owner.events?.on?.(type, (/** @type {any} */ payload) => refresh(payload, type));
             if (release) owner.scope.addCleanup(release);
         }

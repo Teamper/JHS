@@ -14,7 +14,7 @@ describe("List Feature event ownership", () => {
         await list.handle({ scope, featureOwnsStartup: true });
 
         expect(events.on.mock.calls.map(([name]) => name)).toEqual([
-            "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed", "car-state-changed",
+            "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed", "new-video-changed", "actress-changed", "car-state-changed",
         ]);
         expect(scope.addCleanup).toHaveBeenCalled();
     });

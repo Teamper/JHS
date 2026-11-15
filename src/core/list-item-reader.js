@@ -4,18 +4,29 @@ import { getMovieStateEligibility, normalizeMovieCarNum } from "./movie-identity
 
 /** 从列表卡片尽力读取演员名（无演员信息的卡片返回空串，绝不用搜索关键词填充）。 @param {any} item */
 export function readCardNames(item) {
-    const jq = /** @type {any} */ (globalThis).$, element = item?.jquery ? item : jq(item);
+    const root = item?.jquery ? item[0] : item;
+    if (!root?.querySelectorAll) return "";
     /** @type {string[]} */
     const names = [];
-    element.find('.tags a[href^="/actors/"]').each((/** @type {number} */ _index, /** @type {Element} */ node) => {
-        const name = jq(node).text().trim();
-        name && names.push(name);
-    });
-    element.find('span[onmouseover*="star_"] a').each((/** @type {number} */ _index, /** @type {Element} */ node) => {
-        const name = jq(node).text().trim();
-        name && names.push(name);
-    });
+    for (const node of root.querySelectorAll('.tags a[href^="/actors/"], span[onmouseover*="star_"] a')) {
+        const name = String(node.textContent || "").trim();
+        if (name) names.push(name);
+    }
     return [ ...new Set(names) ].join(" ");
+}
+
+/** Extract JavDB starId values from actor links on a list card when present. @param {any} item @returns {string[]} */
+export function readCardStarIds(item) {
+    const root = item?.jquery ? item[0] : item;
+    if (!root?.querySelectorAll) return [];
+    /** @type {string[]} */
+    const starIds = [];
+    for (const node of root.querySelectorAll('a[href*="/actors/"]')) {
+        const href = String(node.getAttribute?.("href") || "");
+        const match = href.match(/\/actors\/([\w-]+)/u);
+        if (match?.[1]) starIds.push(match[1]);
+    }
+    return [ ...new Set(starIds) ];
 }
 
 /** Read one JavDB/JavBus list card without depending on ListPagePlugin. @param {any} item @param {any} [jquery] */

@@ -1,6 +1,7 @@
 // @ts-check
 
 import { B, normalizeCarNum } from "../../core/constants.js";
+import { buildFavoriteActressWorkIndex, resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
 import { createListEvaluationContext } from "./list-evaluator.js";
 
 /** Assemble the one evaluation snapshot shared by visible-list filtering and cross-page scans. */
@@ -28,6 +29,9 @@ export function buildListFilterContext(sources, { now = Date.now(), onMissingBla
         const carNum = normalizeCarNum(item.carNum);
         if (!target.has(carNum)) target.set(carNum, item.names);
     }
+    const favoriteActressHighlightEnabled = sources.favoriteActressesEnabled === false
+        ? false
+        : resolveFavoriteActressHighlightStyle(sources.settings).enabled;
     return { ...createListEvaluationContext({
         titleKeywords: sources.titleKeywords,
         settings: sources.settings,
@@ -35,6 +39,8 @@ export function buildListFilterContext(sources, { now = Date.now(), onMissingBla
         recentCarNums,
         actorCarNumToNameMap,
         actressCarNumToNameMap,
+        favoriteActressIndex: sources.favoriteActressIndex ?? buildFavoriteActressWorkIndex(sources.favoriteActresses),
+        favoriteActressHighlightEnabled,
     }), recentExpiresAt };
 }
 

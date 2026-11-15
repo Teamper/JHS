@@ -12,6 +12,7 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NewVideoWorkspaceController } from "../src/features/discovery/new-video-workspace-controller.js";
+import { isMissingActorSource } from "../src/features/discovery/actor-source-health.js";
 import { FEATURE_ICONS } from "../src/core/feature-icons.js";
 import { getIcon } from "../src/core/icons.js";
 
@@ -34,14 +35,16 @@ function createHarness() {
         getNewVideoDecisions: vi.fn(async () => ({})),
         getFavoriteActressList: vi.fn(() => storageManager.getFavoriteActressList()),
         getCarMap: vi.fn(() => storageManager.getCarMap()),
+        rebindFavoriteActress: vi.fn(async () => ({ ok: true, merged: false, actress: { ...actresses[0], starId: "rebound" } })),
+        removeFavoriteActress: vi.fn(starId => storageManager.removeFavoriteActress?.(starId) ?? true),
     };
     const beans = {
         OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") },
-        TaskPlugin: { getTaskStatusSnapshot: vi.fn(() => ({ state: "idle", completedAt: null, nextAt: null })) }
+        TaskPlugin: { getTaskStatusSnapshot: vi.fn(() => ({ state: "idle", completedAt: null, nextAt: null })), checkOneNewVideo: vi.fn(async () => true) }
     };
     const runtimeServices = {
         profile: Object.assign(new dom.window.EventTarget(), { current: () => "wide" }),
-        actressInfo: { placeholderUrl: vi.fn(() => "https://c0.jdbstatic.com/images/actor_unknow.jpg"), getAvatarSources: vi.fn(() => []) },
+        actressInfo: { placeholderUrl: vi.fn(() => "https://c0.jdbstatic.com/images/actor_unknow.jpg"), getAvatarSources: vi.fn(() => []), searchActors: vi.fn(async () => ({ state: "valid", actors: [] })), uncollect: vi.fn(async () => ({ success: true })) },
         storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
         state: stateService,
         movie: { externalSiteOrigin: vi.fn(() => "https://javdb.com") },
@@ -51,7 +54,7 @@ function createHarness() {
     dom.window.ImageHoverPreview = ImageHoverPreview;
     const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
     const context = vm.createContext({
-        OwnedPopover, renderTaskStatus, taskStatusView, formatUiDateTime, LifecycleScope, dismissActiveTooltip, PRODUCT_NAMES, console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math, FEATURE_ICONS, getIcon,
+        OwnedPopover, renderTaskStatus, taskStatusView, formatUiDateTime, LifecycleScope, dismissActiveTooltip, PRODUCT_NAMES, isMissingActorSource, console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math, FEATURE_ICONS, getIcon,
         window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
         $, BasePlugin, ImageHoverPreview, storageManager, stateService, renderStateView,
         JHS_Z_INDEX: { dialogHoverPreview: 999999992 },
@@ -509,12 +512,12 @@ function installOwnedDialogs(harness) {
 }
 
 describe("new video interaction ownership", () => {
-    it("uses labels for all six editor fields and opens one editor for a repeated actor action", async () => {
+    it("uses labels for all seven editor fields and opens one editor for a repeated actor action", async () => {
         const harness = createHarness(), { plugin, actresses, dom } = harness, { dialog } = installOwnedDialogs(harness);
         await plugin.editActress(actresses[0]); await plugin.editActress(actresses[0]);
         expect(dialog.open).toHaveBeenCalledOnce();
         const controls = plugin.editor.root.find("input,textarea,select").get();
-        expect(controls).toHaveLength(6);
+        expect(controls).toHaveLength(7);
         for (const control of controls) expect(control.labels.length, control.id).toBe(1);
         plugin.dispose(); dom.window.close();
     });
@@ -623,6 +626,8 @@ describe("new video interaction ownership", () => {
     it("keeps filters and commands on the same controls through profile and view changes", async () => {
         const harness = createHarness(), { plugin, runtimeServices, dom, $ } = harness, { dialogs, dialog } = installOwnedDialogs(harness);
         let profile = "compact"; runtimeServices.profile.current = () => profile;
+        $("body > .newVideoToolBox").remove();
+        $("body > .newVideoToolBox").remove();
         plugin.getTaskButtonTips = vi.fn(async () => ({ favorite: "", newVideo: "" })); plugin.reloadNewVideoWorkspaceData = vi.fn(async () => {}); plugin.renderCurrentView = vi.fn();
         await plugin.openDialog(); const root = plugin.nvWorkspaceRoot;
         expect(root.find(".newVideoToolBox").attr("data-jhs-compact")).toBe("true");
@@ -639,6 +644,81 @@ describe("new video interaction ownership", () => {
         expect(root.find("#nvDecisionFilter")[0]).toBe(filter); expect($(filter).val()).toBe("ignored");
         expect(root.find("#nv-filter-panel").prop("hidden")).toBe(false);
         const persisted = runtimeServices.storage.setLocal.mock.calls.map(call => call[0]); expect(persisted).toEqual(["jhs_newVideoViewMode"]);
+        dialog.close(plugin.nvDialogId); expect(dialogs.size).toBe(0); dom.window.close();
+    });
+    it("renders unavailable actor sources in a full-width panel separate from task cards", async () => {
+        const harness = createHarness(), { plugin, runtimeServices, dom, $ } = harness, { dialogs, dialog } = installOwnedDialogs(harness);
+        plugin.runtimeServices.sourceHealth = {
+            list: vi.fn(() => [
+                { starId: "a1", name: "Actor One", retryAt: 1794800000000 },
+                { starId: "a2", name: "Actor Two", retryAt: 1794800001000 },
+                { starId: "a3", name: "Actor Three", retryAt: 1794800002000 },
+            ])
+        };
+        $("body > .newVideoToolBox").remove();
+        plugin.getTaskButtonTips = vi.fn(async () => ({ favorite: "", newVideo: "" })); plugin.reloadNewVideoWorkspaceData = vi.fn(async () => {}); plugin.renderCurrentView = vi.fn();
+        await plugin.openDialog();
+        const statusList = plugin.nvWorkspaceRoot.find("#jhs-task-status-list");
+        expect(statusList.find(".jhs-task-status")).toHaveLength(3);
+        const panel = statusList.find("section.jhs-source-health-panel");
+        expect(panel).toHaveLength(1);
+        expect(panel.attr("aria-label")).toBe("来源不可用的演员");
+        expect(panel.text()).toContain("来源不可用：3 位演员");
+        expect(panel.find("details.jhs-source-health-details").prop("open")).toBe(true);
+        expect(panel.find(".jhs-source-health-item")).toHaveLength(3);
+        expect(panel.find(".jhs-setting-row")).toHaveLength(0);
+        expect(panel.find("button.jhs-btn.jhs-btn--secondary[data-source-retry]")).toHaveLength(3);
+        expect(panel.find('a.jhs-btn[href="https://javdb.com/actors/a1?t=d"]')).toHaveLength(1);
+        expect(panel.find("button.jhs-btn[data-source-rebind]")).toHaveLength(3);
+        expect(panel.find("button.jhs-btn[data-source-remove]")).toHaveLength(3);
+        dialog.close(plugin.nvDialogId); expect(dialogs.size).toBe(0); dom.window.close();
+    });
+
+    it("supports actor source rebind search/manual selection and 404 local removal", async () => {
+        const harness = createHarness(), { plugin, actresses, stateService, runtimeServices, dom, $ } = harness, { dialogs, dialog } = installOwnedDialogs(harness);
+        const clear = vi.fn();
+        plugin.runtimeServices.sourceHealth = { list: vi.fn(() => [{ starId: "alice", name: "Alice", retryAt: 1794800000000 }]), clear };
+        plugin.notifyCommittedNewVideoChange = vi.fn(async () => {});
+        runtimeServices.actressInfo.searchActors.mockResolvedValueOnce({
+            state: "valid",
+            actors: [{ starId: "alice-new", name: "Alice Merged", allName: ["Alice Merged", "Alias"], avatar: "https://img.example/new.jpg", actressType: "censored" }],
+        });
+        stateService.rebindFavoriteActress.mockResolvedValueOnce({ ok: true, merged: false, actress: { ...actresses[0], starId: "alice-new", name: "Alice Merged" } });
+        $("body > .newVideoToolBox").remove();
+        plugin.getTaskButtonTips = vi.fn(async () => ({ favorite: "", newVideo: "" }));
+        plugin.reloadNewVideoWorkspaceData = vi.fn(async () => {});
+        plugin.renderCurrentView = vi.fn();
+
+        await plugin.openDialog();
+        plugin.nvActressesCache = [...actresses];
+        plugin.renderTaskStatuses();
+        plugin.nvWorkspaceRoot.find('[data-source-rebind="alice"]').trigger("click");
+        await vi.waitFor(() => expect(dialogs.size).toBe(2));
+        const rebindDialog = [...dialogs.values()][1];
+        await vi.waitFor(() => expect(rebindDialog.root.find('[data-candidate-id="alice-new"]')).toHaveLength(1));
+        rebindDialog.root.find('[data-candidate-id="alice-new"]').trigger("click");
+        await vi.waitFor(() => expect(stateService.rebindFavoriteActress).toHaveBeenCalledWith({
+            fromStarId: "alice", toStarId: "alice-new", name: "Alice Merged", allName: ["Alice Merged", "Alias"], avatar: "https://img.example/new.jpg", actressType: "censored",
+        }));
+        expect(clear).toHaveBeenCalledWith("https://javdb.com", "alice");
+        expect(clear).toHaveBeenCalledWith("https://javdb.com", "alice-new");
+        expect(harness.beans.TaskPlugin.checkOneNewVideo).toHaveBeenCalledWith(expect.objectContaining({ starId: "alice-new" }));
+
+        await plugin.editActress(actresses[0]);
+        expect(plugin.editor.root.find("#edit-actress-starid").val()).toBe("alice");
+        expect(plugin.editor.root.find("#rebind-actor-id-btn")).toHaveLength(1);
+        plugin.closeActressEditor();
+
+        plugin.nvJavDbUrl = "https://javdb.com";
+        plugin.nvCarMapCache = new Map();
+        plugin.renderActressCards();
+        expect($("#actress-card-container .jhs-badge--danger").text()).toContain("来源不可用");
+        runtimeServices.actressInfo.uncollect.mockRejectedValueOnce({ status: 404, message: "HTTP 404" });
+        plugin.utils.q = vi.fn((_ev, _msg, onConfirm) => onConfirm());
+        $("#actress-card-container .btn-delete-actress").trigger("click");
+        await vi.waitFor(() => expect(stateService.removeFavoriteActress).toHaveBeenCalledWith("alice"));
+        expect(plugin.notifications.ok).toHaveBeenCalledWith("站方演员页已不存在，已清理本地收藏");
+
         dialog.close(plugin.nvDialogId); expect(dialogs.size).toBe(0); dom.window.close();
     });
 });

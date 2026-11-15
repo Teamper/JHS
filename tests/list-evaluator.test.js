@@ -80,4 +80,41 @@ describe("ListEvaluator (唯一列表判定器)", () => {
         expect(findMatchedTitleKeyword([ "ABC" ], "普通标题", "ABC-001")).toBe("ABC");
         expect(findMatchedTitleKeyword([], "标题", "ABC-001")).toBeNull();
     });
+
+    it("derives collected actress matches locally without affecting filter counts or hard-hidden items", () => {
+        const context = createListEvaluationContext({
+            carMap: new Map([
+                [ "ABC-001", { stateFlags: {}, names: "Alice Bob" } ],
+                [ "ABC-002", { stateFlags: { blocked: true }, names: "Alice" } ],
+                [ "ABC-003", { stateFlags: {}, names: "Alice" } ],
+                [ "ABC-004", { stateFlags: {}, names: "Airi" } ],
+            ]),
+            actressCarNumToNameMap: new Map([ [ "ABC-003", "Blacklisted" ] ]),
+            favoriteActresses: [
+                { starId: "a1", name: "Alice", allName: [ "Alias A" ], newVideoList: [ { carNum: "NV-100" } ] },
+                { starId: "a2", name: "Ai", allName: [], newVideoList: [] },
+            ],
+            settings: { enableFavoriteActresses: "yes" },
+        });
+        expect(evaluateListItem({ carNum: "ABC-001", title: "One" }, context, { filter: "waitCheck" })).toMatchObject({
+            hardHidden: false,
+            matchesCurrentFilter: true,
+            favoriteActresses: [ "Alice" ],
+        });
+        expect(evaluateListItem({ carNum: "NV-100", title: "New release" }, context, { filter: "waitCheck" })).toMatchObject({
+            hardHidden: false,
+            matchesCurrentFilter: true,
+            favoriteActresses: [ "Alice" ],
+        });
+        expect(evaluateListItem({ carNum: "ABC-002", title: "Hidden" }, context).favoriteActresses).toEqual([]);
+        expect(evaluateListItem({ carNum: "ABC-003", title: "Blacklisted" }, context).favoriteActresses).toEqual([]);
+        expect(evaluateListItem({ carNum: "ABC-004", title: "Boundary" }, context).favoriteActresses).toEqual([]);
+
+        const disabledContext = createListEvaluationContext({
+            carMap: context.carMap,
+            favoriteActressIndex: context.favoriteActressIndex,
+            settings: { enableFavoriteActresses: "no" },
+        });
+        expect(evaluateListItem({ carNum: "ABC-001", title: "One" }, disabledContext).favoriteActresses).toEqual([]);
+    });
 });

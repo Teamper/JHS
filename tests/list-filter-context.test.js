@@ -133,4 +133,32 @@ describe("ListFilterContextProvider", () => {
         expect(provider.value.recentCarNums).toEqual(new Set(["ABC-123"]));
         provider.dispose();
     });
+
+    it("preserves favoriteActressIndex across state-only car-state-changed invalidations", async () => {
+        const now = Date.parse("2026-10-24T00:00:00Z");
+        let calls = 0;
+        const provider = new ListFilterContextProvider({
+            now: () => now,
+            readSources: async options => {
+                calls++;
+                if (options?.stateOnly) {
+                    return { carMap: new Map([["ABC-123", { stateFlags: { favorite: true }, names: "Alice" }]]), activity: { entries: [] } };
+                }
+                return {
+                    ...sources(now),
+                    favoriteActresses: [{ starId: "a1", name: "Alice", allName: ["Alice"], newVideoList: ["NEW-1"] }],
+                    favoriteActressesEnabled: true,
+                };
+            },
+        });
+        const first = await provider.get();
+        expect(first.favoriteActressIndex.hasActresses).toBe(true);
+        expect(first.favoriteActressHighlightEnabled).toBe(true);
+        provider.invalidateState();
+        const second = await provider.get();
+        expect(second.favoriteActressIndex).toBe(first.favoriteActressIndex);
+        expect(second.carMap.get("ABC-123").names).toBe("Alice");
+        expect(calls).toBe(2);
+        provider.dispose();
+    });
 });

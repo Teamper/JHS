@@ -162,4 +162,30 @@ describe("ListCardStatePresenter", () => {
         item.setAttribute("data-jhs-visibility", "invalid");
         expect(presenter.collectSummary()).toMatchObject({ total: 1, pending: 1, blockedItems: 0 });
     });
+
+    it("marks poster-wall cards for collected actresses without altering summary counts", async () => {
+        const { dom, presenter } = createHarness(
+            "javdb",
+            '<div class="movie-list"><article id="c1" class="item"><div class="tags"><a href="/actors/a1">Alice</a></div></article><article id="c2" class="item"><div class="tags"></div></article></div>',
+            (item) => ({ carNum: item.id === "c1" ? "ABC-001" : "ABC-002", title: item.id })
+        );
+        const context = createListEvaluationContext({
+            carMap: new Map([["ABC-002", { stateFlags: { favorite: true }, names: "Bob" }]]),
+            favoriteActresses: [
+                { starId: "a1", name: "Alice", allName: ["Alice"] },
+                { starId: "b1", name: "Bob", allName: ["Bob"] },
+            ],
+            settings: { enableFavoriteActresses: "yes" },
+        });
+        const items = [...dom.window.document.querySelectorAll(".item")];
+        await presenter.processItems(items, { context, filter: "waitCheck", isCurrent: () => true });
+
+        expect(items[0].getAttribute("data-jhs-favorite-actress")).toBe("yes");
+        expect(items[0].getAttribute("data-jhs-favorite-actress-names")).toBe("Alice");
+        expect(items[0].querySelector(".status-tag--favorite-actress")?.textContent).toBe("收藏演员");
+        expect(items[0].querySelector(".status-tag--favorite-actress")?.getAttribute("data-tip")).toBe("收藏演员：Alice");
+        expect(items[1].getAttribute("data-jhs-favorite-actress")).toBe("yes");
+        expect(presenter.getSummary()).toMatchObject({ total: 2, pending: 1, blockedItems: 0, favorite: 1 });
+        dom.window.close();
+    });
 });

@@ -419,13 +419,21 @@ export class JavDbHostAdapter {
             })];
         }));
     }
-    /** @param {string} html @param {string} baseUrl */
-    parseActorCollection(html, baseUrl) {
+    /** @param {string} html @param {string} baseUrl @param {{allowEmptySearch?: boolean}} [options] */
+    parseActorCollection(html, baseUrl, options = {}) {
         if (typeof html !== "string") throw new TypeError("JavDB actor collection must be HTML text");
         const document = new DOMParser().parseFromString(html, "text/html"), challenge = document.querySelector("title")?.textContent ?? document.body?.textContent ?? "";
         if (/Just a moment|cf-chl-|Cloudflare/i.test(challenge)) return Object.freeze({ state: "challenge", isEmpty: false, actors: Object.freeze([]), nextUrl: null });
         const container = document.querySelector("#actors");
-        if (!container) return Object.freeze({ state: "invalid", isEmpty: false, actors: Object.freeze([]), nextUrl: null });
+        if (!container) {
+            if (options.allowEmptySearch) {
+                const bodyText = document.querySelector("main, section, .container")?.textContent ?? "";
+                if (document.querySelector(".empty-message") || /沒有找到|没有找到|暫無|暂无|No result/iu.test(bodyText)) {
+                    return Object.freeze({ state: "valid", isEmpty: true, actors: Object.freeze([]), nextUrl: null });
+                }
+            }
+            return Object.freeze({ state: "invalid", isEmpty: false, actors: Object.freeze([]), nextUrl: null });
+        }
         try {
             const boxes = [...container.querySelectorAll(".actor-box")], actors = boxes.map((box) => {
                 const anchor = box.querySelector("a[title][href]"), title = anchor?.getAttribute("title") ?? "", href = anchor?.getAttribute("href") ?? "";
@@ -439,5 +447,9 @@ export class JavDbHostAdapter {
             const nextHref = document.querySelector(".pagination-next")?.getAttribute("href"), nextUrl = nextHref ? new URL(nextHref, baseUrl).href : null;
             return Object.freeze({ state: "valid", isEmpty: boxes.length === 0, actors: Object.freeze(actors), nextUrl });
         } catch { return Object.freeze({ state: "invalid", isEmpty: false, actors: Object.freeze([]), nextUrl: null }); }
+    }
+    /** @param {string} html @param {string} baseUrl */
+    parseActorSearch(html, baseUrl) {
+        return this.parseActorCollection(html, baseUrl, { allowEmptySearch: true });
     }
 }

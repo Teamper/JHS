@@ -9,7 +9,7 @@ import { createJavDbWebLists } from "./web-lists.js";
 
 const API_ORIGIN = "https://jdforrepam.com";
 
-/** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {() => string} sign @param {{parseActorMovies?: (html: string, baseUrl: string) => any, parseActorCollection?: (html: string, baseUrl: string) => any} | null} hostAdapter @param {{get:(key:string)=>Promise<string>} | null} [credential] */
+/** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {() => string} sign @param {{parseActorMovies?: (html: string, baseUrl: string) => any, parseActorCollection?: (html: string, baseUrl: string) => any, parseActorSearch?: (html: string, baseUrl: string) => any} | null} hostAdapter @param {{get:(key:string)=>Promise<string>} | null} [credential] */
 export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapter = null, credential = null) {
     /** @param {string} baseUrl */
     const hostPolicy = (baseUrl) => {
@@ -83,6 +83,21 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
             }, options.scope);
             if (typeof hostAdapter?.parseActorCollection !== "function") throw new TypeError("JavDB HostAdapter collection parser is unavailable");
             return hostAdapter.parseActorCollection(response.data, response.finalUrl || url.href);
+        },
+        /** @param {{keyword?: string, name?: string, baseUrl?: string}} query @param {{scope?: any}} [options] */
+        async searchActors(query, options = {}) {
+            const keyword = String(query?.keyword ?? query?.name ?? "").trim();
+            if (!keyword) return Object.freeze({ state: "valid", isEmpty: true, actors: Object.freeze([]), nextUrl: null });
+            const baseUrl = new URL(query.baseUrl || "https://javdb.com").origin, url = new URL("/search", baseUrl);
+            url.searchParams.set("q", keyword);
+            url.searchParams.set("f", "actor");
+            const response = await http.request({
+                providerId: "javdb-host", capability: "actor.search", method: "GET", url: url.href, responseType: "text", urlPolicy: hostPolicy(baseUrl),
+            }, options.scope);
+            const finalUrl = response.finalUrl || url.href;
+            if (typeof hostAdapter?.parseActorSearch === "function") return hostAdapter.parseActorSearch(response.data, finalUrl);
+            if (typeof hostAdapter?.parseActorCollection === "function") return hostAdapter.parseActorCollection(response.data, finalUrl);
+            throw new TypeError("JavDB HostAdapter search parser is unavailable");
         },
         /** @param {{actorId: string, baseUrl?: string, csrfToken: string}} actorRef @param {{scope?: any}} [options] */
         async uncollectActor(actorRef, options = {}) {
@@ -172,9 +187,9 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
 
 export default defineIntegration({
     id: "javdb", trustClass: "builtin-public", hosts: ["javdb.com", "jdforrepam.com", "c0.jdbstatic.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "actor.avatar-placeholder", "account.login", "account.want-read", "account.want-write", "lists.membership"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.search", "actor.uncollect", "actor.avatar-placeholder", "account.login", "account.want-read", "account.want-write", "lists.membership"],
     requires: [SERVICE.http, PORT.javdbHost, SERVICE.credential],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost], credential: dependencies[SERVICE.credential] }),
     createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter, client.credential), createHostAdapter: null,
-    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none", "account.want-read": "none", "account.want-write": "none", "lists.membership": "none" }, quality: "silver",
+    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.search": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none", "account.want-read": "none", "account.want-write": "none", "lists.membership": "none" }, quality: "silver",
 });

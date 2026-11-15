@@ -14,6 +14,7 @@ import { FEATURE_ICONS } from "../../core/feature-icons.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 import { parseTaskInterval } from "../../features/discovery/task-intervals.js";
+import { isMissingActorSource } from "../../features/discovery/actor-source-health.js";
 
 const AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
 
@@ -522,20 +523,53 @@ export class NewVideoWorkspaceService {
         const origin = this.getRuntimeService("movie")?.externalSiteOrigin?.("javDbBtn", settings);
         const unavailable = origin && health ? health.list(origin) : [];
         if (unavailable.length) {
-            const panel = this.jquery('<section class="jhs-task-status" aria-label="来源不可用的演员"></section>');
-            panel.append(this.jquery("<strong></strong>").text(`来源不可用：${unavailable.length} 位演员`), this.jquery("<p></p>").text("原作品保留；24 小时后自动重查，也可单独重试。"));
+            const panel = this.jquery('<section class="jhs-source-health-panel" aria-label="来源不可用的演员"></section>');
+            const details = this.jquery('<details class="jhs-source-health-details" open></details>');
+            const summary = this.jquery('<summary class="jhs-source-health-panel__summary"></summary>').append(
+                this.jquery('<span class="jhs-source-health-panel__heading"></span>').append(
+                    this.jquery('<strong class="jhs-source-health-panel__title"></strong>').text(`来源不可用：${unavailable.length} 位演员`),
+                    this.jquery('<span class="jhs-source-health-panel__note"></span>').text("原作品保留；24 小时后自动重查，也可单独重试。")
+                ),
+                this.jquery(getIcon("chevron-down"))
+            );
+            const list = this.jquery('<div class="jhs-source-health-list"></div>');
             for (const item of unavailable) {
-                const retry = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary"><span>重试</span></button>').attr({ "aria-label": `重试 ${item.name}`, "data-source-retry": item.starId });
-                const row = this.jquery('<div class="jhs-setting-row"></div>').append(this.jquery("<span></span>").text(`${item.name} · 页面不存在 · ${formatUiDateTime(item.retryAt)} 重查`), retry);
+                const starId = String(item.starId || "");
+                const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, origin);
+                const findActress = () => this.nvActressesCache?.find(actor => actor.starId === starId) || { starId, name: item.name, allName: [item.name].filter(Boolean) };
+                const retry = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary"><span>重试</span></button>').attr({ "aria-label": `重试 ${item.name}`, "data-source-retry": starId });
+                const rebind = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary"><span>重新绑定</span></button>').attr({ "aria-label": `重新绑定 ${item.name}`, "data-source-rebind": starId });
+                const remove = this.jquery('<button type="button" class="jhs-btn jhs-btn--ghost"><span>移除</span></button>').attr({ "aria-label": `移除 ${item.name}`, "data-source-remove": starId });
+                const info = this.jquery('<div class="jhs-source-health-item__info"></div>').append(
+                    this.jquery('<strong class="jhs-source-health-item__name"></strong>').text(item.name),
+                    this.jquery('<span class="jhs-source-health-item__meta"></span>').text(`页面不存在（可能已合并或下架 · ID: ${starId}）· ${formatUiDateTime(item.retryAt)} 自动重查`)
+                );
+                const actions = this.jquery('<div class="jhs-source-health-item__actions"></div>');
+                if (profileUrl) {
+                    actions.append(this.jquery('<a class="jhs-btn jhs-btn--ghost" target="_blank" rel="noopener noreferrer">查看主页</a>').attr({ href: profileUrl, "aria-label": `查看 ${item.name} 的演员主页` }));
+                }
+                actions.append(rebind, retry, remove);
+                const row = this.jquery('<div class="jhs-source-health-item"></div>').append(info, actions);
+                rebind.on("click", () => {
+                    const actress = this.nvActressesCache?.find(actor => actor.starId === starId);
+                    if (!actress) return void this.notifications.info("本地收藏中已没有该演员");
+                    void this.openRebindActorDialog(actress);
+                });
                 retry.on("click", async () => {
-                    const actress = this.nvActressesCache?.find(actor => actor.starId === item.starId);
+                    const actress = this.nvActressesCache?.find(actor => actor.starId === starId);
                     if (!actress) return void this.notifications.info("本地收藏中已没有该演员");
                     const generation = this.nvDialogGeneration;
                     await this.runManualTask(retry, "检测中…", () => taskPlugin?.checkOneNewVideo?.(actress));
-                    if (!this.disposed && this.nvWorkspaceMounted && generation === this.nvDialogGeneration) (this.jquery('[data-source-retry]').filter((_, node) => node.getAttribute("data-source-retry") === item.starId)[0] || this.jquery("#nvTaskToggle:visible")[0] || this.jquery(".jhs-new-video-view [role='tab'][aria-selected='true']")[0])?.focus({ preventScroll: true });
+                    if (!this.disposed && this.nvWorkspaceMounted && generation === this.nvDialogGeneration) (this.jquery('[data-source-retry]').filter((_, node) => node.getAttribute("data-source-retry") === starId)[0] || this.jquery("#nvTaskToggle:visible")[0] || this.jquery(".jhs-new-video-view [role='tab'][aria-selected='true']")[0])?.focus({ preventScroll: true });
                 });
-                panel.append(row);
+                remove.on("click", event => {
+                    const actress = findActress();
+                    this.removeUnavailableActress(event, actress, origin);
+                });
+                list.append(row);
             }
+            details.append(summary, list);
+            panel.append(details);
             container.append(panel);
         }
     }
@@ -572,6 +606,7 @@ export class NewVideoWorkspaceService {
             renderStateView(e, { type: "empty", title: this.nvActressesCache.length ? "暂无符合筛选的演员" : "暂无收藏演员" });
             return void this.renderPagination(totalCount, totalPages);
         }
+        const sourceHealth = this.getRuntimeService("sourceHealth"), unavailableStarIds = new Set((javDbUrl && sourceHealth ? sourceHealth.list(javDbUrl) : []).map(item => String(item.starId || "")));
         const cards = pageActresses.map((actress => {
             const allNames = Array.isArray(actress.allName) ? actress.allName.join("，") : "";
             const name = String(actress.name || ""), remark = String(actress.remark || ""), starId = String(actress.starId || "");
@@ -582,7 +617,7 @@ export class NewVideoWorkspaceService {
             actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
             const publishText = String(latestPublishTime || "暂无记录"), noteText = isPaused ? `停更 ${ruleTime / 24 / 365} 年以上，下轮任务不再检测` : remark || "暂无备注";
             const card = this.jquery('<article class="actress-card"></article>').toggleClass("is-paused", isPaused).attr("data-starId", starId), badges = this.jquery('<div class="actress-card__badges"></div>');
-            badges.append(this.jquery("<span class=\"jhs-badge jhs-badge--accent card-new-count-tag\"></span>").attr("data-tip", `新作品数量：${newVideoCount}`).text(`${newVideoCount} 新`), this.jquery("<span class=\"jhs-badge card-tag\"></span>").addClass(typeClass).text(typeLabel)), isPaused && badges.append('<span class="jhs-badge jhs-badge--neutral">停更</span>');
+            badges.append(this.jquery("<span class=\"jhs-badge jhs-badge--accent card-new-count-tag\"></span>").attr("data-tip", `新作品数量：${newVideoCount}`).text(`${newVideoCount} 新`), this.jquery("<span class=\"jhs-badge card-tag\"></span>").addClass(typeClass).text(typeLabel)), unavailableStarIds.has(starId) && badges.append('<span class="jhs-badge jhs-badge--danger">来源不可用</span>'), isPaused && badges.append('<span class="jhs-badge jhs-badge--neutral">停更</span>');
             const profile = this.jquery('<a class="actress-card__profile" target="_blank" rel="noopener noreferrer"></a>').attr("href", profileUrl || "#"), identity = this.jquery("<span></span>").append(this.jquery("<span class=\"actress-card-name\"></span>").text(name), this.jquery("<span class=\"actress-card-allname\"></span>").attr("title", allNames).text(allNames || "暂无别名"));
             profile.append(this.jquery("<img class=\"actress-card-avatar\" loading=\"lazy\">").attr({ src: avatarUrl, alt: allNames }), identity);
             const meta = this.jquery('<dl class="actress-card__meta"></dl>').append(this.jquery("<div class=\"actress-card__meta-row\"><dt>最近影片</dt></div>").append(this.jquery("<dd></dd>").attr("title", publishText).text(publishText)), this.jquery('<div class="actress-card__meta-row"><dt>上次检测</dt></div>').append(this.jquery("<dd></dd>").text(formatUiDateTime(actress.lastCheckTime)))), actions = this.jquery('<div class="actress-card__actions"></div>');
@@ -595,9 +630,23 @@ export class NewVideoWorkspaceService {
             const t = this.jquery(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             this.utils.q(e, `取消收藏演员「${escapeHtml(n.name)}」？`, (async () => {
                 const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await this.legacyStorage.getSetting()), csrfToken = this.document.querySelector("meta[name=csrf-token]")?.getAttribute("content") || "";
-                const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
-                result.success ? (await this.legacyStorage.removeFavoriteActress(t), await this.notifyCommittedNewVideoChange("favorite-actress-removed")) : (this.notifications.error("取消收藏失败，请重试"),
-                this.logger.error("移除失败,返回值:", result));
+                try {
+                    const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
+                    if (result.success) {
+                        await this.removeFavoriteActressRecord(t, baseUrl);
+                    } else {
+                        this.notifications.error("取消收藏失败，请重试");
+                        this.logger.error("移除失败,返回值:", result);
+                    }
+                } catch (error) {
+                    if (isMissingActorSource(error)) {
+                        await this.removeFavoriteActressRecord(t, baseUrl);
+                        this.notifications.ok("站方演员页已不存在，已清理本地收藏");
+                    } else {
+                        this.notifications.error("取消收藏失败，请重试");
+                        this.logger.error("移除失败:", error);
+                    }
+                }
             }), undefined, { confirmText: "取消收藏", tone: "danger" });
         })), this.jquery(".btn-edit-actress").off("click").on("click", (e => {
             e.preventDefault();
@@ -918,6 +967,7 @@ export class NewVideoWorkspaceService {
                 <div class="jhs-form-dialog__body"><label class="jhs-form-label" for="edit-actress-avatar">头像链接</label><input id="edit-actress-avatar" class="jhs-field" value="${safe(avatar)}">
                     <div class="jhs-toolbar jhs-avatar-editor__actions"><button type="button" id="search-avatar-btn" class="jhs-btn jhs-btn--secondary">搜索头像</button><button type="button" id="select-cdn-btn" class="jhs-btn jhs-btn--secondary">选择 CDN 源</button></div>
                 </div></div>
+            <div class="jhs-form-field"><label class="jhs-form-label" for="edit-actress-starid">演员来源 ID（JavDB starId）</label><div class="jhs-inline-fields"><input id="edit-actress-starid" class="jhs-field" value="${safe(record.starId)}" readonly><button type="button" id="rebind-actor-id-btn" class="jhs-btn jhs-btn--secondary">搜索重绑 ID</button></div></div>
             <div class="jhs-form-field"><label class="jhs-form-label" for="edit-actress-name">主名称</label><input id="edit-actress-name" class="jhs-field" value="${safe(record.name)}" aria-describedby="edit-actress-error"></div>
             <div class="jhs-form-field"><label class="jhs-form-label" for="edit-actress-allname">所有别名（用逗号分隔）</label><textarea id="edit-actress-allname" class="jhs-textarea">${safe(allNames)}</textarea></div>
             <div class="jhs-form-field"><label class="jhs-form-label" for="actressType">演员类别</label><select id="actressType" class="jhs-select-source"><option value="">未知</option><option value="censored">有码</option><option value="uncensored">无码</option></select></div>
@@ -937,6 +987,7 @@ export class NewVideoWorkspaceService {
         root.on("input.jhsActressEditor", "#edit-actress-avatar", event => root.find("#edit-avatar-preview").attr("src", normalizeHttpUrl(this.jquery(event.currentTarget).val(), this.nvJavDbUrl) || ""));
         root.on("input.jhsActressEditor", "#edit-actress-name,#edit-actress-allname", () => this.cancelAvatarSearch(editor));
         root.on("click.jhsActressEditor", "#search-avatar-btn", () => void this.searchAvatar(editor));
+        root.on("click.jhsActressEditor", "#rebind-actor-id-btn", () => void this.openRebindActorDialog(record));
         root.on("click.jhsActressEditor", "#select-cdn-btn", () => {
             this.openEditorChild(editor, {
                 type: 1, title: `选择 ${PRODUCT_NAMES.cdn} 来源`, ui: { size: "sm", body: "scroll" }, skin: "jhs-confirm-actions",
@@ -1087,5 +1138,185 @@ export class NewVideoWorkspaceService {
             },
         });
         editor.avatarChild = child;
+    }
+    async removeFavoriteActressRecord(starId, baseUrl = this.nvJavDbUrl) {
+        const state = this.runtimeServices.state;
+        const removed = state?.removeFavoriteActress ? await state.removeFavoriteActress(starId) : await this.legacyStorage.removeFavoriteActress(starId);
+        if (removed && baseUrl) this.getRuntimeService("sourceHealth")?.clear?.(baseUrl, starId);
+        if (removed) await this.notifyCommittedNewVideoChange("favorite-actress-removed");
+        return removed;
+    }
+    removeUnavailableActress(event, actress, baseUrl) {
+        const starId = String(actress?.starId || ""), name = String(actress?.name || "该演员");
+        if (!starId) return;
+        this.utils.q(event, `移除本地失效演员「${escapeHtml(name)}」及其未处理新作品记录？（仅删除本地缓存，不影响站方账号）`, async () => {
+            const removed = await this.removeFavoriteActressRecord(starId, baseUrl);
+            if (!removed) {
+                this.getRuntimeService("sourceHealth")?.clear?.(baseUrl, starId);
+                await this.notifyCommittedNewVideoChange("favorite-actress-removed");
+            }
+            this.notifications.ok(`已移除「${name}」`);
+        }, undefined, { confirmText: "移除记录", tone: "danger" });
+    }
+    /** @param {string} raw @returns {string} */
+    static parseActorIdInput(raw) {
+        const value = String(raw || "").trim();
+        if (!value) return "";
+        if (/^[\w-]+$/u.test(value)) return value;
+        const match = value.match(/(?:^|\/)actors\/([\w-]+)(?:[/?#]|$)/u);
+        return match?.[1] || "";
+    }
+    async resolveActorBaseUrl() {
+        const setting = await this.legacyStorage?.getSetting?.();
+        return this.getRuntimeService("movie")?.externalSiteOrigin?.("javDbBtn", setting) || this.nvJavDbUrl || this.document?.location?.origin || "";
+    }
+    async applyActorRebind(actress, target) {
+        const baseUrl = await this.resolveActorBaseUrl();
+        const state = this.runtimeServices.state;
+        const fromStarId = String(actress?.starId || "").trim(), toStarId = String(target?.starId || "").trim();
+        if (!fromStarId || !toStarId) return null;
+        if (!state?.rebindFavoriteActress) throw new Error("当前状态服务不支持重绑演员 ID");
+        const result = await state.rebindFavoriteActress({
+            fromStarId, toStarId, name: target.name, allName: target.allName, avatar: target.avatar, actressType: target.actressType,
+        });
+        if (!result?.ok || !result.actress) throw new Error("未找到原演员记录");
+        const health = this.getRuntimeService("sourceHealth");
+        health?.clear?.(baseUrl, fromStarId);
+        health?.clear?.(baseUrl, toStarId);
+        if (this.isEditorCurrent(this.editor) && this.editor.record.starId === fromStarId) {
+            Object.assign(this.editor.record, result.actress);
+            this.editor.root.find("#edit-actress-starid").val(result.actress.starId);
+        }
+        await this.notifyCommittedNewVideoChange("favorite-actress-rebound");
+        this.notifications.ok(result.merged ? `已合并到现有演员「${result.actress.name}」（${toStarId}）` : `已重新绑定为「${result.actress.name}」（${toStarId}）`);
+        const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress);
+        return result.actress;
+    }
+    async openRebindActorDialog(actress) {
+        if (this.disposed || !actress?.starId) return null;
+        const dialog = this.getRuntimeService("dialog"), scope = new LifecycleScope("actor-rebind"), safe = value => escapeHtml(String(value || ""));
+        const aliases = [...new Set([actress.name, ...(Array.isArray(actress.allName) ? actress.allName : [])].map(item => String(item || "").trim()).filter(Boolean))];
+        const root = this.jquery(`<div class="jhs-form-dialog jhs-rebind-dialog">
+            <p class="jhs-helper-text">当前来源 ID：<code>${safe(actress.starId)}</code>（站方页面 404 时可检索合并后的新演员页，或直接粘贴目标链接 / ID，原新作品与备注将自动迁移或合并）。</p>
+            <div class="jhs-form-field">
+                <label class="jhs-form-label" for="rebind-actor-query">搜索演员</label>
+                <div class="jhs-inline-fields">
+                    <input id="rebind-actor-query" class="jhs-field" value="${safe(actress.name)}" placeholder="输入演员名或别名">
+                    <button type="button" id="rebind-actor-search-btn" class="jhs-btn jhs-btn--primary">搜索</button>
+                </div>
+            </div>
+            <div id="rebind-actor-aliases" class="jhs-rebind-aliases" aria-label="快捷别名检索"></div>
+            <p id="rebind-actor-status" class="jhs-helper-text" role="status" aria-live="polite"></p>
+            <div id="rebind-actor-results" class="jhs-rebind-results"></div>
+            <div class="jhs-form-field">
+                <label class="jhs-form-label" for="rebind-actor-manual">或直接输入新演员页链接 / starId</label>
+                <div class="jhs-inline-fields">
+                    <input id="rebind-actor-manual" class="jhs-field" placeholder="例如演员页链接、/actors/xxxx 或 xxxx">
+                    <button type="button" id="rebind-actor-apply-btn" class="jhs-btn jhs-btn--secondary">绑定此 ID</button>
+                </div>
+            </div>
+        </div>`);
+        const aliasBox = root.find("#rebind-actor-aliases");
+        if (aliases.length) {
+            for (const alias of aliases.slice(0, 8)) {
+                aliasBox.append(this.jquery(`<button type="button" class="jhs-btn jhs-btn--ghost jhs-rebind-alias"></button>`).text(alias).attr("data-alias", alias));
+            }
+        } else aliasBox.hide();
+        let activeSearch = null, binding = false, dialogId = null;
+        const placeholderAvatar = this.getRuntimeService("actressInfo")?.placeholderUrl?.("javdb") || "";
+        const setStatus = text => root.find("#rebind-actor-status").text(text);
+        const renderCandidates = actors => {
+            const box = root.find("#rebind-actor-results").empty();
+            for (const candidate of actors) {
+                const avatar = normalizeHttpUrl(candidate.avatar, this.nvJavDbUrl) || placeholderAvatar;
+                const typeText = candidate.actressType === "uncensored" ? "无码" : "有码";
+                const namesText = Array.isArray(candidate.allName) ? candidate.allName.join("，") : candidate.name;
+                const row = this.jquery(`<div class="jhs-rebind-candidate"></div>`);
+                row.append(
+                    this.jquery(`<img class="jhs-rebind-candidate__avatar" alt="">`).attr("src", avatar),
+                    this.jquery(`<div class="jhs-rebind-candidate__info"></div>`).append(
+                        this.jquery(`<strong class="jhs-rebind-candidate__name"></strong>`).text(candidate.name || candidate.starId),
+                        this.jquery(`<span class="jhs-rebind-candidate__meta"></span>`).text(`ID: ${candidate.starId} · ${typeText} · ${namesText}`)
+                    ),
+                    this.jquery(`<button type="button" class="jhs-btn jhs-btn--secondary">选择并绑定</button>`).attr("data-candidate-id", candidate.starId).on("click", async () => {
+                        if (binding || scope.disposed) return;
+                        binding = true;
+                        try {
+                            await this.applyActorRebind(actress, candidate);
+                            if (dialogId != null) dialog.close(dialogId);
+                        } catch (error) {
+                            this.logger.error("演员重绑失败", error);
+                            this.notifications.error("重新绑定失败，请重试");
+                        } finally { binding = false; }
+                    })
+                );
+                box.append(row);
+            }
+        };
+        const runSearch = async () => {
+            const keyword = String(root.find("#rebind-actor-query").val() || "").trim();
+            if (!keyword || scope.disposed) return setStatus("请输入要检索的演员名称");
+            activeSearch?.dispose();
+            const searchScope = new LifecycleScope("actor-rebind-search");
+            activeSearch = searchScope;
+            scope.addCleanup(() => searchScope.dispose());
+            const button = root.find("#rebind-actor-search-btn").prop("disabled", true).attr("aria-busy", "true");
+            setStatus(`正在搜索「${keyword}」…`);
+            root.find("#rebind-actor-results").empty();
+            try {
+                const baseUrl = await this.resolveActorBaseUrl();
+                const res = await this.getRuntimeService("actressInfo").searchActors("javdb", { keyword, baseUrl }, { scope: searchScope });
+                if (scope.disposed || activeSearch !== searchScope) return;
+                if (res?.state === "challenge") return setStatus("站方触发了验证页，请先在网页中打开 JavDB 完成验证，或直接在下方粘贴新演员 ID。");
+                if (res?.state !== "valid") return setStatus("搜索结果解析失败，请在下方直接粘贴新演员页链接或 starId。");
+                const actors = Array.isArray(res.actors) ? res.actors : [];
+                if (!actors.length) return setStatus(`未搜到「${keyword}」的可用演员主页，请尝试其他别名或手动输入新 ID。`);
+                setStatus(`找到 ${actors.length} 个候选演员，请选择要绑定的目标主页：`);
+                renderCandidates(actors);
+            } catch (error) {
+                if (!scope.disposed && activeSearch === searchScope) {
+                    this.logger.error("搜索候选演员失败", error);
+                    setStatus(error?.code === "CIRCUIT_OPEN" && error?.message
+                        ? `${error.message}，可稍后重试或直接在下方粘贴新演员页链接 / ID。`
+                        : "搜索失败，可切换别名重试或直接在下方粘贴新演员页链接 / ID。");
+                }
+            } finally {
+                if (activeSearch === searchScope) activeSearch = null;
+                searchScope.dispose();
+                if (!scope.disposed) button.prop("disabled", false).removeAttr("aria-busy");
+            }
+        };
+        root.on("click", "#rebind-actor-search-btn", () => void runSearch());
+        root.on("keydown", "#rebind-actor-query", event => { if (event.key === "Enter") { event.preventDefault(); void runSearch(); } });
+        root.on("click", ".jhs-rebind-alias", event => {
+            root.find("#rebind-actor-query").val(this.jquery(event.currentTarget).attr("data-alias") || "");
+            void runSearch();
+        });
+        root.on("click", "#rebind-actor-apply-btn", async () => {
+            if (binding || scope.disposed) return;
+            const nextId = NewVideoWorkspaceService.parseActorIdInput(String(root.find("#rebind-actor-manual").val() || ""));
+            if (!nextId) return setStatus("请输入有效的演员页链接（/actors/xxxx）或 starId");
+            binding = true;
+            try {
+                await this.applyActorRebind(actress, { starId: nextId });
+                if (dialogId != null) dialog.close(dialogId);
+            } catch (error) {
+                this.logger.error("手动重绑演员失败", error);
+                this.notifications.error("重新绑定失败，请重试");
+            } finally { binding = false; }
+        });
+        root.hide().appendTo(this.document.body);
+        dialogId = dialog.open({
+            type: 1, title: `重新绑定演员来源：${safe(actress.name)}`, ui: { size: "sm", body: "scroll" }, content: root, btn: ["关闭"],
+            success: (_layer, id) => {
+                dialogId = id;
+                this.utils.setupEscClose?.(id);
+                scope.addCleanup(() => this.utils.releaseEscClose?.(id));
+                void runSearch();
+            },
+            end: () => { activeSearch?.dispose(); scope.dispose(); root.remove(); },
+        });
+        return dialogId;
     }
 }

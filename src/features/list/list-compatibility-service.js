@@ -4,7 +4,8 @@ import { B, C, _, b, escapeHtml, k, l, normalizeCarNum, o, r, u, y } from "../..
 import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { getIcon } from "../../core/icons.js";
 import { requestHostPage } from "../../core/host-page-request.js";
-import { readCardNames, readListItem } from "../../core/list-item-reader.js";
+import { readCardNames, readCardStarIds, readListItem } from "../../core/list-item-reader.js";
+import { buildFavoriteActressWorkIndex, resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
 import { assertMovieStateEligible } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
@@ -25,7 +26,7 @@ function normalizeCard(item) {
 }
 
 /** settings-changed 中需要触发列表全量重判定的 key；其余（主题/Preview/截图/布局等）由各自 Feature 精确处理。 */
-const LIST_EFFECT_KEYS = new Set([ "tagPosition", "defaultQuickFilterTab" ]);
+const LIST_EFFECT_KEYS = new Set([ "tagPosition", "defaultQuickFilterTab", "enableFavoriteActresses" ]);
 
 const Te = {
     IS_FILTERED: {
@@ -286,11 +287,11 @@ export class ListPageCompatibilityService {
                 if (payload.notificationId) lastSyncRefresh = payload.notificationId;
         };
         const events = this.getRuntimeService("events");
-        [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(events.on(type, refreshAll)))),
+        [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed", "new-video-changed", "actress-changed" ].forEach((type => scope.addCleanup(events.on(type, refreshAll)))),
         scope.addCleanup(events.on("car-state-changed", (async (/** @type {any} */ payload, /** @type {any} */ event) => {
             if (payload.notificationId && payload.notificationId === lastSyncRefresh) return;
             const full = Boolean(payload.scope === "all" || !Array.isArray(payload.carNums)
-                || payload.changedDomains?.some((/** @type {string} */ key) => ["setting", "blacklist", "blacklist_car_list", "filter_keyword_title"].includes(key)));
+                || payload.changedDomains?.some((/** @type {string} */ key) => ["setting", "blacklist", "blacklist_car_list", "filter_keyword_title", "favorite_actresses"].includes(key)));
             const refreshed = full ? await this.requestListRefresh({ reason: "car-state-changed", full: true }) : await this.refreshCarNums(payload.carNums, event?.originId === events.originId ? payload.transactionId : null);
             if (!full && refreshed !== false) {
                 const update = this.getOptionalDependency("HistoryPlugin")?.tableObj?.setData?.();
@@ -611,7 +612,7 @@ export class ListPageCompatibilityService {
             return context;
         }
         if (this.filterContext) return this.filterContext;
-        const storage = this.getRuntimeService("legacyStorage"), [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storage.getTitleFilterKeyword(), storage.getBlacklistMap(), storage.getBlacklistCarList(), storage.getSetting(), storage.getCarMap(), this.getRuntimeService("state").getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
+        const storage = this.getRuntimeService("legacyStorage"), state = this.getRuntimeService("state"), [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity, favoriteActresses] = await Promise.all([ storage.getTitleFilterKeyword(), storage.getBlacklistMap(), storage.getBlacklistCarList(), storage.getSetting(), storage.getCarMap(), state.getActivityLog(), state.getFavoriteActressList?.() ?? storage.getFavoriteActressList?.() ?? [] ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
         const cutoff = Date.now() - 7 * 864e5;
         activity.entries
             .filter((/** @type {ListRecord} */ entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)
@@ -629,7 +630,9 @@ export class ListPageCompatibilityService {
             const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap, carNum = normalizeCarNum(item.carNum);
             target.has(carNum) || target.set(carNum, item.names);
         }
-        return this.filterContext = { titleKeywords, settings, carMap, recentCarNums, actorCarNumToNameMap, actressCarNumToNameMap };
+        const favoriteActressIndex = buildFavoriteActressWorkIndex(favoriteActresses);
+        const favoriteActressHighlightEnabled = resolveFavoriteActressHighlightStyle(settings).enabled;
+        return this.filterContext = { titleKeywords, settings, carMap, recentCarNums, actorCarNumToNameMap, actressCarNumToNameMap, favoriteActressIndex, favoriteActressHighlightEnabled };
     }
     collectCurrentPageSummary() {
         if (this.cardStatePresenter) return this.cardStatePresenter.collectSummary();
@@ -712,9 +715,15 @@ export class ListPageCompatibilityService {
                 n > 0 && n % 12 == 0 && await this.yieldListFrame();
                 let t = $(e[n]);
                 if (l && t.find(".avatar-box").length > 0) continue;
-                const record = this.findCarNumAndHref(t), {carNum: a, title: i} = record, evaluation = evaluateListItem(record, evaluationContext, { filter: activeFilter }), {flags, visibilityReasons, hardHidden} = evaluation, keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i, a) : null;
+                const rawRecord = this.findCarNumAndHref(t);
+                const record = evaluationContext.favoriteActressHighlightEnabled && evaluationContext.favoriteActressIndex?.hasActresses
+                    ? { ...rawRecord, cardNames: readCardNames(t[0] ?? t), cardStarIds: readCardStarIds(t[0] ?? t) }
+                    : rawRecord;
+                const {carNum: a, title: i} = record, evaluation = evaluateListItem(record, evaluationContext, { filter: activeFilter }), {flags, visibilityReasons, hardHidden, favoriteActresses = []} = evaluation, keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i, a) : null;
                 t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", evaluation.recent ? _ : C).attr("data-jhs-tag-position", P);
-                const signature = JSON.stringify({ flags, visibilityReasons, P });
+                if (favoriteActresses.length) t.attr("data-jhs-favorite-actress", _).attr("data-jhs-favorite-actress-names", favoriteActresses.join("，"));
+                else t.removeAttr("data-jhs-favorite-actress").removeAttr("data-jhs-favorite-actress-names");
+                const signature = JSON.stringify({ flags, visibilityReasons, P, favoriteActresses });
                 if (t.attr("data-jhs-state-signature") !== signature) {
                     t.attr("data-jhs-state-signature", signature), t.find(".jhs-status-tags").remove();
                     const badgeDefs = [

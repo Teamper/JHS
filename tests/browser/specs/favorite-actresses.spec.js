@@ -84,3 +84,91 @@ test("favorite actress actions are feature-owned and retain the legacy disable I
     await disabledContext.close();
   }
 });
+
+for (const theme of ["light", "dark"]) {
+  test(`favorite actress poster-wall highlight renders on JavDB and JavBus ${theme}`, async ({ page, context }, info) => {
+    test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop/mobile matrix");
+    await fulfillHostFixtures(context);
+
+    const seedPosterWallData = async (currentPage) => {
+      await currentPage.evaluate(async () => {
+        const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
+        await forage.setItem("data_version", 3);
+        await forage.setItem("favorite_actresses", [
+          { starId: "fav-a", name: "收藏女优甲", allName: ["收藏女优甲", "AliasA"], actressType: "censored", avatar: "", newVideoList: [{ carNum: "ABC-123", title: "Matched via newVideoList" }] },
+          { starId: "fav-b", name: "收藏女优乙", allName: ["收藏女优乙"], actressType: "censored", avatar: "", newVideoList: [] },
+        ]);
+        await forage.setItem("car_list", [
+          { carNum: "DEF-456", url: "https://javdb.com/v/def-456", names: "收藏女优乙 其他演员", stateFlags: { favorite: true, downloaded: false, watched: false, blocked: false } },
+          { carNum: "GHI-789", url: "https://javdb.com/v/ghi-789", names: "未收藏演员", stateFlags: { favorite: false, downloaded: false, watched: false, blocked: false } },
+        ]);
+      });
+    };
+
+    const javdbListHtml = `
+      <main class="container"><section><div class="container"><div class="movie-list">
+        <div class="item" id="card-abc"><a href="/v/abc-123" title="Hit NewVideo"><div class="cover"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></div><div class="video-title"><strong>ABC-123</strong> Hit NewVideo</div><div class="meta">2026-10-01</div></a><div class="tags"></div></div>
+        <div class="item" id="card-def"><a href="/v/def-456" title="Hit CarNames"><div class="cover"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></div><div class="video-title"><strong>DEF-456</strong> Hit CarNames</div><div class="meta">2026-10-02</div></a><div class="tags"></div></div>
+        <div class="item" id="card-ghi"><a href="/v/ghi-789" title="Other"><div class="cover"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></div><div class="video-title"><strong>GHI-789</strong> Other</div><div class="meta">2026-10-03</div></a><div class="tags"></div></div>
+      </div></div></section></main>`;
+
+    await page.goto("https://javdb.com/");
+    await page.evaluate((html) => { document.body.innerHTML = html; }, javdbListHtml);
+    await injectUserscriptRuntime(page, {
+      hostStyles: true,
+      settingOverrides: { themeMode: theme, defaultQuickFilterTab: "all", enableFavoriteActresses: "yes", highlightedTagNumber: 2, highlightedTagColor: "#ff4757" },
+      beforeUserscriptInjection: seedPosterWallData,
+    });
+    await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
+    const cardAbc = page.locator("#card-abc"), cardDef = page.locator("#card-def"), cardGhi = page.locator("#card-ghi");
+    await expect(cardAbc).toHaveAttribute("data-jhs-favorite-actress", "yes");
+    await expect(cardDef).toHaveAttribute("data-jhs-favorite-actress", "yes");
+    await expect(cardGhi).not.toHaveAttribute("data-jhs-favorite-actress", "yes");
+    await expect(cardAbc.locator(".status-tag--favorite-actress")).toHaveText("收藏演员");
+    await expect(cardGhi.locator(".status-tag--favorite-actress")).toHaveCount(0);
+    await expect(cardAbc).not.toHaveCSS("box-shadow", "none");
+    await expect(cardGhi).toHaveCSS("box-shadow", "none");
+    if (info.project.name === "desktop-wide") {
+      await page.locator("[data-jhs-primary-list]").scrollIntoViewIfNeeded();
+      await page.screenshot({ path: info.outputPath(`poster-wall-javdb-${theme}.png`) });
+    }
+
+    await page.evaluate(async () => {
+      const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+      await settings.set("enableFavoriteActresses", "no");
+    });
+    await expect(cardAbc).not.toHaveAttribute("data-jhs-favorite-actress", "yes");
+    await expect(cardAbc.locator(".status-tag--favorite-actress")).toHaveCount(0);
+    await expect(cardAbc).toHaveCSS("box-shadow", "none");
+
+    await page.evaluate(async () => {
+      const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+      await settings.set("highlightedTagColor", "#10ac84");
+      await settings.set("enableFavoriteActresses", "yes");
+    });
+    await expect(cardAbc).toHaveAttribute("data-jhs-favorite-actress", "yes");
+    await expect(cardAbc).not.toHaveCSS("box-shadow", "none");
+
+    const javbusListHtml = `
+      <main class="container-fluid"><div class="row"><div class="masonry">
+        <div class="item movie-box" id="bus-abc"><a href="/ABC-123"><div class="photo-frame"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" title="JavBus Hit"></div><div class="photo-info"><span>JavBus Hit<br><div class="item-tag"></div><date>ABC-123</date> / <date>2026-10-01</date></span></div></a></div>
+        <div class="item movie-box" id="bus-xyz"><a href="/XYZ-001"><div class="photo-frame"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" title="JavBus Miss"></div><div class="photo-info"><span>JavBus Miss<br><div class="item-tag"></div><date>XYZ-001</date> / <date>2026-10-02</date></span></div></a></div>
+      </div></div></main>`;
+    await page.goto("https://www.javbus.com/");
+    await page.evaluate((html) => { document.body.innerHTML = html; }, javbusListHtml);
+    await injectUserscriptRuntime(page, {
+      hostStyles: true,
+      settingOverrides: { themeMode: theme, defaultQuickFilterTab: "all", enableFavoriteActresses: "yes", highlightedTagNumber: 2, highlightedTagColor: "#ff4757" },
+      beforeUserscriptInjection: seedPosterWallData,
+    });
+    await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
+    await expect(page.locator("#bus-abc")).toHaveAttribute("data-jhs-favorite-actress", "yes");
+    await expect(page.locator("#bus-abc .status-tag--favorite-actress")).toHaveText("收藏演员");
+    await expect(page.locator("#bus-abc")).not.toHaveCSS("box-shadow", "none");
+    await expect(page.locator("#bus-xyz")).not.toHaveAttribute("data-jhs-favorite-actress", "yes");
+    await expect(page.locator("#bus-xyz")).toHaveCSS("box-shadow", "none");
+    if (info.project.name === "desktop-wide") {
+      await page.screenshot({ path: info.outputPath(`poster-wall-javbus-${theme}.png`) });
+    }
+  });
+}

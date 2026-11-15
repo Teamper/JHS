@@ -5,13 +5,14 @@ import vm from "node:vm";
 import jquery from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
+import { movieCodeKey } from "../src/core/movie-code-evidence.js";
 
 const fixture = (name) => readTestFile(join(import.meta.dirname, "fixtures", name), "utf8");
 const source = ["javstore", "javdb", "host-list", "av123"].map((id) => readTestFile(join(import.meta.dirname, `../src/integrations/${id}/parser.js`), "utf8")).join("\n");
 
 function loadParsers(html) {
     const dom = new JSDOM(html, { url: "https://javdb.com/" }), $ = jquery(dom.window);
-    const context = vm.createContext({ URL, $, A: "uncensored", D: "censored", normalizeCarNum: (value) => value?.trim() || null });
+    const context = vm.createContext({ URL, $, A: "uncensored", D: "censored", normalizeCarNum: (value) => value?.trim() || null, movieCodeKey });
     vm.runInContext(`${source}; globalThis.parsers = { normalizeJavStoreAssetUrl, parseJavStoreSearch, parseJavStorePreview, parseJavDbActorList, parseDetailPage, parse123AvCards, merge123AvCards, parse123AvSourceMaxPage, parse123AvVideoInfo };`, context);
     return { ...context.parsers, $page: $(dom.window.document) };
 }

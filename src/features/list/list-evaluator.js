@@ -2,6 +2,7 @@
 
 import { normalizeStateFlags } from "../../core/state-model.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
+import { buildFavoriteActressWorkIndex, matchCollectedActressesForWork, resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
 import { isHardHidden, matchesQuickFilter } from "./list-filters.js";
 
 /** @typedef {import("../../core/state-model.js").StateFlags} StateFlags */
@@ -18,23 +19,28 @@ export function findMatchedTitleKeyword(keywords, title, carNum) {
     return null;
 }
 
-/** @param {{ titleKeywords?: string[], carMap?: Map<string, Record<string, any>>, actorCarNumToNameMap?: Map<string, string>, actressCarNumToNameMap?: Map<string, string>, recentCarNums?: Set<string>, settings?: Record<string, any> }} options */
+/** @param {{ titleKeywords?: string[], carMap?: Map<string, Record<string, any>>, actorCarNumToNameMap?: Map<string, string>, actressCarNumToNameMap?: Map<string, string>, recentCarNums?: Set<string>, settings?: Record<string, any>, favoriteActresses?: any[], favoriteActressIndex?: ReturnType<typeof buildFavoriteActressWorkIndex>, favoriteActressHighlightEnabled?: boolean }} options */
 export function createListEvaluationContext(options = {}) {
+    const settings = options.settings ?? {};
+    const favoriteActressIndex = options.favoriteActressIndex ?? buildFavoriteActressWorkIndex(options.favoriteActresses);
+    const favoriteActressHighlightEnabled = options.favoriteActressHighlightEnabled ?? resolveFavoriteActressHighlightStyle(settings).enabled;
     return {
         titleKeywords: Array.isArray(options.titleKeywords) ? options.titleKeywords : [],
         carMap: options.carMap instanceof Map ? options.carMap : new Map(),
         actorCarNumToNameMap: options.actorCarNumToNameMap instanceof Map ? options.actorCarNumToNameMap : new Map(),
         actressCarNumToNameMap: options.actressCarNumToNameMap instanceof Map ? options.actressCarNumToNameMap : new Map(),
         recentCarNums: options.recentCarNums instanceof Set ? options.recentCarNums : new Set(),
-        settings: options.settings ?? {},
+        settings,
+        favoriteActressIndex,
+        favoriteActressHighlightEnabled,
     };
 }
 
 /**
- * @param {{ carNum?: string | null, title?: string, stateEligibility?: import("../../core/movie-identity.js").MovieStateEligibility }} record
+ * @param {{ carNum?: string | null, title?: string, stateEligibility?: import("../../core/movie-identity.js").MovieStateEligibility, cardNames?: string, cardStarIds?: string[] }} record
  * @param {ReturnType<typeof createListEvaluationContext>} context
  * @param {{ filter?: unknown }} [options]
- * @returns {{ flags: StateFlags, visibilityReasons: VisibilityReasons, matchedKeyword: string | null, recent: boolean, hardHidden: boolean, matchesCurrentFilter: boolean }}
+ * @returns {{ flags: StateFlags, visibilityReasons: VisibilityReasons, matchedKeyword: string | null, recent: boolean, hardHidden: boolean, matchesCurrentFilter: boolean, favoriteActresses: string[] }}
  */
 export function evaluateListItem(record, context, { filter = "waitCheck" } = {}) {
     const carNum = record?.carNum;
@@ -49,6 +55,14 @@ export function evaluateListItem(record, context, { filter = "waitCheck" } = {})
     };
     const recent = carNum && reliable ? context.recentCarNums.has(carNum) : false;
     const hardHidden = isHardHidden(flags, visibilityReasons);
+    const favoriteActresses = !hardHidden && context.favoriteActressHighlightEnabled && context.favoriteActressIndex?.hasActresses
+        ? matchCollectedActressesForWork({
+            carNum: reliable ? (carNum || "") : "",
+            recordNames: state?.names,
+            cardNames: record?.cardNames,
+            cardStarIds: record?.cardStarIds,
+        }, context.favoriteActressIndex)
+        : [];
     return {
         flags,
         visibilityReasons,
@@ -56,5 +70,6 @@ export function evaluateListItem(record, context, { filter = "waitCheck" } = {})
         recent,
         hardHidden,
         matchesCurrentFilter: matchesQuickFilter(filter, flags, { visibilityReasons, recent }),
+        favoriteActresses,
     };
 }

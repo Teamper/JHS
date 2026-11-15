@@ -164,6 +164,14 @@ export class FeatureRuntime {
         return this.configurationQueue;
     }
 
+    /** Check user disablement preference for a contribution regardless of current site/route gating. @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
+    isContributionPreferenceEnabled(featureId, contributionId, legacyPluginId) {
+        const manifest = this.manifests.get(featureId);
+        if (!manifest) return false;
+        if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
+        return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
+    }
+
     /** @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
     isContributionEnabled(featureId, contributionId, legacyPluginId) {
         const manifest = this.manifests.get(featureId);
@@ -267,6 +275,7 @@ export class FeatureRuntime {
             result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, site: this.site, route: this.route,
                 isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionEnabled(featureId, contributionId, legacyPluginId),
+                isContributionPreferenceEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionPreferenceEnabled(featureId, contributionId, legacyPluginId),
                 executeCommand: /** @type {(command: string, ...args: unknown[]) => Promise<unknown>} */ ((command, ...args) => this.commands.execute(command, ...args)),
                 isCommandAvailable: (/** @type {string} */ command) => this.commands.isAvailable(command),
                 isCompatibilityBeanAvailable: (/** @type {string} */ name) => this.isCompatibilityBeanAvailable(name),
