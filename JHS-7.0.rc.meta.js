@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         JHS RC 7.0
 // @namespace    https://github.com/Teamper/JHS/rc/7.0
-// @version      7.0.0-rc.1
+// @version      7.0.0-rc.2
 // @author       JHS Contributors
-// @description  JHS 7.0 RC build 86a60f4e085b57dffc0ebca8671895293172a206
+// @description  JHS 7.0 RC build e0e479b2a14c7d28f0e1c05203f6cc3db37b866f
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=javdb.com
 // @homepageURL  https://github.com/Teamper/JHS
