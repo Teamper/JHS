@@ -164,15 +164,15 @@ async function ensureV2MigrationSnapshot(/** @type {any} */ storage) {
     if (!await hasPortableUserData(storage)) return null;
     const snapshots = await storage._getSnapshots(), existing = snapshots.find((/** @type {Record<string, any>} */ item) => "migration-snapshot" === item.kind && 2 === item.targetDataVersion);
     if (existing) return existing;
-    const data = await storage._exportPortableDataWithoutLock(), snapshot = {
+    const data = await storage._exportPortableDataWithoutLock(), now = new Date().toISOString(), snapshot = {
         id: "migration_v2_" + Date.now(),
         name: "6.4.0-migration-backup",
         source: "migration",
         kind: "migration-snapshot",
         targetDataVersion: 2,
         appVersion: "6.4.0",
-        createdAt: new Date().toISOString(),
-        time: utils.getNowStr(),
+        createdAt: now,
+        time: formatUiDateTime(now),
         itemCount: Object.values(data).reduce(((sum, value) => sum + (Array.isArray(value) ? value.length : value && "object" == typeof value ? 1 : 0)), 0),
         data
     };

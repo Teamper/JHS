@@ -2,7 +2,7 @@
 
 import { isMissingActorSource } from "./actor-source-health.js";
 import { selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
-import { getMovieStateEligibility } from "../../core/movie-identity.js";
+import { getMovieStateEligibility, normalizeCarNum } from "../../core/movie-identity.js";
 
 /** Converts discovered actor titles into the existing 6.5.1 actress record shape. */
 export class NewVideoScanController {
@@ -22,7 +22,7 @@ export class NewVideoScanController {
     }
 
     /** Fetch and persist one actor's manual scan through the same feature-owned write path. */
-    /** @param {{starId: string, name: string}} actress @param {{baseUrl: string, onActorStart?: (actress: any, url: string) => void}} options */
+    /** @param {{starId: string, name: string}} actress @param {{baseUrl: string, onActorStart?: (actress: any, url: string) => void, preservePending?: boolean}} options */
     async scanActress(actress, options) {
         this.assertActive();
         const { starId, name } = actress, url = `${options.baseUrl}/actors/${starId}?t=d`;
@@ -33,8 +33,12 @@ export class NewVideoScanController {
         const blacklistSet = new Set(blacklistCars.map((/** @type {any} */ item) => item.carNum));
         options.onActorStart?.(actress, url);
         try {
-            const movies = await this.actressInfo.movies("javdb", { actorId: starId, baseUrl: options.baseUrl }, { scope: this.scope, ttlMs: 0 });
+            let movies = await this.actressInfo.movies("javdb", { actorId: starId, baseUrl: options.baseUrl }, { scope: this.scope, ttlMs: 0 });
             this.assertActive();
+            // A rebind scan must keep pending entries migrated from the previous source: the new
+            // page cannot list videos published under the old actor id, so replacing the stored list
+            // would silently drop them.
+            if (options.preservePending) movies = [...movies, ...await this.readPendingCarryOver(starId, movies)];
             const result = await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
             this.sourceHealth?.clear(options.baseUrl, starId);
             return result;
@@ -42,6 +46,17 @@ export class NewVideoScanController {
             if (isMissingActorSource(error)) this.sourceHealth?.unavailable(options.baseUrl, actress);
             throw error;
         }
+    }
+
+    /** @param {string} starId @param {any[]} movies @returns {Promise<any[]>} */
+    async readPendingCarryOver(starId, movies) {
+        const actresses = await this.state.getFavoriteActressList();
+        this.assertActive();
+        const known = new Set(movies.map((movie) => normalizeCarNum(movie?.carNum)).filter(Boolean));
+        const current = (Array.isArray(actresses) ? actresses : []).find((item) => item?.starId === starId);
+        return (Array.isArray(current?.newVideoList) ? current.newVideoList : [])
+            .map((/** @type {any} */ item) => (typeof item === "string" ? { carNum: item } : item))
+            .filter((/** @type {any} */ item) => item?.carNum && !known.has(normalizeCarNum(item.carNum)));
     }
 
     /** Fetch every saved-actress page and persist only after pagination validates completely. */

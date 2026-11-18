@@ -74,6 +74,38 @@ it("reports unverified opaque previews instead of accepting them", async () => {
     await expect(createJavStoreAdapter({ request }).getImages({ carNum: "MSFH-021" })).rejects.toMatchObject({ code: "INVALID_RESPONSE", source: "javstore", details: { stage: "detail", reason: "identity", candidateCount: 1 } });
 });
 
+it("keeps opaque-cover search candidates whose title matches even when the article path omits the carNum, then confirms on detail", async () => {
+    const html = '<a href="/12345-pn.html"><h3>MSFH-021 Fixture</h3><img src="/opaque-cover.jpg"></a>';
+    expect(inspectJavStoreSearch(html, "MSFH-021")).toMatchObject({
+        candidateCount: 1,
+        unrecognizedCount: 0,
+        candidates: [{ url: "https://javstore.net/12345-pn.html", requiresDetailIdentity: true }],
+    });
+    const request = vi.fn(async options => ({
+        data: options.url.includes("/search?")
+            ? html
+            : '<main><article><h1>MSFH-021 Fixture</h1><a href="/images/opaque_s.jpg">CLICK HERE!</a></article></main>',
+        finalUrl: options.url,
+    }));
+    await expect(createJavStoreAdapter({ request }).getImages({ carNum: "MSFH-021" })).resolves.toEqual([
+        { url: "https://javstore.net/images/opaque_s.jpg", providerId: "javstore" },
+    ]);
+    expect(request.mock.calls.map(([options]) => options.url)).toEqual([
+        "https://javstore.net/search?q=MSFH-021",
+        "https://javstore.net/12345-pn.html",
+    ]);
+
+    const unverified = createJavStoreAdapter({
+        request: async options => ({
+            data: options.url.includes("/search?") ? html : '<main><article><a href="/images/opaque.jpg">CLICK HERE!</a></article></main>',
+            finalUrl: options.url,
+        }),
+    });
+    await expect(unverified.getImages({ carNum: "MSFH-021" })).rejects.toMatchObject({
+        code: "INVALID_RESPONSE", source: "javstore", details: { stage: "detail", reason: "identity", candidateCount: 1 },
+    });
+});
+
 it("confines explicit links to the article and rejects contradictory detail titles", () => {
     const detail = '<main><article><h1>MSFH-021 Fixture Case01:CA</h1><a href="/MSFH-021_s.jpg">CLICK HERE!</a></article><aside><a href="/wrong.jpg">CLICK HERE!</a></aside></main>';
     expect(parseJavStorePreview(detail, "https://javstore.net/MSFH021-pn.html", "MSFH-021")).toBe("https://javstore.net/MSFH-021_s.jpg");

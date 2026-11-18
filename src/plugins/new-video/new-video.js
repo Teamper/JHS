@@ -44,6 +44,7 @@ export class NewVideoWorkspaceService {
         this.batchPopover = null;
         this.editor = null;
         this.editorGeneration = 0;
+        /** @type {Set<() => void>} */ this.rebindDialogClosers = new Set();
         Object.assign(this, FEATURE_ICONS);
         i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvCoverPreview", null), i(this, "nvWorkspaceRoot", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
         i(this, "nvWorkspaceFullReloadRequested", !1), i(this, "nvPendingRemovals", new Set), i(this, "nvRemovingCards", new Set);
@@ -311,6 +312,7 @@ export class NewVideoWorkspaceService {
         this.nvLoadGeneration++, this.nvWorkspaceLoading = false;
         clearTimeout(this.nvInvalidationTimer), this.nvInvalidationTimer = null, this.nvWorkspaceReloadDirty = !1, this.nvWorkspaceFullReloadRequested = !1, this.nvPendingRemovals.clear();
         this.closeActressEditor();
+        this.closeRebindDialogs();
         this.workspaceLayoutScope?.dispose(); this.workspaceLayoutScope = null;
         this.workspaceMorePopover?.close(); this.workspaceMorePopover = null;
         this.batchPopover?.close(); this.batchPopover = null;
@@ -321,6 +323,11 @@ export class NewVideoWorkspaceService {
         this.nvCoverPreview?.destroy?.(), this.nvCoverPreview = null,
         this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
         this.jquery(Array.from(this.nvRemovingCards)).stop(!0, !0), this.nvRemovingCards.clear();
+    }
+    /** 工作区关闭或停用时释放重绑弹窗及其在途搜索。 */
+    closeRebindDialogs() {
+        for (const close of [...(this.rebindDialogClosers ?? [])]) close();
+        this.rebindDialogClosers?.clear();
     }
     bindWorkspaceLayout() {
         this.workspaceLayoutScope?.dispose();
@@ -1184,13 +1191,16 @@ export class NewVideoWorkspaceService {
         health?.clear?.(baseUrl, fromStarId);
         health?.clear?.(baseUrl, toStarId);
         if (this.isEditorCurrent(this.editor) && this.editor.record.starId === fromStarId) {
-            Object.assign(this.editor.record, result.actress);
-            this.editor.root.find("#edit-actress-starid").val(result.actress.starId);
+            // The committed record is a merge of both actors; keeping the stale form open would let
+            // its untouched inputs overwrite the merged remark, aliases and pending videos on save.
+            this.closeActressEditor();
         }
         await this.notifyCommittedNewVideoChange("favorite-actress-rebound");
         this.notifications.ok(result.merged ? `已合并到现有演员「${result.actress.name}」（${toStarId}）` : `已重新绑定为「${result.actress.name}」（${toStarId}）`);
         const taskPlugin = this.getOptionalDependency("TaskPlugin");
-        if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress);
+        // The first scan after a rebind must not replace the freshly migrated pending videos with
+        // only what the new source page lists right now.
+        if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress, { preservePending: true });
         return result.actress;
     }
     async openRebindActorDialog(actress) {
@@ -1223,7 +1233,15 @@ export class NewVideoWorkspaceService {
                 aliasBox.append(this.jquery(`<button type="button" class="jhs-btn jhs-btn--ghost jhs-rebind-alias"></button>`).text(alias).attr("data-alias", alias));
             }
         } else aliasBox.hide();
-        let activeSearch = null, binding = false, dialogId = null;
+        let activeSearch = null, binding = false, dialogId = null, closed = false;
+        const closeSelf = () => {
+            if (closed) return;
+            closed = true;
+            this.rebindDialogClosers?.delete(closeSelf);
+            activeSearch?.dispose(); scope.dispose(); root.remove();
+            if (dialogId != null) dialog.close(dialogId);
+        };
+        this.rebindDialogClosers?.add(closeSelf);
         const placeholderAvatar = this.getRuntimeService("actressInfo")?.placeholderUrl?.("javdb") || "";
         const setStatus = text => root.find("#rebind-actor-status").text(text);
         const renderCandidates = actors => {
@@ -1240,7 +1258,7 @@ export class NewVideoWorkspaceService {
                         this.jquery(`<span class="jhs-rebind-candidate__meta"></span>`).text(`ID: ${candidate.starId} · ${typeText} · ${namesText}`)
                     ),
                     this.jquery(`<button type="button" class="jhs-btn jhs-btn--secondary">选择并绑定</button>`).attr("data-candidate-id", candidate.starId).on("click", async () => {
-                        if (binding || scope.disposed) return;
+                        if (binding || scope.disposed || this.disposed) return;
                         binding = true;
                         try {
                             await this.applyActorRebind(actress, candidate);
@@ -1294,7 +1312,7 @@ export class NewVideoWorkspaceService {
             void runSearch();
         });
         root.on("click", "#rebind-actor-apply-btn", async () => {
-            if (binding || scope.disposed) return;
+            if (binding || scope.disposed || this.disposed) return;
             const nextId = NewVideoWorkspaceService.parseActorIdInput(String(root.find("#rebind-actor-manual").val() || ""));
             if (!nextId) return setStatus("请输入有效的演员页链接（/actors/xxxx）或 starId");
             binding = true;
@@ -1315,7 +1333,7 @@ export class NewVideoWorkspaceService {
                 scope.addCleanup(() => this.utils.releaseEscClose?.(id));
                 void runSearch();
             },
-            end: () => { activeSearch?.dispose(); scope.dispose(); root.remove(); },
+            end: () => { closed = true; this.rebindDialogClosers?.delete(closeSelf); activeSearch?.dispose(); scope.dispose(); root.remove(); },
         });
         return dialogId;
     }

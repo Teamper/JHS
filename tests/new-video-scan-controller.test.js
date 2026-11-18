@@ -198,6 +198,22 @@ describe("NewVideoScanController", () => {
         });
     });
 
+    it("keeps pending entries migrated from the previous source on a rebind scan", async () => {
+        const scope = {}, state = {
+            getFavoriteActressList: vi.fn(async () => [{ starId: "actor-new", newVideoList: [
+                { carNum: "OLD-001", title: "Migrated pending" }, "OLD-002", { carNum: "LIVE-003", title: "Also on the new page" },
+            ] }]),
+            getBlacklistCarList: vi.fn(async () => []),
+            getCarMap: vi.fn(async () => new Map()), getNewVideoDecisions: vi.fn(async () => ({})),
+            updateFavoriteActress: vi.fn(async () => true),
+        };
+        const actressInfo = { movies: vi.fn(async () => [{ carNum: "LIVE-003", title: "On the new page" }]) };
+        const controller = new NewVideoScanController({ state, titleKeywords: { getAll: async () => [] }, actressInfo, scope, getTimestamp: () => "2026-11-18 10:00:00", onNewItems: vi.fn() });
+
+        await controller.scanActress({ starId: "actor-new", name: "Actor" }, { baseUrl: "https://javdb.com", preservePending: true });
+        expect(state.updateFavoriteActress.mock.calls[0][0].newVideoList.map(item => item.carNum)).toEqual(["LIVE-003", "OLD-001", "OLD-002"]);
+    });
+
     it("syncs every collection page before writing the merged actress list", async () => {
         const state = { addFavoriteActressList: vi.fn(async () => true) };
         const fetched = [];

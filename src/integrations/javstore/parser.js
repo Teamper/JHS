@@ -126,7 +126,9 @@ export function inspectJavStoreSearch(page, carNum, baseUrl = "https://javstore.
         }
         if (!tokens.includes(target)) continue;
         if (hasConflict(tokens, target)) { result.identityRejected++; continue; }
-        if (unknownCover && !(titleTokens.includes(target) && pathTokens.includes(target))) {
+        // A title that names the target is independent positive evidence; the detail page still
+        // has to confirm it, so an opaque cover alone must not reject the candidate here.
+        if (unknownCover && !titleTokens.includes(target)) {
             result.unrecognizedCount++;
             continue;
         }

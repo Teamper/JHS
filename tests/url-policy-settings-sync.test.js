@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppContext } from "../src/app/create-app-context.js";
+
+// Node 26 默认在 globalThis 定义 localStorage 访问器（未提供 --localstorage-file 时取值为 undefined），
+// Vitest 的 jsdom 环境因此跳过注入；这里显式绑定本环境 jsdom 窗口的真实 Storage。
+beforeEach(() => { vi.stubGlobal("localStorage", globalThis.jsdom.window.localStorage); });
+afterEach(() => { vi.unstubAllGlobals(); });
 
 function createRuntime(initial = {}) {
     const values = new Map([[ "setting", { ...initial } ]]);

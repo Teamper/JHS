@@ -157,7 +157,14 @@ export class AutoPageController {
         scope.listen(this.window, "resize", () => this.invalidatePagePositions());
         scope.listen(container, "load", () => this.invalidatePagePositions(), true);
         if (this.window.MutationObserver) {
-            const observer = new this.window.MutationObserver(() => this.invalidatePagePositions());
+            const itemSelector = selectors.requestDomItemSelector;
+            const containsItem = (/** @type {Node} */ node) => node.nodeType === 1 && (/** @type {Element} */ (node).matches?.(itemSelector) || Boolean(/** @type {Element} */ (node).querySelector?.(itemSelector)));
+            const observer = new this.window.MutationObserver((/** @type {MutationRecord[]} */ records) => {
+                if (records.some((/** @type {MutationRecord} */ record) => record.type === "childList" && ([...record.addedNodes].some(containsItem) || [...record.removedNodes].some(containsItem)))) {
+                    this.knownCarNums = null;
+                }
+                this.invalidatePagePositions();
+            });
             observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
             scope.ownObserver(observer);
         }

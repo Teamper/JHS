@@ -512,6 +512,31 @@ function installOwnedDialogs(harness) {
 }
 
 describe("new video interaction ownership", () => {
+    it("closes the stale editor after a rebind so untouched fields cannot overwrite the merge", async () => {
+        const harness = createHarness(), { plugin, actresses, stateService, dom } = harness, { dialogs } = installOwnedDialogs(harness);
+        plugin.notifyCommittedNewVideoChange = vi.fn(async () => {});
+        await plugin.editActress(actresses[0]);
+        expect(plugin.editor).not.toBeNull();
+        stateService.rebindFavoriteActress.mockResolvedValueOnce({ ok: true, merged: true, actress: { ...actresses[0], starId: "alice-2", name: "Merged" } });
+
+        await plugin.applyActorRebind(actresses[0], { starId: "alice-2", name: "Merged" });
+
+        expect(plugin.editor).toBeNull();
+        expect(dialogs.size).toBe(0);
+        dom.window.close();
+    });
+
+    it("closes rebind dialogs when the workspace is cleaned up", async () => {
+        const harness = createHarness(), { plugin, actresses, dom } = harness, { dialogs } = installOwnedDialogs(harness);
+        const rebindId = await plugin.openRebindActorDialog(actresses[0]);
+        expect(dialogs.has(rebindId)).toBe(true);
+
+        plugin.cleanupNewVideoWorkspace();
+
+        expect(dialogs.has(rebindId)).toBe(false);
+        dom.window.close();
+    });
+
     it("uses labels for all seven editor fields and opens one editor for a repeated actor action", async () => {
         const harness = createHarness(), { plugin, actresses, dom } = harness, { dialog } = installOwnedDialogs(harness);
         await plugin.editActress(actresses[0]); await plugin.editActress(actresses[0]);
@@ -702,7 +727,7 @@ describe("new video interaction ownership", () => {
         }));
         expect(clear).toHaveBeenCalledWith("https://javdb.com", "alice");
         expect(clear).toHaveBeenCalledWith("https://javdb.com", "alice-new");
-        expect(harness.beans.TaskPlugin.checkOneNewVideo).toHaveBeenCalledWith(expect.objectContaining({ starId: "alice-new" }));
+        expect(harness.beans.TaskPlugin.checkOneNewVideo).toHaveBeenCalledWith(expect.objectContaining({ starId: "alice-new" }), { preservePending: true });
 
         await plugin.editActress(actresses[0]);
         expect(plugin.editor.root.find("#edit-actress-starid").val()).toBe("alice");

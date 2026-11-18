@@ -101,13 +101,8 @@ export class CredentialService extends EventTarget {
             catch { await this.notifyChanged(key); }
             const current = await this.readVersioned(key);
             if (current.revision !== revision) throw Object.assign(new Error("连接配置已变化，请重新读取"), { code: "CONFIG_CONFLICT" });
-            try {
-                const prefix = `${key}:revision:`, revKeys = (await this.storage.listValues?.() ?? []).filter((/** @type {string} */ k) => typeof k === "string" && k.startsWith(prefix));
-                if (revKeys.length > 8) {
-                    const keep = new Set([revision, ...parents.filter(Boolean)].map(id => `${prefix}${id}`));
-                    for (const oldKey of revKeys) if (!keep.has(oldKey)) await this.storage.removeValue?.(oldKey);
-                }
-            } catch { /* Old revision cleanup must never break a committed save. */ }
+            // Revision pruning is intentionally absent: GM storage is shared across sites while
+            // Web Locks are origin-scoped, so a keep-list delete can erase a concurrent sibling branch.
             return current;
         };
         const locks = /** @type {any} */ (globalThis.navigator?.locks);

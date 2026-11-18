@@ -60,6 +60,8 @@ export class TaskExecutionService {
     }
     /** @param {string} name */
     getOptionalDependency(name) { return this.resolveDependency(name) ?? null; }
+    /** Read the host list-page flag without assuming it exists. */
+    getHostListPageFlag() { return /** @type {{ isListPage?: boolean }} */ (this.window).isListPage; }
     /** @param {string} [site] */
     getSelector(site = detectSite(this.window?.location).site) {
         const siteName = site === I ? "javbus" : site === T ? "javdb" : site;
@@ -168,7 +170,7 @@ export class TaskExecutionService {
         if (this.activeTasks.has(name)) status = "running";
         else if (state.pending && now < nextAt) status = "pending";
         else if (null == storedNext || now >= nextAt) status = "due";
-        return { name, ready: this.window.isListPage !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, unavailableCount: name === "newVideo" && this.javDbUrl ? this.sourceHealth.list(this.javDbUrl).length : 0, pendingUntil: state.pending ? nextAt : null };
+        return { name, ready: this.getHostListPageFlag() !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, unavailableCount: name === "newVideo" && this.javDbUrl ? this.sourceHealth.list(this.javDbUrl).length : 0, pendingUntil: state.pending ? nextAt : null };
     }
     /** @param {string} name @param {string} phase */
     async emitTaskStatus(name, phase) {
@@ -255,13 +257,13 @@ export class TaskExecutionService {
         })), this.configRefreshPromise;
     }
     async doTask() {
-        if (!this.window.isListPage) return;
+        if (!this.getHostListPageFlag()) return;
         await this.loadConfig(), this.javDbUrl = await this.getConfiguredSiteOrigin("javDbBtn");
         return this.window.navigator.locks.request(this.singleTaskKey, {
             ifAvailable: !0
         }, (async e => {
             if (e) {
-                if (this.window.isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.runBackgroundTask("黑名单整批检测", (() => this.checkBlacklist())) : this.logger.warn("自动检测屏蔽黑名单-禁用"),
+                if (this.getHostListPageFlag() && (this.taskConfig.enableCheckBlacklist === _ ? await this.runBackgroundTask("黑名单整批检测", (() => this.checkBlacklist())) : this.logger.warn("自动检测屏蔽黑名单-禁用"),
                 !l)) {
                     if (this.taskConfig.enableCheckFavoriteActress === _) {
                         this.jquery('a[href*="/users/profile"]').length > 0 ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : this.logger.debug("未登录 JavDB，跳过自动同步演员");
@@ -692,8 +694,8 @@ export class TaskExecutionService {
         }
         return fresh.length;
     }
-    /** @param {TaskRecord} e */
-    async checkOneNewVideo(e) {
+    /** @param {TaskRecord} e @param {{preservePending?: boolean}} [options] */
+    async checkOneNewVideo(e, options = {}) {
         await this.ensureReady();
         const {name, starId} = e, url = `${this.javDbUrl}/actors/${starId}?t=d`;
         const l = this.jquery("#checkNewVideoMsg");
@@ -703,6 +705,7 @@ export class TaskExecutionService {
                 await this.featureNewVideoScanController.scanActress(e, {
                     baseUrl: this.javDbUrl,
                     onActorStart: (/** @type {TaskRecord} */ actress) => l.text(`正在检测：${actress.name}`),
+                    preservePending: Boolean(options.preservePending),
                 });
             } else {
                 const titleKeywords = await this.legacyStorage.getTitleFilterKeyword(), blacklistCars = await this.legacyStorage.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((/** @type {TaskRecord} */ item) => item.carNum));

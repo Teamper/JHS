@@ -68,6 +68,18 @@ describe("CacheService L1/L2 cache", () => {
         expect(storage.get.mock.calls.length).toBeLessThanOrEqual(256);
     });
 
+    it("keeps a persisted entry refreshed by another tab instead of pruning it", async () => {
+        vi.useFakeTimers();
+        const storage = backend(), stale = new CacheService({ storage }), fresh = new CacheService({ storage });
+        await stale.set("shared", "old", { scope: "public", ttlMs: 1_000 });
+        vi.advanceTimersByTime(500);
+        await fresh.set("shared", "new", { scope: "public", ttlMs: 60_000 });
+        vi.advanceTimersByTime(600);
+        await stale.prunePublic();
+        expect(storage.data.size).toBe(1);
+        await expect(fresh.get("shared", { scope: "public" })).resolves.toMatchObject({ value: "new" });
+    });
+
     it("does not persist a response with an obsolete public generation", async () => {
         const storage = backend(), cache = new CacheService({ storage }), generation = cache.publicGeneration;
         await cache.clearPublic();

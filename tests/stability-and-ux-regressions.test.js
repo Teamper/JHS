@@ -158,7 +158,7 @@ describe("stability, lifecycle, UX, and performance regressions", () => {
         service.dispose();
     });
 
-    it("prunes stale CredentialService ancestor revisions past retention limit while preserving active head/parents", async () => {
+    it("keeps CredentialService revisions past the old retention limit so concurrent branches stay recoverable", async () => {
         vi.stubGlobal("navigator", { locks: { request: (_k, run) => run() } });
         const values = new Map();
         const storage = {
@@ -173,8 +173,11 @@ describe("stability, lifecycle, UX, and performance regressions", () => {
             const saved = await cred.setVersioned("conn", JSON.stringify({ n: idx }), rev);
             rev = saved.revision;
         }
-        const remaining = [...values.keys()].filter(k => k.includes(":revision:"));
-        expect(remaining.length).toBeLessThanOrEqual(8);
-        expect((await cred.readVersioned("conn")).value).toBe(JSON.stringify({ n: 11 }));
+        // Pruning by a keep-list erased sibling revisions written from the same parent by another
+        // site, so a conflict could no longer be resolved; every committed revision must stay.
+        expect([...values.keys()].filter(k => k.includes(":revision:"))).toHaveLength(12);
+        const head = await cred.readVersioned("conn");
+        expect(head.value).toBe(JSON.stringify({ n: 11 }));
+        expect(head.revision).toBe(rev);
     });
 });

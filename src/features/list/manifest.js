@@ -7,7 +7,7 @@ export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.clog, SERVICE.titleKeywords, SERVICE.state, SERVICE.settings, SERVICE.storageMutation, SERVICE.notifications, SERVICE.dialog, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clipboard, SERVICE.navigation, SERVICE.screenshot, SERVICE.movie],
     contributes: ["list.core", "list.auto-page", "detail.fc2-navigation", "list.fold-category", "list.actions", "detail.javbus-images", "detail.cover-state-actions"],
-    configurationDependencies: ["new-video", "discovery.new-video", "library", "library.blacklist"],
+    configurationDependencies: ["new-video", "discovery.new-video", "library", "library.blacklist", "library.favorite-actresses"],
     providesCommands: ["list.current-page-summary", "list.set-quick-filter", "list.get-page-actions", "list.execute-page-action"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const [

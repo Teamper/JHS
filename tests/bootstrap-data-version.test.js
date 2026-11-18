@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { webcrypto } from "node:crypto";
 import { StorageManager } from "../src/core/storage.js";
 import { StateService } from "../src/core/state-service.js";
@@ -63,6 +63,10 @@ function fixture(version = CURRENT_DATA_VERSION) {
 }
 
 afterEach(() => { StorageManager.instance = null; vi.restoreAllMocks(); localStorage.clear(); vi.unstubAllGlobals(); });
+
+// Node 26 默认在 globalThis 定义 localStorage 访问器（未提供 --localstorage-file 时取值为 undefined），
+// Vitest 的 jsdom 环境因此跳过注入；这里显式绑定本环境 jsdom 窗口的真实 Storage。
+beforeEach(() => { vi.stubGlobal("localStorage", globalThis.jsdom.window.localStorage); });
 
 function watchLegacyPageStorage() {
     localStorage.setItem(CREDENTIAL_KEYS.javdbToken, "old-dummy-token");

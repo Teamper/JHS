@@ -138,6 +138,21 @@ describe("List Feature auto-page controller", () => {
         scope.dispose();
     });
 
+    it("re-reads cards added to the same list root before judging duplicate pages", async () => {
+        const page2 = `<div class="movie-list">${card("ABC-002", "/v/abc-002").outerHTML}</div><a class="pagination-next" href="/page/3">下一页</a>`;
+        const page3 = `<div class="movie-list">${card("ABC-010", "/v/host-10").outerHTML}${card("ABC-011", "/v/host-11").outerHTML}</div><a class="pagination-next" href="/page/4">下一页</a>`;
+        const { controller, scope, http } = setup("yes", "");
+        http.request.mockImplementationOnce(async () => ({ data: page2 })).mockImplementationOnce(async () => ({ data: page3 }));
+        await controller.mount();
+        await controller.loadNextPage();
+        document.querySelector(".movie-list").insertAdjacentHTML("beforeend", card("ABC-010", "/v/host-10").outerHTML + card("ABC-011", "/v/host-11").outerHTML);
+        await vi.waitFor(() => expect(controller.knownCarNums).toBeNull());
+        await controller.loadNextPage();
+        expect(document.querySelectorAll(".movie-list .item")).toHaveLength(4);
+        expect(controller.nextUrl).toBeNull();
+        scope.dispose();
+    });
+
     it("pauses an empty quick filter and lets each manual action load only one page", async () => {
         const pages = [
             `<div class="movie-list">${card("ABC-002", "/v/abc-002").outerHTML}</div><a class="pagination-next" href="/page/3">下一页</a>`,

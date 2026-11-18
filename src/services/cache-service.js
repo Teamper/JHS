@@ -191,17 +191,31 @@ export class CacheService {
                 meta = { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || 0 };
                 this.publicMetadataIndex.set(key, meta);
             } else if (!Number.isFinite(meta.expiresAt) || meta.expiresAt <= now) {
-                this.publicMetadataIndex.delete(key);
-                await this.storage.remove(key).catch(() => {});
-                continue;
+                // Another tab may have refreshed this key after the in-page index saw it; the local
+                // metadata alone cannot prove the persisted entry is still the stale one.
+                const entry = await this.storage.get(key).catch(() => null);
+                if (entry && entry.version === this.namespaceVersion && Number.isFinite(entry.expiresAt) && entry.expiresAt > now) {
+                    meta = { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || 0 };
+                    this.publicMetadataIndex.set(key, meta);
+                } else {
+                    this.publicMetadataIndex.delete(key);
+                    await this.storage.remove(key).catch(() => {});
+                    continue;
+                }
             }
             candidates.push({ key, lastUsed: meta.lastUsed });
         }
         if (candidates.length > PUBLIC_CACHE_MAX_ENTRIES) {
             candidates.sort((left, right) => left.lastUsed - right.lastUsed);
             for (const item of candidates.slice(0, candidates.length - PUBLIC_CACHE_MAX_ENTRIES)) {
-                this.publicMetadataIndex.delete(/** @type {any} */ (item).key);
-                await this.storage.remove(/** @type {any} */ (item).key).catch(() => {});
+                const key = /** @type {any} */ (item).key, entry = await this.storage.get(key).catch(() => null);
+                if (entry && Number(entry.lastUsed) > item.lastUsed) {
+                    // Refreshed elsewhere while queued for eviction; keep it and re-evaluate later.
+                    this.publicMetadataIndex.set(key, { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) });
+                    continue;
+                }
+                this.publicMetadataIndex.delete(key);
+                await this.storage.remove(key).catch(() => {});
             }
         }
     }
