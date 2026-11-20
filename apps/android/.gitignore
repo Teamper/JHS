@@ -1,0 +1,6 @@
+/android/
+/www/
+*.apk
+*.aab
+*.keystore
+*.jks
