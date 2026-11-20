@@ -9,6 +9,18 @@ export const CREDENTIAL_KEYS = Object.freeze({
 /** Same-realm fallback when Web Locks is unavailable. */
 const connectionQueues = new Map();
 
+/** @param {unknown} parents @param {string} revision */
+function validRevisionParents(parents, revision) {
+    return Array.isArray(parents) && parents.every(parent => parent === null || typeof parent === "string") && !parents.includes(revision);
+}
+
+/** @param {any} record @param {string} revision @param {Array<string | null>} parents */
+async function revisionFingerprint(record, revision, parents) {
+    const value = typeof record === "string" ? record : [record.schema, record.id, record.secret, record.ciphertext];
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([revision, value, parents])));
+    return btoa(String.fromCharCode(...new Uint8Array(digest)));
+}
+
 export class CredentialService extends EventTarget {
     /** @param {{getValue: (key: string, fallback?: unknown) => unknown, setValue: (key: string, value: unknown) => unknown, removeValue: (key: string) => unknown, listValues?: () => any, listenValue?: (key: string, callback: () => void) => any, unlistenValue?: (listener: any) => void}} storage @param {Storage} [legacyStorage] */
     constructor(storage, legacyStorage = globalThis.localStorage) {
@@ -57,27 +69,67 @@ export class CredentialService extends EventTarget {
         const revision = record && typeof record === "object" && /** @type {any} */ (record).schema === 2 ? String(/** @type {any} */ (record).id || "") || null : null;
         return record === undefined ? { exists: false, value: "", revision: null } : { exists: true, value: await this.decode(record), revision };
     }
+    /** @param {any} record @param {string} revision */
+    async decodeRevision(record, revision) {
+        if (typeof record !== "string" && (!record || typeof record !== "object")) throw new Error("凭证格式无效");
+        const value = await this.decode(record);
+        if (!value) return null;
+        const node = JSON.parse(value);
+        if (node?.schema !== 1 || !validRevisionParents(node.parents, revision) || typeof node.value !== "string") {
+            throw new Error("连接修订版本不受支持");
+        }
+        return { schema: 1, parents: node.parents, value: node.value, revision };
+    }
+
     /** Read immutable encrypted connection revisions, retaining concurrent branches. @param {string} key */
     async readVersioned(key) {
+        return this.readRevisionGraph(key);
+    }
+
+    /** @param {string} key @param {boolean} [rebuild] @returns {Promise<{exists: boolean, value: string, revision: string | null}>} */
+    async readRevisionGraph(key, rebuild = false) {
         const prefix = `${key}:revision:`;
         const nodes = [];
         for (const name of await this.storage.listValues?.() || []) {
             if (!name.startsWith(prefix)) continue;
-            const entry = await this.readEntry(name);
-            if (!entry.exists || !entry.value) continue;
-            const node = JSON.parse(entry.value);
+            const record = /** @type {any} */ (await this.storage.getValue(name, undefined));
+            if (record === undefined) continue;
             const revision = name.slice(prefix.length);
-            if (node.schema !== 1 || !Array.isArray(node.parents) || !node.parents.every((/** @type {any} */ parent) => parent === null || typeof parent === "string") || node.parents.includes(revision) || typeof node.value !== "string") {
-                throw new Error("连接修订版本不受支持");
+            const indexKey = `${key}:revision-index:${revision}`;
+            // Membership comes from immutable revision keys. Missing or stale indexes are disposable.
+            if (!rebuild) {
+                try {
+                    const index = /** @type {any} */ (await this.storage.getValue(indexKey, undefined));
+                    if (index?.schema === 1 && validRevisionParents(index.parents, revision)
+                        && index.fingerprint === await revisionFingerprint(record, revision, index.parents)) {
+                        nodes.push({ revision, parents: index.parents, record, decoded: null });
+                        continue;
+                    }
+                } catch { /* An index failure falls through to authenticated decoding. */ }
             }
-            nodes.push({ ...node, revision });
+            const decoded = await this.decodeRevision(record, revision);
+            if (!decoded) continue;
+            nodes.push({ revision, parents: decoded.parents, record, decoded });
+            try {
+                const fingerprint = await revisionFingerprint(record, revision, decoded.parents);
+                await this.storage.setValue(indexKey, { schema: 1, parents: decoded.parents, fingerprint });
+            } catch { /* The index is optional and never replaces the encrypted record. */ }
         }
         if (!nodes.length) return this.readEntry(key);
         const parents = new Set(nodes.flatMap(node => node.parents));
         const heads = nodes.filter(node => !parents.has(node.revision));
-        if (!heads.length) throw new Error("连接修订关系无效，原记录已保留");
-        if (heads.length > 1) throw Object.assign(new Error("连接配置存在并发冲突，请选择保留的版本"), { code: "CONFIG_CONFLICT", candidates: heads });
-        return { exists: true, value: heads[0].value, revision: heads[0].revision };
+        if (!heads.length) {
+            if (!rebuild) return this.readRevisionGraph(key, true);
+            throw new Error("连接修订关系无效，原记录已保留");
+        }
+        const candidates = [];
+        for (const head of heads) {
+            const node = head.decoded ?? await this.decodeRevision(head.record, head.revision);
+            if (!node || JSON.stringify(node.parents) !== JSON.stringify(head.parents)) return this.readRevisionGraph(key, true);
+            candidates.push(node);
+        }
+        if (candidates.length > 1) throw Object.assign(new Error("连接配置存在并发冲突，请选择保留的版本"), { code: "CONFIG_CONFLICT", candidates });
+        return { exists: true, value: candidates[0].value, revision: candidates[0].revision };
     }
     /** Compare inside the origin lock; immutable siblings preserve cross-origin races. @param {string} key @param {string} value @param {string | null | string[]} expected */
     async setVersioned(key, value, expected) {
