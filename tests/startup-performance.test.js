@@ -5,6 +5,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { CompatibilityBeanRegistry } from "../src/core/compatibility-bean-registry.js";
+import { isAbortError } from "../src/core/jhs-error.js";
 import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -29,7 +30,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
   const runtimeStorage = { getLocal: vi.fn(() => null), setLocal: vi.fn(), removeLocal: vi.fn() };
   const movie = { externalSiteOrigin: vi.fn(() => "https://javdb.example") };
   const context = vm.createContext({
-    ActorSourceHealth, isMissingActorSource, console,
+    ActorSourceHealth, isMissingActorSource, isAbortError, console,
     URL,
     gmHttp,
     i: (target, key, value) => (target[key] = value),

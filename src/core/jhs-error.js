@@ -34,3 +34,26 @@ export class JhsError extends Error {
         return { code: this.code, message: this.message, source: this.source, retryable: this.retryable, details: this.details };
     }
 }
+
+const TRANSIENT_BLOCK_CODES = new Set(["RATE_LIMITED", "CIRCUIT_OPEN", "CF_BLOCKED"]);
+
+/** @param {unknown} error @returns {boolean} */
+export function isAbortError(error) {
+    if (!error || typeof error !== "object") return false;
+    const item = /** @type {Record<string, any>} */ (error);
+    return item.code === "ABORTED" || item.name === "AbortError";
+}
+
+/** @param {unknown} error @returns {boolean} */
+export function isNotFoundError(error) {
+    if (!error || typeof error !== "object") return false;
+    const item = /** @type {Record<string, any>} */ (error);
+    return item.code === "NOT_FOUND" || item.details?.status === 404 || item.status === 404;
+}
+
+/** @param {unknown} error @returns {boolean} */
+export function isTransientBlockError(error) {
+    if (!error || typeof error !== "object") return false;
+    const item = /** @type {Record<string, any>} */ (error);
+    return TRANSIENT_BLOCK_CODES.has(item.code);
+}

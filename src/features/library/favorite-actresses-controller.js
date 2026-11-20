@@ -1,5 +1,6 @@
 // @ts-check
 
+import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { _ } from "../../core/constants.js";
 import { resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
 
@@ -172,17 +173,43 @@ export class FavoriteActressesController {
         return this.location.pathname.match(/\/actors\/([^/?]+)/u)?.[1] || null;
     }
 
+    readFallbackActorProfile() {
+        /** @type {string[]} */
+        const names = [];
+        const seen = new Set();
+        let isUncensored = /uncensored/u.test(this.location?.pathname || "");
+        const addFromText = (/** @type {string} */ raw) => {
+            for (const part of raw.split(/[,，、]/u)) {
+                const cleaned = cleanActressName(part);
+                if (cleaned && !seen.has(cleaned)) {
+                    seen.add(cleaned);
+                    names.push(cleaned);
+                }
+            }
+        };
+        const actorName = this.document.querySelector(".actor-section-name");
+        if (actorName) {
+            const text = readCleanActorElementText(actorName);
+            if (/無碼|无码/u.test(text)) isUncensored = true;
+            addFromText(text);
+        }
+        for (const element of this.document.querySelectorAll(".section-meta")) {
+            const text = readCleanActorElementText(element);
+            if (text && !text.includes("影片")) {
+                if (/無碼|无码/u.test(text)) isUncensored = true;
+                addFromText(text);
+            }
+        }
+        return names.length ? { starId: this.getActressId(), name: names[0], names, actressType: isUncensored ? "uncensored" : "censored" } : null;
+    }
+
     /** @param {Element} button */
     async collectActor(button) {
-        const actorId = button.getAttribute("href")?.match(ACTOR_ACTION)?.[1];
-        const names = [];
-        const actorName = this.document.querySelector(".actor-section-name");
-        if (actorName) names.push(...(actorName.textContent || "").trim().split(",").map((name) => name.trim()));
-        for (const element of this.document.querySelectorAll(".section-meta")) {
-            const text = (element.textContent || "").trim();
-            if (text && !text.includes("影片")) names.push(...text.split(",").map((name) => name.trim()));
-        }
-        const allName = names.filter(Boolean);
+        const profile = typeof this.hostAdapter?.readActorProfile === "function"
+            ? this.hostAdapter.readActorProfile(this.document, this.location.href)
+            : this.readFallbackActorProfile();
+        const actorId = button.getAttribute("href")?.match(ACTOR_ACTION)?.[1] || profile?.starId || null;
+        const allName = profile?.names?.length ? [...profile.names] : [];
         if (!allName.length) return this.logError("获取演员名称失败");
         if (!actorId) return this.logError("无法获取演员ID进行收藏操作。");
         const view = this.document.defaultView;
@@ -190,7 +217,8 @@ export class FavoriteActressesController {
         const backgroundImage = view.getComputedStyle(this.document.querySelector(".avatar") || this.document.body).backgroundImage;
         const avatar = backgroundImage.match(/^url\(["']?(.*?)["']?\)$/u)?.[1] || "";
         const name = allName[0];
-        const result = await this.state.addFavoriteActressList([{ starId: actorId, name, allName, avatar }]);
+        const actressType = profile?.actressType;
+        const result = await this.state.addFavoriteActressList([{ starId: actorId, name, allName, avatar, ...(actressType ? { actressType } : {}) }]);
         if (result === 1) {
             this.log("log", `收藏演员成功: ${name} (ID: ${actorId})`);
             this.dispatchActressStateChanged(actorId);

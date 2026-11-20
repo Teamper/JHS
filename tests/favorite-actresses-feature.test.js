@@ -119,6 +119,7 @@ describe("Library Feature favorite actresses", () => {
         expect(loaded.add).toHaveBeenCalledWith([expect.objectContaining({
             starId: "actor1", name: "演员甲", allName: ["演员甲", "Actor A", "演员乙"],
             avatar: "https://img.example/avatar.jpg",
+            actressType: "censored",
         })]);
         expect(changes).toEqual(["actor1"]);
 
@@ -159,5 +160,30 @@ describe("Library Feature favorite actresses", () => {
         expect(document.querySelector(".jhs-favorite-actress-avatar")).not.toBeNull();
         loaded.scope.dispose();
         expect(document.querySelector(".jhs-favorite-actress-avatar")).toBeNull();
+    });
+
+    it("strips JHS badges and non-name meta tokens when collecting an actor via hostAdapter or fallback", async () => {
+        const loaded = createController({
+            html: '<div class="actor-section-name">演员甲(無碼)<span class="jhs-actress-state-container"><span class="jhs-badge">已收藏</span></span></div><div class="section-meta">10 影片</div><div class="section-meta">女優, 160cm, 别名乙</div><a id="button-collect-actor" href="/actors/actor9/collect">收藏</a>',
+            url: "https://javdb.com/actors/actor9",
+        });
+        await loaded.controller.collectActor(document.querySelector("#button-collect-actor"));
+        expect(loaded.add).toHaveBeenCalledWith([expect.objectContaining({
+            starId: "actor9",
+            name: "演员甲",
+            allName: ["演员甲", "别名乙"],
+            actressType: "uncensored",
+        })]);
+
+        loaded.add.mockClear();
+        loaded.controller.hostAdapter = null;
+        await loaded.controller.collectActor(document.querySelector("#button-collect-actor"));
+        expect(loaded.add).toHaveBeenCalledWith([expect.objectContaining({
+            starId: "actor9",
+            name: "演员甲",
+            allName: ["演员甲", "女優", "160cm", "别名乙"],
+            actressType: "uncensored",
+        })]);
+        loaded.scope.dispose();
     });
 });

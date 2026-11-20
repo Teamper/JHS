@@ -1,8 +1,19 @@
 // @ts-check
 import { privacySelectors } from "../../contracts/privacy-targets.js";
 
+import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
+
+const JAVDB_NON_NAME_META_RE = /^(?:女[優优]|男[優优]|有[碼码]|無[碼码]|无[码碼]|歐美|欧美|素[人]|FC2|VR|動畫|动画|中文字幕)$/iu;
+const JAVDB_NUMERIC_META_RE = /^(?:\d+(?:\.\d+)?(?:\s*(?:cm|kg|歳|岁|年|月|日|部))?|(?:19|20)\d{2}[-/.年].*|\d+\s*[-/]\s*\d+(?:\s*[-/]\s*\d+)+|(?:[BWH]\s*\d+|身高|体重|體重|三围|三圍|胸围|胸圍|腰围|腰圍|臀围|臀圍|罩杯|年齢|年齡|出生|生日|血型).*|[A-Z](?:カップ|罩杯|cup))$/iu;
+
+/** @param {string} token */
+function isJavDbNonNameMetaToken(token) {
+    if (!token || token.includes("影片")) return true;
+    if (JAVDB_NON_NAME_META_RE.test(token) || JAVDB_NUMERIC_META_RE.test(token)) return true;
+    return /\b[BWH]\d{2,3}\b|^\d+\s*(?:cm|kg|歳|岁)\b/iu.test(token);
+}
 
 
 
@@ -184,6 +195,53 @@ export class JavDbHostAdapter {
             stateEligibility.reason = native.length ? "conflicting" : "missing";
         }
         return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javdb", stateEligibility }) : null;
+    }
+    /** @param {Document | Element} [root] @param {string} [baseUrl] */
+    readActorProfile(root = this.document, baseUrl = this.location.href) {
+        let starId = null;
+        let isUncensored = false;
+        try {
+            const parsed = new URL(baseUrl, this.location?.href || "https://javdb.com");
+            if (parsed.pathname.includes("uncensored")) isUncensored = true;
+            const match = parsed.pathname.match(/^\/actors\/([^/?#]+)/u);
+            if (match) {
+                try { starId = decodeURIComponent(match[1]); }
+                catch { starId = match[1]; }
+            }
+        } catch {
+            starId = null;
+        }
+        const title = root.querySelector(".actor-section-name");
+        const anchorParent = title?.parentElement ?? null;
+        /** @type {string[]} */
+        const names = [];
+        const seen = new Set();
+        const pushName = (/** @type {string} */ raw) => {
+            const cleaned = cleanActressName(raw);
+            if (!cleaned || seen.has(cleaned)) return;
+            seen.add(cleaned);
+            names.push(cleaned);
+        };
+        if (title) {
+            const titleText = readCleanActorElementText(title);
+            if (/無碼|无码/u.test(titleText)) isUncensored = true;
+            for (const part of titleText.split(/[,，、]/u)) pushName(part);
+        }
+        for (const meta of root.querySelectorAll(".section-meta")) {
+            const text = readCleanActorElementText(meta);
+            if (!text || text.includes("影片")) continue;
+            if (/無碼|无码/u.test(text)) isUncensored = true;
+            for (const part of text.split(/[,，、]/u)) {
+                const cleaned = cleanActressName(part);
+                if (!cleaned || isJavDbNonNameMetaToken(cleaned)) continue;
+                if (!seen.has(cleaned)) {
+                    seen.add(cleaned);
+                    names.push(cleaned);
+                }
+            }
+        }
+        if (!names.length) return null;
+        return Object.freeze({ starId: starId || null, name: names[0], names: Object.freeze(names), actressType: isUncensored ? "uncensored" : "censored", anchorParent });
     }
     /** @param {Document | Element} [root] @param {string} [baseUrl] */
     readMovieActors(root = this.document, baseUrl = this.location.href) {

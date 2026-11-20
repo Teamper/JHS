@@ -164,3 +164,23 @@ it("recenters content-adaptive forms as their content grows and releases observa
     expect(root.style.maxHeight).toBe("624px");
     options.end(); expect(disconnect).toHaveBeenCalledOnce();
 });
+
+it("stops trapping focus while layer-anim-close is animating out and preserves focus moved to underlying dialog", async () => {
+    dom = new JSDOM('<button id="opener">打开</button><div class="layui-layer" style="z-index:10" id="parent"><button id="parentFirst">首项</button><input id="parentInput" type="text"></div><div class="layui-layer" style="z-index:20" id="child"><button id="childBtn">确认</button></div>');
+    vi.stubGlobal("window", dom.window);
+    const doc = dom.window.document;
+    const parent = doc.querySelector("#parent"), child = doc.querySelector("#child"), input = doc.querySelector("#parentInput");
+    const parentOpts = prepareDialogOptions({ type: 1, ui: { body: "scroll" } });
+    parentOpts.success(parent, 1); await Promise.resolve();
+    const childOpts = prepareDialogOptions({ type: 1, ui: { body: "scroll" } });
+    childOpts.success(child, 2); await Promise.resolve();
+    expect(doc.activeElement.id).toBe("childBtn");
+
+    child.classList.add("layer-anim-close");
+    input.focus();
+    expect(doc.activeElement).toBe(input);
+
+    childOpts.end();
+    expect(doc.activeElement).toBe(input);
+    parentOpts.end();
+});

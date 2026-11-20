@@ -1,6 +1,7 @@
 // @ts-check
 
 import { B, D, P, CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
+import { normalizeActressProfileData } from "./actress-measurements.js";
 import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./state-model.js";
 import { isPersonalRating } from "./personal-rating.js";
 import { formatUiDateTime } from "./ui-date-time.js";
@@ -37,10 +38,26 @@ export function normalizeLegacySettings(draft) {
 
 /** @param {MigrationRecord[]} actresses */
 function normalizeActressNewVideos(actresses) {
-    return actresses.map((actress) => !Array.isArray(actress.newVideoList) ? actress : {
-        ...actress, newVideoList: actress.newVideoList.filter(Boolean).map((/** @type {any} */ item) => typeof item === "string" ? normalizeCarNum(item) : {
-            ...item, carNum: normalizeCarNum(item.carNum),
-        }).filter((item) => typeof item === "string" ? item : item?.carNum),
+    return actresses.map((actress) => {
+        if (!actress || typeof actress !== "object") return actress;
+        let next = actress;
+        if (Array.isArray(actress.newVideoList)) {
+            next = {
+                ...next,
+                newVideoList: actress.newVideoList.filter(Boolean).map((/** @type {any} */ item) => typeof item === "string" ? normalizeCarNum(item) : {
+                    ...item, carNum: normalizeCarNum(item.carNum),
+                }).filter((item) => typeof item === "string" ? item : item?.carNum),
+            };
+        }
+        if (Object.hasOwn(next, "actressProfile")) {
+            const profile = normalizeActressProfileData(next.actressProfile);
+            if (profile) next = { ...next, actressProfile: profile };
+            else {
+                const { actressProfile: _dropped, ...rest } = next;
+                next = rest;
+            }
+        }
+        return next;
     });
 }
 
@@ -96,8 +113,8 @@ export function normalizePortableData(source) {
             data.car_list = result.list;
             appendStateMigrationWarnings(warnings, result);
         }
-        if (data.favorite_actresses) data.favorite_actresses = normalizeActressNewVideos(data.favorite_actresses);
     }
+    if (data.favorite_actresses) data.favorite_actresses = normalizeActressNewVideos(data.favorite_actresses);
     // Partial backups must not borrow destination evidence or rewrite omitted domains.
     if (version < 3 && ["car_list", "activity_log", "new_video_decisions"].every((key) => Object.hasOwn(data, key))) {
         const result = normalizeNewVideoTombstones(data.car_list, data.new_video_decisions, data.activity_log);

@@ -1,5 +1,6 @@
 // @ts-check
 
+import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { escapeHtml } from "../../core/constants.js";
 import { assertMovieStateEligible, getMovieStateEligibility } from "../../core/movie-identity.js";
 
@@ -54,8 +55,13 @@ export class ListContextMenuController {
     }
 
     getActorName() {
+        const profile = typeof this.hostAdapter?.readActorProfile === "function"
+            ? this.hostAdapter.readActorProfile(this.hostAdapter.document, this.hostAdapter.location?.href)
+            : null;
+        if (profile?.name) return profile.name;
         const selector = this.hostAdapter.site === "javdb" ? ".actor-section-name" : ".avatar-box .photo-info .pb10";
-        return this.hostAdapter.document?.querySelector?.(selector)?.textContent?.trim()?.split(",")[0]?.replace("(無碼)", "") ?? "";
+        const element = this.hostAdapter.document?.querySelector?.(selector) ?? null;
+        return cleanActressName(readCleanActorElementText(element).split(/[,，、]/u)[0] ?? "");
     }
 
     /** @param {Element} card @param {string} [expectedCarNum] */

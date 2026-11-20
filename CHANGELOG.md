@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### 新增
 
+- 新增收藏演员维基百科身材资料后台补齐与详情页优先复用：`actressProfile` 仅保留 `url`、`birthday`、`age`、`height`、`weight`、`threeSizeText`、`braSize`、`matchedName` 八个展示字段并随 `favorite_actresses` 参与备份与 WebDAV 同步，本地冷却时间戳独立存于 `jhs_actress_profile_attempts_v1`；资料未变化时不写入不触发同步，详情/演员页优先消费已存资料并统一通过宿主适配器读取与清理徽标，列表页忽略 `favorite-profile-backfill` 刷新通知。
+- 新增“新作品”工作区双视图身材筛选：在演员视图与新作品视图提供身高区间（cm）、年龄区间、罩杯复选（`A`–`G`、`H+`）与一键重置；演员卡片安全展示“身材”行，空状态支持清除全部筛选条件；同步记录 Dev 产物包体变化（相对 Commit 1 `3c67470`：未压缩 `1778574` 字节 → `1810024` 字节，+`31450` 字节；压缩后 `1652504` 字节 → `1682712` 字节，+`30208` 字节，均低于 `2000000` 字节硬预算）。
+- 同步修复弹窗退出动画（`.layer-anim-close`）期间焦点陷阱从下层弹窗回抢焦点、新作品后台资料补齐误占手动任务锁或在初始加载完成前点击重试无效与异常未捕获、编辑与重绑合并保留/规范化 `actressProfile`、演员主页收藏保留有码/无码 `actressType` 分类、本地冷却缓存写入异常不遮蔽已提交写库、未登录态与 AbortError 任务门控，以及跨标签 `favorite_actresses` 缓存失效联动问题。
 - 翻译支持具名 DeepSeek、OpenAI Responses、Gemini、三类自定义协议、DeepLX 与 DeepL Free/Pro 配置，保留 Google 默认服务和旧缓存。连接与令牌地址加密保存在本机，备用链由用户显式选择，详细结果接口保留来源、缓存和服务用量。
 - 增加详情、FC2 共用标题翻译面板和跨页勾选翻译。自动翻译按可见标题调度，在遮罩、关闭或切换服务后取消旧消费者，区分鉴权、限流、额度、拒绝、空结果和截断。
 - 翻译默认每页并发 2，可在设置中调整。

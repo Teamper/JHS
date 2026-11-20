@@ -1,5 +1,15 @@
 // @ts-check
 
+import { collectActressLookupNames } from "../core/actress-measurements.js";
+import { CACHE_TTL } from "../core/cache-policy.js";
+import { JhsError, isAbortError, isNotFoundError, isTransientBlockError } from "../core/jhs-error.js";
+
+/** @param {unknown} name */
+function normalizeLookupName(name) {
+    const trimmed = String(name ?? "").trim();
+    return trimmed === "三上悠亞" ? "三上悠亜" : trimmed;
+}
+
 export class ActressInfoService {
     /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./cache-service.js").CacheService} cache */
     constructor(integrations, cache) { this.integrations = integrations; this.cache = cache; }
@@ -15,18 +25,64 @@ export class ActressInfoService {
 
     /** @param {string} name @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async lookup(name, options = {}) {
-        const normalized = String(name).trim() === "三上悠亞" ? "三上悠亜" : String(name).trim();
+        const normalized = normalizeLookupName(name);
         if (!normalized) return null;
-        const key = `actress-info:${normalized}`;
+        const key = `actress-info:v2:${normalized}`;
         const cached = await this.cache.get("actress-info", key, { scope: "public" });
         if (cached.hit) return cached.value;
         const generation = this.cache.generation("actress-info");
         for (const manifest of this.integrations.list("person.actress-info")) {
             const adapter = this.integrations.getAdapter(manifest.id);
             if (typeof adapter.lookup !== "function") continue;
-            const result = await adapter.lookup(normalized, options);
-            await this.cache.set("actress-info", key, result, { scope: "public", ttlMs: 604_800_000, negative: !result, generation });
-            return result;
+            try {
+                const result = await adapter.lookup(normalized, options);
+                await this.cache.set("actress-info", key, result ?? null, {
+                    scope: "public",
+                    ttlMs: result ? CACHE_TTL.actressInfo : CACHE_TTL.actressInfoNegative,
+                    negative: !result,
+                    generation,
+                });
+                return result ?? null;
+            } catch (error) {
+                if (isAbortError(error)) throw error;
+                if (isNotFoundError(error)) {
+                    await this.cache.set("actress-info", key, null, {
+                        scope: "public",
+                        ttlMs: CACHE_TTL.actressInfoNegative,
+                        negative: true,
+                        generation,
+                    });
+                    return null;
+                }
+                throw error;
+            }
+        }
+        return null;
+    }
+
+    /** @param {string | string[]} names @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async lookupAny(names, options = {}) {
+        /** @type {string[]} */
+        const candidates = [];
+        const seen = new Set();
+        for (const raw of collectActressLookupNames(names)) {
+            const candidate = normalizeLookupName(raw);
+            if (!candidate || seen.has(candidate)) continue;
+            seen.add(candidate);
+            candidates.push(candidate);
+        }
+        for (const candidate of candidates) {
+            if (options.scope?.signal?.aborted) {
+                throw new JhsError("ABORTED", "请求已取消", { source: "actress-info", cause: options.scope.signal.reason });
+            }
+            try {
+                const info = await this.lookup(candidate, options);
+                if (info) return { info, matchedName: candidate };
+            } catch (error) {
+                if (isAbortError(error) || isTransientBlockError(error)) throw error;
+                if (isNotFoundError(error)) continue;
+                throw error;
+            }
         }
         return null;
     }

@@ -38,6 +38,7 @@ export class SupplementaryCardsController {
         this.started = true;
         owner.scope.addCleanup(() => this.dispose());
         const refresh = (/** @type {any} */ payload = {}, type = "structure") => {
+            if (type === "new-video-changed" && payload?.reason === "favorite-profile-backfill") return;
             if (type === "settings-changed") {
                 const names = Array.isArray(payload?.names) ? payload.names : Array.isArray(payload?.changedKeys) ? payload.changedKeys : null;
                 if (names && !names.some((/** @type {string} */ name) => name === "tagPosition" || name === "defaultQuickFilterTab" || name === "enableFavoriteActresses")) return;

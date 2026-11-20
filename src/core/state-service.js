@@ -296,6 +296,10 @@ export class StateService {
     async updateFavoriteActress(update) {
         return this.storage.updateFavoriteActress(update);
     }
+    /** Atomically update materially changed actress profiles under the actress lock. @param {Array<{starId: string, actressProfile: StateRecord}>} updates */
+    async batchUpdateFavoriteActressProfiles(updates) {
+        return this.storage.batchUpdateFavoriteActressProfiles(updates);
+    }
     /** Atomically migrate or merge a favorite actress record onto a new starId under the actress lock. @param {StateRecord} payload */
     async rebindFavoriteActress(payload) {
         return this.storage.rebindFavoriteActress(payload);

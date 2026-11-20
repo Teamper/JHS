@@ -43,6 +43,7 @@ describe("NewVideoWorkspaceController", () => {
         expect(await controller.loadWorkspace()).toEqual({
             actresses, carMap, decisions, ruleTime: 720, javDbUrl: "https://mirror.example",
             items: [expect.objectContaining({ carNum: "ABC-001", starId: "actor-1", decisionState: "pending" })],
+            measurementsByStarId: expect.any(Map),
         });
         expect(settingsService.snapshot).toHaveBeenCalledOnce();
         expect(movie.externalSiteOrigin).toHaveBeenCalledWith("javDbBtn", expect.objectContaining(settings));

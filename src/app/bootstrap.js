@@ -129,6 +129,9 @@ export async function bootstrapJhs() {
             if (event.originId !== jhsEventBus.originId || !stateService.getCommittedListSnapshot(payload.transactionId)) storageManager._invalidateCache(storageManager.car_list_key);
         });
         jhsEventBus.on("actress-changed", () => storageManager._invalidateCache(storageManager.favorite_actresses_key));
+        jhsEventBus.on("new-video-changed", (_payload, event) => {
+            if (event?.originId !== jhsEventBus.originId) storageManager._invalidateCache(storageManager.favorite_actresses_key);
+        });
         patchLayerRuntime(vendors.layer, utils);
         // 先退出整包 IIFE 调用栈，避免首个资源请求为整包同步生成调试源位置。
         await Promise.resolve();

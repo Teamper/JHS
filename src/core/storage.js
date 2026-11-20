@@ -5,6 +5,7 @@ import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 import { readReviewKeywords } from "./review-keywords.js";
 import { assertMovieStateEligible, getMovieStateEligibility } from "./movie-identity.js";
+import { cleanActressName, isSameActressProfile, normalizeActressProfileData } from "./actress-measurements.js";
 
 /** Compare legacy entries structurally so a metadata-only actor update can carry them unchanged. */
 function movieRecordSignature(value) {
@@ -152,10 +153,42 @@ export class StorageManager {
         if (r != null && !Array.isArray(r)) throw new TypeError("新作品列表必须为数组");
         const newVideoList = Array.isArray(r) ? prepareNewVideoRecords(r, Array.isArray(existing.newVideoList) ? existing.newVideoList : []) : r;
         const h = { ...existing };
+        if (Object.hasOwn(e, "actressProfile")) {
+            const normalizedProfile = normalizeActressProfileData(e.actressProfile);
+            if (normalizedProfile) h.actressProfile = normalizedProfile;
+            else if (e.actressProfile === null) delete h.actressProfile;
+        }
         a && (h.name = a), i && (h.allName = i), s && (h.avatar = s), null != c && (h.actressType = c),
         o && (h.lastCheckTime = o), r && (h.newVideoList = newVideoList), l && (h.lastPublishTime = l),
         d && (h.remark = d), h.updateDate = utils.getNowStr(), await this._setItemAndInvalidate(this.favorite_actresses_key, t.map((item => item === existing ? h : item)));
         return true;
+    }
+    async batchUpdateFavoriteActressProfiles(updates) {
+        if (!Array.isArray(updates) || !updates.length) return 0;
+        const normalizedByStarId = new Map();
+        for (const entry of updates) {
+            const starId = String(entry?.starId || "").trim();
+            const profile = normalizeActressProfileData(entry?.actressProfile);
+            if (!starId || !profile) continue;
+            normalizedByStarId.set(starId, profile);
+        }
+        if (!normalizedByStarId.size) return 0;
+        return this.withActressLock(async () => {
+            const list = await this.getFavoriteActressList();
+            if (!Array.isArray(list) || !list.length) return 0;
+            const now = utils.getNowStr();
+            let updated = 0;
+            const nextList = list.map((actress) => {
+                const starId = String(actress?.starId || "").trim();
+                if (!starId || !normalizedByStarId.has(starId)) return actress;
+                const nextProfile = normalizedByStarId.get(starId);
+                if (isSameActressProfile(actress.actressProfile, nextProfile)) return actress;
+                updated += 1;
+                return { ...actress, actressProfile: nextProfile, updateDate: now };
+            });
+            if (updated > 0) await this._setItemAndInvalidate(this.favorite_actresses_key, nextList);
+            return updated;
+        });
     }
     async getCarList() {
         return this._readCached("cacheCarList", this.car_list_key, []);
@@ -506,7 +539,7 @@ export class StorageManager {
         return this.withActressLock(async () => {
             const fromStarId = String(payload?.fromStarId || "").trim(), toStarId = String(payload?.toStarId || "").trim();
             if (!fromStarId || !toStarId) throw new Error("缺失starId");
-            const stripTag = (value) => String(value || "").replace(/\(無碼\)/gu, "").trim();
+            const stripTag = (value) => cleanActressName(value);
             const incomingName = stripTag(payload?.name);
             const incomingNames = Array.isArray(payload?.allName) ? payload.allName.map(stripTag).filter(Boolean) : [];
             if (fromStarId === toStarId) {
@@ -545,6 +578,9 @@ export class StorageManager {
                 if (b.includes(a)) return b;
                 return `${a}；${b}`;
             };
+            const normalizedTargetProfile = normalizeActressProfileData(target?.actressProfile);
+            const normalizedSourceProfile = normalizeActressProfileData(source.actressProfile);
+            const resolvedProfile = target ? (normalizedTargetProfile || normalizedSourceProfile) : normalizedSourceProfile;
             const nextRecord = target ? {
                 ...target,
                 name: incomingName || target.name || source.name,
@@ -567,6 +603,8 @@ export class StorageManager {
                 newVideoList: mergeVideos(source.newVideoList),
                 updateDate: now,
             };
+            if (resolvedProfile) nextRecord.actressProfile = resolvedProfile;
+            else delete nextRecord.actressProfile;
             const nextList = target ? list.filter(item => item !== source).map(item => item === target ? nextRecord : item) : list.map(item => item === source ? nextRecord : item);
             await this._setItemAndInvalidate(this.favorite_actresses_key, nextList);
             return { ok: true, merged: Boolean(target), actress: nextRecord };

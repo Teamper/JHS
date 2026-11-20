@@ -1,5 +1,6 @@
 // @ts-check
 
+import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { B, C, _, b, escapeHtml, k, l, normalizeCarNum, o, r, u, y } from "../../core/constants.js";
 import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { getIcon } from "../../core/icons.js";
@@ -277,9 +278,10 @@ export class ListPageCompatibilityService {
             scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
         }
         let lastSyncRefresh = "";
-        const refreshAll = async (/** @type {any} */ payload = {}) => {
+        const refreshAll = async (/** @type {any} */ payload = {}, /** @type {string} */ type = "") => {
                 // 6.5 收敛：settings-changed 只对列表判定相关 key 全量刷新；主题/Preview/截图/布局
                 // 等由各自 Feature 精确处理，不再触发 doFilter/applyVisibility/History setData。
+                if (type === "new-video-changed" && payload?.reason === "favorite-profile-backfill") return;
                 if (payload.notificationId && payload.notificationId === lastSyncRefresh) return;
                 const changedNames = /** @type {string[] | undefined} */ (payload?.changedNames);
                 if (changedNames && (!payload.changedDomains || payload.changedDomains.every((/** @type {string} */ key) => key === "setting")) && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
@@ -287,7 +289,7 @@ export class ListPageCompatibilityService {
                 if (payload.notificationId) lastSyncRefresh = payload.notificationId;
         };
         const events = this.getRuntimeService("events");
-        [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed", "new-video-changed", "actress-changed" ].forEach((type => scope.addCleanup(events.on(type, refreshAll)))),
+        [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed", "new-video-changed", "actress-changed" ].forEach((type => scope.addCleanup(events.on(type, (/** @type {any} */ payload) => refreshAll(payload, type))))),
         scope.addCleanup(events.on("car-state-changed", (async (/** @type {any} */ payload, /** @type {any} */ event) => {
             if (payload.notificationId && payload.notificationId === lastSyncRefresh) return;
             const full = Boolean(payload.scope === "all" || !Array.isArray(payload.carNums)
@@ -774,8 +776,12 @@ export class ListPageCompatibilityService {
                 e.preventDefault();
                 const t = $(e.target).closest(".item"), movie = this.findCarNumAndHref(t), {carNum: n, url: a, publishTime: i, fc2Source} = movie;
                 assertMovieStateEligible(movie);
-                let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
-                s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `屏蔽「${escapeHtml(n)}」？`, (async () => {
+                let o = this.getRuntimeService("host")?.readActorProfile?.()?.name || "";
+                if (!o) {
+                    const actorEl = document.querySelector(r ? ".actor-section-name" : ".avatar-box .photo-info .pb10");
+                    o = cleanActressName(readCleanActorElementText(actorEl).split(/[,，、]/u)[0] ?? "");
+                }
+                utils.q(e, `屏蔽「${escapeHtml(n)}」？`, (async () => {
                     try {
                         const current = this.findCarNumAndHref(t);
                         assertMovieStateEligible(current);

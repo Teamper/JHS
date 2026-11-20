@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jquery from "jquery";
+import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
@@ -66,5 +67,66 @@ describe("JavDB movie actors", () => {
         vi.stubGlobal("$", jquery);
         try { expect(await list.parseActressName("https://www.javbus.com/ABC-123", scope)).toBe("演员丙 演员丁"); }
         finally { scope.dispose(); }
+    });
+
+    it("reads clean decoded actor profiles on JavDB and JavBus while filtering non-name metadata", () => {
+        document.body.innerHTML = `
+            <div class="actor-section">
+                <h2 class="actor-section-name">三上悠亜 (無碼), 鬼頭桃菜<span class="jhs-actress-state-container"><span class="jhs-badge">已收藏</span></span></h2>
+                <div class="section-meta">35部影片</div>
+                <div class="section-meta">女優</div>
+                <div class="section-meta">無碼</div>
+                <div class="section-meta">1993-08-16 (33歲)</div>
+                <div class="section-meta">159cm</div>
+                <div class="section-meta">B83 / W59 / H88</div>
+                <div class="section-meta">E罩杯</div>
+                <div class="section-meta">鬼頭桃菜, 桜もこ (有码)<span class="jhs-badge">高分</span></div>
+            </div>
+        `;
+        const javdb = new JavDbHostAdapter(document, new URL("https://javdb.com/actors/%E4%B8%89%E4%B8%8A%E6%82%A0%E4%BA%9C?t=d"));
+        const dbProfile = javdb.readActorProfile();
+        expect(dbProfile).toEqual({
+            starId: "三上悠亜",
+            name: "三上悠亜",
+            names: ["三上悠亜", "鬼頭桃菜", "桜もこ"],
+            actressType: "uncensored",
+            anchorParent: document.querySelector(".actor-section"),
+        });
+        expect(Object.isFrozen(dbProfile)).toBe(true);
+        expect(Object.isFrozen(dbProfile?.names)).toBe(true);
+
+        document.body.innerHTML = `<div class="actor-section"><h2 class="actor-section-name">桃乃木かな</h2><div class="section-meta">有碼</div></div>`;
+        expect(new JavDbHostAdapter(document, new URL("https://javdb.com/actors/db-censored")).readActorProfile()).toEqual({
+            starId: "db-censored",
+            name: "桃乃木かな",
+            names: ["桃乃木かな"],
+            actressType: "censored",
+            anchorParent: document.querySelector(".actor-section"),
+        });
+
+        document.body.innerHTML = `
+            <div class="avatar-box"><div class="photo-info">
+                <span class="pb10">三上悠亜 (無碼)<span class="jhs-actress-state-container"><span class="jhs-badge">已收藏</span></span></span>
+            </div></div>
+        `;
+        const javbus = new JavBusHostAdapter(document, new URL("https://www.javbus.com/uncensored/star/bus%2D1/2"));
+        const busProfile = javbus.readActorProfile();
+        expect(busProfile).toEqual({
+            starId: "bus-1",
+            name: "三上悠亜",
+            names: ["三上悠亜"],
+            actressType: "uncensored",
+            anchorParent: document.querySelector(".photo-info"),
+        });
+        expect(Object.isFrozen(busProfile)).toBe(true);
+
+        document.body.innerHTML = `<div class="avatar-box"><div class="photo-info"><span class="pb10">桃乃木かな</span></div></div>`;
+        expect(new JavBusHostAdapter(document, new URL("https://www.javbus.com/star/bus-censored")).readActorProfile()).toEqual({
+            starId: "bus-censored",
+            name: "桃乃木かな",
+            names: ["桃乃木かな"],
+            actressType: "censored",
+            anchorParent: document.querySelector(".photo-info"),
+        });
     });
 });

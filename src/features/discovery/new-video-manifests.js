@@ -57,6 +57,7 @@ export const newVideoFeature = defineFeature({
         const taskPlugin = runtime.resolveCompatibilityBean("TaskPlugin");
         const scanController = new NewVideoScanController({
             sourceHealth, backgroundWork: deps[SERVICE.backgroundWork],
+            storage: deps[SERVICE.storage],
             state: deps[SERVICE.state],
             titleKeywords: deps[SERVICE.titleKeywords],
             actressInfo: deps[SERVICE.actressInfo],

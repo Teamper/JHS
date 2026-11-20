@@ -122,4 +122,58 @@ describe("WebDAV domain semantics at the external-state boundary", () => {
         expect(other.values.get("offline_history")).toEqual(local.values.get("offline_history"));
         expect(other.values.get("offline_history")[0]).toMatchObject({ id: "task-without-movie", carNum: null });
     });
+
+    it("validates f:actressProfile whitelist, allows legacy finite fetchedAt, and rejects malformed values", () => {
+        const validProfile = {
+            url: "https://ja.wikipedia.org/wiki/Alice",
+            birthday: "1995年1月1日",
+            age: "31岁",
+            height: "160cm",
+            weight: "46 kg",
+            threeSizeText: "85 - 58 - 86",
+            braSize: "E",
+            matchedName: "Alice",
+        };
+        const validState = model("favorite_actresses/a1", {
+            "f:starId": field("a1"),
+            "f:actressProfile": field(validProfile),
+        });
+        expect(validateSyncState(validState)).toBe(validState);
+
+        const legacyReplicaState = model("favorite_actresses/a1", {
+            "f:starId": field("a1"),
+            "f:actressProfile": field({ ...validProfile, fetchedAt: 1700000000000 }),
+        });
+        const before = JSON.stringify(legacyReplicaState);
+        expect(validateSyncState(legacyReplicaState)).toBe(legacyReplicaState);
+        expect(JSON.stringify(legacyReplicaState)).toBe(before);
+
+        const nullAndUnsetState = model("favorite_actresses/a1", {
+            "f:starId": field("a1"),
+            "f:actressProfile": { v: stamp, unset: true },
+        });
+        expect(validateSyncState(nullAndUnsetState)).toBe(nullAndUnsetState);
+        expect(validateSyncState(model("favorite_actresses/a1", {
+            "f:starId": field("a1"),
+            "f:actressProfile": field(null),
+        }))).toBeTruthy();
+
+        for (const badProfile of [
+            ["array"],
+            "string",
+            123,
+            {},
+            { url: "" },
+            { url: "javascript:alert(1)" },
+            { ...validProfile, height: 160 },
+            { ...validProfile, fetchedAt: "1700000000000" },
+            { ...validProfile, fetchedAt: -1 },
+            { ...validProfile, unknownKey: "x" },
+        ]) {
+            expect(() => validateSyncState(model("favorite_actresses/a1", {
+                "f:starId": field("a1"),
+                "f:actressProfile": field(badProfile),
+            }))).toThrow("字段");
+        }
+    });
 });

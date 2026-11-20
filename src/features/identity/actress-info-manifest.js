@@ -5,7 +5,7 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 
 export default defineFeature({
     id: "actress-info", kind: "feature", disableable: true, sites: ["javdb"], routes: [], startup: "idle",
-    requires: [PORT.host, PORT.style, SERVICE.actressInfo, SERVICE.settings],
+    requires: [PORT.host, PORT.style, SERVICE.actressInfo, SERVICE.settings, SERVICE.state],
     contributes: ["identity.actress-info"], providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "identity.actress-info";
@@ -13,7 +13,7 @@ export default defineFeature({
         const { ActressInfoController, INFO_TAG_CSS } = await import("./actress-info-controller.js");
         const controller = new ActressInfoController({
             document, location, hostAdapter: deps[PORT.host], service: deps[SERVICE.actressInfo], settings: deps[SERVICE.settings],
-            scope: runtime.scope, diagnostics: runtime.diagnostics,
+            state: deps[SERVICE.state], scope: runtime.scope, diagnostics: runtime.diagnostics,
         });
         const releaseStyle = deps[PORT.style].register("feature-actress-info", INFO_TAG_CSS);
         runtime.scope.addCleanup(releaseStyle);
