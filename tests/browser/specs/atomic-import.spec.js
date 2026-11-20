@@ -7,7 +7,14 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
 
 const foragePath = fileURLToPath(new URL("../node_modules/localforage/dist/localforage.min.js", import.meta.url));
 const source = await readFile(new URL("../../../src/platform/userscript/indexeddb-storage-adapter.js", import.meta.url), "utf8");
-const bundled = await build({ stdin: { contents: source.replaceAll("export ", "") + "\nwindow.atomic = {readAtomicSnapshot, commitAtomicBatch};", loader: "js" }, bundle: true, write: false, format: "iife" });
+const bundled = await build({
+    stdin: {
+        contents: source.replaceAll("export ", "") + '\nimport { CacheService } from "./src/services/cache-service.js";\nwindow.atomic = {readAtomicSnapshot, commitAtomicBatch, IndexedDbStorageAdapter, CacheService};',
+        loader: "js",
+        resolveDir: fileURLToPath(new URL("../../../", import.meta.url)),
+    },
+    bundle: true, write: false, format: "iife",
+});
 
 async function prepare(context, page) {
     await fulfillHostFixtures(context); await page.goto("https://javdb.com/");
@@ -50,6 +57,52 @@ test("another tab changing the baseline aborts without publishing imported domai
     await other.evaluate(() => localforage.createInstance({ name: "JAV-JHS", storeName: "appData" }).setItem("setting", { otherTab: true }));
     expect(await page.evaluate(async () => { try { await atomic.commitAtomicBatch(forage, { expected, puts: { car_list: ["new"] }, deletes: [] }); } catch (error) { return error.code; } })).toBe("ATOMIC_IMPORT_CONFLICT");
     expect(await page.evaluate(() => forage.getItem("car_list"))).toEqual(["old"]);
+});
+
+test("automatic cache cleanup keeps a concurrent refresh visible to a third tab", async ({ context, page }) => {
+    await prepare(context, page);
+    const openCacheTab = async () => {
+        const tab = await context.newPage();
+        await tab.goto("https://javdb.com/");
+        await tab.addScriptTag({ path: foragePath });
+        await tab.addScriptTag({ content: bundled.outputFiles[0].text });
+        return tab;
+    };
+    await page.evaluate(async () => {
+        const storage = new atomic.IndexedDbStorageAdapter(forage, localStorage, () => {}, () => {});
+        const cache = new atomic.CacheService({ storage });
+        const commit = storage.commitAtomicBatch.bind(storage);
+        storage.commitAtomicBatch = async batch => {
+            await new Promise(resolve => { window.releaseCacheCommit = resolve; });
+            return commit(batch);
+        };
+        await cache.set("race", "old", { scope: "public", ttlMs: 1000 });
+        window.cachePrune = (async () => {
+            // Advance only this tab's clock, leaving the writer and reader on real time.
+            const now = Date.now;
+            Date.now = () => now() + 2000;
+            try { await cache.prunePublic(); }
+            finally { Date.now = now; }
+        })();
+    });
+    await page.waitForFunction(() => typeof window.releaseCacheCommit === "function");
+    const writer = await openCacheTab();
+    await writer.evaluate(async () => {
+        const store = localforage.createInstance({ name: "JAV-JHS", storeName: "appData" });
+        const storage = new atomic.IndexedDbStorageAdapter(store, localStorage, () => {}, () => {});
+        await new atomic.CacheService({ storage }).set("race", "new", { scope: "public", ttlMs: 60_000 });
+    });
+    await page.evaluate(async () => {
+        window.releaseCacheCommit();
+        await window.cachePrune;
+    });
+    const reader = await openCacheTab();
+    const result = await reader.evaluate(() => {
+        const store = localforage.createInstance({ name: "JAV-JHS", storeName: "appData" });
+        const storage = new atomic.IndexedDbStorageAdapter(store, localStorage, () => {}, () => {});
+        return new atomic.CacheService({ storage }).get("race", { scope: "public" });
+    });
+    expect(result).toMatchObject({ hit: true, value: "new" });
 });
 
 test("real browser quota failure leaves every business domain unchanged", async ({ context, page }) => {
