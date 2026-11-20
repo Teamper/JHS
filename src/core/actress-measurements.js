@@ -174,7 +174,7 @@ export function parseActressMeasurements(source) {
  * @returns {ParsedMeasurements | null}
  */
 export function readStoredActressMeasurements(actress) {
-    const profile = normalizeActressProfileData(actress?.actressProfile);
+    const profile = readVerifiedActressProfile(actress);
     if (!profile) return null;
     return parseActressMeasurements(profile);
 }
@@ -187,7 +187,7 @@ export function readStoredActressMeasurements(actress) {
 export function formatBodyMeasurements(source) {
     if (!source || typeof source !== "object") return "";
     const target = Object.hasOwn(source, "actressProfile")
-        ? normalizeActressProfileData(source.actressProfile)
+        ? readVerifiedActressProfile(source)
         : source;
     if (!target) return "";
     const parsed = parseActressMeasurements(target);
@@ -338,6 +338,27 @@ export function normalizeActressProfileData(profile) {
         braSize: readStr("braSize"),
         matchedName: readStr("matchedName"),
     });
+}
+
+/** @param {unknown} name */
+export function normalizeActressLookupName(name) {
+    const cleaned = cleanActressName(String(name ?? "").normalize("NFKC").replace(/_/g, " "), { stripBrackets: true });
+    return cleaned === "三上悠亞" ? "三上悠亜" : cleaned;
+}
+
+/** @param {URL} url */
+export function isJapaneseWikipediaArticle(url) {
+    return url.origin === "https://ja.wikipedia.org" && !url.username && !url.password
+        && !url.search && url.pathname.startsWith("/wiki/") && url.pathname.length > 6;
+}
+
+/** @param {Record<string, any> | null | undefined} actress */
+export function readVerifiedActressProfile(actress) {
+    const profile = normalizeActressProfileData(actress?.actressProfile);
+    if (!profile || profile.url !== actress?.actressProfileVerifiedUrl || !isJapaneseWikipediaArticle(new URL(profile.url))) return null;
+    const matchedName = normalizeActressLookupName(profile.matchedName);
+    return collectActressLookupNames(actress.name, actress.allName).some(name => normalizeActressLookupName(name) === matchedName)
+        ? profile : null;
 }
 
 /**

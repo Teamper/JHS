@@ -53,7 +53,7 @@ describe("favorite actress update failure", () => {
             matchedName: "Alice",
         };
         let current = [
-            { starId: "a1", name: "Alice (無碼)", updateDate: "2026-10-01 00:00:00", actressProfile: existingProfile },
+            { starId: "a1", name: "Alice (無碼)", updateDate: "2026-10-01 00:00:00", actressProfile: existingProfile, actressProfileVerifiedUrl: existingProfile.url },
             { starId: "a2", name: "Bobette", updateDate: "2026-10-01 00:00:00" },
         ];
         let lockCount = 0;
@@ -75,7 +75,7 @@ describe("favorite actress update failure", () => {
         // Material change updates only changed actresses in a single write
         const updatedCount = await storage.batchUpdateFavoriteActressProfiles([
             { starId: "a1", actressProfile: { ...existingProfile, fetchedAt: 99999 } },
-            { starId: "a2", actressProfile: { url: "https://ja.wikipedia.org/wiki/B", height: "165cm", braSize: "E", fetchedAt: 12345 } },
+            { starId: "a2", actressProfile: { url: "https://ja.wikipedia.org/wiki/B", height: "165cm", braSize: "E", matchedName: "Bobette", fetchedAt: 12345 } },
             { starId: "a3", actressProfile: { url: "javascript:alert(1)" } },
         ]);
         expect(updatedCount).toBe(1);
@@ -90,8 +90,9 @@ describe("favorite actress update failure", () => {
             weight: "",
             threeSizeText: "",
             braSize: "E",
-            matchedName: "",
+            matchedName: "Bobette",
         });
+        expect(current[1].actressProfileVerifiedUrl).toBe(current[1].actressProfile.url);
         expect(Object.hasOwn(current[1].actressProfile, "fetchedAt")).toBe(false);
         expect(current[1].updateDate).toBe("2026-11-18 12:00:00");
 

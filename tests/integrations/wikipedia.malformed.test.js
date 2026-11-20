@@ -16,12 +16,12 @@ it("never fabricates cm when height has no cm unit and ignores non-matching link
         <tr><th>身長</th><td>159</td></tr>
         <tr><th>体重</th><td>― / ― kg</td></tr>
     </table><div id="mw-content-text"><a href="/wiki/Other_(AV%E5%A5%B3%E5%84%AA)">Other</a></div></body></html>`;
-    const parsed = parseWikipediaActressPage(html, "https://ja.wikipedia.org/wiki/Alice", "Alice");
+    const parsed = parseWikipediaActressPage(html, "https://ja.wikipedia.org/wiki/Alice_(AV女優)", "Alice");
     expect(parsed.info?.height).toBe("");
     expect(parsed.info?.weight).toBe("");
     expect(parsed.disambigUrls).toEqual([]);
 
-    const unitlessOnly = parseWikipediaActressPage("<html><body><table><tr><th>身長</th><td>5 ft 3 in</td></tr></table></body></html>", "https://ja.wikipedia.org/wiki/Alice", "Alice");
+    const unitlessOnly = parseWikipediaActressPage("<html><body><table><tr><th>身長</th><td>5 ft 3 in</td></tr></table></body></html>", "https://ja.wikipedia.org/wiki/Alice_(AV女優)", "Alice");
     expect(unitlessOnly.info).toBeNull();
 });
 

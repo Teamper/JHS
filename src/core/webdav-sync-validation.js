@@ -6,7 +6,7 @@ import { isPersonalRating } from "./personal-rating.js";
 const ENTITIES = new Set(["car_list", "blacklist_car_list", "favorite_actresses", "blacklist"]);
 const MEMBERS = new Set(["filter_keyword_title", "filter_keyword_review", "highlighted_tags"]);
 const OMITTED = new Set(["status", "checkTime", "lastCheckTime", "stateFlags", "newVideoList"]);
-const TEXT_METADATA = new Set(["name", "names", "url", "avatar", "remark", "title", "role", "movieType", "actressType", "fc2Source", "createDate", "updateDate", "createTime", "publishTime", "lastPublishTime"]);
+const TEXT_METADATA = new Set(["name", "names", "url", "avatar", "remark", "title", "role", "movieType", "actressType", "fc2Source", "createDate", "updateDate", "createTime", "publishTime", "lastPublishTime", "actressProfileVerifiedUrl"]);
 const ACTRESS_PROFILE_TEXT_KEYS = new Set(["url", "birthday", "age", "height", "weight", "threeSizeText", "braSize", "matchedName"]);
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 
@@ -53,6 +53,7 @@ function metadata(name, value) {
     if (!jsonValue(value)) return false;
     if (value === null) return true;
     if (TEXT_METADATA.has(name)) return text(value);
+    if (name === "retainedAfterRebind") return value === true;
     if (name === "allName") return Array.isArray(value) && value.every(text);
     if (name === "starId") return actorId(value);
     if (name === "carNum") return carId(value);

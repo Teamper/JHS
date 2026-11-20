@@ -643,7 +643,7 @@ export class TaskExecutionService {
             starId: t,
             lastCheckTime: this.utils.getNowStr(),
             newVideoList: []
-        }), 0;
+        }, { scan: true }), 0;
         const movies = this.readCompletePageMovies([...s]);
         let c = [];
         const publishTimes = [];
@@ -680,7 +680,7 @@ export class TaskExecutionService {
             lastCheckTime: this.utils.getNowStr(),
             newVideoList: p,
             lastPublishTime: d
-        });
+        }, { scan: true });
         return fresh.length;
     }
     /** @param {TaskRecord[]} items @param {string} starId @param {string} name @param {string[]} titleKeywords @param {Set<string>} blacklistSet */
@@ -688,7 +688,7 @@ export class TaskExecutionService {
         if (this.featureNewVideoScanController) return this.featureNewVideoScanController.parseActorMovies(items, starId, name, titleKeywords, blacklistSet);
         assertCompleteMovieIdentities(items);
         if (!items.length) {
-            const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: [] });
+            const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: [] }, { scan: true });
             if (saved === false) throw new Error("演员记录已不存在");
             return 0;
         }
@@ -700,7 +700,7 @@ export class TaskExecutionService {
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
         const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await this.legacyStorage.getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, freshItems = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum)), fresh = freshItems.filter((/** @type {TaskRecord} */ item) => decisions[item.carNum]?.action !== "dismissed");
-        const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: freshItems, lastPublishTime: latestPublishTime });
+        const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: freshItems, lastPublishTime: latestPublishTime }, { scan: true });
         if (saved === false) throw new Error("演员记录已不存在");
         if (fresh.length > 0) {
             try { this.logger.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${fresh.length}部</span>`); }
@@ -711,8 +711,8 @@ export class TaskExecutionService {
         }
         return fresh.length;
     }
-    /** @param {TaskRecord} e @param {{preservePending?: boolean}} [options] */
-    async checkOneNewVideo(e, options = {}) {
+    /** @param {TaskRecord} e */
+    async checkOneNewVideo(e) {
         await this.ensureReady();
         const {name, starId} = e, url = `${this.javDbUrl}/actors/${starId}?t=d`;
         const l = this.jquery("#checkNewVideoMsg");
@@ -722,7 +722,6 @@ export class TaskExecutionService {
                 await this.featureNewVideoScanController.scanActress(e, {
                     baseUrl: this.javDbUrl,
                     onActorStart: (/** @type {TaskRecord} */ actress) => l.text(`正在检测：${actress.name}`),
-                    preservePending: Boolean(options.preservePending),
                 });
             } else {
                 const titleKeywords = await this.legacyStorage.getTitleFilterKeyword(), blacklistCars = await this.legacyStorage.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((/** @type {TaskRecord} */ item) => item.carNum));

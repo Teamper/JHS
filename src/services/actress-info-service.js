@@ -1,14 +1,8 @@
 // @ts-check
 
-import { collectActressLookupNames } from "../core/actress-measurements.js";
+import { collectActressLookupNames, normalizeActressLookupName } from "../core/actress-measurements.js";
 import { CACHE_TTL } from "../core/cache-policy.js";
 import { JhsError, isAbortError, isNotFoundError, isTransientBlockError } from "../core/jhs-error.js";
-
-/** @param {unknown} name */
-function normalizeLookupName(name) {
-    const trimmed = String(name ?? "").trim();
-    return trimmed === "三上悠亞" ? "三上悠亜" : trimmed;
-}
 
 export class ActressInfoService {
     /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./cache-service.js").CacheService} cache */
@@ -25,9 +19,9 @@ export class ActressInfoService {
 
     /** @param {string} name @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async lookup(name, options = {}) {
-        const normalized = normalizeLookupName(name);
+        const normalized = normalizeActressLookupName(name);
         if (!normalized) return null;
-        const key = `actress-info:v2:${normalized}`;
+        const key = `actress-info:v3:${normalized}`;
         const cached = await this.cache.get("actress-info", key, { scope: "public" });
         if (cached.hit) return cached.value;
         const generation = this.cache.generation("actress-info");
@@ -66,7 +60,7 @@ export class ActressInfoService {
         const candidates = [];
         const seen = new Set();
         for (const raw of collectActressLookupNames(names)) {
-            const candidate = normalizeLookupName(raw);
+            const candidate = normalizeActressLookupName(raw);
             if (!candidate || seen.has(candidate)) continue;
             seen.add(candidate);
             candidates.push(candidate);

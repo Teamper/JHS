@@ -113,6 +113,7 @@ describe("Actress info Feature", () => {
             getFavoriteActressList: vi.fn(async () => [{
                 starId: "a1",
                 name: "Stored Fav",
+                actressProfileVerifiedUrl: "https://ja.wikipedia.org/wiki/Stored_Fav",
                 actressProfile: {
                     url: "https://ja.wikipedia.org/wiki/Stored_Fav",
                     birthday: "1995年1月2日",

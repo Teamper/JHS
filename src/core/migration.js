@@ -1,7 +1,7 @@
 // @ts-check
 
 import { B, D, P, CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
-import { normalizeActressProfileData } from "./actress-measurements.js";
+import { normalizeActressProfileData, readVerifiedActressProfile } from "./actress-measurements.js";
 import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./state-model.js";
 import { isPersonalRating } from "./personal-rating.js";
 import { formatUiDateTime } from "./ui-date-time.js";
@@ -46,6 +46,10 @@ function normalizeActressNewVideos(actresses) {
                 ...next,
                 newVideoList: actress.newVideoList.filter(Boolean).map((/** @type {any} */ item) => typeof item === "string" ? normalizeCarNum(item) : {
                     ...item, carNum: normalizeCarNum(item.carNum),
+                }).map(item => {
+                    if (!item || typeof item !== "object" || item.retainedAfterRebind === true) return item;
+                    const { retainedAfterRebind: _retention, ...video } = item;
+                    return video;
                 }).filter((item) => typeof item === "string" ? item : item?.carNum),
             };
         }
@@ -53,9 +57,13 @@ function normalizeActressNewVideos(actresses) {
             const profile = normalizeActressProfileData(next.actressProfile);
             if (profile) next = { ...next, actressProfile: profile };
             else {
-                const { actressProfile: _dropped, ...rest } = next;
+                const { actressProfile: _dropped, actressProfileVerifiedUrl: _verification, ...rest } = next;
                 next = rest;
             }
+        }
+        if (Object.hasOwn(next, "actressProfileVerifiedUrl") && !readVerifiedActressProfile(next)) {
+            const { actressProfileVerifiedUrl: _verification, ...rest } = next;
+            return rest;
         }
         return next;
     });

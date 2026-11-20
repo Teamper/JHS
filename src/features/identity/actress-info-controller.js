@@ -1,6 +1,6 @@
 // @ts-check
 
-import { cleanActressName, collectActressLookupNames, normalizeActressProfileData, readCleanActorElementText } from "../../core/actress-measurements.js";
+import { cleanActressName, collectActressLookupNames, readCleanActorElementText, readVerifiedActressProfile } from "../../core/actress-measurements.js";
 import { isAbortError, isNotFoundError } from "../../core/jhs-error.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
@@ -87,7 +87,7 @@ export class ActressInfoController {
     async resolveActorInfo({ starId = "", domNames = [], aliasMaps = null, requestScope }) {
         const normalizedStarId = String(starId || "").trim();
         const favorite = normalizedStarId ? aliasMaps?.favoriteById?.get(normalizedStarId) : null;
-        const stored = normalizeActressProfileData(favorite?.actressProfile);
+        const stored = readVerifiedActressProfile(favorite);
         if (stored) return stored;
         const blacklist = normalizedStarId ? aliasMaps?.blacklistById?.get(normalizedStarId) : null;
         const candidates = collectActressLookupNames(

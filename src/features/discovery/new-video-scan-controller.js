@@ -1,13 +1,14 @@
 // @ts-check
 
 import { isMissingActorSource } from "./actor-source-health.js";
-import { collectActressLookupNames, isSameActressProfile, normalizeActressProfileData } from "../../core/actress-measurements.js";
+import { collectActressLookupNames, isSameActressProfile, normalizeActressProfileData, readVerifiedActressProfile } from "../../core/actress-measurements.js";
 import { CACHE_TTL } from "../../core/cache-policy.js";
 import { selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { isAbortError, isTransientBlockError } from "../../core/jhs-error.js";
-import { getMovieStateEligibility, normalizeCarNum } from "../../core/movie-identity.js";
+import { getMovieStateEligibility } from "../../core/movie-identity.js";
 
 const PROFILE_ATTEMPTS_KEY = "jhs_actress_profile_attempts_v1";
+const PROFILE_ATTEMPTS_SCHEMA = 2;
 
 /** @param {unknown} [cause] */
 function createScanAbortError(cause) {
@@ -51,7 +52,7 @@ export class NewVideoScanController {
     }
 
     /** Fetch and persist one actor's manual scan through the same feature-owned write path. */
-    /** @param {{starId: string, name: string}} actress @param {{baseUrl: string, onActorStart?: (actress: any, url: string) => void, preservePending?: boolean}} options */
+    /** @param {{starId: string, name: string}} actress @param {{baseUrl: string, onActorStart?: (actress: any, url: string) => void}} options */
     async scanActress(actress, options) {
         this.assertActive();
         const { starId, name } = actress, url = `${options.baseUrl}/actors/${starId}?t=d`;
@@ -62,12 +63,8 @@ export class NewVideoScanController {
         const blacklistSet = new Set(blacklistCars.map((/** @type {any} */ item) => item.carNum));
         options.onActorStart?.(actress, url);
         try {
-            let movies = await this.actressInfo.movies("javdb", { actorId: starId, baseUrl: options.baseUrl }, { scope: this.scope, ttlMs: 0 });
+            const movies = await this.actressInfo.movies("javdb", { actorId: starId, baseUrl: options.baseUrl }, { scope: this.scope, ttlMs: 0 });
             this.assertActive();
-            // A rebind scan must keep pending entries migrated from the previous source: the new
-            // page cannot list videos published under the old actor id, so replacing the stored list
-            // would silently drop them.
-            if (options.preservePending) movies = [...movies, ...await this.readPendingCarryOver(starId, movies)];
             const result = await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
             this.sourceHealth?.clear(options.baseUrl, starId);
             return result;
@@ -75,17 +72,6 @@ export class NewVideoScanController {
             if (isMissingActorSource(error)) this.sourceHealth?.unavailable(options.baseUrl, actress);
             throw error;
         }
-    }
-
-    /** @param {string} starId @param {any[]} movies @returns {Promise<any[]>} */
-    async readPendingCarryOver(starId, movies) {
-        const actresses = await this.state.getFavoriteActressList();
-        this.assertActive();
-        const known = new Set(movies.map((movie) => normalizeCarNum(movie?.carNum)).filter(Boolean));
-        const current = (Array.isArray(actresses) ? actresses : []).find((item) => item?.starId === starId);
-        return (Array.isArray(current?.newVideoList) ? current.newVideoList : [])
-            .map((/** @type {any} */ item) => (typeof item === "string" ? { carNum: item } : item))
-            .filter((/** @type {any} */ item) => item?.carNum && !known.has(normalizeCarNum(item.carNum)));
     }
 
     /** Fetch every saved-actress page and persist only after pagination validates completely. */
@@ -237,7 +223,7 @@ export class NewVideoScanController {
         this.assertActive();
         if (items.some(item => !getMovieStateEligibility(item).eligible)) throw Object.assign(new Error("部分影片番号无法确认，本次未更新检测结果"), { code: "INCOMPLETE_MOVIE_IDENTITY" });
         if (!items.length) {
-            const saved = await this.state.updateFavoriteActress({ starId, lastCheckTime: this.getTimestamp(), newVideoList: [] });
+            const saved = await this.state.updateFavoriteActress({ starId, lastCheckTime: this.getTimestamp(), newVideoList: [] }, { scan: true });
             if (saved === false) throw new Error("演员记录已不存在");
             return 0;
         }
@@ -257,7 +243,7 @@ export class NewVideoScanController {
         const saved = await this.state.updateFavoriteActress({
             starId, lastCheckTime: this.getTimestamp(), newVideoList: freshItems,
             lastPublishTime: selectLatestPublishTime(publishTimes),
-        });
+        }, { scan: true });
         if (saved === false) throw new Error("演员记录已不存在");
         if (!this.disposed && fresh.length) {
             try { this.onNewItems(name, fresh.length); }
@@ -276,7 +262,7 @@ export class NewVideoScanController {
             const raw = this.storage.getLocal(PROFILE_ATTEMPTS_KEY);
             if (!raw) return new Map();
             const parsed = JSON.parse(raw);
-            if (parsed?.schema !== 1 || !parsed.entries || typeof parsed.entries !== "object" || Array.isArray(parsed.entries)) {
+            if (parsed?.schema !== PROFILE_ATTEMPTS_SCHEMA || !parsed.entries || typeof parsed.entries !== "object" || Array.isArray(parsed.entries)) {
                 return new Map();
             }
             const map = new Map();
@@ -302,7 +288,7 @@ export class NewVideoScanController {
         }
         if (typeof this.storage?.setLocal === "function") {
             try {
-                this.storage.setLocal(PROFILE_ATTEMPTS_KEY, JSON.stringify({ schema: 1, entries }));
+                this.storage.setLocal(PROFILE_ATTEMPTS_KEY, JSON.stringify({ schema: PROFILE_ATTEMPTS_SCHEMA, entries }));
             } catch (error) {
                 try { this.logger?.warn?.("保存演员资料冷却缓存失败，已忽略:", error); }
                 catch { /* 本地冷却缓存写入失败不应覆盖已提交的业务写入。 */ }
@@ -340,7 +326,7 @@ export class NewVideoScanController {
         for (const actress of list) {
             const starId = String(actress?.starId || "").trim();
             if (!starId) continue;
-            const currentProfile = normalizeActressProfileData(actress?.actressProfile);
+            const currentProfile = readVerifiedActressProfile(actress);
             const cooldown = currentProfile?.url ? CACHE_TTL.actressInfo : CACHE_TTL.actressInfoNegative;
             const lastAttempt = attempts.get(starId) ?? 0;
             const due = lastAttempt <= 0 || (now - lastAttempt) >= cooldown;
@@ -400,7 +386,7 @@ export class NewVideoScanController {
                         ? result.matchedName
                         : (rawInfo?.matchedName || names[0] || "");
                     const nextProfile = rawInfo
-                        ? normalizeActressProfileData({ ...rawInfo, matchedName: rawInfo.matchedName || matchedName })
+                        ? normalizeActressProfileData({ ...rawInfo, matchedName })
                         : null;
                     attempts.set(starId, now);
                     attemptsDirty = true;

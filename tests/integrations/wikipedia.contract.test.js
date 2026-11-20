@@ -62,7 +62,7 @@ it("does not compute age from birthday when a death row is present", () => {
     });
 });
 
-it("extracts up to 2 disambiguation URLs while skipping navboxes, references, and off-site links", () => {
+it("extracts only the matching actress title while skipping navboxes, references, and off-site links", () => {
     const html = `<!doctype html><html><body>
         <div id="mw-content-text"><div class="mw-parser-output">
             <div id="disambigbox">曖昧さ回避</div>
@@ -82,7 +82,6 @@ it("extracts up to 2 disambiguation URLs while skipping navboxes, references, an
     expect(parsed.info).toBeNull();
     expect(parsed.disambigUrls).toEqual([
         "https://ja.wikipedia.org/wiki/Alice_(AV%E5%A5%B3%E5%84%AA)",
-        "https://ja.wikipedia.org/wiki/Alice_Alias_(AV%E5%A5%B3%E5%84%AA)",
     ]);
 });
 
@@ -105,7 +104,7 @@ it("loads Wikipedia through the declared HTTP boundary and resolves disambiguati
     scope.dispose();
 });
 
-it("continues to next disambiguation URL on NOT_FOUND and skips disambig when already on _(AV女優)", async () => {
+it("keeps a miss when the matching candidate is absent and ignores unrelated candidates", async () => {
     const disambigHtml = `<div id="disambigbox"></div><div id="mw-content-text">
         <a href="/wiki/Alice_(AV%E5%A5%B3%E5%84%AA)">One</a>
         <a href="/wiki/Alice_B_(AV%E5%A5%B3%E5%84%AA)">Two</a>
@@ -115,10 +114,30 @@ it("continues to next disambiguation URL on NOT_FOUND and skips disambig when al
         if (options.url.includes("/wiki/Alice_(AV")) throw new JhsError("NOT_FOUND", "404", { details: { status: 404 } });
         return { data: fixture, finalUrl: options.url };
     });
-    await expect(createWikipediaAdapter({ request }).lookup("Alice")).resolves.toEqual(expect.objectContaining({ age: "33岁" }));
-    expect(request).toHaveBeenCalledTimes(3);
+    await expect(createWikipediaAdapter({ request }).lookup("Alice")).resolves.toBeNull();
+    expect(request).toHaveBeenCalledTimes(2);
 
     const noLoopRequest = vi.fn(async (options) => ({ data: disambigHtml, finalUrl: "https://ja.wikipedia.org/wiki/Alice_(AV%E5%A5%B3%E5%84%AA)" }));
     await expect(createWikipediaAdapter({ request: noLoopRequest }).lookup("Alice")).resolves.toBeNull();
     expect(noLoopRequest).toHaveBeenCalledTimes(1);
+});
+
+it("rejects same-name non-actresses and disambiguation pages with unrelated links", async () => {
+    const pages = [
+        '<table class="infobox"><tr><th>身長</th><td>182 cm</td></tr></table>',
+        '<div id="disambigbox"></div><main><a href="/wiki/Bella_(AV女優)">Bella</a></main>',
+    ];
+    for (const data of pages) {
+        const request = vi.fn(async ({ url }) => ({ data, finalUrl: url }));
+        await expect(createWikipediaAdapter({ request }).lookup("Alice")).resolves.toBeNull();
+        expect(request).toHaveBeenCalledOnce();
+    }
+});
+
+it("accepts a documented alias on a categorized actress article after a redirect", async () => {
+    const data = fixture.replace("<table>", '<div id="mw-normal-catlinks"><a>日本のAV女優</a></div><table class="infobox"><tr><th>別名義</th><td>Ａｌｉｃｅ</td></tr>');
+    const request = vi.fn(async () => ({ data, finalUrl: "https://ja.wikipedia.org/wiki/Canonical" }));
+    await expect(createWikipediaAdapter({ request }).lookup("Alice")).resolves.toMatchObject({
+        height: "159cm", url: "https://ja.wikipedia.org/wiki/Canonical",
+    });
 });

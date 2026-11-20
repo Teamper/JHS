@@ -213,7 +213,7 @@ describe("blocked network task termination", () => {
     }) };
 
     await expect(task.parsePage(dom, "javdb", "actor-1", "演员", [], new Set())).resolves.toBe(0);
-    expect(updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", lastCheckTime: "2026-08-11 20:00:00", newVideoList: [] });
+    expect(updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", lastCheckTime: "2026-08-11 20:00:00", newVideoList: [] }, { scan: true });
   });
 
   it("rejects a structurally invalid empty page without advancing actress state", async () => {
@@ -238,7 +238,7 @@ describe("blocked network task termination", () => {
     ], "actor", "Actor", [], new Set())).resolves.toBe(0);
     expect(updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
       newVideoList: [expect.objectContaining({ carNum: "A-1" })]
-    }));
+    }), { scan: true });
   });
 
   it("does not count an empty actor scan when the saved actor disappeared", async () => {
