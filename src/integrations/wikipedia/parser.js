@@ -1,6 +1,6 @@
 // @ts-check
 
-import { cleanActressName, parseCupLetter } from "../../core/actress-measurements.js";
+import { collectActressLookupNames, isJapaneseWikipediaArticle, normalizeActressLookupName, parseCupLetter } from "../../core/actress-measurements.js";
 
 /** @param {string} value */
 function compact(value) { return value.replace(/\s+/g, " ").trim(); }
@@ -44,17 +44,26 @@ function computeAgeFromBirthday(birthdayText, now = new Date()) {
     return years >= 15 && years <= 99 ? years : null;
 }
 
+/** @param {URL} url */
+function readTopic(url) {
+    if (!isJapaneseWikipediaArticle(url)) return "";
+    try {
+        const topic = decodeURIComponent(url.pathname.slice(6)).normalize("NFKC");
+        return /[:/]/u.test(topic) ? "" : topic;
+    } catch {
+        return "";
+    }
+}
+
+const ACTRESS_SUFFIX = /[ _]*\(AV女優\)$/u;
+
 /** @param {Document} doc @param {URL} parsedBase @param {string} queriedName @returns {string[]} */
 function extractDisambigUrls(doc, parsedBase, queriedName) {
-    const hasDisambigBox = Boolean(doc.querySelector("#disambigbox, .dmbox"));
-    const cleanedQuery = cleanActressName(queriedName, { stripBrackets: true });
-    if (!hasDisambigBox && !cleanedQuery) return [];
+    if (!queriedName || !isJapaneseWikipediaArticle(parsedBase)) return [];
     const contentRoot = doc.querySelector("#mw-content-text .mw-parser-output, #mw-content-text, #bodyContent, main") || doc.body;
     if (!contentRoot) return [];
     /** @type {string[]} */
     const exactMatches = [];
-    /** @type {string[]} */
-    const disambigMatches = [];
     const seen = new Set([parsedBase.href]);
     for (const anchor of contentRoot.querySelectorAll("a[href]")) {
         if (anchor.closest(".navbox, .vertical-navbox, .reflist, .references, .catlinks")) continue;
@@ -68,26 +77,15 @@ function extractDisambigUrls(doc, parsedBase, queriedName) {
             continue;
         }
         candidate.hash = "";
-        if (candidate.protocol !== "https:" || candidate.hostname !== "ja.wikipedia.org") continue;
-        if (candidate.search || !candidate.pathname.startsWith("/wiki/")) continue;
-        const encodedTitle = candidate.pathname.slice("/wiki/".length);
-        if (!encodedTitle) continue;
-        let decodedTitle = "";
-        try {
-            decodedTitle = decodeURIComponent(encodedTitle);
-        } catch {
-            continue;
-        }
-        if (decodedTitle.includes(":") || !decodedTitle.endsWith("_(AV女優)")) continue;
-        const baseTitle = cleanActressName(decodedTitle.slice(0, -"_(AV女優)".length).replace(/_/g, " "), { stripBrackets: true });
+        const topic = readTopic(candidate);
+        if (!ACTRESS_SUFFIX.test(topic) || normalizeActressLookupName(topic.replace(ACTRESS_SUFFIX, "")) !== queriedName) continue;
         const href = candidate.href;
         if (seen.has(href)) continue;
         seen.add(href);
-        if (cleanedQuery && baseTitle === cleanedQuery) exactMatches.push(href);
-        else if (hasDisambigBox) disambigMatches.push(href);
-        if (exactMatches.length >= 2) break;
+        exactMatches.push(href);
+        if (exactMatches.length > 1) return [];
     }
-    return [...exactMatches, ...disambigMatches].slice(0, 2);
+    return exactMatches;
 }
 
 /** @param {string} html @param {string} url @param {string} [queriedName] */
@@ -95,6 +93,20 @@ export function parseWikipediaActressPage(html, url, queriedName = "") {
     if (typeof html !== "string") throw new TypeError("Wikipedia page must be HTML text");
     const parsedUrl = new URL(url);
     const doc = new DOMParser().parseFromString(html, "text/html");
+    const name = normalizeActressLookupName(queriedName);
+    const topic = readTopic(parsedUrl);
+    if (name) {
+        const actorCategory = [...doc.querySelectorAll("#mw-normal-catlinks a")].some(link =>
+            /のAV女優$/u.test(compact(link.textContent ?? "").normalize("NFKC")));
+        const titleMatches = normalizeActressLookupName(topic.replace(ACTRESS_SUFFIX, "")) === name;
+        const aliasMatches = [...doc.querySelectorAll("table.infobox tr")].some(row =>
+            /^(?:別名|別名義|芸名)$/u.test(readVisibleText(row.querySelector(":scope > th")))
+            && collectActressLookupNames(readVisibleText(row.querySelector(":scope > td"))).some(alias => normalizeActressLookupName(alias) === name));
+        if (!topic || doc.querySelector("#disambigbox, .dmbox")
+            || !(ACTRESS_SUFFIX.test(topic) || actorCategory) || !(titleMatches || aliasMatches)) {
+            return Object.freeze({ info: null, disambigUrls: Object.freeze(extractDisambigUrls(doc, parsedUrl, name)) });
+        }
+    }
     let birthday = "";
     let age = "";
     let height = "";
@@ -198,7 +210,7 @@ export function parseWikipediaActressPage(html, url, queriedName = "") {
     const info = hasInfo
         ? Object.freeze({ birthday, age, height, weight, threeSizeText, braSize, url: parsedUrl.href })
         : null;
-    const disambigUrls = info ? Object.freeze([]) : Object.freeze(extractDisambigUrls(doc, parsedUrl, queriedName));
+    const disambigUrls = info ? Object.freeze([]) : Object.freeze(extractDisambigUrls(doc, parsedUrl, name));
     return Object.freeze({ info, disambigUrls });
 }
 

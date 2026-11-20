@@ -5,7 +5,7 @@ import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 import { readReviewKeywords } from "./review-keywords.js";
 import { assertMovieStateEligible, getMovieStateEligibility } from "./movie-identity.js";
-import { cleanActressName, isSameActressProfile, normalizeActressProfileData } from "./actress-measurements.js";
+import { cleanActressName, isSameActressProfile, normalizeActressProfileData, readVerifiedActressProfile } from "./actress-measurements.js";
 
 /** Compare legacy entries structurally so a metadata-only actor update can carry them unchanged. */
 function movieRecordSignature(value) {
@@ -27,6 +27,26 @@ function prepareNewVideoRecords(records, previous = []) {
         const { stateEligibility, ...saved } = record;
         return saved;
     });
+}
+
+function newVideoKey(item) {
+    return normalizeCarNum(typeof item === "string" ? item : item?.carNum);
+}
+
+function mergeScannedNewVideos(scanned, previous, decisions) {
+    const entries = new Map();
+    for (const item of scanned) {
+        const key = newVideoKey(item);
+        if (key && decisions[key]?.action !== "dismissed") entries.set(key, item);
+    }
+    for (const item of previous) {
+        if (item?.retainedAfterRebind !== true) continue;
+        const key = newVideoKey(item);
+        if (!key || decisions[key]?.action === "dismissed") continue;
+        const fresh = entries.get(key);
+        entries.set(key, fresh ? { ...item, ...fresh, retainedAfterRebind: true } : item);
+    }
+    return [...entries.values()];
 }
 
 /** Report a post-commit failure without reclassifying the persisted mutation. */
@@ -144,19 +164,26 @@ export class StorageManager {
             try { return await fn(); } finally { release(); }
         });
     }
-    async _rawUpdateFavoriteActress(e) {
+    async _rawUpdateFavoriteActress(e, scan = false) {
         const t = await this.getFavoriteActressList();
         const {starId: n, name: a, allName: i, avatar: s, lastCheckTime: o, newVideoList: r, lastPublishTime: l, actressType: c, remark: d} = e;
         if (!n) throw new Error("缺失starId");
         const existing = t.find((e => e.starId === n));
         if (!existing) return clog.error("未找到演员信息", n, a), !1;
         if (r != null && !Array.isArray(r)) throw new TypeError("新作品列表必须为数组");
-        const newVideoList = Array.isArray(r) ? prepareNewVideoRecords(r, Array.isArray(existing.newVideoList) ? existing.newVideoList : []) : r;
+        const previous = Array.isArray(existing.newVideoList) ? existing.newVideoList : [];
+        const videos = scan ? mergeScannedNewVideos(r, previous, await this.stateService.getNewVideoDecisions()) : r;
+        const newVideoList = Array.isArray(videos) ? prepareNewVideoRecords(videos, previous) : videos;
         const h = { ...existing };
         if (Object.hasOwn(e, "actressProfile")) {
             const normalizedProfile = normalizeActressProfileData(e.actressProfile);
-            if (normalizedProfile) h.actressProfile = normalizedProfile;
-            else if (e.actressProfile === null) delete h.actressProfile;
+            if (normalizedProfile) {
+                h.actressProfile = normalizedProfile;
+                delete h.actressProfileVerifiedUrl;
+            } else if (e.actressProfile === null) {
+                delete h.actressProfile;
+                delete h.actressProfileVerifiedUrl;
+            }
         }
         a && (h.name = a), i && (h.allName = i), s && (h.avatar = s), null != c && (h.actressType = c),
         o && (h.lastCheckTime = o), r && (h.newVideoList = newVideoList), l && (h.lastPublishTime = l),
@@ -182,9 +209,10 @@ export class StorageManager {
                 const starId = String(actress?.starId || "").trim();
                 if (!starId || !normalizedByStarId.has(starId)) return actress;
                 const nextProfile = normalizedByStarId.get(starId);
-                if (isSameActressProfile(actress.actressProfile, nextProfile)) return actress;
+                const next = { ...actress, actressProfile: nextProfile, actressProfileVerifiedUrl: nextProfile.url };
+                if (!readVerifiedActressProfile(next) || isSameActressProfile(readVerifiedActressProfile(actress), nextProfile)) return actress;
                 updated += 1;
-                return { ...actress, actressProfile: nextProfile, updateDate: now };
+                return { ...next, updateDate: now };
             });
             if (updated > 0) await this._setItemAndInvalidate(this.favorite_actresses_key, nextList);
             return updated;
@@ -532,8 +560,8 @@ export class StorageManager {
             return a.length === n ? (clog.error(`移除演员失败, ${e} 不存在`), !1) : (await this._setItemAndInvalidate(this.favorite_actresses_key, a), !0);
         });
     }
-    async updateFavoriteActress(e) {
-        return this.withActressLock(() => this._rawUpdateFavoriteActress(e));
+    async updateFavoriteActress(e, { scan = false } = {}) {
+        return this.withActressLock(() => this._rawUpdateFavoriteActress(e, scan));
     }
     async rebindFavoriteActress(payload) {
         return this.withActressLock(async () => {
@@ -556,17 +584,24 @@ export class StorageManager {
             if (!source) return { ok: false, merged: false, actress: null };
             const target = list.find(item => item.starId === toStarId) || null;
             const mergeNames = (...groups) => [...new Set(groups.flat().map(stripTag).filter(Boolean))];
+            const retainedKeys = new Set([
+                ...(Array.isArray(target?.newVideoList) ? target.newVideoList : []).filter(item => item?.retainedAfterRebind === true),
+                ...(Array.isArray(source.newVideoList) ? source.newVideoList : []),
+            ].map(newVideoKey));
             const mergeVideos = (...lists) => {
                 const merged = new Map();
                 for (const items of lists) {
                     for (const item of Array.isArray(items) ? items : []) {
-                        const key = normalizeCarNum(typeof item === "string" ? item : item?.carNum);
+                        const key = newVideoKey(item);
                         if (!key) continue;
                         const prev = merged.get(key);
                         if (!prev || (typeof prev === "string" && item && typeof item === "object")) merged.set(key, item);
                     }
                 }
-                return prepareNewVideoRecords([...merged.values()], [...(Array.isArray(target?.newVideoList) ? target.newVideoList : []), ...(Array.isArray(source.newVideoList) ? source.newVideoList : [])]);
+                const videos = prepareNewVideoRecords([...merged.values()], [...(Array.isArray(target?.newVideoList) ? target.newVideoList : []), ...(Array.isArray(source.newVideoList) ? source.newVideoList : [])]);
+                return videos.map(item => retainedKeys.has(newVideoKey(item))
+                    ? { ...(typeof item === "string" ? { carNum: item } : item), retainedAfterRebind: true }
+                    : item);
             };
             const mergedNames = mergeNames(incomingName ? [incomingName] : [], incomingNames, target?.allName, target?.name ? [target.name] : [], source.allName, source.name ? [source.name] : []);
             const now = utils.getNowStr();
@@ -580,7 +615,8 @@ export class StorageManager {
             };
             const normalizedTargetProfile = normalizeActressProfileData(target?.actressProfile);
             const normalizedSourceProfile = normalizeActressProfileData(source.actressProfile);
-            const resolvedProfile = target ? (normalizedTargetProfile || normalizedSourceProfile) : normalizedSourceProfile;
+            const verifiedProfile = readVerifiedActressProfile(target) || readVerifiedActressProfile(source);
+            const resolvedProfile = verifiedProfile || normalizedTargetProfile || normalizedSourceProfile;
             const nextRecord = target ? {
                 ...target,
                 name: incomingName || target.name || source.name,
@@ -605,6 +641,8 @@ export class StorageManager {
             };
             if (resolvedProfile) nextRecord.actressProfile = resolvedProfile;
             else delete nextRecord.actressProfile;
+            if (verifiedProfile) nextRecord.actressProfileVerifiedUrl = verifiedProfile.url;
+            else delete nextRecord.actressProfileVerifiedUrl;
             const nextList = target ? list.filter(item => item !== source).map(item => item === target ? nextRecord : item) : list.map(item => item === source ? nextRecord : item);
             await this._setItemAndInvalidate(this.favorite_actresses_key, nextList);
             return { ok: true, merged: Boolean(target), actress: nextRecord };

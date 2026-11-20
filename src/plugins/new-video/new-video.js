@@ -1194,7 +1194,7 @@ export class NewVideoWorkspaceService {
                 root.find("#edit-actress-error").prop("hidden", !!name).text(name ? "" : "请输入演员主名称");
                 if (!name) { root.find("#edit-actress-name").trigger("focus"); return false; }
                 const split = text => text.split(/[，,]/).map(item => item.trim()).filter(Boolean);
-                const { actressProfile: _ignoredProfile, ...editableBase } = record;
+                const { actressProfile: _ignoredProfile, actressProfileVerifiedUrl: _ignoredVerification, ...editableBase } = record;
                 const updated = { ...editableBase, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")).map(car => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
                 editor.savePending = true; editor.layer?.find(".layui-layer-btn1").attr("aria-disabled", "true");
                 try {
@@ -1359,9 +1359,7 @@ export class NewVideoWorkspaceService {
         await this.notifyCommittedNewVideoChange("favorite-actress-rebound");
         this.notifications.ok(result.merged ? `已合并到现有演员「${result.actress.name}」（${toStarId}）` : `已重新绑定为「${result.actress.name}」（${toStarId}）`);
         const taskPlugin = this.getOptionalDependency("TaskPlugin");
-        // The first scan after a rebind must not replace the freshly migrated pending videos with
-        // only what the new source page lists right now.
-        if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress, { preservePending: true });
+        if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress);
         return result.actress;
     }
     async openRebindActorDialog(actress, { ownerScope } = {}) {

@@ -51,6 +51,7 @@ test("uses stored actressProfile without network lookup, strips actor-page badge
         name: "演员甲",
         allName: ["演员甲", "Actor One"],
         actressType: "censored",
+        actressProfileVerifiedUrl: "https://ja.wikipedia.org/wiki/Actor_One",
         actressProfile: {
           url: "https://ja.wikipedia.org/wiki/Actor_One",
           birthday: "1995年1月2日",
@@ -68,6 +69,7 @@ test("uses stored actressProfile without network lookup, strips actor-page badge
         name: "演员乙",
         allName: ["演员乙"],
         actressType: "uncensored",
+        actressProfileVerifiedUrl: "https://ja.wikipedia.org/wiki/Actor_Two",
         actressProfile: {
           url: "https://ja.wikipedia.org/wiki/Actor_Two",
           birthday: "2000年3月4日",

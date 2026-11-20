@@ -752,7 +752,7 @@ describe("new video interaction ownership", () => {
         }));
         expect(clear).toHaveBeenCalledWith("https://javdb.com", "alice");
         expect(clear).toHaveBeenCalledWith("https://javdb.com", "alice-new");
-        expect(harness.beans.TaskPlugin.checkOneNewVideo).toHaveBeenCalledWith(expect.objectContaining({ starId: "alice-new" }), { preservePending: true });
+        expect(harness.beans.TaskPlugin.checkOneNewVideo).toHaveBeenCalledWith(expect.objectContaining({ starId: "alice-new" }));
 
         await plugin.editActress(actresses[0]);
         expect(plugin.editor.root.find("#edit-actress-starid").val()).toBe("alice");
@@ -782,6 +782,7 @@ describe("new video interaction ownership", () => {
             }
             return container;
         };
+        actresses[0].actressProfileVerifiedUrl = "https://ja.wikipedia.org/wiki/Alice";
         actresses[0].actressProfile = {
             url: "https://ja.wikipedia.org/wiki/Alice",
             birthday: "1996年1月1日", age: "30岁", height: "162cm", weight: "",
@@ -789,6 +790,7 @@ describe("new video interaction ownership", () => {
         };
         actresses.push({
             name: "Bella", allName: ["Bella Alias"], starId: "bella", actressType: "uncensored",
+            actressProfileVerifiedUrl: "https://ja.wikipedia.org/wiki/Bella",
             actressProfile: {
                 url: "https://ja.wikipedia.org/wiki/Bella",
                 birthday: "2000年1月1日", age: "26岁", height: "152cm", weight: "",

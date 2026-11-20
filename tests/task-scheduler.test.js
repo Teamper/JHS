@@ -389,7 +389,7 @@ describe("task scheduler state machine", () => {
         await harness.plugin.parsePage(page, "javdb", "actor", "Actor", [ "filtered" ], new Set);
         expect(harness.storageManager.updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
             starId: "actor", lastPublishTime: "2026-09-03", newVideoList: [ expect.objectContaining({ carNum: "A-1" }) ]
-        }));
+        }), { scan: true });
     });
 
     it("completes a structurally valid empty actress sync and rejects a login page", async () => {

@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { StorageManager } from "../src/core/storage.js";
+import { normalizePortableData } from "../src/core/migration.js";
+import { emptySyncModel, materializeSyncData, projectSyncData, validateSyncState, versionSyncDiff } from "../src/core/webdav-sync-model.js";
 import { CACHE_TTL } from "../src/core/cache-policy.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
@@ -35,7 +38,7 @@ describe("NewVideoScanController", () => {
                 { carNum: "ABC-123", coverUrl: "", title: "New release", publishTime: "2026-09-20", score: 4.5, voteCount: 22, url: "/v/abc-123" },
                 { carNum: "DISMISSED-005", coverUrl: "", title: "Dismissed", publishTime: "2026-09-25", score: 0, voteCount: 0, url: "" },
             ],
-        });
+        }, { scan: true });
         expect(onNewItems).toHaveBeenCalledWith("Actor One", 1);
     });
 
@@ -44,7 +47,7 @@ describe("NewVideoScanController", () => {
         const controller = new NewVideoScanController({ state, getTimestamp: () => "2026-09-27 15:00:00", onNewItems: vi.fn() });
 
         await expect(controller.parseActorMovies([], "actor-1", "Actor One", [], new Set())).resolves.toBe(0);
-        expect(state.updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", lastCheckTime: "2026-09-27 15:00:00", newVideoList: [] });
+        expect(state.updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", lastCheckTime: "2026-09-27 15:00:00", newVideoList: [] }, { scan: true });
     });
 
     it.each([[[]], [[{ carNum: "ABC-123", title: "New release" }]]])("does not report new work when another tab removed the actor before persistence: %j", async items => {
@@ -147,7 +150,7 @@ describe("NewVideoScanController", () => {
         expect(result).toMatchObject({ actressCount: 4, eligibleCount: 2, success: 2, skippedInterval: 1, skippedStopped: 1, networkFailed: 0, parseFailed: 0 });
         expect(state.getBlacklistCarList).toHaveBeenCalledOnce();
         expect(state.updateFavoriteActress).toHaveBeenCalledTimes(2);
-        expect(state.updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({ starId: "primary", newVideoList: [expect.objectContaining({ carNum: "primary-001" })] }));
+        expect(state.updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({ starId: "primary", newVideoList: [expect.objectContaining({ carNum: "primary-001" })] }), { scan: true });
         expect(sleep).toHaveBeenCalledWith(0);
     });
 
@@ -197,23 +200,68 @@ describe("NewVideoScanController", () => {
         expect(state.updateFavoriteActress).toHaveBeenCalledWith({
             starId: "actor-1", lastCheckTime: "2026-09-27 15:00:00", lastPublishTime: null,
             newVideoList: [{ carNum: "ACTOR-001", coverUrl: "", title: "Synthetic title", publishTime: "", score: 0, voteCount: 0, url: "" }],
-        });
+        }, { scan: true });
     });
 
-    it("keeps pending entries migrated from the previous source on a rebind scan", async () => {
-        const scope = {}, state = {
-            getFavoriteActressList: vi.fn(async () => [{ starId: "actor-new", newVideoList: [
-                { carNum: "OLD-001", title: "Migrated pending" }, "OLD-002", { carNum: "LIVE-003", title: "Also on the new page" },
-            ] }]),
-            getBlacklistCarList: vi.fn(async () => []),
-            getCarMap: vi.fn(async () => new Map()), getNewVideoDecisions: vi.fn(async () => ({})),
-            updateFavoriteActress: vi.fn(async () => true),
-        };
-        const actressInfo = { movies: vi.fn(async () => [{ carNum: "LIVE-003", title: "On the new page" }]) };
-        const controller = new NewVideoScanController({ state, titleKeywords: { getAll: async () => [] }, actressInfo, scope, getTimestamp: () => "2026-11-18 10:00:00", onNewItems: vi.fn() });
+    it("keeps migrated works through manual and scheduled scans, sync, and an in-flight removal", async () => {
+        let favoriteActresses = [
+            { starId: "old", name: "Actor", newVideoList: ["OLD-001", "AMBIGUOUS", { carNum: "LIVE-003", title: "Old title" }] },
+            { starId: "new", name: "Actor", newVideoList: ["TARGET-002"] },
+            { starId: "normal", name: "Other", newVideoList: ["NORMAL-004"] },
+        ];
+        let decisions = {};
+        const state = Object.create(StorageManager.prototype);
+        Object.assign(state, {
+            favorite_actresses_key: "favorite_actresses",
+            _actressLock: Promise.resolve(),
+            getFavoriteActressList: async () => favoriteActresses,
+            getBlacklistCarList: async () => [],
+            getCarMap: async () => new Map(),
+            getNewVideoDecisions: async () => decisions,
+            _setItemAndInvalidate: async (_key, value) => { favoriteActresses = value; },
+            stateService: state,
+        });
+        vi.stubGlobal("utils", { getNowStr: () => "2026-11-18 10:00:00" });
+        try {
+            const { actress } = await state.rebindFavoriteActress({ fromStarId: "old", toStarId: "new" });
+            const movies = vi.fn(async () => [{ carNum: "LIVE-003", title: "Updated title" }]);
+            const controller = new NewVideoScanController({
+                state, titleKeywords: { getAll: async () => [] }, actressInfo: { movies },
+                scope: new LifecycleScope("rebind-scan"), getTimestamp: utils.getNowStr, onNewItems: vi.fn(),
+            });
+            await controller.scanActress(actress, { baseUrl: "https://javdb.com" });
+            const getVideos = () => favoriteActresses.find(actor => actor.starId === "new").newVideoList;
+            expect(getVideos()).toEqual([
+                expect.objectContaining({ carNum: "LIVE-003", title: "Updated title", retainedAfterRebind: true }),
+                { carNum: "OLD-001", retainedAfterRebind: true },
+                { carNum: "AMBIGUOUS", retainedAfterRebind: true },
+            ]);
 
-        await controller.scanActress({ starId: "actor-new", name: "Actor" }, { baseUrl: "https://javdb.com", preservePending: true });
-        expect(state.updateFavoriteActress.mock.calls[0][0].newVideoList.map(item => item.carNum)).toEqual(["LIVE-003", "OLD-001", "OLD-002"]);
+            const replica = "aa4bd732-dfaa-4dfa-8e17-6dec447c1dfe";
+            const backup = normalizePortableData({ data_version: 4, favorite_actresses: favoriteActresses }).data;
+            const { model } = versionSyncDiff(emptySyncModel(), {}, projectSyncData(backup), [1, replica]);
+            favoriteActresses = materializeSyncData(validateSyncState(model), backup).favorite_actresses;
+            movies.mockResolvedValue([]);
+            await controller.scanActresses({
+                baseUrl: "https://javdb.com", concurrency: 1, sleepMs: 0, intervalHours: 12,
+                ruleHours: 8760, force: true, isUnnecessaryCheck: () => false,
+                isNetworkBlocked: () => false, sleep: async () => {},
+            });
+            expect(getVideos().map(movie => movie.carNum).sort()).toEqual(["AMBIGUOUS", "LIVE-003", "OLD-001"]);
+            expect(favoriteActresses.find(actor => actor.starId === "normal").newVideoList).toEqual([]);
+
+            let finishFetch;
+            movies.mockImplementationOnce(() => new Promise(resolve => { finishFetch = resolve; }));
+            const scanning = controller.scanActress(actress, { baseUrl: "https://javdb.com" });
+            await vi.waitFor(() => expect(finishFetch).toBeTypeOf("function"));
+            decisions = { "OLD-001": { action: "dismissed" } };
+            await state.updateFavoriteActress({ starId: "new", newVideoList: getVideos().filter(movie => movie.carNum !== "OLD-001") });
+            finishFetch([{ carNum: "OLD-001", title: "Still on the server" }]);
+            await scanning;
+            expect(getVideos().map(movie => movie.carNum).sort()).toEqual(["AMBIGUOUS", "LIVE-003"]);
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     it("syncs every collection page before writing the merged actress list", async () => {
@@ -334,7 +382,7 @@ describe("NewVideoScanController", () => {
     it("backfills due favorite actress profiles, respects 7d/24h cooldowns, skips unchanged writes, preserves existing profiles on null lookup, and prunes orphans", async () => {
         const localStore = new Map([
             ["jhs_actress_profile_attempts_v1", JSON.stringify({
-                schema: 1,
+                schema: 2,
                 entries: {
                     "fresh-pos": 1000,
                     "fresh-neg": 1000 + CACHE_TTL.actressInfoNegative - 100,
@@ -358,17 +406,17 @@ describe("NewVideoScanController", () => {
         };
         const state = {
             getFavoriteActressList: vi.fn(async () => [
-                { starId: "fresh-pos", name: "FreshPos", actressProfile: existingProfile },
+                { starId: "fresh-pos", name: "FreshPos", allName: ["Existing"], actressProfile: existingProfile, actressProfileVerifiedUrl: existingProfile.url },
                 { starId: "fresh-neg", name: "FreshNeg" },
-                { starId: "due-same", name: "DueSame", actressProfile: existingProfile },
-                { starId: "due-null", name: "DueNull", actressProfile: preservedProfile },
+                { starId: "due-same", name: "DueSame", allName: ["Existing"], actressProfile: existingProfile, actressProfileVerifiedUrl: existingProfile.url },
+                { starId: "due-null", name: "DueNull", allName: ["Preserved"], actressProfile: preservedProfile, actressProfileVerifiedUrl: preservedProfile.url },
                 { starId: "due-new", name: "DueNew", allName: ["DueAlias"] },
             ]),
             batchUpdateFavoriteActressProfiles: vi.fn(async (updates) => updates.length),
         };
         const actressInfo = {
             lookupAny: vi.fn(async (names) => {
-                if (names.includes("DueSame")) return { info: { ...existingProfile }, matchedName: "DueSame" };
+                if (names.includes("DueSame")) return { info: { ...existingProfile }, matchedName: "Existing" };
                 if (names.includes("DueNull")) return null;
                 if (names.includes("DueNew")) return { info: { url: "https://ja.wikipedia.org/wiki/DueNew", birthday: "1998年5月6日", age: "28岁", height: "158cm", weight: "", threeSizeText: "83 - 57 - 84", braSize: "C" }, matchedName: "DueAlias" };
                 return null;
@@ -406,7 +454,7 @@ describe("NewVideoScanController", () => {
             birthday: "", age: "", height: "160cm", weight: "", threeSizeText: "", braSize: "C", matchedName: "Same",
         };
         const state = {
-            getFavoriteActressList: vi.fn(async () => [{ starId: "same", name: "Same", actressProfile: existingProfile }]),
+            getFavoriteActressList: vi.fn(async () => [{ starId: "same", name: "Same", actressProfile: existingProfile, actressProfileVerifiedUrl: existingProfile.url }]),
             batchUpdateFavoriteActressProfiles: vi.fn(),
         };
         const actressInfo = { lookupAny: vi.fn(async () => ({ info: { ...existingProfile }, matchedName: "Same" })) };

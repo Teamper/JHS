@@ -103,6 +103,8 @@ describe("actress-measurements core primitives", () => {
     it("parses stored measurements and formats body measurement summaries", () => {
         const actress = {
             starId: "a1",
+            name: "三上悠亞",
+            actressProfileVerifiedUrl: "https://ja.wikipedia.org/wiki/test",
             actressProfile: {
                 url: "https://ja.wikipedia.org/wiki/test",
                 birthday: "1993年8月16日",
@@ -115,6 +117,7 @@ describe("actress-measurements core primitives", () => {
                 fetchedAt: 123456,
             },
         };
+        expect(readStoredActressMeasurements({ ...actress, actressProfileVerifiedUrl: undefined })).toBeNull();
         expect(readStoredActressMeasurements(actress)).toEqual({ heightCm: 159, ageYears: 33, cup: "E" });
         expect(readStoredActressMeasurements({ starId: "a2", actressProfile: { url: "javascript:alert(1)", height: "160cm" } })).toBeNull();
         expect(parseActressMeasurements({ threeSizeText: "85(F) - 58 - 86", height: "162cm" })).toEqual({
