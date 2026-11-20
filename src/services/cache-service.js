@@ -27,7 +27,7 @@ export class CacheService {
         this.pruneRunning = false;
         /** @type {Promise<void> | null} */
         this.prunePromise = null;
-        /** @type {Map<string, {expiresAt: number, lastUsed: number}>} */
+        /** @type {Map<string, {expiresAt: number, lastUsed: number, writeId?: string}>} */
         this.publicMetadataIndex = new Map();
     }
 
@@ -61,6 +61,18 @@ export class CacheService {
         return null;
     }
 
+    /** @param {string} key @param {unknown} entry */
+    async removeUnchangedPublicEntry(key, entry) {
+        if (!entry || !this.storage?.commitAtomicBatch) return false;
+        try {
+            await this.storage.commitAtomicBatch({ expected: { [key]: { exists: true, value: entry } }, puts: {}, deletes: [key] });
+            return true;
+        } catch {
+            // A newer write or unavailable transaction leaves maintenance for the next pass.
+            return false;
+        }
+    }
+
     /** @param {any} namespace @param {any} key @param {any} policy */
     async get(namespace, key, policy) {
         if (arguments.length === 2) policy = key, key = namespace, namespace = "default";
@@ -92,7 +104,7 @@ export class CacheService {
             }
             if (entry?.version !== this.namespaceVersion || !Number.isFinite(entry?.expiresAt) || entry.expiresAt <= now) {
                 this.publicMetadataIndex.delete(persistedKey);
-                if (entry) await storage.remove(persistedKey).catch(() => {});
+                await this.removeUnchangedPublicEntry(persistedKey, entry);
                 this.diagnostics?.recordCache(false);
                 return { hit: false, value: undefined, negative: false };
             }
@@ -101,7 +113,7 @@ export class CacheService {
                 return { hit: false, value: undefined, negative: false };
             }
             const normalized = { value: entry.value, expiresAt: entry.expiresAt, negative: entry.negative === true };
-            this.publicMetadataIndex.set(persistedKey, { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || now });
+            this.publicMetadataIndex.set(persistedKey, { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || 0, writeId: entry.writeId });
             this._setMemoryEntry(this.publicCache, cacheKey, normalized);
             this.diagnostics?.recordCache(true);
             return { hit: true, value: normalized.value, negative: normalized.negative };
@@ -131,14 +143,15 @@ export class CacheService {
         if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
         try {
             if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
-            const lastUsed = Date.now();
-            await storage.set(persistedKey, { version: this.namespaceVersion, ...entry, lastUsed });
+            const lastUsed = Date.now(), writeId = crypto.randomUUID();
+            const persisted = { version: this.namespaceVersion, ...entry, lastUsed, writeId };
+            await storage.set(persistedKey, persisted);
             if (policy.generation != null && policy.generation !== this.generation(namespace)) {
                 this.publicMetadataIndex.delete(persistedKey);
-                await storage.remove(persistedKey).catch(() => {});
+                await this.removeUnchangedPublicEntry(persistedKey, persisted);
                 return;
             }
-            this.publicMetadataIndex.set(persistedKey, { expiresAt: entry.expiresAt, lastUsed });
+            this.publicMetadataIndex.set(persistedKey, { expiresAt: entry.expiresAt, lastUsed, writeId });
             this._setMemoryEntry(store, cacheKey, entry);
             this.publicWritesSincePrune++;
             this.schedulePublicPrune();
@@ -182,41 +195,33 @@ export class CacheService {
         for (const knownKey of this.publicMetadataIndex.keys()) if (!activeKeySet.has(knownKey)) this.publicMetadataIndex.delete(knownKey);
         for (const key of cacheKeys) {
             let meta = this.publicMetadataIndex.get(key);
-            if (!meta) {
-                const entry = await this.storage.get(key).catch(() => null);
+            if (!meta || !Number.isFinite(meta.expiresAt) || meta.expiresAt <= now) {
+                const entry = await this.storage.get(key).catch(() => undefined);
                 if (!entry || entry.version !== this.namespaceVersion || !Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) {
-                    await this.storage.remove(key).catch(() => {});
-                    continue;
-                }
-                meta = { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || 0 };
-                this.publicMetadataIndex.set(key, meta);
-            } else if (!Number.isFinite(meta.expiresAt) || meta.expiresAt <= now) {
-                // Another tab may have refreshed this key after the in-page index saw it; the local
-                // metadata alone cannot prove the persisted entry is still the stale one.
-                const entry = await this.storage.get(key).catch(() => null);
-                if (entry && entry.version === this.namespaceVersion && Number.isFinite(entry.expiresAt) && entry.expiresAt > now) {
-                    meta = { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || 0 };
-                    this.publicMetadataIndex.set(key, meta);
-                } else {
                     this.publicMetadataIndex.delete(key);
-                    await this.storage.remove(key).catch(() => {});
+                    await this.removeUnchangedPublicEntry(key, entry);
                     continue;
                 }
+                meta = { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) || 0, writeId: entry.writeId };
+                this.publicMetadataIndex.set(key, meta);
             }
-            candidates.push({ key, lastUsed: meta.lastUsed });
+            candidates.push({ key, ...meta });
         }
-        if (candidates.length > PUBLIC_CACHE_MAX_ENTRIES) {
-            candidates.sort((left, right) => left.lastUsed - right.lastUsed);
-            for (const item of candidates.slice(0, candidates.length - PUBLIC_CACHE_MAX_ENTRIES)) {
-                const key = /** @type {any} */ (item).key, entry = await this.storage.get(key).catch(() => null);
-                if (entry && Number(entry.lastUsed) > item.lastUsed) {
-                    // Refreshed elsewhere while queued for eviction; keep it and re-evaluate later.
-                    this.publicMetadataIndex.set(key, { expiresAt: entry.expiresAt, lastUsed: Number(entry.lastUsed) });
-                    continue;
-                }
+
+        let overflow = candidates.length - PUBLIC_CACHE_MAX_ENTRIES;
+        if (overflow <= 0) return;
+        candidates.sort((left, right) => left.lastUsed - right.lastUsed);
+        for (const candidate of candidates) {
+            const { key, lastUsed, expiresAt, writeId } = candidate;
+            const entry = await this.storage.get(key).catch(() => undefined);
+            if (!entry) continue;
+            if (entry.version !== this.namespaceVersion || (Number(entry.lastUsed) || 0) !== lastUsed
+                || entry.expiresAt !== expiresAt || entry.writeId !== writeId) {
                 this.publicMetadataIndex.delete(key);
-                await this.storage.remove(key).catch(() => {});
+                continue;
             }
+            this.publicMetadataIndex.delete(key);
+            if (await this.removeUnchangedPublicEntry(key, entry) && --overflow === 0) break;
         }
     }
 
