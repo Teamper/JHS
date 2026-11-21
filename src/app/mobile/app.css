@@ -162,6 +162,11 @@ body[data-route="settings"] #main { padding-bottom: max(20px, var(--safe-bottom)
 #main .library-work { display: grid; width: 100%; text-align: start; gap: .25rem; border-bottom: 1px solid var(--line); padding: .75rem 0; }
 #main .library-work[aria-pressed="true"] { background: var(--selected); }
 .library-work .movie-title-text { font-weight: 650; overflow-wrap: anywhere; }
+.follow-work { min-width: 0; }
+.follow-actions { margin: .25rem 0 .5rem; gap: .2rem; }
+#main .follow-actions button { min-width: 48px; padding-inline: .4rem; }
+.mobile-summary { margin-block: .25rem 1rem; }
+.mobile-summary button { flex: 1 1 42%; }
 .movie-hero { display: grid; gap: .65rem; padding-bottom: .3rem; }
 .movie-hero .cover-large { height: auto; max-height: min(30svh, 280px); object-fit: contain; }
 .saved-movie-status { display: block; margin-top: .24rem; }

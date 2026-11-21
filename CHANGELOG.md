@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+- Android 离线预览增加发现、追新和片库三条可连续操作的流程，并保存作品状态、队列决策与显示偏好。
+
 - 整理 Android 离线预览及共享界面组件，提供基于内置样片的浏览、排序、详情和状态操作。
 
 ### 修复
