@@ -4,18 +4,24 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="light dark">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
     <title>JHS 离线预览</title>
     <link rel="stylesheet" href="app.css">
+    <link rel="stylesheet" href="product.css">
     <script type="module" src="main.js"></script>
 </head>
 <body>
     <header class="mobile-top">
         <button id="back" type="button" hidden aria-label="返回">‹</button>
-        <div><h1 id="title">发现</h1></div>
+        <div><h1 id="title" tabindex="-1">发现</h1></div>
         <button id="privacy" type="button" aria-pressed="false">隐私</button>
     </header>
     <main id="main"></main>
+    <div class="feedback glass" hidden>
+        <span id="status" role="status"></span>
+        <button id="undo" type="button" hidden>撤销</button>
+        <button id="dismiss-status" type="button" aria-label="关闭反馈">×</button>
+    </div>
     <nav class="mobile-tabs" aria-label="主导航"></nav>
 </body>
 </html>
