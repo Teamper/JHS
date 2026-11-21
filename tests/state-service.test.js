@@ -37,6 +37,22 @@ function createHarness(initial = {}, mutationCoordinator = null, diagnosticConso
 }
 
 describe("StateService durable transactions", () => {
+    it("can save a personal flag independently of the new-work queue and undo each action", async () => {
+        const { service, data } = createHarness({
+            car_list: [],
+            favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }],
+        });
+        const flag = await service.toggle("ABC-1", "favorite", { preserveNewVideo: true });
+        expect(data.get("favorite_actresses")[0].newVideoList).toEqual(["ABC-1"]);
+        const decision = await service.setNewVideoDecision("ABC-1", "dismissed");
+        expect(data.get("new_video_decisions")["ABC-1"].action).toBe("dismissed");
+        await service.undoTransaction(decision.transactionId);
+        expect(data.get("new_video_decisions")["ABC-1"]).toBeUndefined();
+        expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
+        await service.undoTransaction(flag.transactionId);
+        expect(data.get("favorite_actresses")[0].newVideoList).toEqual(["ABC-1"]);
+    });
+
     it("does not rewrite unrelated new-work domains for a movie absent from those domains", async () => {
         const f = createHarness({ car_list: [], favorite_actresses: [{ starId: "actor-1", newVideoList: [{ carNum: "OTHER-1" }] }], new_video_decisions: { "OTHER-1": { action: "dismissed" } }, activity_log: { entries: [] } });
         await f.service.patch("ABC-123", { favorite: true });

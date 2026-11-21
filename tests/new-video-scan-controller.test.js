@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 
 describe("NewVideoScanController", () => {
+    it("keeps an already queued work after it is saved when queue decisions are independent", async () => {
+        const state = {
+            getCarMap: async () => new Map([["ABC-123", {}], ["ABC-456", {}]]),
+            getNewVideoDecisions: async () => ({}),
+            getFavoriteActressList: async () => [{ starId: "actor", newVideoList: ["ABC-123"] }],
+            updateFavoriteActress: vi.fn(async () => true),
+        };
+        const controller = new NewVideoScanController({
+            state, preserveNewVideo: true, getTimestamp: () => "2026-11-21", onNewItems: vi.fn(),
+        });
+        await expect(controller.parseActorMovies([{ carNum: "ABC-123" }, { carNum: "ABC-456" }], "actor", "Actor", [], new Set())).resolves.toBe(0);
+        expect(state.updateFavoriteActress.mock.lastCall[0].newVideoList.map(item => item.carNum)).toEqual(["ABC-123"]);
+    });
+
     it("does not wait for another background permit after its final actor completed", async () => {
         const state = { getFavoriteActressList: async () => [{ starId: "a1", name: "Actor" }], getBlacklistCarList: async () => [], updateFavoriteActress: async () => true };
         let permits = 0;

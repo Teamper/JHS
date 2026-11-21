@@ -2,17 +2,18 @@
 
 import { isMissingActorSource } from "./actor-source-health.js";
 import { selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
-import { getMovieStateEligibility } from "../../core/movie-identity.js";
+import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
 
 /** Converts discovered actor titles into the existing 6.5.1 actress record shape. */
 export class NewVideoScanController {
-    /** @param {{state: any, titleKeywords: any, actressInfo: any, scope: any, logger: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, onNewItems: (name: string, count: number) => void}} options */
+    /** @param {{state: any, titleKeywords: any, actressInfo: any, scope: any, logger: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, allowHidden?: boolean, preserveNewVideo?: boolean, onNewItems: (name: string, count: number) => void}} options */
     constructor(options) {
         this.state = options.state;
         this.titleKeywords = options.titleKeywords;
         this.actressInfo = options.actressInfo;
         this.scope = options.scope;
         this.backgroundWork = options.backgroundWork;
+        this.preserveNewVideo = options.preserveNewVideo === true;
         this.sourceHealth = options.sourceHealth;
         this.logger = options.logger;
         this.getTimestamp = options.getTimestamp;
@@ -206,10 +207,16 @@ export class NewVideoScanController {
             carNum: item.carNum, coverUrl: item.coverUrl || "", title: item.title || "", publishTime: item.publishTime || "",
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
-        const [carMap, decisions] = await Promise.all([this.state.getCarMap(), this.state.getNewVideoDecisions()]);
+        const [carMap, decisions, actresses] = await Promise.all([
+            this.state.getCarMap(), this.state.getNewVideoDecisions(),
+            this.preserveNewVideo ? this.state.getFavoriteActressList() : [],
+        ]);
         this.assertActive();
-        const freshItems = candidates.filter((item) => !carMap.has(item.carNum));
-        const fresh = freshItems.filter((item) => decisions[item.carNum]?.action !== "dismissed");
+        const previous = actresses.find((/** @type {any} */ actress) => actress.starId === starId);
+        const queued = new Set((previous?.newVideoList || []).map((/** @type {any} */ entry) =>
+            normalizeMovieCarNum(typeof entry === "string" ? entry : entry.carNum)));
+        const freshItems = candidates.filter((item) => !carMap.has(item.carNum) || queued.has(normalizeMovieCarNum(item.carNum)));
+        const fresh = freshItems.filter((item) => !carMap.has(item.carNum) && decisions[item.carNum]?.action !== "dismissed");
         const saved = await this.state.updateFavoriteActress({
             starId, lastCheckTime: this.getTimestamp(), newVideoList: freshItems,
             lastPublishTime: selectLatestPublishTime(publishTimes),
