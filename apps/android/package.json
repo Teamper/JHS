@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@capacitor/android": "8.6.2",
+    "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.6.2"
   },
   "devDependencies": {

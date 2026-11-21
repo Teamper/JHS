@@ -7,6 +7,20 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 
 describe("NewVideoScanController", () => {
+    it("keeps an already queued work after it is saved when queue decisions are independent", async () => {
+        const state = {
+            getCarMap: async () => new Map([["ABC-123", {}], ["ABC-456", {}]]),
+            getNewVideoDecisions: async () => ({}),
+            getFavoriteActressList: async () => [{ starId: "actor", newVideoList: ["ABC-123"] }],
+            updateFavoriteActress: vi.fn(async () => true),
+        };
+        const controller = new NewVideoScanController({
+            state, preserveNewVideo: true, getTimestamp: () => "2026-11-21", onNewItems: vi.fn(),
+        });
+        await expect(controller.parseActorMovies([{ carNum: "ABC-123" }, { carNum: "ABC-456" }], "actor", "Actor", [], new Set())).resolves.toBe(0);
+        expect(state.updateFavoriteActress.mock.lastCall[0].newVideoList.map(item => item.carNum)).toEqual(["ABC-123"]);
+    });
+
     it("does not wait for another background permit after its final actor completed", async () => {
         const state = { getFavoriteActressList: async () => [{ starId: "a1", name: "Actor" }], getBlacklistCarList: async () => [], updateFavoriteActress: async () => true };
         let permits = 0;
@@ -241,6 +255,13 @@ describe("NewVideoScanController", () => {
             const backup = normalizePortableData({ data_version: 4, favorite_actresses: favoriteActresses }).data;
             const { model } = versionSyncDiff(emptySyncModel(), {}, projectSyncData(backup), [1, replica]);
             favoriteActresses = materializeSyncData(validateSyncState(model), backup).favorite_actresses;
+            decisions = { "OLD-001": { action: "dismissed" }, "NORMAL-004": { action: "dismissed" } };
+            movies.mockResolvedValueOnce([{ carNum: "NORMAL-004" }]);
+            const normal = favoriteActresses.find(actor => actor.starId === "normal");
+            await controller.scanActress(normal, { baseUrl: "https://javdb.com" });
+            expect(favoriteActresses.find(actor => actor.starId === "normal").newVideoList)
+                .toEqual([expect.objectContaining({ carNum: "NORMAL-004" })]);
+
             movies.mockResolvedValue([]);
             await controller.scanActresses({
                 baseUrl: "https://javdb.com", concurrency: 1, sleepMs: 0, intervalHours: 12,
@@ -254,7 +275,6 @@ describe("NewVideoScanController", () => {
             movies.mockImplementationOnce(() => new Promise(resolve => { finishFetch = resolve; }));
             const scanning = controller.scanActress(actress, { baseUrl: "https://javdb.com" });
             await vi.waitFor(() => expect(finishFetch).toBeTypeOf("function"));
-            decisions = { "OLD-001": { action: "dismissed" } };
             await state.updateFavoriteActress({ starId: "new", newVideoList: getVideos().filter(movie => movie.carNum !== "OLD-001") });
             finishFetch([{ carNum: "OLD-001", title: "Still on the server" }]);
             await scanning;

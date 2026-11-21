@@ -35,14 +35,16 @@ function newVideoKey(item) {
 
 function mergeScannedNewVideos(scanned, previous, decisions) {
     const entries = new Map();
+    const queued = new Set(previous.map(newVideoKey));
     for (const item of scanned) {
         const key = newVideoKey(item);
-        if (key && decisions[key]?.action !== "dismissed") entries.set(key, item);
+        // A queue decision can be undone. An explicitly removed entry is absent from the queue.
+        if (key && (decisions[key]?.action !== "dismissed" || queued.has(key))) entries.set(key, item);
     }
     for (const item of previous) {
         if (item?.retainedAfterRebind !== true) continue;
         const key = newVideoKey(item);
-        if (!key || decisions[key]?.action === "dismissed") continue;
+        if (!key) continue;
         const fresh = entries.get(key);
         entries.set(key, fresh ? { ...item, ...fresh, retainedAfterRebind: true } : item);
     }
