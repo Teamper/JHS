@@ -46,6 +46,7 @@ describe("layered dialog DOM ownership", () => {
         expect(historyStyles).toContain(".jhs-history-dialog #filterBox");
         expect(historyStyles).toContain(".jhs-history-dialog #allSelectBox");
         expect(historyStyles).toContain(".jhs-history-dialog #table-container");
+        expect(historyStyles).toMatch(/@media\(max-width:767px\),\(pointer:coarse\)[^\n]*\.jhs-history-dialog #table-container\s*\{\s*flex:1 0 360px;\s*min-height:360px;/);
         expect(history).not.toContain("async initCss()");
         expect(history).toContain('class="jhs-history-layout jhs-history-dialog"');
         expect(history).not.toContain("async handle()");

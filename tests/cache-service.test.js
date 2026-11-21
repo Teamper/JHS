@@ -9,6 +9,12 @@ function backend() {
         set: vi.fn(async (key, value) => data.set(key, value)),
         remove: vi.fn(async key => data.delete(key)),
         keys: vi.fn(async () => [ ...data.keys() ]),
+        commitAtomicBatch: vi.fn(async ({ expected, deletes }) => {
+            for (const [key, entry] of Object.entries(expected)) {
+                if (data.get(key) !== entry.value) throw new Error("replaced");
+            }
+            for (const key of deletes) data.delete(key);
+        }),
     };
 }
 
@@ -66,6 +72,52 @@ describe("CacheService L1/L2 cache", () => {
         await cache.waitForPrune();
         expect(storage.keys.mock.calls.length).toBeLessThanOrEqual(2);
         expect(storage.get.mock.calls.length).toBeLessThanOrEqual(256);
+    });
+
+    it("keeps a persisted entry refreshed by another tab instead of pruning it", async () => {
+        vi.useFakeTimers();
+        const storage = backend(), stale = new CacheService({ storage }), fresh = new CacheService({ storage });
+        await stale.set("shared", "old", { scope: "public", ttlMs: 1_000 });
+        vi.advanceTimersByTime(500);
+        await fresh.set("shared", "new", { scope: "public", ttlMs: 60_000 });
+        vi.advanceTimersByTime(600);
+        await stale.prunePublic();
+        expect(storage.data.size).toBe(1);
+        await expect(fresh.get("shared", { scope: "public" })).resolves.toMatchObject({ value: "new" });
+    });
+
+    it.each(["prune", "read"])("retains a write that replaces an expired entry just before %s cleanup commits", async (mode) => {
+        vi.useFakeTimers();
+        const storage = backend(), cleaning = new CacheService({ storage }), writing = new CacheService({ storage });
+        await cleaning.set("shared", "old", { scope: "public", ttlMs: 1_000 });
+        vi.advanceTimersByTime(2_000);
+        const commit = storage.commitAtomicBatch.getMockImplementation();
+        storage.commitAtomicBatch.mockImplementationOnce(async batch => {
+            await writing.set("shared", "new", { scope: "public", ttlMs: 60_000 });
+            return commit(batch);
+        });
+        if (mode === "prune") await cleaning.prunePublic();
+        else await cleaning.get("shared", { scope: "public" });
+        const reader = new CacheService({ storage });
+        await expect(reader.get("shared", { scope: "public" })).resolves.toMatchObject({ value: "new" });
+    });
+
+    it("tries the next eviction candidate if the first one is refreshed", async () => {
+        vi.useFakeTimers();
+        const storage = backend(), cache = new CacheService({ storage }), writing = new CacheService({ storage });
+        await cache.set("oldest", "before", { scope: "public", ttlMs: 60_000 });
+        vi.advanceTimersByTime(100);
+        for (let index = 0; index < 500; index++) {
+            storage.data.set(cache.publicPrefix + "test-" + index, { version: 2, expiresAt: Date.now() + 60_000, lastUsed: Date.now(), value: index });
+        }
+        const commit = storage.commitAtomicBatch.getMockImplementation();
+        storage.commitAtomicBatch.mockImplementationOnce(async batch => {
+            await writing.set("oldest", "after", { scope: "public", ttlMs: 60_000 });
+            return commit(batch);
+        });
+        await cache.prunePublic();
+        expect(storage.data.size).toBe(500);
+        await expect(new CacheService({ storage }).get("oldest", { scope: "public" })).resolves.toMatchObject({ value: "after" });
     });
 
     it("does not persist a response with an obsolete public generation", async () => {

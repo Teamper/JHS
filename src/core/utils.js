@@ -282,7 +282,10 @@ export class Utils {
         };
         const buttons = [ options.cancelText || "取消", options.confirmText || "确定" ];
         const dialogOptions = {
-            title: "提示", btn: buttons, shade: 0, zIndex: JHS_Z_INDEX.layer,
+            title: "提示", btn: buttons, shade: 0,
+            // The dialog service stacks above existing layers itself; a fixed zIndex would put
+            // this confirmation behind a dialog opened after it and trap focus on the wrong layer.
+            ...(service ? {} : { zIndex: JHS_Z_INDEX.layer }),
             ui: { focus: "caller" },
             ...(options.skin ? { skin: options.skin } : {}),
             success: (element, id) => {

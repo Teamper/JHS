@@ -9,10 +9,52 @@ function createStorage(values = {}) {
         getValue: vi.fn((key, fallback) => data.has(key) ? data.get(key) : fallback),
         setValue: vi.fn((key, value) => data.set(key, value)),
         removeValue: vi.fn((key) => data.delete(key)),
+        listValues: vi.fn(() => [...data.keys()]),
     };
 }
 
 describe("CredentialService", () => {
+    it("indexes old revisions once, checks damaged indexes, and decrypts only the active head on a fresh page", async () => {
+        const storage = createStorage(), service = new CredentialService(storage, {});
+        for (let index = 1; index <= 33; index++) {
+            await service.set(`connection:revision:${index}`, JSON.stringify({
+                schema: 1, parents: [index === 1 ? null : String(index - 1)], value: `synthetic-${index}`,
+            }));
+        }
+        const originals = new Map(storage.data);
+        await expect(service.readVersioned("connection")).resolves.toMatchObject({ revision: "33", value: "synthetic-33" });
+        const reader = new CredentialService(storage, {});
+        const decode = vi.spyOn(reader, "decode");
+        await expect(reader.readVersioned("connection")).resolves.toMatchObject({ revision: "33" });
+        expect(decode).toHaveBeenCalledOnce();
+
+        const indexKey = "connection:revision-index:2";
+        storage.data.set(indexKey, { ...storage.data.get(indexKey), parents: ["33"] });
+        storage.data.delete("connection:revision-index:5");
+        decode.mockClear();
+        await expect(reader.readVersioned("connection")).resolves.toMatchObject({ revision: "33" });
+        expect(decode).toHaveBeenCalledTimes(3);
+        expect(storage.data.get(indexKey).parents).toEqual(["1"]);
+        for (const [key, record] of originals) expect(storage.data.get(key)).toEqual(record);
+        expect(JSON.stringify(storage.data.get(indexKey))).not.toContain("synthetic-");
+    });
+
+    it("keeps cross-site forks visible and resolves them without pruning encrypted records", async () => {
+        const storage = createStorage(), oneSite = new CredentialService(storage, {}), anotherSite = new CredentialService(storage, {});
+        const root = await oneSite.setVersioned("connection", "initial", null);
+        await oneSite.setVersioned("connection", "first branch", root.revision);
+        // A second origin can append a sibling based on the same revision it already read.
+        await anotherSite.set("connection:revision:other-site", JSON.stringify({ schema: 1, parents: [root.revision], value: "second branch" }));
+        const collision = await anotherSite.readVersioned("connection").catch(error => error);
+        expect(collision.code).toBe("CONFIG_CONFLICT");
+        expect(collision.candidates.map(candidate => candidate.value).sort()).toEqual(["first branch", "second branch"]);
+        const originalKeys = storage.listValues().filter(key => key.startsWith("connection:revision:"));
+        await expect(anotherSite.setVersioned("connection", "resolved", collision.candidates.map(node => node.revision)))
+            .resolves.toMatchObject({ value: "resolved" });
+        expect(storage.listValues()).toEqual(expect.arrayContaining(originalKeys));
+        expect(storage.removeValue).not.toHaveBeenCalled();
+    });
+
     it("checks the login owner again after encryption and before saving", async () => {
         const storage = createStorage(), service = new CredentialService(storage, { getItem: () => null });
         const assertActive = vi.fn().mockImplementationOnce(() => {}).mockImplementationOnce(() => { throw new DOMException("closed", "AbortError"); });

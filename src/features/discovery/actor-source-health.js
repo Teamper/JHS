@@ -1,5 +1,7 @@
 // @ts-check
 
+import { isNotFoundError } from "../../core/jhs-error.js";
+
 const KEY = "jhs_new_video_source_health_v1";
 export const ACTOR_SOURCE_RETRY_MS = 24 * 60 * 60 * 1000;
 
@@ -35,4 +37,4 @@ export class ActorSourceHealth {
 }
 
 /** @param {any} error */
-export function isMissingActorSource(error) { return error?.code === "NOT_FOUND" || error?.details?.status === 404 || error?.status === 404; }
+export function isMissingActorSource(error) { return isNotFoundError(error); }

@@ -8,6 +8,7 @@ import { dismissActiveTooltip } from "../../core/tooltip-controller.js";
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { getIcon } from "../../core/icons.js";
 
+import { CUP_FILTER_OPTIONS, cleanActressName, createBodyFilterMatcher, formatBodyMeasurements, hasActiveBodyFilter, normalizeBodyFilter, readStoredActressMeasurements } from "../../core/actress-measurements.js";
 import { A, C, D, _, escapeHtml, i, normalizeCarNum } from "../../core/constants.js";
 import { mapLimit, normalizeHttpUrl, parseNumberSetting, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { FEATURE_ICONS } from "../../core/feature-icons.js";
@@ -44,8 +45,9 @@ export class NewVideoWorkspaceService {
         this.batchPopover = null;
         this.editor = null;
         this.editorGeneration = 0;
+        /** @type {Set<() => void>} */ this.rebindDialogClosers = new Set();
         Object.assign(this, FEATURE_ICONS);
-        i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvCoverPreview", null), i(this, "nvWorkspaceRoot", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
+        i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvMeasurementsByStarId", new Map), i(this, "nvMeasurementsByName", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvBodyFilterDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvCoverPreview", null), i(this, "nvWorkspaceRoot", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
         i(this, "nvWorkspaceFullReloadRequested", !1), i(this, "nvPendingRemovals", new Set), i(this, "nvRemovingCards", new Set);
         /** @type {(() => Promise<void>) | null} */ this.featureNewVideoStyleLoader = null;
         /** @type {any} */ this.featureNewVideoBatchController = null;
@@ -250,6 +252,29 @@ export class NewVideoWorkspaceService {
                             <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
                         </select></label>
                         <label class="jhs-new-video-filter-field"><span>新作品排序</span><select id="nvSortBy" class="jhs-select-source jhs-is-hidden" aria-label="新作品排序"><option value="publishTime_desc" selected>发行时间 新→旧</option><option value="publishTime_asc">发行时间 旧→新</option><option value="voteCount_desc">评价人数 多→少</option><option value="voteCount_asc">评价人数 少→多</option><option value="actress_asc">演员名 A→Z</option><option value="actress_desc">演员名 Z→A</option><option value="carNum_asc">番号 A→Z</option><option value="carNum_desc">番号 Z→A</option></select></label>
+                        <div class="jhs-new-video-filter-field jhs-nv-range-field">
+                            <span id="nvHeightLabel">身高(cm)</span>
+                            <div class="jhs-nv-range-inputs" role="group" aria-labelledby="nvHeightLabel">
+                                <input id="nvHeightMin" type="number" inputmode="numeric" min="100" max="230" class="jhs-field jhs-nv-range-input" placeholder="最低" aria-label="最低身高(cm)">
+                                <span class="jhs-nv-range-sep" aria-hidden="true">-</span>
+                                <input id="nvHeightMax" type="number" inputmode="numeric" min="100" max="230" class="jhs-field jhs-nv-range-input" placeholder="最高" aria-label="最高身高(cm)">
+                            </div>
+                        </div>
+                        <div class="jhs-new-video-filter-field jhs-nv-range-field">
+                            <span id="nvAgeLabel">年龄</span>
+                            <div class="jhs-nv-range-inputs" role="group" aria-labelledby="nvAgeLabel">
+                                <input id="nvAgeMin" type="number" inputmode="numeric" min="15" max="99" class="jhs-field jhs-nv-range-input" placeholder="最小" aria-label="最小年龄">
+                                <span class="jhs-nv-range-sep" aria-hidden="true">-</span>
+                                <input id="nvAgeMax" type="number" inputmode="numeric" min="15" max="99" class="jhs-field jhs-nv-range-input" placeholder="最大" aria-label="最大年龄">
+                            </div>
+                        </div>
+                        <fieldset class="jhs-new-video-filter-field jhs-nv-cup-field">
+                            <legend>罩杯</legend>
+                            <div class="jhs-nv-cup-group">${CUP_FILTER_OPTIONS.map(cup => `<label class="jhs-choice jhs-nv-cup-choice"><input type="checkbox" class="jhs-nv-cup-checkbox" value="${cup}" aria-label="罩杯 ${cup}"><span>${cup}</span></label>`).join("")}</div>
+                        </fieldset>
+                        <div class="jhs-new-video-filter-field jhs-nv-body-reset-field">
+                            <button type="button" id="nvBodyReset" class="jhs-btn jhs-btn--ghost" hidden>重置身材</button>
+                        </div>
                     </div>
                     <span id="checkNewVideoMsg" role="status" aria-live="polite"></span>
                 </div>
@@ -281,7 +306,7 @@ export class NewVideoWorkspaceService {
                     if (event.detail?.names?.some(name => ["enableCheckBlacklist", "enableCheckFavoriteActress", "enableCheckNewVideo"].includes(name))) this.renderTaskStatuses();
                 };
                 settings?.addEventListener?.("settings.changed", this._tipSettingsChanged);
-                await this.reloadNewVideoWorkspaceData();
+                await this.reloadNewVideoWorkspaceData({ skipTaskStatusRender: true });
             },
             end: () => {
                 if (ended) return;
@@ -311,16 +336,22 @@ export class NewVideoWorkspaceService {
         this.nvLoadGeneration++, this.nvWorkspaceLoading = false;
         clearTimeout(this.nvInvalidationTimer), this.nvInvalidationTimer = null, this.nvWorkspaceReloadDirty = !1, this.nvWorkspaceFullReloadRequested = !1, this.nvPendingRemovals.clear();
         this.closeActressEditor();
+        this.closeRebindDialogs();
         this.workspaceLayoutScope?.dispose(); this.workspaceLayoutScope = null;
         this.workspaceMorePopover?.close(); this.workspaceMorePopover = null;
         this.batchPopover?.close(); this.batchPopover = null;
         this.nvWorkspaceRoot?.find('[aria-busy="true"]').attr("aria-busy", "false");
         if (this._tipSettingsChanged) this.getRuntimeService("settings")?.removeEventListener?.("settings.changed", this._tipSettingsChanged);
         this._tipSettingsChanged = null;
-        this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = !1, this.nvWorkspaceRoot = null, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
+        this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvBodyFilterDebounced?.cancel?.(), this.nvBodyFilterDebounced = null, this.nvWorkspaceMounted = !1, this.nvWorkspaceRoot = null, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
         this.nvCoverPreview?.destroy?.(), this.nvCoverPreview = null,
-        this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
+        this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvMeasurementsByStarId.clear(), this.nvMeasurementsByName.clear(), this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
         this.jquery(Array.from(this.nvRemovingCards)).stop(!0, !0), this.nvRemovingCards.clear();
+    }
+    /** 工作区关闭或停用时释放重绑弹窗及其在途搜索。 */
+    closeRebindDialogs() {
+        for (const close of [...(this.rebindDialogClosers ?? [])]) close();
+        this.rebindDialogClosers?.clear();
     }
     bindWorkspaceLayout() {
         this.workspaceLayoutScope?.dispose();
@@ -373,19 +404,48 @@ export class NewVideoWorkspaceService {
         this.syncFilterSummary();
         if (changed && this._viewMode === "list") this.renderBatchBar();
     }
+    readBodyFilter() {
+        return normalizeBodyFilter({
+            heightMin: this.jquery("#nvHeightMin").val(),
+            heightMax: this.jquery("#nvHeightMax").val(),
+            ageMin: this.jquery("#nvAgeMin").val(),
+            ageMax: this.jquery("#nvAgeMax").val(),
+            cups: this.jquery(".jhs-nv-cup-checkbox:checked").toArray().map(node => this.jquery(node).val()),
+        });
+    }
+    resetBodyFilter() {
+        this.jquery("#nvHeightMin,#nvHeightMax,#nvAgeMin,#nvAgeMax").val("");
+        this.jquery(".jhs-nv-cup-checkbox").prop("checked", false);
+        this.syncFilterSummary();
+    }
     syncFilterSummary() {
         const root = this.nvWorkspaceRoot;
         if (!root) return;
         const selectors = this._viewMode === "list" ? [["#nvCategoryFilter", "类别"], ["#nvStateFilter", "状态"], ["#nvDecisionFilter", "决策"]] : [["#paramActressType", "演员类别"]];
         const filters = selectors.map(([selector, label]) => {
             const select = root.find(selector); return select.val() && select.val() !== "all" ? `${label}：${select.find("option:selected").text()}` : "";
-        }).filter(Boolean), summary = filters.length ? `筛选，${filters.join("；")}` : "筛选，全部";
+        }).filter(Boolean);
+        const body = this.readBodyFilter();
+        if (body.heightMin !== null || body.heightMax !== null) filters.push(`身高：${body.heightMin ?? ""}~${body.heightMax ?? ""}cm`);
+        if (body.ageMin !== null || body.ageMax !== null) filters.push(`年龄：${body.ageMin ?? ""}~${body.ageMax ?? ""}岁`);
+        if (body.cups.length) filters.push(`罩杯：${body.cups.join("/")}`);
+        root.find("#nvBodyReset").prop("hidden", !hasActiveBodyFilter(body));
+        const summary = filters.length ? `筛选，${filters.join("；")}` : "筛选，全部";
         root.find("#nvFilterToggle").attr("aria-label", summary).find("span").text(filters.length ? `筛选 ${filters.length}` : "筛选");
+    }
+    refreshCurrentView({ resetPage = true } = {}) {
+        if (resetPage) {
+            if ("list" === this._viewMode) this.nvCurrentPage = 1;
+            else this.currentPage = 1;
+        }
+        this.nvRenderGeneration++;
+        this.syncFilterSummary();
+        return this.renderCurrentView();
     }
     bindClick() {
         const taskPlugin = this.getOptionalDependency("TaskPlugin");
-        const renderList = () => {
-            this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
+        const refreshView = () => {
+            void this.refreshCurrentView({ resetPage: true });
         };
         taskPlugin || this.jquery("#checkFavoriteActress,#checkNewVideo").prop("disabled", !0).attr("title", "后台任务已关闭");
         this.jquery("#reLoad").on("click", (() => {
@@ -416,10 +476,16 @@ export class NewVideoWorkspaceService {
             }));
         })), this.jquery("#checkNewVideo").on("click", (event => {
             void this.runManualTask(this.jquery(event.currentTarget), "检测中…", (() => taskPlugin?.checkNewVideo?.(!0)));
-        })), this.jquery("#paramActressType,#paramSortBy").on("change", (e => {
-            this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
-        })), this.jquery("#nvSortBy,#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", renderList),
-        this.nvSearchDebounced = this.utils.debounce(renderList, 200), this.jquery("#nvSearch").on("input", this.nvSearchDebounced), this.jquery(".jhs-new-video-view").on("click", '[role="tab"]', (event => {
+        })), this.jquery("#paramActressType,#paramSortBy,#nvSortBy,#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").off("change.jhsNvFilter").on("change.jhsNvFilter", refreshView),
+        this.jquery("#nv-filter-panel").off("change.jhsNvBody").on("change.jhsNvBody", ".jhs-nv-cup-checkbox", refreshView),
+        this.nvBodyFilterDebounced?.cancel?.(), this.nvBodyFilterDebounced = this.utils.debounce(refreshView, 200),
+        this.jquery("#nv-filter-panel").off("input.jhsNvBody").on("input.jhsNvBody", "#nvHeightMin,#nvHeightMax,#nvAgeMin,#nvAgeMax", this.nvBodyFilterDebounced),
+        this.jquery("#nv-filter-panel").off("click.jhsNvBody").on("click.jhsNvBody", "#nvBodyReset", () => {
+            this.nvBodyFilterDebounced?.cancel?.();
+            this.resetBodyFilter();
+            refreshView();
+        }),
+        this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = this.utils.debounce(refreshView, 200), this.jquery("#nvSearch").off("input.jhsNvSearch").on("input.jhsNvSearch", this.nvSearchDebounced), this.jquery(".jhs-new-video-view").on("click", '[role="tab"]', (event => {
             this.setViewMode(this.jquery(event.currentTarget).data("view"));
         })).on("keydown", '[role="tab"]', (event => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
@@ -454,7 +520,7 @@ export class NewVideoWorkspaceService {
     }
     setViewMode(mode) {
         if (![ "actress", "list" ].includes(mode) || mode === this._viewMode) return;
-        this._viewMode = mode, this.getRuntimeService("storage").setLocal("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
+        this._viewMode = mode, this.getRuntimeService("storage").setLocal("jhs_newVideoViewMode", mode), this.applyViewMode(), this.refreshCurrentView({ resetPage: true });
     }
     applyViewMode() {
         const list = "list" === this._viewMode;
@@ -463,7 +529,10 @@ export class NewVideoWorkspaceService {
             const active = this.jquery(tab).data("view") === this._viewMode;
             this.jquery(tab).attr({ "aria-selected": String(active), tabindex: active ? "0" : "-1" }).toggleClass("active", active);
         }));
-        this.jquery("#nv-filter-panel .jhs-new-video-filter-field").each((_, label) => this.jquery(label).prop("hidden", this.jquery(label).find(".jhs-select-control").hasClass("jhs-is-hidden")));
+        this.jquery("#nv-filter-panel .jhs-new-video-filter-field").each((_, label) => {
+            const field = this.jquery(label), selectControl = field.find(".jhs-select-control");
+            if (selectControl.length) field.prop("hidden", selectControl.hasClass("jhs-is-hidden"));
+        });
         this.syncWorkspaceLayout();
     }
     renderCurrentView() {
@@ -478,7 +547,7 @@ export class NewVideoWorkspaceService {
         this.currentPage = 1;
         return this.reloadNewVideoWorkspaceData();
     }
-    async reloadNewVideoWorkspaceData({ preservePage = !1 } = {}) {
+    async reloadNewVideoWorkspaceData({ preservePage = !1, skipTaskStatusRender = !1 } = {}) {
         if (!this.isWorkspaceMounted()) return;
         const generation = ++this.nvLoadGeneration, root = this.nvWorkspaceRoot;
         const current = () => generation === this.nvLoadGeneration && root === this.nvWorkspaceRoot && this.isWorkspaceMounted();
@@ -489,15 +558,16 @@ export class NewVideoWorkspaceService {
         try {
             if (!this.featureNewVideoWorkspaceController) throw new Error("Discovery workspace feature is unavailable");
             const workspace = await this.featureNewVideoWorkspaceController.loadWorkspace();
-            const { actresses, carMap, decisions, ruleTime, javDbUrl } = workspace;
+            const { actresses, carMap, decisions, measurementsByStarId, ruleTime, javDbUrl } = workspace;
             if (!current()) return;
             this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
+            this.syncMeasurementsCaches(actresses, measurementsByStarId);
             if (!Array.isArray(workspace.items)) throw new TypeError("Discovery workspace projection is unavailable");
             const items = workspace.items, nextMap = new Map;
             items.forEach((item => nextMap.set(normalizeCarNum(item.carNum), { ...item, carNum: normalizeCarNum(item.carNum) }))), this.nvAllItemsMap = nextMap;
             this.pruneNewVideoSelection();
             this.nvWorkspaceLoading = false, this.nvRenderGeneration++, await this.renderCurrentView();
-            current() && this.renderTaskStatuses();
+            current() && !skipTaskStatusRender && this.renderTaskStatuses();
         } catch (error) {
             if (!current()) return;
             const container = this.jquery("list" === this._viewMode ? "#new-video-list-container" : "#actress-card-container");
@@ -550,15 +620,49 @@ export class NewVideoWorkspaceService {
                 }
                 actions.append(rebind, retry, remove);
                 const row = this.jquery('<div class="jhs-source-health-item"></div>').append(info, actions);
-                rebind.on("click", () => {
-                    const actress = this.nvActressesCache?.find(actor => actor.starId === starId);
+                const resolveActress = async () => {
+                    const cached = this.nvActressesCache?.find(actor => actor.starId === starId);
+                    if (cached) return cached;
+                    if (!this.nvWorkspaceLoading) return null;
+                    const list = await this.getRuntimeService("state")?.getFavoriteActressList?.();
+                    return Array.isArray(list) ? list.find(actor => actor.starId === starId) || null : null;
+                };
+                rebind.on("click", async () => {
+                    if (rebind.attr("aria-busy") === "true" || rebind.prop("disabled")) return;
+                    const generation = this.nvDialogGeneration;
+                    rebind.attr("aria-busy", "true").prop("disabled", true);
+                    let actress;
+                    try {
+                        actress = await resolveActress();
+                    } catch (error) {
+                        this.logger.error("读取收藏演员失败", error);
+                        if (!this.disposed && this.nvWorkspaceMounted && generation === this.nvDialogGeneration) {
+                            this.notifications.error("读取演员信息失败，请重试");
+                        }
+                        return;
+                    } finally {
+                        rebind.removeAttr("aria-busy").prop("disabled", false);
+                    }
+                    if (this.disposed || !this.nvWorkspaceMounted || generation !== this.nvDialogGeneration) return;
                     if (!actress) return void this.notifications.info("本地收藏中已没有该演员");
                     void this.openRebindActorDialog(actress);
                 });
                 retry.on("click", async () => {
-                    const actress = this.nvActressesCache?.find(actor => actor.starId === starId);
-                    if (!actress) return void this.notifications.info("本地收藏中已没有该演员");
+                    if (retry.attr("aria-busy") === "true" || retry.prop("disabled")) return;
                     const generation = this.nvDialogGeneration;
+                    let actress;
+                    try {
+                        actress = await resolveActress();
+                    } catch (error) {
+                        this.logger.error("读取收藏演员失败", error);
+                        if (!this.disposed && this.nvWorkspaceMounted && generation === this.nvDialogGeneration) {
+                            this.notifications.error("读取演员信息失败，请重试");
+                        }
+                        return;
+                    }
+                    if (this.disposed || !this.nvWorkspaceMounted || generation !== this.nvDialogGeneration) return;
+                    if (retry.attr("aria-busy") === "true" || retry.prop("disabled")) return;
+                    if (!actress) return void this.notifications.info("本地收藏中已没有该演员");
                     await this.runManualTask(retry, "检测中…", () => taskPlugin?.checkOneNewVideo?.(actress));
                     if (!this.disposed && this.nvWorkspaceMounted && generation === this.nvDialogGeneration) (this.jquery('[data-source-retry]').filter((_, node) => node.getAttribute("data-source-retry") === starId)[0] || this.jquery("#nvTaskToggle:visible")[0] || this.jquery(".jhs-new-video-view [role='tab'][aria-selected='true']")[0])?.focus({ preventScroll: true });
                 });
@@ -573,13 +677,52 @@ export class NewVideoWorkspaceService {
             container.append(panel);
         }
     }
+    syncMeasurementsCaches(actresses, measurementsByStarId = null) {
+        const byStarId = new Map();
+        const byName = new Map();
+        for (const actress of Array.isArray(actresses) ? actresses : []) {
+            const starId = String(actress?.starId || "").trim();
+            const parsed = measurementsByStarId instanceof Map && starId && measurementsByStarId.has(starId)
+                ? measurementsByStarId.get(starId)
+                : readStoredActressMeasurements(actress);
+            if (starId) byStarId.set(starId, parsed ?? null);
+            const names = [actress?.name, ...(Array.isArray(actress?.allName) ? actress.allName : [])];
+            for (const raw of names) {
+                const cleaned = cleanActressName(raw, { stripBrackets: true });
+                if (!cleaned) continue;
+                if (!byName.has(cleaned) || (!byName.get(cleaned) && parsed)) byName.set(cleaned, parsed ?? null);
+            }
+        }
+        this.nvMeasurementsByStarId = byStarId;
+        this.nvMeasurementsByName = byName;
+    }
+    getActressMeasurements(actress) {
+        const starId = String(actress?.starId || "").trim();
+        if (starId && this.nvMeasurementsByStarId.has(starId)) return this.nvMeasurementsByStarId.get(starId);
+        return readStoredActressMeasurements(actress);
+    }
+    matchesNewVideoBodyFilter(item, bodyMatcher) {
+        const starIds = Array.isArray(item?.starIds) && item.starIds.length ? item.starIds : item?.starId ? [item.starId] : [];
+        if (starIds.length) {
+            return starIds.some(starId => bodyMatcher(this.nvMeasurementsByStarId.get(String(starId || "").trim()) ?? null));
+        }
+        const names = Array.isArray(item?.actresses) && item.actresses.length
+            ? item.actresses
+            : String(item?.actressName || "").split(/[、,，]/u);
+        return names.some(name => {
+            const cleaned = cleanActressName(name, { stripBrackets: true });
+            return cleaned ? bodyMatcher(this.nvMeasurementsByName.get(cleaned) ?? null) : false;
+        });
+    }
     async renderActressCards() {
         const e = this.jquery("#actress-card-container");
         if (!e.length || this.renderWorkspaceLoading(e)) return;
         e.attr("aria-busy", "false");
         let t = [ ...this.nvActressesCache ];
-        const n = this.jquery("#paramActressType").val();
+        const n = this.jquery("#paramActressType").val() ?? "all";
         "all" !== n && (t = t.filter((e => e.actressType === n)));
+        const bodyFilter = this.readBodyFilter(), bodyActive = hasActiveBodyFilter(bodyFilter), bodyMatcher = createBodyFilterMatcher(bodyFilter);
+        if (bodyActive) t = t.filter((actress => bodyMatcher(this.getActressMeasurements(actress))));
         const _carSet = this.nvCarMapCache;
         const _newVideoCount = e => this.getPendingNewVideoCount(e, _carSet);
         const sortBy = this.jquery("#paramSortBy").val();
@@ -603,7 +746,19 @@ export class NewVideoWorkspaceService {
         totalPages > 0 && this.currentPage > totalPages && (this.currentPage = totalPages);
         const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getOptionalDependency("TaskPlugin"), ruleTime = this.nvRuleTime;
         if (0 === pageActresses.length) {
-            renderStateView(e, { type: "empty", title: this.nvActressesCache.length ? "暂无符合筛选的演员" : "暂无收藏演员" });
+            const hasActressFilter = this.nvActressesCache.length > 0 && (n !== "all" || bodyActive);
+            renderStateView(e, {
+                type: "empty",
+                title: this.nvActressesCache.length ? "暂无符合筛选的演员" : "暂无收藏演员",
+                ...(hasActressFilter ? {
+                    actionLabel: "清除筛选",
+                    onAction: () => {
+                        JhsSelect.setValue("#paramActressType", "all", !1);
+                        this.resetBodyFilter();
+                        void this.refreshCurrentView({ resetPage: true });
+                    },
+                } : {}),
+            });
             return void this.renderPagination(totalCount, totalPages);
         }
         const sourceHealth = this.getRuntimeService("sourceHealth"), unavailableStarIds = new Set((javDbUrl && sourceHealth ? sourceHealth.list(javDbUrl) : []).map(item => String(item.starId || "")));
@@ -616,11 +771,16 @@ export class NewVideoWorkspaceService {
             let typeLabel = "未知", typeClass = "is-unknown";
             actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
             const publishText = String(latestPublishTime || "暂无记录"), noteText = isPaused ? `停更 ${ruleTime / 24 / 365} 年以上，下轮任务不再检测` : remark || "暂无备注";
+            const bodyText = formatBodyMeasurements(actress) || "暂无资料";
             const card = this.jquery('<article class="actress-card"></article>').toggleClass("is-paused", isPaused).attr("data-starId", starId), badges = this.jquery('<div class="actress-card__badges"></div>');
             badges.append(this.jquery("<span class=\"jhs-badge jhs-badge--accent card-new-count-tag\"></span>").attr("data-tip", `新作品数量：${newVideoCount}`).text(`${newVideoCount} 新`), this.jquery("<span class=\"jhs-badge card-tag\"></span>").addClass(typeClass).text(typeLabel)), unavailableStarIds.has(starId) && badges.append('<span class="jhs-badge jhs-badge--danger">来源不可用</span>'), isPaused && badges.append('<span class="jhs-badge jhs-badge--neutral">停更</span>');
             const profile = this.jquery('<a class="actress-card__profile" target="_blank" rel="noopener noreferrer"></a>').attr("href", profileUrl || "#"), identity = this.jquery("<span></span>").append(this.jquery("<span class=\"actress-card-name\"></span>").text(name), this.jquery("<span class=\"actress-card-allname\"></span>").attr("title", allNames).text(allNames || "暂无别名"));
             profile.append(this.jquery("<img class=\"actress-card-avatar\" loading=\"lazy\">").attr({ src: avatarUrl, alt: allNames }), identity);
-            const meta = this.jquery('<dl class="actress-card__meta"></dl>').append(this.jquery("<div class=\"actress-card__meta-row\"><dt>最近影片</dt></div>").append(this.jquery("<dd></dd>").attr("title", publishText).text(publishText)), this.jquery('<div class="actress-card__meta-row"><dt>上次检测</dt></div>').append(this.jquery("<dd></dd>").text(formatUiDateTime(actress.lastCheckTime)))), actions = this.jquery('<div class="actress-card__actions"></div>');
+            const meta = this.jquery('<dl class="actress-card__meta"></dl>').append(
+                this.jquery("<div class=\"actress-card__meta-row\"><dt>最近影片</dt></div>").append(this.jquery("<dd></dd>").attr("title", publishText).text(publishText)),
+                this.jquery('<div class="actress-card__meta-row"><dt>上次检测</dt></div>').append(this.jquery("<dd></dd>").text(formatUiDateTime(actress.lastCheckTime))),
+                this.jquery('<div class="actress-card__meta-row"><dt>身材</dt></div>').append(this.jquery("<dd></dd>").attr("title", bodyText).text(bodyText)),
+            ), actions = this.jquery('<div class="actress-card__actions"></div>');
             const check = this.jquery('<button type="button" class="jhs-btn jhs-btn--secondary btn-check-actress"><span>重新检测</span></button>').attr("data-starId", starId).prepend(this.checkSvg), remove = this.jquery('<button type="button" class="jhs-btn jhs-icon-btn jhs-btn--ghost btn-delete-actress" title="取消收藏"></button>').attr({ "aria-label": `取消收藏 ${name}`, "data-starId": starId }).append(this.deleteSvg), edit = this.jquery('<button type="button" class="jhs-btn jhs-btn--ghost btn-edit-actress" role="menuitem"><span>编辑资料</span></button>').attr("data-starId", starId).prepend(this.editSvg);
             actions.append(check, remove, this.jquery(`<div class="actress-card__menu"><button type="button" class="jhs-btn jhs-icon-btn jhs-btn--ghost" aria-label="更多操作" title="更多操作" aria-haspopup="menu" aria-expanded="false">${getIcon("ellipsis")}</button><div class="jhs-popover actress-card__menu-popover" role="menu"></div></div>`).find(".actress-card__menu-popover").append(edit).end());
             return card.append(badges, profile, meta, this.jquery("<p class=\"actress-card__note\"></p>").attr("title", noteText).text(noteText), actions)[0];
@@ -630,6 +790,10 @@ export class NewVideoWorkspaceService {
             const t = this.jquery(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             this.utils.q(e, `取消收藏演员「${escapeHtml(n.name)}」？`, (async () => {
                 const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await this.legacyStorage.getSetting()), csrfToken = this.document.querySelector("meta[name=csrf-token]")?.getAttribute("content") || "";
+                if (!csrfToken) {
+                    this.notifications.error("缺少站方请求令牌，请刷新 JavDB 页面后重试");
+                    return;
+                }
                 try {
                     const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
                     if (result.success) {
@@ -665,12 +829,14 @@ export class NewVideoWorkspaceService {
     }
     async getNewVideoFlatList() {
         const category = this.jquery("#nvCategoryFilter").val() || "all", stateFilter = this.jquery("#nvStateFilter").val() || "pending", decisionFilter = this.jquery("#nvDecisionFilter").val() || "pending", query = String(this.jquery("#nvSearch").val() || "").trim().toUpperCase();
+        const bodyFilter = this.readBodyFilter(), bodyActive = hasActiveBodyFilter(bodyFilter), bodyMatcher = createBodyFilterMatcher(bodyFilter);
         return [ ...this.nvAllItemsMap.values() ].filter((item => {
             const categoryMatch = "all" === category || "vr" === category ? "all" === category || item.isVr : "unknown" === category ? 0 === item.categories.length : item.categories.includes(category);
             const stateMatch = "all" === stateFilter || "pending" === stateFilter ? "all" === stateFilter || !hasAnyState(item.flags) : !!item.flags[stateFilter];
             const decisionMatch = "all" === decisionFilter || item.decisionState === decisionFilter;
             const searchMatch = !query || `${item.carNum} ${item.title} ${item.actressName}`.toUpperCase().includes(query);
-            return categoryMatch && stateMatch && decisionMatch && searchMatch;
+            const bodyMatch = !bodyActive || this.matchesNewVideoBodyFilter(item, bodyMatcher);
+            return categoryMatch && stateMatch && decisionMatch && searchMatch && bodyMatch;
         })).sort(((left, right) => (right.publishTime || "").localeCompare(left.publishTime || "")));
     }
     getActorCoverRequest(starId, requestMap) {
@@ -732,11 +898,12 @@ export class NewVideoWorkspaceService {
         this.nvCurrentPage = totalPages ? Math.min(this.nvCurrentPage, totalPages) : 1;
         if (!items.length) {
             this.nvCurrentPageItems = [], this.jquery("#nv-pagination-bar").remove();
-            const query = String(this.jquery("#nvSearch").val() || "").trim(), filtered = [ "nvCategoryFilter", "nvStateFilter", "nvDecisionFilter" ].some((id => this.jquery("#" + id).val() !== ("nvCategoryFilter" === id ? "all" : "pending")));
+            const bodyFilter = this.readBodyFilter();
+            const query = String(this.jquery("#nvSearch").val() || "").trim(), filtered = [ "nvCategoryFilter", "nvStateFilter", "nvDecisionFilter" ].some((id => this.jquery("#" + id).val() !== ("nvCategoryFilter" === id ? "all" : "pending"))) || hasActiveBodyFilter(bodyFilter);
             if (!this.nvAllItemsMap.size) renderStateView(container, { type: "empty", title: "暂无新作品记录" }); else if (query) renderStateView(container, { type: "empty", title: `未找到「${query}」的影片`, actionLabel: "清除搜索", onAction: () => {
-                this.jquery("#nvSearch").val(""), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
+                this.jquery("#nvSearch").val(""), void this.refreshCurrentView({ resetPage: true });
             } }); else if (filtered) renderStateView(container, { type: "empty", title: "暂无符合筛选的影片", actionLabel: "清除筛选", onAction: () => {
-                JhsSelect.setValue("#nvCategoryFilter", "all", !1), JhsSelect.setValue("#nvStateFilter", "pending", !1), JhsSelect.setValue("#nvDecisionFilter", "pending", !1), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
+                JhsSelect.setValue("#nvCategoryFilter", "all", !1), JhsSelect.setValue("#nvStateFilter", "pending", !1), JhsSelect.setValue("#nvDecisionFilter", "pending", !1), this.resetBodyFilter(), void this.refreshCurrentView({ resetPage: true });
             } }); else renderStateView(container, { type: "empty", title: "暂无待处理的新作品" });
             return void this.renderBatchBar();
         }
@@ -987,7 +1154,7 @@ export class NewVideoWorkspaceService {
         root.on("input.jhsActressEditor", "#edit-actress-avatar", event => root.find("#edit-avatar-preview").attr("src", normalizeHttpUrl(this.jquery(event.currentTarget).val(), this.nvJavDbUrl) || ""));
         root.on("input.jhsActressEditor", "#edit-actress-name,#edit-actress-allname", () => this.cancelAvatarSearch(editor));
         root.on("click.jhsActressEditor", "#search-avatar-btn", () => void this.searchAvatar(editor));
-        root.on("click.jhsActressEditor", "#rebind-actor-id-btn", () => void this.openRebindActorDialog(record));
+        root.on("click.jhsActressEditor", "#rebind-actor-id-btn", () => void this.openRebindActorDialog(record, { ownerScope: editor.scope }));
         root.on("click.jhsActressEditor", "#select-cdn-btn", () => {
             this.openEditorChild(editor, {
                 type: 1, title: `选择 ${PRODUCT_NAMES.cdn} 来源`, ui: { size: "sm", body: "scroll" }, skin: "jhs-confirm-actions",
@@ -1027,7 +1194,8 @@ export class NewVideoWorkspaceService {
                 root.find("#edit-actress-error").prop("hidden", !!name).text(name ? "" : "请输入演员主名称");
                 if (!name) { root.find("#edit-actress-name").trigger("focus"); return false; }
                 const split = text => text.split(/[，,]/).map(item => item.trim()).filter(Boolean);
-                const updated = { ...record, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")).map(car => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
+                const { actressProfile: _ignoredProfile, actressProfileVerifiedUrl: _ignoredVerification, ...editableBase } = record;
+                const updated = { ...editableBase, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")).map(car => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
                 editor.savePending = true; editor.layer?.find(".layui-layer-btn1").attr("aria-disabled", "true");
                 try {
                     const saved = await this.legacyStorage.updateFavoriteActress(updated);
@@ -1184,8 +1352,9 @@ export class NewVideoWorkspaceService {
         health?.clear?.(baseUrl, fromStarId);
         health?.clear?.(baseUrl, toStarId);
         if (this.isEditorCurrent(this.editor) && this.editor.record.starId === fromStarId) {
-            Object.assign(this.editor.record, result.actress);
-            this.editor.root.find("#edit-actress-starid").val(result.actress.starId);
+            // The committed record is a merge of both actors; keeping the stale form open would let
+            // its untouched inputs overwrite the merged remark, aliases and pending videos on save.
+            this.closeActressEditor();
         }
         await this.notifyCommittedNewVideoChange("favorite-actress-rebound");
         this.notifications.ok(result.merged ? `已合并到现有演员「${result.actress.name}」（${toStarId}）` : `已重新绑定为「${result.actress.name}」（${toStarId}）`);
@@ -1193,8 +1362,9 @@ export class NewVideoWorkspaceService {
         if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress);
         return result.actress;
     }
-    async openRebindActorDialog(actress) {
-        if (this.disposed || !actress?.starId) return null;
+    async openRebindActorDialog(actress, { ownerScope } = {}) {
+        if (this.disposed || ownerScope?.disposed || !actress?.starId) return null;
+        this.closeRebindDialogs();
         const dialog = this.getRuntimeService("dialog"), scope = new LifecycleScope("actor-rebind"), safe = value => escapeHtml(String(value || ""));
         const aliases = [...new Set([actress.name, ...(Array.isArray(actress.allName) ? actress.allName : [])].map(item => String(item || "").trim()).filter(Boolean))];
         const root = this.jquery(`<div class="jhs-form-dialog jhs-rebind-dialog">
@@ -1223,7 +1393,16 @@ export class NewVideoWorkspaceService {
                 aliasBox.append(this.jquery(`<button type="button" class="jhs-btn jhs-btn--ghost jhs-rebind-alias"></button>`).text(alias).attr("data-alias", alias));
             }
         } else aliasBox.hide();
-        let activeSearch = null, binding = false, dialogId = null;
+        let activeSearch = null, binding = false, dialogId = null, closed = false;
+        const closeSelf = () => {
+            if (closed) return;
+            closed = true;
+            this.rebindDialogClosers?.delete(closeSelf);
+            activeSearch?.dispose(); scope.dispose(); root.remove();
+            if (dialogId != null) dialog.close(dialogId);
+        };
+        this.rebindDialogClosers?.add(closeSelf);
+        if (ownerScope?.addCleanup) scope.addCleanup(ownerScope.addCleanup(closeSelf));
         const placeholderAvatar = this.getRuntimeService("actressInfo")?.placeholderUrl?.("javdb") || "";
         const setStatus = text => root.find("#rebind-actor-status").text(text);
         const renderCandidates = actors => {
@@ -1240,11 +1419,11 @@ export class NewVideoWorkspaceService {
                         this.jquery(`<span class="jhs-rebind-candidate__meta"></span>`).text(`ID: ${candidate.starId} · ${typeText} · ${namesText}`)
                     ),
                     this.jquery(`<button type="button" class="jhs-btn jhs-btn--secondary">选择并绑定</button>`).attr("data-candidate-id", candidate.starId).on("click", async () => {
-                        if (binding || scope.disposed) return;
+                        if (binding || scope.disposed || this.disposed) return;
                         binding = true;
                         try {
                             await this.applyActorRebind(actress, candidate);
-                            if (dialogId != null) dialog.close(dialogId);
+                            closeSelf();
                         } catch (error) {
                             this.logger.error("演员重绑失败", error);
                             this.notifications.error("重新绑定失败，请重试");
@@ -1294,13 +1473,13 @@ export class NewVideoWorkspaceService {
             void runSearch();
         });
         root.on("click", "#rebind-actor-apply-btn", async () => {
-            if (binding || scope.disposed) return;
+            if (binding || scope.disposed || this.disposed) return;
             const nextId = NewVideoWorkspaceService.parseActorIdInput(String(root.find("#rebind-actor-manual").val() || ""));
             if (!nextId) return setStatus("请输入有效的演员页链接（/actors/xxxx）或 starId");
             binding = true;
             try {
                 await this.applyActorRebind(actress, { starId: nextId });
-                if (dialogId != null) dialog.close(dialogId);
+                closeSelf();
             } catch (error) {
                 this.logger.error("手动重绑演员失败", error);
                 this.notifications.error("重新绑定失败，请重试");
@@ -1315,7 +1494,7 @@ export class NewVideoWorkspaceService {
                 scope.addCleanup(() => this.utils.releaseEscClose?.(id));
                 void runSearch();
             },
-            end: () => { activeSearch?.dispose(); scope.dispose(); root.remove(); },
+            end: () => { closed = true; this.rebindDialogClosers?.delete(closeSelf); activeSearch?.dispose(); scope.dispose(); root.remove(); },
         });
         return dialogId;
     }

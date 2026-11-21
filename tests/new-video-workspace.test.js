@@ -1,4 +1,5 @@
 import { OwnedPopover } from "../src/core/owned-popover.js";
+import { CUP_FILTER_OPTIONS, cleanActressName, createBodyFilterMatcher, formatBodyMeasurements, hasActiveBodyFilter, normalizeBodyFilter, readStoredActressMeasurements } from "../src/core/actress-measurements.js";
 import { renderTaskStatus, taskStatusView } from "../src/core/task-status-view.js";
 import { formatUiDateTime } from "../src/core/ui-date-time.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
@@ -24,7 +25,7 @@ function normalizeCarNum(value) {
 }
 
 function createHarness() {
-    const dom = new JSDOM(`<body><div class="newVideoToolBox"><select id="paramActressType"><option value="all" selected>all</option></select><select id="paramSortBy"><option value="default" selected>default</option></select><select id="nvCategoryFilter"><option value="all" selected>all</option></select><select id="nvStateFilter"><option value="pending" selected>pending</option></select><select id="nvDecisionFilter"><option value="pending" selected>pending</option></select><select id="nvSortBy"><option value="publishTime_desc" selected>sort</option></select><input id="nvSearch"><div id="actress-card-container"></div><div id="actress-pagination"></div><div id="new-video-list-container"></div><div id="new-video-list-footer"></div><div id="jhs-task-status-list"></div></div></body>`, { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
+    const dom = new JSDOM(`<body><div class="newVideoToolBox"><div id="nv-filter-panel"><select id="paramActressType"><option value="all" selected>all</option></select><select id="paramSortBy"><option value="default" selected>default</option></select><select id="nvCategoryFilter"><option value="all" selected>all</option></select><select id="nvStateFilter"><option value="pending" selected>pending</option></select><select id="nvDecisionFilter"><option value="pending" selected>pending</option></select><select id="nvSortBy"><option value="publishTime_desc" selected>sort</option></select><input id="nvHeightMin" type="number" class="jhs-field"><input id="nvHeightMax" type="number" class="jhs-field"><input id="nvAgeMin" type="number" class="jhs-field"><input id="nvAgeMax" type="number" class="jhs-field">${CUP_FILTER_OPTIONS.map(c => `<label class="jhs-choice"><input type="checkbox" class="jhs-nv-cup-checkbox" value="${c}"></label>`).join("")}<button type="button" id="nvBodyReset" class="jhs-btn" hidden>重置身材</button></div><input id="nvSearch"><div id="actress-card-container"></div><div id="actress-pagination"></div><div id="new-video-list-container"></div><div id="new-video-list-footer"></div><div id="jhs-task-status-list"></div></div></body>`, { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     const actresses = [{ name: "Alice", starId: "alice", actressType: "censored", newVideoList: [{ carNum: "abc_001", title: "One", publishTime: "2026-08-01" }, { carNum: "ABC-002", title: "Two", publishTime: "2026-08-02" }] }];
     const storageManager = {
         getFavoriteActressList: vi.fn(async () => actresses),
@@ -54,7 +55,7 @@ function createHarness() {
     dom.window.ImageHoverPreview = ImageHoverPreview;
     const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
     const context = vm.createContext({
-        OwnedPopover, renderTaskStatus, taskStatusView, formatUiDateTime, LifecycleScope, dismissActiveTooltip, PRODUCT_NAMES, isMissingActorSource, console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math, FEATURE_ICONS, getIcon,
+        OwnedPopover, CUP_FILTER_OPTIONS, cleanActressName, createBodyFilterMatcher, formatBodyMeasurements, hasActiveBodyFilter, normalizeBodyFilter, readStoredActressMeasurements, renderTaskStatus, taskStatusView, formatUiDateTime, LifecycleScope, dismissActiveTooltip, PRODUCT_NAMES, isMissingActorSource, console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math, FEATURE_ICONS, getIcon,
         window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
         $, BasePlugin, ImageHoverPreview, storageManager, stateService, renderStateView,
         JHS_Z_INDEX: { dialogHoverPreview: 999999992 },
@@ -512,6 +513,55 @@ function installOwnedDialogs(harness) {
 }
 
 describe("new video interaction ownership", () => {
+    it("closes the stale editor after a rebind so untouched fields cannot overwrite the merge", async () => {
+        const harness = createHarness(), { plugin, actresses, stateService, dom } = harness, { dialogs } = installOwnedDialogs(harness);
+        plugin.notifyCommittedNewVideoChange = vi.fn(async () => {});
+        await plugin.editActress(actresses[0]);
+        expect(plugin.editor).not.toBeNull();
+        stateService.rebindFavoriteActress.mockResolvedValueOnce({ ok: true, merged: true, actress: { ...actresses[0], starId: "alice-2", name: "Merged" } });
+
+        await plugin.applyActorRebind(actresses[0], { starId: "alice-2", name: "Merged" });
+
+        expect(plugin.editor).toBeNull();
+        expect(dialogs.size).toBe(0);
+        dom.window.close();
+    });
+
+    it("closes rebind dialogs when the workspace is cleaned up", async () => {
+        const harness = createHarness(), { plugin, actresses, dom } = harness, { dialogs } = installOwnedDialogs(harness);
+        const rebindId = await plugin.openRebindActorDialog(actresses[0]);
+        expect(dialogs.has(rebindId)).toBe(true);
+
+        plugin.cleanupNewVideoWorkspace();
+
+        expect(dialogs.has(rebindId)).toBe(false);
+        dom.window.close();
+    });
+
+    it("omits stale actressProfile when saving editActress and closes editor-owned rebind dialogs on editor close", async () => {
+        const harness = createHarness(), { plugin, actresses, storageManager, dom } = harness, { dialogs, dialog } = installOwnedDialogs(harness);
+        storageManager.updateFavoriteActress = vi.fn(async () => true);
+        plugin.events.emit = vi.fn(async () => {});
+        const recordWithProfile = {
+            ...actresses[0],
+            actressProfile: { url: "https://ja.wikipedia.org/wiki/Alice", height: "160cm", braSize: "D", matchedName: "Alice" },
+        };
+        await plugin.editActress(recordWithProfile);
+        plugin.editor.root.find("#edit-remark").val("updated note");
+        await dialog.open.mock.calls[0][0].btn2(plugin.editor.id);
+        expect(storageManager.updateFavoriteActress).toHaveBeenCalledOnce();
+        const savedPayload = storageManager.updateFavoriteActress.mock.calls[0][0];
+        expect(Object.hasOwn(savedPayload, "actressProfile")).toBe(false);
+        expect(savedPayload.remark).toBe("updated note");
+
+        await plugin.editActress({ ...actresses[0], actressProfile: null });
+        plugin.editor.root.find("#rebind-actor-id-btn").trigger("click");
+        await vi.waitFor(() => expect(dialogs.size).toBe(2));
+        plugin.closeActressEditor();
+        expect(dialogs.size).toBe(0);
+        dom.window.close();
+    });
+
     it("uses labels for all seven editor fields and opens one editor for a repeated actor action", async () => {
         const harness = createHarness(), { plugin, actresses, dom } = harness, { dialog } = installOwnedDialogs(harness);
         await plugin.editActress(actresses[0]); await plugin.editActress(actresses[0]);
@@ -713,12 +763,202 @@ describe("new video interaction ownership", () => {
         plugin.nvCarMapCache = new Map();
         plugin.renderActressCards();
         expect($("#actress-card-container .jhs-badge--danger").text()).toContain("来源不可用");
+        plugin.document.head.append($("<meta name='csrf-token' content='synthetic-token'>")[0]);
         runtimeServices.actressInfo.uncollect.mockRejectedValueOnce({ status: 404, message: "HTTP 404" });
         plugin.utils.q = vi.fn((_ev, _msg, onConfirm) => onConfirm());
         $("#actress-card-container .btn-delete-actress").trigger("click");
         await vi.waitFor(() => expect(stateService.removeFavoriteActress).toHaveBeenCalledWith("alice"));
         expect(plugin.notifications.ok).toHaveBeenCalledWith("站方演员页已不存在，已清理本地收藏");
 
+        dialog.close(plugin.nvDialogId); expect(dialogs.size).toBe(0); dom.window.close();
+    });
+
+    it("filters both actress and list views by body measurements, falls back to alias map when starIds missing, renders body row safely, and cancels debounce on cleanup", async () => {
+        const harness = createHarness(), { plugin, $, actresses, dom, context } = harness;
+        context.renderStateView = (container, options) => {
+            container.empty().append($("<div></div>").text(options.title || ""));
+            if (options.actionLabel && options.onAction) {
+                container.append($('<button type="button"></button>').text(options.actionLabel).on("click", options.onAction));
+            }
+            return container;
+        };
+        actresses[0].actressProfileVerifiedUrl = "https://ja.wikipedia.org/wiki/Alice";
+        actresses[0].actressProfile = {
+            url: "https://ja.wikipedia.org/wiki/Alice",
+            birthday: "1996年1月1日", age: "30岁", height: "162cm", weight: "",
+            threeSizeText: "88 - 58 - 86", braSize: "E", matchedName: "Alice",
+        };
+        actresses.push({
+            name: "Bella", allName: ["Bella Alias"], starId: "bella", actressType: "uncensored",
+            actressProfileVerifiedUrl: "https://ja.wikipedia.org/wiki/Bella",
+            actressProfile: {
+                url: "https://ja.wikipedia.org/wiki/Bella",
+                birthday: "2000年1月1日", age: "26岁", height: "152cm", weight: "",
+                threeSizeText: "95 - 58 - 88", braSize: "I", matchedName: "Bella",
+            },
+            newVideoList: [{ carNum: "BEL-001", title: "Bella Work", publishTime: "2026-08-03" }],
+        });
+        plugin.hydrateVisibleCovers = vi.fn();
+        plugin.nvWorkspaceRoot = $(".newVideoToolBox");
+        const cancelSpy = vi.fn();
+        plugin.utils.debounce = (fn) => Object.assign(fn, { cancel: cancelSpy });
+        plugin.bindClick();
+        await plugin.reloadNewVideoWorkspaceData();
+
+        // List view: height >= 160 matches Alice's 2 works
+        $("#nvHeightMin").val("160").trigger("input");
+        await vi.waitFor(() => expect($("#nv-grid .nv-card")).toHaveLength(2));
+        expect($("#nvBodyReset").prop("hidden")).toBe(false);
+
+        // List view: alias fallback when item.starIds missing
+        const legacyItem = { carNum: "LEGACY-1", actressName: "Bella Alias", actresses: ["Bella Alias"], starIds: [], flags: {}, decisionState: "pending", categories: ["uncensored"], publishTime: "2026-08-04" };
+        plugin.nvAllItemsMap.set("LEGACY-1", legacyItem);
+        $("#nvHeightMin").val("");
+        $(".jhs-nv-cup-checkbox[value='H+']").prop("checked", true).trigger("change");
+        const flat = await plugin.getNewVideoFlatList();
+        expect(flat.map(item => item.carNum)).toEqual(["LEGACY-1", "BEL-001"]);
+
+        // Empty state + reset button clears body filter
+        $("#nvAgeMax").val("18").trigger("input");
+        await vi.waitFor(() => expect($("#new-video-list-container").text()).toContain("暂无符合筛选的影片"));
+        $("#new-video-list-container button").trigger("click");
+        expect($(".jhs-nv-cup-checkbox:checked")).toHaveLength(0);
+        expect($("#nvAgeMax").val()).toBe("");
+        await vi.waitFor(() => expect($("#nv-grid .nv-card")).toHaveLength(4));
+
+        // Actress view: displays 身材 row safely & filters by cup/height
+        plugin.setViewMode("actress");
+        await vi.waitFor(() => expect($(".actress-card")).toHaveLength(2));
+        expect($(".actress-card[data-starId='alice']").text()).toContain("162cm · E杯 · 88 - 58 - 86 · 30岁");
+        $("#nvHeightMin").val("160").trigger("input");
+        await vi.waitFor(() => expect($(".actress-card")).toHaveLength(1));
+        $("#nvBodyReset").trigger("click");
+        await vi.waitFor(() => expect($(".actress-card")).toHaveLength(2));
+
+        // Cleanup cancels body filter debouncer & clears pre-parsed caches
+        plugin.cleanupNewVideoWorkspace();
+        expect(cancelSpy).toHaveBeenCalled();
+        expect(plugin.nvMeasurementsByStarId.size).toBe(0);
+        expect(plugin.nvMeasurementsByName.size).toBe(0);
+        dom.window.close();
+    });
+
+    it("exits uncollect early with error notice when csrfToken is missing", async () => {
+        const { plugin, $, actresses, runtimeServices, dom } = createHarness();
+        plugin._viewMode = "actress";
+        plugin.nvJavDbUrl = "https://javdb.com";
+        plugin.nvActressesCache = actresses;
+        plugin.getPendingNewVideoCount = () => 0;
+        plugin.renderPagination = vi.fn();
+        plugin.utils.q = vi.fn((_ev, _msg, onConfirm) => onConfirm());
+        await plugin.renderActressCards();
+        await $(".btn-delete-actress").first().trigger("click");
+        await vi.waitFor(() => expect(plugin.notifications.error).toHaveBeenCalledWith("缺少站方请求令牌，请刷新 JavDB 页面后重试"));
+        expect(runtimeServices.actressInfo.uncollect).not.toHaveBeenCalled();
+        dom.window.close();
+    });
+
+    it("resolves unavailable actor retry while initial workspace load is pending and preserves task panel", async () => {
+        const harness = createHarness(), { plugin, stateService, dom, $ } = harness, { dialogs, dialog } = installOwnedDialogs(harness);
+        const clear = vi.fn();
+        plugin.runtimeServices.sourceHealth = { list: vi.fn(() => [{ starId: "alice", name: "Alice", retryAt: 1794800000000 }]), clear };
+        const checkOneNewVideo = vi.fn(async actress => { clear("https://javdb.com", actress.starId); });
+        harness.beans.TaskPlugin.singleTaskKey = "jhs-single-task";
+        harness.beans.TaskPlugin.checkOneNewVideo = checkOneNewVideo;
+        Object.defineProperty(dom.window.navigator, "locks", {
+            configurable: true,
+            value: { request: (_name, _opts, fn) => Promise.resolve(fn({ name: _name })) },
+        });
+        let releaseLoad;
+        stateService.getCarMap.mockImplementationOnce(() => new Promise(resolve => { releaseLoad = () => resolve(new Map()); }));
+        $("body > .newVideoToolBox").remove();
+        plugin.getTaskButtonTips = vi.fn(async () => ({ favorite: "", newVideo: "" }));
+        const renderStatusesSpy = vi.spyOn(plugin, "renderTaskStatuses");
+
+        await plugin.openDialog();
+        expect(plugin.nvWorkspaceLoading).toBe(true);
+        expect(renderStatusesSpy).toHaveBeenCalledTimes(1);
+        const initialButton = plugin.nvWorkspaceRoot.find('[data-source-retry="alice"]')[0];
+        expect(initialButton).toBeTruthy();
+
+        // Retry clicked before loadWorkspace finishes should still resolve Alice from StateService
+        $(initialButton).trigger("click");
+        await vi.waitFor(() => expect(checkOneNewVideo).toHaveBeenCalledWith(expect.objectContaining({ starId: "alice" })));
+
+        releaseLoad();
+        await vi.waitFor(() => expect(plugin.nvWorkspaceLoading).toBe(false));
+        // Initial load completion skips redundant task-status re-render (called once on open + once by runManualTask finally)
+        expect(renderStatusesSpy).toHaveBeenCalledTimes(2);
+        dialog.close(plugin.nvDialogId); expect(dialogs.size).toBe(0); dom.window.close();
+    });
+
+    it("handles resolveActress failures cleanly and guards duplicate retry clicks while pending", async () => {
+        const harness = createHarness(), { plugin, stateService, dom, $ } = harness, { dialogs, dialog } = installOwnedDialogs(harness);
+        plugin.runtimeServices.sourceHealth = { list: vi.fn(() => [{ starId: "alice", name: "Alice", retryAt: 1794800000000 }]), clear: vi.fn() };
+        const checkOneNewVideo = vi.fn(async () => {});
+        harness.beans.TaskPlugin.singleTaskKey = "jhs-single-task";
+        harness.beans.TaskPlugin.checkOneNewVideo = checkOneNewVideo;
+        Object.defineProperty(dom.window.navigator, "locks", {
+            configurable: true,
+            value: { request: (_name, _opts, fn) => Promise.resolve(fn({ name: _name })) },
+        });
+        let releaseLoad;
+        stateService.getCarMap.mockImplementationOnce(() => new Promise(resolve => { releaseLoad = () => resolve(new Map()); }));
+        $("body > .newVideoToolBox").remove();
+        plugin.getTaskButtonTips = vi.fn(async () => ({ favorite: "", newVideo: "" }));
+
+        await plugin.openDialog();
+        stateService.getFavoriteActressList
+            .mockRejectedValueOnce(new Error("idb read fail on rebind"))
+            .mockRejectedValueOnce(new Error("idb read fail on retry"));
+
+        $(plugin.nvWorkspaceRoot.find('[data-source-rebind="alice"]')[0]).trigger("click");
+        await vi.waitFor(() => expect(plugin.notifications.error).toHaveBeenCalledWith("读取演员信息失败，请重试"));
+        expect(plugin.logger.error).toHaveBeenCalledWith("读取收藏演员失败", expect.any(Error));
+
+        plugin.notifications.error.mockClear();
+        plugin.logger.error.mockClear();
+        const retryBtn = $(plugin.nvWorkspaceRoot.find('[data-source-retry="alice"]')[0]);
+        retryBtn.trigger("click");
+        await vi.waitFor(() => expect(plugin.notifications.error).toHaveBeenCalledWith("读取演员信息失败，请重试"));
+        expect(plugin.logger.error).toHaveBeenCalledWith("读取收藏演员失败", expect.any(Error));
+
+        // Double click while first resolveActress is still pending executes checkOneNewVideo only once
+        let releaseFirst;
+        stateService.getFavoriteActressList
+            .mockImplementationOnce(() => new Promise(resolve => { releaseFirst = () => resolve([{ starId: "alice", name: "Alice" }]); }))
+            .mockResolvedValueOnce([{ starId: "alice", name: "Alice" }]);
+        let releaseTask;
+        checkOneNewVideo.mockImplementationOnce(() => new Promise(resolve => { releaseTask = resolve; }));
+        retryBtn.trigger("click");
+        retryBtn.trigger("click");
+        releaseFirst();
+        await vi.waitFor(() => expect(checkOneNewVideo).toHaveBeenCalledTimes(1));
+        releaseTask();
+        await vi.waitFor(() => expect(retryBtn.attr("aria-busy")).toBeUndefined());
+
+        // Double click on rebind while resolveActress is pending queries storage once and opens a single rebind dialog
+        let releaseRebind;
+        stateService.getFavoriteActressList.mockClear();
+        stateService.getFavoriteActressList
+            .mockImplementationOnce(() => new Promise(resolve => { releaseRebind = () => resolve([{ starId: "alice", name: "Alice" }]); }))
+            .mockResolvedValueOnce([{ starId: "alice", name: "Alice" }]);
+        const rebindBtn = $(plugin.nvWorkspaceRoot.find('[data-source-rebind="alice"]')[0]);
+        rebindBtn.trigger("click");
+        rebindBtn.trigger("click");
+        expect(rebindBtn.attr("aria-busy")).toBe("true");
+        expect(rebindBtn.prop("disabled")).toBe(true);
+        releaseRebind();
+        await vi.waitFor(() => expect(dialogs.size).toBe(2));
+        expect(stateService.getFavoriteActressList).toHaveBeenCalledTimes(1);
+        expect(rebindBtn.attr("aria-busy")).toBeUndefined();
+        expect(rebindBtn.prop("disabled")).toBe(false);
+        const rebindDialogId = [...dialogs.keys()][1];
+        dialog.close(rebindDialogId);
+        await vi.waitFor(() => expect(dialogs.size).toBe(1));
+
+        releaseLoad();
+        await vi.waitFor(() => expect(plugin.nvWorkspaceLoading).toBe(false));
         dialog.close(plugin.nvDialogId); expect(dialogs.size).toBe(0); dom.window.close();
     });
 });

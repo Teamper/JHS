@@ -1,5 +1,6 @@
 // @ts-check
 
+import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { OwnedPopover } from "../../core/owned-popover.js";
 import { _, d, g, h } from "../../core/constants.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
@@ -346,8 +347,14 @@ export class ListActionsController {
     supportsLiveSorting() { return this.sortController?.supportsLiveSorting?.() ?? false; }
 
     getActorName() {
+        const profile = typeof this.hostAdapter?.readActorProfile === "function"
+            ? this.hostAdapter.readActorProfile(this.document, this.hostAdapter.location?.href)
+            : null;
+        if (profile?.name) return profile.name;
         const selector = this.hostAdapter.site === "javdb" ? ".actor-section-name" : ".avatar-box .photo-info .pb10";
-        return this.$(selector).text().trim().split(",")[0].replace("(無碼)", "");
+        const element = this.document?.querySelector?.(selector) ?? this.$(selector)[0] ?? null;
+        const raw = element ? readCleanActorElementText(element) : this.$(selector).text();
+        return cleanActressName(String(raw || "").split(/[,，、]/u)[0] ?? "");
     }
 
     /** @returns {{kind: "actor" | "search", displayName: string, recordName: string}} */

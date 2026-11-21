@@ -227,4 +227,14 @@ describe("native list actions controller", () => {
         expect(harness.controller.list.openMovieDetail.mock.calls[0][0][0].id).toBe("first");
         expect(harness.controller.list.openMovieDetail.mock.calls[0][1]).toEqual({ autoplay: true, newTab: false });
     });
+
+    it("resolves clean actor names via hostAdapter.readActorProfile and safe fallback without badges", () => {
+        harness = createHarness({
+            url: "https://javdb.com/actors/a",
+            html: '<div class="main-tabs"></div><div class="actor-section-name">演员甲(無碼)<span class="jhs-badge">收藏</span>, 别名乙</div>',
+        });
+        expect(harness.controller.getActorName()).toBe("演员甲");
+        harness.controller.hostAdapter.readActorProfile = vi.fn(() => ({ starId: "a", name: "宿主解析名", names: ["宿主解析名"] }));
+        expect(harness.controller.getActorName()).toBe("宿主解析名");
+    });
 });

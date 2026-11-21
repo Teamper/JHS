@@ -138,6 +138,56 @@ describe("List Feature auto-page controller", () => {
         scope.dispose();
     });
 
+    it("re-reads cards added to the same list root before judging duplicate pages", async () => {
+        const page2 = `<div class="movie-list">${card("ABC-002", "/v/abc-002").outerHTML}</div><a class="pagination-next" href="/page/3">下一页</a>`;
+        const page3 = `<div class="movie-list">${card("ABC-010", "/v/host-10").outerHTML}${card("ABC-011", "/v/host-11").outerHTML}</div><a class="pagination-next" href="/page/4">下一页</a>`;
+        const { controller, scope, http } = setup("yes", "");
+        http.request.mockImplementationOnce(async () => ({ data: page2 })).mockImplementationOnce(async () => ({ data: page3 }));
+        await controller.mount();
+        await controller.loadNextPage();
+        document.querySelector(".movie-list").insertAdjacentHTML("beforeend", card("ABC-010", "/v/host-10").outerHTML + card("ABC-011", "/v/host-11").outerHTML);
+        await vi.waitFor(() => expect(controller.knownCarNums).toBeNull());
+        await controller.loadNextPage();
+        expect(document.querySelectorAll(".movie-list .item")).toHaveLength(4);
+        expect(controller.nextUrl).toBeNull();
+        scope.dispose();
+    });
+
+    it("reads only the new cards across 25 pages and invalidates when a live card is removed", async () => {
+        const { controller, scope, http } = setup();
+        vi.spyOn(controller, "checkLoad").mockImplementation(() => {});
+        const list = document.querySelector(".movie-list");
+        const pageCards = page => Array.from({ length: 40 }, (_, index) => {
+            const number = `ABC-${1000 + page * 40 + index}`;
+            return card(number, `/v/${number}`).outerHTML;
+        }).join("");
+        list.innerHTML = pageCards(1);
+        let page = 2;
+        http.request.mockImplementation(async () => ({
+            data: `<div class="movie-list">${pageCards(page++)}</div><a class="pagination-next" href="/page/${page}">下一页</a>`,
+        }));
+        const read = vi.spyOn(controller, "readCarNumbers");
+        await controller.mount();
+        await controller.loadNextPage();
+        expect(read.mock.calls.map(([collection]) => collection.length)).toEqual([40, 40]);
+        for (let next = 3; next <= 25; next++) {
+            read.mockClear();
+            await controller.loadNextPage();
+            expect(read.mock.calls.map(([collection]) => collection.length)).toEqual([40]);
+        }
+        expect(list.children).toHaveLength(1000);
+        expect(controller.knownCarNums.size).toBe(1000);
+        list.firstElementChild.remove();
+        await vi.waitFor(() => expect(controller.knownCarNums).toBeNull());
+        const remaining = list.firstElementChild.outerHTML;
+        http.request.mockResolvedValueOnce({
+            data: `<div class="movie-list">${card("ABC-1040", "/v/reappeared").outerHTML}${remaining}</div>`,
+        });
+        await controller.loadNextPage();
+        expect(controller.loadedPage).toBe(26);
+        scope.dispose();
+    });
+
     it("pauses an empty quick filter and lets each manual action load only one page", async () => {
         const pages = [
             `<div class="movie-list">${card("ABC-002", "/v/abc-002").outerHTML}</div><a class="pagination-next" href="/page/3">下一页</a>`,

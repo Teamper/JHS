@@ -110,4 +110,11 @@ describe("List Feature context-menu action", () => {
         controller.dispose();
         expect(scope.snapshot().listeners).toBe(0);
     });
+
+    it("prefers hostAdapter.readActorProfile and strips badges/(無碼) in fallback getActorName", () => {
+        mount({ actorName: '演员甲(無碼)<span class="jhs-badge">收藏</span>, 别名' });
+        expect(controller.getActorName()).toBe("演员甲");
+        controller.hostAdapter.readActorProfile = vi.fn(() => ({ starId: "a", name: "规范演员名", names: ["规范演员名"] }));
+        expect(controller.getActorName()).toBe("规范演员名");
+    });
 });

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { CompatibilityBeanRegistry } from "../src/core/compatibility-bean-registry.js";
+import { isAbortError } from "../src/core/jhs-error.js";
 import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -29,7 +30,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
   const runtimeStorage = { getLocal: vi.fn(() => null), setLocal: vi.fn(), removeLocal: vi.fn() };
   const movie = { externalSiteOrigin: vi.fn(() => "https://javdb.example") };
   const context = vm.createContext({
-    ActorSourceHealth, isMissingActorSource, console,
+    ActorSourceHealth, isMissingActorSource, isAbortError, console,
     URL,
     gmHttp,
     i: (target, key, value) => (target[key] = value),
@@ -212,7 +213,7 @@ describe("blocked network task termination", () => {
     }) };
 
     await expect(task.parsePage(dom, "javdb", "actor-1", "演员", [], new Set())).resolves.toBe(0);
-    expect(updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", lastCheckTime: "2026-08-11 20:00:00", newVideoList: [] });
+    expect(updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", lastCheckTime: "2026-08-11 20:00:00", newVideoList: [] }, { scan: true });
   });
 
   it("rejects a structurally invalid empty page without advancing actress state", async () => {
@@ -237,7 +238,7 @@ describe("blocked network task termination", () => {
     ], "actor", "Actor", [], new Set())).resolves.toBe(0);
     expect(updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
       newVideoList: [expect.objectContaining({ carNum: "A-1" })]
-    }));
+    }), { scan: true });
   });
 
   it("does not count an empty actor scan when the saved actor disappeared", async () => {

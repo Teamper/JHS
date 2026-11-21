@@ -1,9 +1,9 @@
 // @ts-check
 
 import { _ } from "./constants.js";
+import { cleanActressName } from "./actress-measurements.js";
 import { normalizeMovieCarNum } from "./movie-identity.js";
 
-const ACTOR_TAG_SUFFIX_RE = /\(無碼\)/gu;
 const NAME_SPLIT_RE = /[\s,，、/|()（）·・]+/u;
 const HAS_NAME_DELIM_RE = /[\s,，、/|()（）·・]/u;
 const REGEXP_SPECIAL_RE = /[.*+?^${}()|[\]\\]/gu;
@@ -15,7 +15,7 @@ function escapeRegExp(value) {
 
 /** @param {unknown} value */
 function cleanActorAlias(value) {
-    return String(value ?? "").replace(ACTOR_TAG_SUFFIX_RE, "").trim();
+    return cleanActressName(value);
 }
 
 /**

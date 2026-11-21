@@ -1,6 +1,7 @@
 // @ts-check
 import { privacySelectors } from "../../contracts/privacy-targets.js";
 
+import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
 
 /** JavBus 带分页的列表路径前缀（除 /page/N 外的 /<prefix>/<id>/N 形式）。 */
@@ -48,6 +49,39 @@ export class JavBusHostAdapter {
         return [...record.addedNodes,...record.removedNodes].some(node => node.nodeType === 1 && (/** @type {Element} */ (node).matches(selector) || /** @type {Element} */ (node).querySelector(selector)));
     }
     detectRoute() { return this.locateNativeMagnets() ? "detail" : this.locateListRoot() ? "list" : "other"; }
+    /** @param {Document | Element} [root] @param {string} [baseUrl] */
+    readActorProfile(root = this.document, baseUrl = this.location.href) {
+        let starId = null;
+        let isUncensored = false;
+        try {
+            const parsed = new URL(baseUrl, this.location?.href || "https://www.javbus.com");
+            if (parsed.pathname.includes("uncensored")) isUncensored = true;
+            const match = parsed.pathname.match(/\/star\/([^/?#]+)/u);
+            if (match) {
+                try { starId = decodeURIComponent(match[1]); }
+                catch { starId = match[1]; }
+            }
+        } catch {
+            starId = null;
+        }
+        const title = root.querySelector(".avatar-box .photo-info .pb10");
+        const anchorParent = title?.parentElement ?? null;
+        /** @type {string[]} */
+        const names = [];
+        const seen = new Set();
+        if (title) {
+            const titleText = readCleanActorElementText(title);
+            if (/無碼|无码/u.test(titleText)) isUncensored = true;
+            for (const part of titleText.split(/[,，、]/u)) {
+                const cleaned = cleanActressName(part);
+                if (!cleaned || seen.has(cleaned)) continue;
+                seen.add(cleaned);
+                names.push(cleaned);
+            }
+        }
+        if (!names.length) return null;
+        return Object.freeze({ starId: starId || null, name: names[0], names: Object.freeze(names), actressType: isUncensored ? "uncensored" : "censored", anchorParent });
+    }
     readMovieRef() {
         const pathCarNum = this.location.pathname.split("/").filter(Boolean).pop()?.replace(/_\d{4}-\d{2}-\d{2}$/u, "") ?? null;
         const explicit = this.document.querySelector("[data-car-number]");

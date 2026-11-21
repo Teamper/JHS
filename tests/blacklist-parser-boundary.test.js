@@ -72,4 +72,32 @@ describe("blacklist parser boundary", () => {
         expect(getBlacklistSubjectInfo({ site: "javdb", href: dom.window.location.href, document: dom.window.document, jquery: $ })).toMatchObject({ starId: "no-分類 & 名稱", role: "虚拟演员", movieType: "分類 & 名稱", blacklistUrl: "https://javdb.com/tags?tag=14" });
         dom.window.close();
     });
+
+    it("strips injected JHS state containers and badges from JavDB and JavBus actor elements", () => {
+        let { dom, $ } = createPage(
+            '<h2 class="actor-section-name">演员甲, 别名甲<span class="jhs-actress-state-container"><span class="jhs-badge">已收藏</span></span></h2>'
+            + '<div class="section-meta">男優<span class="jhs-badge">已屏蔽</span></div>'
+            + '<div class="section-meta">無碼</div>',
+            "https://javdb.com/actors/actor-a",
+        );
+        expect(getBlacklistSubjectInfo({ site: "javdb", href: dom.window.location.href, document: dom.window.document, jquery: $ })).toMatchObject({
+            starId: "actor-a",
+            name: "演员甲",
+            allName: ["演员甲", "别名甲", "男優", "無碼"],
+            role: "actor",
+            movieType: "uncensored",
+        });
+        dom.window.close();
+
+        ({ dom, $ } = createPage(
+            '<div class="avatar-box"><div class="photo-info"><span class="pb10">演员乙<span class="jhs-actress-state-container"><span class="jhs-badge">已收藏</span></span></span></div></div>',
+            "https://www.javbus.com/star/bus-b",
+        ));
+        expect(getBlacklistSubjectInfo({ site: "javbus", href: dom.window.location.href, document: dom.window.document, jquery: $ })).toMatchObject({
+            starId: "bus-b",
+            name: "演员乙",
+            allName: ["演员乙"],
+        });
+        dom.window.close();
+    });
 });

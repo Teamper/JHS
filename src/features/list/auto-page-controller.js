@@ -46,6 +46,7 @@ export class AutoPageController {
         this.pausedFilter = null;
         /** @type {Element | null} */ this.knownCarContainer = null;
         /** @type {Set<string> | null} */ this.knownCarNums = null;
+        /** @type {WeakSet<Element>} */ this.appendedCards = new WeakSet();
         this.visibilitySnapshot = this.list?.getVisibilitySnapshot?.() ?? null;
         this.mounted = false;
         this.disposed = false;
@@ -103,6 +104,7 @@ export class AutoPageController {
         this.pausedFilter = null;
         /** @type {Element | null} */ this.knownCarContainer = null;
         /** @type {Set<string> | null} */ this.knownCarNums = null;
+        this.appendedCards = new WeakSet();
         this.loader?.remove();
         this.loader = undefined;
     }
@@ -157,7 +159,24 @@ export class AutoPageController {
         scope.listen(this.window, "resize", () => this.invalidatePagePositions());
         scope.listen(container, "load", () => this.invalidatePagePositions(), true);
         if (this.window.MutationObserver) {
-            const observer = new this.window.MutationObserver(() => this.invalidatePagePositions());
+            const itemSelector = selectors.requestDomItemSelector;
+            const containsCard = (/** @type {Element} */ node, /** @type {string} */ selector) =>
+                node.matches(selector) || Boolean(node.querySelector(selector));
+            const observer = new this.window.MutationObserver((/** @type {MutationRecord[]} */ records) => {
+                for (const record of records) {
+                    if (record.type !== "childList" || /** @type {Element} */ (record.target).closest?.(itemSelector)) continue;
+                    for (const node of record.addedNodes) {
+                        if (node.nodeType !== 1) continue;
+                        const element = /** @type {Element} */ (node);
+                        if (!this.appendedCards.delete(element) && containsCard(element, itemSelector)) this.knownCarNums = null;
+                    }
+                    // Removed cards no longer match selectors that include the list ancestor.
+                    if ([...record.removedNodes].some(node => node.nodeType === 1 && containsCard(/** @type {Element} */ (node), ".item"))) {
+                        this.knownCarNums = null;
+                    }
+                }
+                this.invalidatePagePositions();
+            });
             observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
             scope.ownObserver(observer);
         }
@@ -278,10 +297,12 @@ export class AutoPageController {
             const pageUrl = new URL(this.nextUrl, this.window.location.href).href;
             const pageTop = container.getBoundingClientRect().top + this.window.scrollY + container.scrollHeight;
             this.list.replaceCoverImages?.(cards.find(selectors.coverImgSelector).toArray());
+            const addedCards = cards.toArray();
+            for (const card of addedCards) this.appendedCards.add(card);
             this.ui.jquery(container).append(cards);
             for (const carNum of nextCarNums) if (carNum) this.knownCarNums?.add(carNum);
             this.loadedPage++;
-            this.pageItems.push({ page: this.loadedPage, top: pageTop, url: pageUrl, items: cards.toArray() });
+            this.pageItems.push({ page: this.loadedPage, top: pageTop, url: pageUrl, items: addedCards });
             this.invalidatePagePositions();
             this.nextUrl = boundary ? boundary.nextLink?.getAttribute("href") ?? null : page.find(selectors.nextPageSelector).first().attr("href") ?? null;
             if (boundary && this.nextUrl) this.nextUrl = new URL(this.nextUrl, pageUrl).href;

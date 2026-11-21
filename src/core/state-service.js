@@ -292,9 +292,13 @@ export class StateService {
         return this.storage.addFavoriteActressList(actresses);
     }
     /** Keep the existing strict starId deletion semantics under the shared mutation coordinator. @param {unknown} starId */
-    /** Preserve the actress update API; StorageManager enters the shared mutation coordinator. @param {StateRecord} update */
-    async updateFavoriteActress(update) {
-        return this.storage.updateFavoriteActress(update);
+    /** @param {StateRecord} update @param {{scan?: boolean}} [options] */
+    async updateFavoriteActress(update, options) {
+        return options?.scan ? this.storage.updateFavoriteActress(update, options) : this.storage.updateFavoriteActress(update);
+    }
+    /** Atomically update materially changed actress profiles under the actress lock. @param {Array<{starId: string, actressProfile: StateRecord}>} updates */
+    async batchUpdateFavoriteActressProfiles(updates) {
+        return this.storage.batchUpdateFavoriteActressProfiles(updates);
     }
     /** Atomically migrate or merge a favorite actress record onto a new starId under the actress lock. @param {StateRecord} payload */
     async rebindFavoriteActress(payload) {

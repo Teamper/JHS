@@ -7,6 +7,8 @@ import { TaskExecutionService } from "../src/features/discovery/task-execution-s
 import { TaskCompatibilityBean } from "../src/compat/task-compatibility-bean.js";
 import { NewVideoCompatibilityBean } from "../src/compat/new-video-compatibility-bean.js";
 import { NEW_VIDEO_STYLES } from "../src/features/discovery/new-video-styles.js";
+import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { SupplementaryCardsController } from "../src/features/list/supplementary-cards-controller.js";
 import { NewVideoWorkspaceService } from "../src/plugins/new-video/new-video.js";
 
 afterEach(() => {
@@ -101,7 +103,7 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(scanController).toBeDefined();
         await expect(scanController.scanActresses({ baseUrl: "https://javdb.com", concurrency: 2, sleepMs: 0, intervalHours: 12, ruleHours: 8760, force: false, isUnnecessaryCheck: () => false, isNetworkBlocked: () => false, sleep: async () => {} })).resolves.toMatchObject({ actressCount: 0, eligibleCount: 0 });
         expect(await workspaceController.getPendingSummary()).toEqual({ count: 0, decisions: {} });
-        expect(await workspaceController.loadWorkspace()).toEqual({ actresses: [], carMap: expect.any(Map), decisions: {}, items: [], ruleTime: 8760, javDbUrl: "https://javdb.com" });
+        expect(await workspaceController.loadWorkspace()).toEqual({ actresses: [], carMap: expect.any(Map), decisions: {}, items: [], measurementsByStarId: expect.any(Map), ruleTime: 8760, javDbUrl: "https://javdb.com" });
         expect(movie.externalSiteOrigin).toHaveBeenCalledWith("javDbBtn", { checkNewVideo_ruleTime: 8760 });
         expect(plugin.initializeLocalState).toHaveBeenCalledOnce();
         await vi.waitFor(() => expect(plugin.showNewVideoCount).toHaveBeenCalledOnce());
@@ -205,5 +207,143 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(taskService.disposed).toBe(true);
         expect(taskBean.service).toBeNull();
         expect(eventHandlers.has("settings-changed")).toBe(false);
+    });
+
+    it("ignores favorite-profile-backfill events in list compatibility and supplementary cards", async () => {
+        const dom = new JSDOM('<!doctype html><html><body><div class="movie-list"></div></body></html>', { url: "https://javdb.com/" });
+        vi.stubGlobal("window", dom.window);
+        vi.stubGlobal("document", dom.window.document);
+        vi.stubGlobal("MutationObserver", dom.window.MutationObserver);
+        vi.stubGlobal("$", () => ({ off: vi.fn() }));
+        dom.window.isListPage = true;
+        const handlers = new Map();
+        const events = {
+            originId: "origin-1",
+            on: vi.fn((type, handler) => { handlers.set(type, handler); return () => handlers.delete(type); }),
+            emit: vi.fn(async () => {}),
+        };
+        const scope = new LifecycleScope("test:list-ignore-backfill");
+        const service = new ListPageCompatibilityService({
+            runtimeServices: {
+                scope: () => scope,
+                settings: Object.assign(new dom.window.EventTarget(), { snapshot: () => ({ hoverBigImg: "no" }) }),
+                events,
+                host: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) },
+                logger: { debug: vi.fn(), error: vi.fn(), html: vi.fn(), warn: vi.fn() },
+            },
+        });
+        service.requestListRefresh = vi.fn(async () => true);
+        await service.handle({ scope, featureOwnsStartup: true });
+        await handlers.get("new-video-changed")({ reason: "favorite-profile-backfill", carNums: [] });
+        expect(service.requestListRefresh).not.toHaveBeenCalled();
+        await handlers.get("new-video-changed")({ reason: "task-completed", carNums: [] });
+        expect(service.requestListRefresh).toHaveBeenCalledOnce();
+
+        const suppHandlers = new Map();
+        const root = dom.window.document.querySelector(".movie-list");
+        const supp = new SupplementaryCardsController({
+            owner: {
+                scope,
+                hostAdapter: { locateCardEnhancementRoots: () => [root], getListSelectors: () => ({ boxSelector: ".movie-list" }), getLiveListSelectors: () => ({ boxSelector: ".movie-list" }) },
+                boundListRoot: root,
+                readFilterSources: async () => ({ settings: {} }),
+                readCardIdentity: () => null,
+                events: { on: (type, fn) => { suppHandlers.set(type, fn); return () => suppHandlers.delete(type); } },
+                coverImageController: { replace: vi.fn() },
+                logger: { error: vi.fn() },
+                legacyPlugin: {},
+            },
+            ui: {}, notifications: {}, diagnostics: {},
+        });
+        await supp.start();
+        supp.refreshQueue.request = vi.fn(async () => true);
+        suppHandlers.get("new-video-changed")({ reason: "favorite-profile-backfill", carNums: [] });
+        expect(supp.refreshQueue.request).not.toHaveBeenCalled();
+        suppHandlers.get("new-video-changed")({ reason: "task-completed", carNums: [] });
+        expect(supp.refreshQueue.request).toHaveBeenCalledOnce();
+        scope.dispose();
+        dom.window.close();
+    });
+
+    it("gates backfillFavoriteProfiles in TaskExecutionService.doTask, requires JavDB login for favoriteActress, and classifies AbortError as blocked", async () => {
+        const msgEl = { text: vi.fn() };
+        const events = { emit: vi.fn(async () => {}) };
+        let settingValues = { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" };
+        let loggedIn = false;
+        const pageWindow = {
+            location: { href: "https://javdb.com/" },
+            isListPage: true,
+            navigator: { locks: { request: vi.fn(async (_k, _opts, fn) => fn({})) } },
+        };
+        const taskService = new TaskExecutionService({
+            runtimeServices: {
+                storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
+                movie: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") },
+                events,
+            },
+            resolveDependency: () => null,
+            legacyStorage: { getSetting: vi.fn(async () => settingValues) },
+            utilities: { getNowStr: () => "2026-11-18" },
+            logger: { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() },
+            jquery: vi.fn((selector) => selector === "#checkNewVideoMsg" ? msgEl : { length: loggedIn && selector === 'a[href*="/users/profile"]' ? 1 : 0 }),
+            window: pageWindow,
+            notifications: { error: vi.fn() },
+        });
+        const backfill = vi.fn(async ({ onProgress }) => {
+            onProgress?.({ processed: 1, total: 1 });
+            return { total: 1, updated: 0, unchanged: 1, failed: 0, rateLimited: 0 };
+        });
+        taskService.attachFeatureNewVideoScanController({ backfillFavoriteProfiles: backfill });
+
+        expect(taskService.isNetworkBlocked(new DOMException("Scan disposed", "AbortError"))).toBe(true);
+
+        // Both tasks disabled -> skipped
+        await taskService.doTask();
+        expect(backfill).not.toHaveBeenCalled();
+
+        // Only favoriteActress enabled while logged out -> skipped (does not spam every page load)
+        settingValues = { enableCheckBlacklist: "no", enableCheckFavoriteActress: "yes", enableCheckNewVideo: "no" };
+        await taskService.invalidateConfig();
+        await taskService.doTask();
+        expect(backfill).not.toHaveBeenCalled();
+
+        // favoriteActress enabled while logged in -> runs backfill, no event when updated=0
+        loggedIn = true;
+        await taskService.doTask();
+        expect(backfill).toHaveBeenCalledTimes(1);
+        expect(events.emit).not.toHaveBeenCalledWith("new-video-changed", expect.anything());
+        expect(msgEl.text).toHaveBeenCalledWith("演员资料补齐：更新 0，未变 1，失败 0");
+
+        // newVideo enabled (even logged out) -> runs backfill and emits new-video-changed when updated > 0
+        loggedIn = false;
+        backfill.mockResolvedValueOnce({ total: 1, updated: 1, unchanged: 0, failed: 0, rateLimited: 0 });
+        settingValues = { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "yes" };
+        await taskService.invalidateConfig();
+        await taskService.doTask();
+        expect(backfill).toHaveBeenCalledTimes(2);
+        expect(events.emit).toHaveBeenCalledWith("new-video-changed", { reason: "favorite-profile-backfill", carNums: [] });
+        expect(pageWindow.navigator.locks.request).toHaveBeenCalledWith(taskService.profileBackfillLockKey, { ifAvailable: true }, expect.any(Function));
+
+        // When neither favoriteActress nor newVideo is due, doTask skips backfillFavoriteProfiles even when logged in
+        const futureNext = String(Date.now() + 3600_000);
+        const scheduledStorage = { getLocal: vi.fn((key) => key.endsWith("_next") ? futureNext : null), setLocal: vi.fn() };
+        const scheduledService = new TaskExecutionService({
+            runtimeServices: {
+                storage: scheduledStorage,
+                movie: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") },
+                events,
+            },
+            resolveDependency: () => null,
+            legacyStorage: { getSetting: vi.fn(async () => ({ enableCheckBlacklist: "no", enableCheckFavoriteActress: "yes", enableCheckNewVideo: "yes" })) },
+            utilities: { getNowStr: () => "2026-11-18" },
+            logger: { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() },
+            jquery: vi.fn((selector) => ({ text: vi.fn(), length: selector === 'a[href*="/users/profile"]' ? 1 : 0 })),
+            window: pageWindow,
+            notifications: { error: vi.fn() },
+        });
+        const skippedBackfill = vi.fn();
+        scheduledService.attachFeatureNewVideoScanController({ backfillFavoriteProfiles: skippedBackfill });
+        await scheduledService.doTask();
+        expect(skippedBackfill).not.toHaveBeenCalled();
     });
 });

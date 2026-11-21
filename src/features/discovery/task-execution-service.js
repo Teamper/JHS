@@ -2,6 +2,7 @@
 
 import { ActorSourceHealth, isMissingActorSource } from "./actor-source-health.js";
 import { I, T, _, escapeHtml, l, normalizeCarNum } from "../../core/constants.js";
+import { isAbortError } from "../../core/jhs-error.js";
 import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
@@ -33,6 +34,7 @@ export class TaskExecutionService {
         this.notifications = options.notifications;
         this.storageQueue = options.storageQueue ?? new StorageQueue();
         this.singleTaskKey = "checkNewActressActorFilterCar";
+        this.profileBackfillLockKey = "jhsBackfillActressProfiles";
         /** @type {any} */ this.taskConfig = null;
         this.lastCheckFavoriteActressTimeKey = "jhs_time_checkFavoriteActress";
         this.lastCheckBlacklistTimeKey = "jhs_time_checkBlacklist";
@@ -60,6 +62,8 @@ export class TaskExecutionService {
     }
     /** @param {string} name */
     getOptionalDependency(name) { return this.resolveDependency(name) ?? null; }
+    /** Read the host list-page flag without assuming it exists. */
+    getHostListPageFlag() { return /** @type {{ isListPage?: boolean }} */ (this.window).isListPage; }
     /** @param {string} [site] */
     getSelector(site = detectSite(this.window?.location).site) {
         const siteName = site === I ? "javbus" : site === T ? "javdb" : site;
@@ -102,7 +106,7 @@ export class TaskExecutionService {
     }
     /** @param {any} e */
     isNetworkBlocked(e) {
-        return [ "CF_BLOCKED", "CIRCUIT_OPEN", "ABORTED" ].includes(e?.code) || !0 === e?._cfBlocked || !0 === e?._circuitBroken;
+        return isAbortError(e) || [ "CF_BLOCKED", "CIRCUIT_OPEN", "ABORTED" ].includes(e?.code) || !0 === e?._cfBlocked || !0 === e?._circuitBroken;
     }
     /** 通过统一 HttpService 抓取当前配置宿主的 HTML。 */
     /** @param {string} url @param {string} site */
@@ -168,7 +172,7 @@ export class TaskExecutionService {
         if (this.activeTasks.has(name)) status = "running";
         else if (state.pending && now < nextAt) status = "pending";
         else if (null == storedNext || now >= nextAt) status = "due";
-        return { name, ready: this.window.isListPage !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, unavailableCount: name === "newVideo" && this.javDbUrl ? this.sourceHealth.list(this.javDbUrl).length : 0, pendingUntil: state.pending ? nextAt : null };
+        return { name, ready: this.getHostListPageFlag() !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, unavailableCount: name === "newVideo" && this.javDbUrl ? this.sourceHealth.list(this.javDbUrl).length : 0, pendingUntil: state.pending ? nextAt : null };
     }
     /** @param {string} name @param {string} phase */
     async emitTaskStatus(name, phase) {
@@ -255,22 +259,37 @@ export class TaskExecutionService {
         })), this.configRefreshPromise;
     }
     async doTask() {
-        if (!this.window.isListPage) return;
+        if (!this.getHostListPageFlag()) return;
         await this.loadConfig(), this.javDbUrl = await this.getConfiguredSiteOrigin("javDbBtn");
-        return this.window.navigator.locks.request(this.singleTaskKey, {
+        let allowProfileBackfill = !1;
+        await this.window.navigator.locks.request(this.singleTaskKey, {
             ifAvailable: !0
         }, (async e => {
             if (e) {
-                if (this.window.isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.runBackgroundTask("黑名单整批检测", (() => this.checkBlacklist())) : this.logger.warn("自动检测屏蔽黑名单-禁用"),
+                if (this.getHostListPageFlag() && (this.taskConfig.enableCheckBlacklist === _ ? await this.runBackgroundTask("黑名单整批检测", (() => this.checkBlacklist())) : this.logger.warn("自动检测屏蔽黑名单-禁用"),
                 !l)) {
+                    const loggedInJavDb = this.jquery('a[href*="/users/profile"]').length > 0;
+                    const favoriteDue = this.taskConfig.enableCheckFavoriteActress === _ && loggedInJavDb && await this.shouldStartTask("favoriteActress");
+                    const newVideoDue = this.taskConfig.enableCheckNewVideo === _ && await this.shouldStartTask("newVideo");
                     if (this.taskConfig.enableCheckFavoriteActress === _) {
-                        this.jquery('a[href*="/users/profile"]').length > 0 ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : this.logger.debug("未登录 JavDB，跳过自动同步演员");
+                        loggedInJavDb ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : this.logger.debug("未登录 JavDB，跳过自动同步演员");
                     } else this.logger.warn("自动同步已收藏的演员-禁用");
                     this.taskConfig.enableCheckNewVideo === _ ? await this.runBackgroundTask("新作品整批检测", (() => this.checkNewVideo())) : this.logger.warn("自动检测已收藏演员的最新作品-禁用");
+                    allowProfileBackfill = favoriteDue || newVideoDue;
                 }
             } else this.logger.debug("争夺任务锁失败, 跳过执行");
         })).catch((e => {
             this.isNetworkBlocked(e) ? this.logger.warn(`后台检测已停止: ${e.message}`) : this.logger.error("锁任务出现错误:", e);
+        }));
+        if (!allowProfileBackfill || this.disposed || !this.getHostListPageFlag()) return;
+        return this.window.navigator.locks.request(this.profileBackfillLockKey, {
+            ifAvailable: !0
+        }, (async lock => {
+            if (lock && !this.disposed && this.getHostListPageFlag()) {
+                await this.runBackgroundTask("演员身材资料补齐", (() => this.backfillFavoriteActressProfiles()));
+            }
+        })).catch((e => {
+            this.isNetworkBlocked(e) ? this.logger.warn(`演员身材资料补齐已停止: ${e.message}`) : this.logger.error("演员身材资料补齐出现错误:", e);
         }));
     }
     async loadConfig() {
@@ -624,7 +643,7 @@ export class TaskExecutionService {
             starId: t,
             lastCheckTime: this.utils.getNowStr(),
             newVideoList: []
-        }), 0;
+        }, { scan: true }), 0;
         const movies = this.readCompletePageMovies([...s]);
         let c = [];
         const publishTimes = [];
@@ -661,7 +680,7 @@ export class TaskExecutionService {
             lastCheckTime: this.utils.getNowStr(),
             newVideoList: p,
             lastPublishTime: d
-        });
+        }, { scan: true });
         return fresh.length;
     }
     /** @param {TaskRecord[]} items @param {string} starId @param {string} name @param {string[]} titleKeywords @param {Set<string>} blacklistSet */
@@ -669,7 +688,7 @@ export class TaskExecutionService {
         if (this.featureNewVideoScanController) return this.featureNewVideoScanController.parseActorMovies(items, starId, name, titleKeywords, blacklistSet);
         assertCompleteMovieIdentities(items);
         if (!items.length) {
-            const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: [] });
+            const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: [] }, { scan: true });
             if (saved === false) throw new Error("演员记录已不存在");
             return 0;
         }
@@ -681,7 +700,7 @@ export class TaskExecutionService {
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
         const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await this.legacyStorage.getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, freshItems = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum)), fresh = freshItems.filter((/** @type {TaskRecord} */ item) => decisions[item.carNum]?.action !== "dismissed");
-        const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: freshItems, lastPublishTime: latestPublishTime });
+        const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: freshItems, lastPublishTime: latestPublishTime }, { scan: true });
         if (saved === false) throw new Error("演员记录已不存在");
         if (fresh.length > 0) {
             try { this.logger.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${fresh.length}部</span>`); }
@@ -722,5 +741,24 @@ export class TaskExecutionService {
         catch (error) { this.reportCompletedNoticeFailure("单个演员新作品检测", error); }
         try { await this.emitNewVideoChanged("single-actress-check"); }
         catch (error) { this.reportCompletedNoticeFailure("单个演员新作品检测", error); }
+    }
+    async backfillFavoriteActressProfiles() {
+        const backfill = this.featureNewVideoScanController?.backfillFavoriteProfiles;
+        if (typeof backfill !== "function") return null;
+        const summary = await backfill.call(this.featureNewVideoScanController, {
+            onProgress: (/** @type {{ processed: number, total: number }} */ { processed, total }) => {
+                this.jquery("#checkNewVideoMsg").text(`正在补齐演员资料 (${processed}/${total})…`);
+            },
+        });
+        if (summary?.total > 0) {
+            this.jquery("#checkNewVideoMsg").text(
+                `演员资料补齐：更新 ${summary.updated}，未变 ${summary.unchanged}，失败 ${summary.failed}${summary.rateLimited ? `，限流 ${summary.rateLimited}` : ""}`
+            );
+        }
+        if (summary?.updated > 0) {
+            try { await this.emitNewVideoChanged("favorite-profile-backfill"); }
+            catch (error) { this.reportCompletedNoticeFailure("演员身材资料补齐", error); }
+        }
+        return summary;
     }
 }

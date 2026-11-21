@@ -7,7 +7,7 @@ import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function createController({ html, url, setting = "yes", lookup = vi.fn(async () => null), profileUrl = vi.fn(() => "https://profiles.example/actor") }) {
+function createController({ html, url, setting = "yes", lookup = vi.fn(async () => null), lookupAny = undefined, profileUrl = vi.fn(() => "https://profiles.example/actor"), state = undefined }) {
     document.body.innerHTML = html;
     if (typeof globalThis.requestIdleCallback !== "function") vi.stubGlobal("requestIdleCallback", vi.fn(() => 1));
     if (typeof globalThis.cancelIdleCallback !== "function") vi.stubGlobal("cancelIdleCallback", vi.fn());
@@ -15,10 +15,10 @@ function createController({ html, url, setting = "yes", lookup = vi.fn(async () 
     settings.value = { enableLoadActressInfo: setting };
     settings.snapshot = () => settings.value;
     const scope = new LifecycleScope("identity.actress-info");
-    const service = { lookup, profileUrl };
+    const service = lookupAny ? { lookup, lookupAny, profileUrl } : { lookup, profileUrl };
     const diagnostics = { recordError: vi.fn() };
-    const controller = new ActressInfoController({ document, location: new URL(url), hostAdapter: new JavDbHostAdapter(document, new URL(url)), service, settings, scope, diagnostics });
-    return { controller, scope, settings, service, diagnostics, lookup, profileUrl };
+    const controller = new ActressInfoController({ document, location: new URL(url), hostAdapter: new JavDbHostAdapter(document, new URL(url)), service, settings, state, scope, diagnostics });
+    return { controller, scope, settings, service, diagnostics, lookup, lookupAny, profileUrl };
 }
 
 function changeSetting(settings, value) {
@@ -105,5 +105,69 @@ describe("Actress info Feature", () => {
         expect(loaded.lookup).not.toHaveBeenCalled();
         loaded.scope.dispose();
         expect(loaded.controller.mountScope).toBeNull();
+    });
+
+    it("prefers stored favorite actressProfile before querying lookupAny and rejects unsafe URLs", async () => {
+        const lookupAny = vi.fn(async () => null);
+        const state = {
+            getFavoriteActressList: vi.fn(async () => [{
+                starId: "a1",
+                name: "Stored Fav",
+                actressProfileVerifiedUrl: "https://ja.wikipedia.org/wiki/Stored_Fav",
+                actressProfile: {
+                    url: "https://ja.wikipedia.org/wiki/Stored_Fav",
+                    birthday: "1995年1月2日",
+                    age: "31岁",
+                    height: "162cm",
+                    weight: "46kg",
+                    threeSizeText: "85 - 58 - 86",
+                    braSize: "D",
+                    matchedName: "Stored Fav",
+                },
+            }]),
+            getBlacklist: vi.fn(async () => []),
+        };
+        const loaded = createController({
+            html: '<div class="panel-block"><a class="actor-female" href="/actors/a1">DOM Name</a></div><div id="actor-heading"><strong>演员</strong></div>',
+            url: "https://javdb.com/v/stored",
+            lookupAny,
+            state,
+        });
+        await loaded.controller.mount();
+        expect(lookupAny).not.toHaveBeenCalled();
+        const link = document.querySelector("#actor-heading + .actress-info a");
+        expect(link?.getAttribute("href")).toBe("https://ja.wikipedia.org/wiki/Stored_Fav");
+        expect(link?.textContent).toContain("162cm");
+        loaded.controller.dispose();
+    });
+
+    it("queries lookupAny in [favorite, dom, blacklist] order, strips actor-page badges, and filters abort/not-found noise logs", async () => {
+        const clogError = vi.fn();
+        vi.stubGlobal("clog", { error: clogError });
+        const lookupAny = vi.fn(async () => ({
+            info: { url: "javascript:alert(1)", birthday: "1996年3月4日", age: "30岁", height: "160cm", weight: "", threeSizeText: "", braSize: "C" },
+            matchedName: "Fav Name",
+        }));
+        const state = {
+            getFavoriteActressList: vi.fn(async () => [{ starId: "actor1", name: "Fav Name", allName: ["Fav Alias"] }]),
+            getBlacklist: vi.fn(async () => [{ starId: "actor1", name: "Black Name", allName: ["Black Alias"] }]),
+        };
+        const loaded = createController({
+            html: '<div class="actor-section-name">DOM Name(無碼)<span class="jhs-badge">收藏</span></div><div class="section-meta">12 影片</div><div class="section-meta">女優, 160cm, DOM Alias</div>',
+            url: "https://javdb.com/actors/actor1",
+            lookupAny,
+            state,
+        });
+        await loaded.controller.mount();
+        expect(lookupAny).toHaveBeenCalledWith(["Fav Name", "Fav Alias", "DOM Name", "DOM Alias", "Black Name", "Black Alias"], { scope: expect.any(LifecycleScope) });
+        const card = document.querySelector(".actress-info");
+        expect(card?.getAttribute("href")).toBe("#");
+
+        loaded.controller.logLookupError("x", { code: "NOT_FOUND" });
+        loaded.controller.logLookupError("x", { name: "AbortError" });
+        expect(clogError).not.toHaveBeenCalled();
+        loaded.controller.logLookupError("x", new Error("unexpected parse error"));
+        expect(clogError).toHaveBeenCalledOnce();
+        loaded.controller.dispose();
     });
 });

@@ -1,5 +1,6 @@
 // @ts-check
 
+import { readStoredActressMeasurements } from "../../core/actress-measurements.js";
 import { normalizeCarNum } from "../../core/constants.js";
 import { countPendingNewVideos, getPendingNewVideoCarNumbers, isNewVideoDecisionHidden } from "../../core/new-video-model.js";
 import { normalizeStateFlags } from "../../core/state-model.js";
@@ -68,8 +69,15 @@ export class NewVideoWorkspaceController {
         ]);
         this.assertActive();
         const items = aggregateNewVideoRecords(actresses, carMap, decisions);
+        /** @type {Map<string, import("../../core/actress-measurements.js").ParsedMeasurements | null>} */
+        const measurementsByStarId = new Map();
+        for (const actress of Array.isArray(actresses) ? actresses : []) {
+            const starId = String(actress?.starId || "").trim();
+            if (!starId) continue;
+            measurementsByStarId.set(starId, readStoredActressMeasurements(actress));
+        }
         return {
-            actresses, carMap, decisions, items, ruleTime: settings.checkNewVideo_ruleTime ?? 8760,
+            actresses, carMap, decisions, items, measurementsByStarId, ruleTime: settings.checkNewVideo_ruleTime ?? 8760,
             javDbUrl: this.movie.externalSiteOrigin("javDbBtn", settings),
         };
     }

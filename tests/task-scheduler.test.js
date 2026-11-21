@@ -7,6 +7,7 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { isAbortError } from "../src/core/jhs-error.js";
 import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -70,7 +71,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     };
     const context = vm.createContext({
-        ActorSourceHealth, isMissingActorSource, getMovieStateEligibility,
+        ActorSourceHealth, isMissingActorSource, isAbortError, getMovieStateEligibility,
         console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
         window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, StorageQueue,
         T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
@@ -388,7 +389,7 @@ describe("task scheduler state machine", () => {
         await harness.plugin.parsePage(page, "javdb", "actor", "Actor", [ "filtered" ], new Set);
         expect(harness.storageManager.updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
             starId: "actor", lastPublishTime: "2026-09-03", newVideoList: [ expect.objectContaining({ carNum: "A-1" }) ]
-        }));
+        }), { scan: true });
     });
 
     it("completes a structurally valid empty actress sync and rejects a login page", async () => {

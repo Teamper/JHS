@@ -2,6 +2,7 @@
 
 import { I, T } from "../../core/constants.js";
 import { A, B, D, P } from "../../core/constants.js";
+import { readCleanActorElementText } from "../../core/actress-measurements.js";
 import { selectLatestPublishTime } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { assertMovieStateEligible } from "../../core/movie-identity.js";
@@ -28,13 +29,16 @@ export function getBlacklistSubjectInfo(options) {
     if (!isActorPage) throw new Error("接口调用错误, 非演员详情页");
     /** @type {string[]} */ const names = [];
     const primary = site === T ? jquery(".actor-section-name") : jquery(".avatar-box .photo-info .pb10");
-    if (primary.length) primary.text().trim().split(",").forEach((/** @type {string} */ name) => names.push(name.trim()));
-    jquery(".section-meta").each((/** @type {number} */ _index, /** @type {Element} */ element) => {
-        if (site === T && element.textContent?.includes("影片")) return;
-        element.textContent?.trim().split(",").forEach((/** @type {string} */ name) => names.push(name.trim()));
+    primary.each((/** @type {number} */ _index, /** @type {Element} */ element) => {
+        readCleanActorElementText(element).split(",").forEach((/** @type {string} */ name) => names.push(name.trim()));
     });
+    const sectionMetas = [...document.querySelectorAll(".section-meta")].map((element) => readCleanActorElementText(element));
+    for (const metaText of sectionMetas) {
+        if (site === T && metaText.includes("影片")) continue;
+        metaText.split(",").forEach((/** @type {string} */ name) => names.push(name.trim()));
+    }
     const allName = [...new Set(names.filter(Boolean))];
-    const role = [...document.querySelectorAll(".section-meta")].some((element) => element.textContent?.includes("男優")) ? B : P;
+    const role = sectionMetas.some((metaText) => metaText.includes("男優")) ? B : P;
     const movieType = allName.some((name) => name.includes("無碼")) || url.pathname.includes("uncensored") ? A : D;
     let starId = "", blacklistUrl = "";
     if (site === T) {

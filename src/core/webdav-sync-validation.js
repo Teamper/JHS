@@ -6,7 +6,8 @@ import { isPersonalRating } from "./personal-rating.js";
 const ENTITIES = new Set(["car_list", "blacklist_car_list", "favorite_actresses", "blacklist"]);
 const MEMBERS = new Set(["filter_keyword_title", "filter_keyword_review", "highlighted_tags"]);
 const OMITTED = new Set(["status", "checkTime", "lastCheckTime", "stateFlags", "newVideoList"]);
-const TEXT_METADATA = new Set(["name", "names", "url", "avatar", "remark", "title", "role", "movieType", "actressType", "fc2Source", "createDate", "updateDate", "createTime", "publishTime", "lastPublishTime"]);
+const TEXT_METADATA = new Set(["name", "names", "url", "avatar", "remark", "title", "role", "movieType", "actressType", "fc2Source", "createDate", "updateDate", "createTime", "publishTime", "lastPublishTime", "actressProfileVerifiedUrl"]);
+const ACTRESS_PROFILE_TEXT_KEYS = new Set(["url", "birthday", "age", "height", "weight", "threeSizeText", "braSize", "matchedName"]);
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 
 /** @param {any} value @returns {boolean} */
@@ -28,14 +29,35 @@ function carId(value) { return text(value) && !!normalizeCarNum(value); }
 function actorId(value) { return (text(value) && value !== "") || typeof value === "number" && Number.isFinite(value); }
 /** @param {any} value @param {string} key @param {(value: any) => boolean} test */
 function optional(value, key, test) { return !Object.hasOwn(value, key) || value[key] == null || test(value[key]); }
+/** @param {any} value */
+function actressProfile(value) {
+    if (!isSyncObject(value)) return false;
+    if (!text(value.url) || !value.url.trim()) return false;
+    try {
+        const parsed = new URL(value.url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    } catch {
+        return false;
+    }
+    for (const [key, entry] of Object.entries(value)) {
+        if (key === "fetchedAt") {
+            if (typeof entry !== "number" || !Number.isFinite(entry) || entry < 0) return false;
+            continue;
+        }
+        if (!ACTRESS_PROFILE_TEXT_KEYS.has(key) || !text(entry)) return false;
+    }
+    return true;
+}
 /** Unknown metadata remains JSON-compatible for existing imported records. @param {string} name @param {any} value */
 function metadata(name, value) {
     if (!jsonValue(value)) return false;
     if (value === null) return true;
     if (TEXT_METADATA.has(name)) return text(value);
+    if (name === "retainedAfterRebind") return value === true;
     if (name === "allName") return Array.isArray(value) && value.every(text);
     if (name === "starId") return actorId(value);
     if (name === "carNum") return carId(value);
+    if (name === "actressProfile") return actressProfile(value);
     return true;
 }
 /** @param {any} value @param {string} id */

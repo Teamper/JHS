@@ -42,6 +42,17 @@ describe("user confirmation actions", () => {
         });
     }
 
+    it("lets the dialog service stack confirmations while the direct Layer path keeps its index", () => {
+        const { utils } = loadUtils(false), service = { confirm: vi.fn(() => 9), close: vi.fn() };
+        utils.setDialogService(service);
+        utils.q(null, "屏蔽记录？", vi.fn(), vi.fn());
+        expect(service.confirm.mock.calls[0][1]).not.toHaveProperty("zIndex");
+
+        const { utils: legacy, layer } = loadUtils(false);
+        legacy.q(null, "旧确认", vi.fn(), vi.fn());
+        expect(layer.confirm.mock.calls[0][1].zIndex).toBe(2000);
+    });
+
     it("unifies unnamed confirmations to cancel-left and preserves the fourth cancellation callback", () => {
         const { utils, layer } = loadUtils(false), accept = vi.fn(), cancel = vi.fn();
         utils.q(null, "旧确认", accept, cancel);

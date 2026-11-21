@@ -16,7 +16,7 @@ function bindDialogFocus(root, initialFocus) {
     owners.add(owner);
     let disposed = false;
     const visible = (/** @type {HTMLElement} */ node) => {
-        if (!node.isConnected || node.closest('[hidden],[inert]')) return false;
+        if (!node.isConnected || node.closest('[hidden],[inert],.layer-anim-close')) return false;
         for (let element = /** @type {HTMLElement | null} */ (node); element; element = element.parentElement) {
             const style = view?.getComputedStyle(element);
             if (style?.display === "none" || style?.visibility === "hidden") return false;
@@ -64,7 +64,8 @@ function bindDialogFocus(root, initialFocus) {
         doc.removeEventListener('focusin', focusin, true);
         owners.delete(owner);
         for (const nested of owners) if (nested.previous && root.contains(nested.previous)) nested.previous = owner.previous;
-        if (owner.previous && visible(owner.previous) && !blocked()) owner.previous.focus({ preventScroll: true });
+        const active = doc.activeElement;
+        if ((!active || active === doc.body || root.contains(active)) && owner.previous && visible(owner.previous) && !blocked()) owner.previous.focus({ preventScroll: true });
     };
 }
 
