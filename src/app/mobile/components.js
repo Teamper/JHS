@@ -47,11 +47,11 @@ export function input(type, label, value = "") {
     return field;
 }
 
-/** @param {unknown} value */
-export function validHttps(value) {
+/** @param {unknown} value @param {URL} [base] */
+export function validHttps(value, base) {
     if (typeof value !== "string") return null;
     try {
-        const url = new URL(value);
+        const url = new URL(value, base);
         return url.protocol === "https:" && !url.username && !url.password ? url.href : null;
     } catch { return null; }
 }
@@ -68,14 +68,15 @@ export function image(value, className) {
     return img;
 }
 
-/** @param {HTMLElement} root @param {string} title @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
-export function sheet(root, title, scope) {
+/** @param {HTMLElement} root @param {string} title @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope @param {boolean} [showClose] */
+export function sheet(root, title, scope, showClose = true) {
     const dialog = el("dialog", null, "mobile-sheet glass");
     const heading = el("h2", title);
     heading.id = "sheet-" + crypto.randomUUID();
     dialog.setAttribute("aria-labelledby", heading.id);
     const header = el("header", null, "sheet-title");
-    header.append(heading, button("关闭", () => dialog.close()));
+    header.append(heading);
+    if (showClose) header.append(button("关闭", () => dialog.close()));
     dialog.append(header);
     root.append(dialog);
     scope.addCleanup(() => { dialog.close(); dialog.remove(); });
