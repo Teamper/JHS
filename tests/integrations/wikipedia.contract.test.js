@@ -141,3 +141,33 @@ it("accepts a documented alias on a categorized actress article after a redirect
         height: "159cm", url: "https://ja.wikipedia.org/wiki/Canonical",
     });
 });
+
+it.each([
+    ["别名", "First Alias<br>櫻井澤亞 ＡＬＩＣＥ<sup class=\"reference\">[1]</sup>"],
+    ["别名义", "<ul><li>First Alias</li><li>櫻井沢亜 Alice</li></ul>"],
+    ["藝名", "First Alias、桜井泽亚 ALICE"],
+    ["艺名", "First Alias，櫻井澤亞 Alice"],
+])("checks full aliases in the %s infobox row", (label, aliases) => {
+    const article = "https://ja.wikipedia.org/wiki/Canonical";
+    const data = fixture.replace("<table>", '<div id="mw-normal-catlinks"><a>日本のAV女優</a></div>'
+        + '<table class="infobox"><tr><th>' + label + '</th><td>' + aliases + '</td></tr>');
+    expect(parseWikipediaActressPage(data, article, "桜井沢亜 alice").info).toMatchObject({ height: "159cm" });
+    expect(parseWikipediaActressPage(data, article, "沢亜 alice").info).toBeNull();
+    expect(parseWikipediaActressPage(data.replace(label, "出身"), article, "桜井沢亜 alice").info).toBeNull();
+});
+
+it("keeps the original lookup spelling and follows only a unique title after folding variants", async () => {
+    const query = "桜井 Alice";
+    const originalUrl = new URL("/wiki/" + encodeURIComponent(query), "https://ja.wikipedia.org").href;
+    const candidate = new URL("/wiki/櫻井_ALICE_(AV女優)", originalUrl).href;
+    const link = '<a href="/wiki/櫻井_ALICE_(AV女優)">One</a>';
+    const request = vi.fn(async ({ url }) => ({
+        data: url === originalUrl ? '<main id="disambigbox">' + link + '</main>' : fixture,
+        finalUrl: url,
+    }));
+    await expect(createWikipediaAdapter({ request }).lookup(query)).resolves.toMatchObject({ url: candidate });
+    expect(request.mock.calls.map(([options]) => options.url)).toEqual([originalUrl, candidate]);
+
+    const ambiguous = '<main id="disambigbox">' + link + '<a href="/wiki/桜井_Alice_(AV女優)">Two</a></main>';
+    expect(parseWikipediaActressPage(ambiguous, originalUrl, query)).toEqual({ info: null, disambigUrls: [] });
+});

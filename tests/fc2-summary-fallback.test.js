@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import jquery from "jquery";
 import { afterEach, expect, it, vi } from "vitest";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { Fc2WorkspaceService } from "../src/features/detail/fc2-workspace-service.js";
 
 const contexts = [];
@@ -13,9 +14,9 @@ afterEach(() => {
 
 function fixture(initialMovie = { title: "列表已有标题", coverUrl: "https://images.example.test/card.jpg", releaseDate: "2026-11-10" }) {
     vi.stubGlobal("$", jquery);
-    const detail = vi.fn();
+    const detail = vi.fn(), scope = new LifecycleScope("fc2-fixture");
     const service = new Fc2WorkspaceService({ runtimeServices: {
-        movie: { detail, sourceUrls: () => [] }, scope: async () => ({ disposed: false }), logger: { error: vi.fn() },
+        movie: { detail, sourceUrls: () => [] }, scope: async () => scope, logger: { error: vi.fn() },
     } });
     vi.spyOn(service, "getDetailStateController").mockReturnValue({ bind() {} });
     for (const method of ["loadNativeDetail", "loadFc2Screenshot", "mountFc2OtherSites", "bindFc2FeatureLifecycle"]) {
@@ -73,6 +74,7 @@ it("ignores detail responses after close", async () => {
     const request = service.fetchAndRenderNativeDetail(context);
     await vi.waitFor(() => expect(detail).toHaveBeenCalledOnce());
     context.destroy();
+    expect(detail.mock.calls[0][1].scope.signal.aborted).toBe(true);
     resolve({ title: "迟到标题" });
     await request;
     expect(summary.text()).not.toContain("迟到标题");

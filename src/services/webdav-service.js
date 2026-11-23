@@ -14,6 +14,9 @@ function encodeBackupFileName(name) {
 }
 
 export class WebDavClient {
+    /** @type {Set<string>} */
+    #deletableBackupNames = new Set();
+
     /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password @param {any} [scope] */
     constructor(http, davUrl, username, password, scope = undefined) {
         this.http = http;
@@ -76,34 +79,68 @@ export class WebDavClient {
     }
     /** @param {string} folder */
     async getFileList(folder) {
-        const directory = new URL(`${encodeBackupFileName(folder)}/`, this.baseUrl);
-        const xml = String(await this.request("PROPFIND", encodeBackupFileName(folder), { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:resourcetype/></d:prop></d:propfind>'));
+        const directoryPath = `${encodeBackupFileName(folder)}/`;
+        const directory = new URL(directoryPath, this.baseUrl);
+        const parentSegments = directory.pathname.split("/").slice(0, -1).map(segment => decodeURIComponent(segment));
+        const xml = String(await this.request("PROPFIND", directoryPath, { Depth: "1", "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:resourcetype/></d:prop></d:propfind>'));
         const document = new DOMParser().parseFromString(xml, "text/xml");
         if (document.getElementsByTagName("parsererror").length || document.documentElement?.localName !== "multistatus" || document.documentElement.namespaceURI !== "DAV:") throw new Error("WebDAV 备份列表格式无效");
-        const files = [], seen = new Set();
+        /** @type {Map<string, {fileId: string, name: string, size: number, createTime: string, canDelete?: false}>} */
+        const files = new Map();
+        const collections = new Set();
+        let incomplete = false;
         for (const item of document.getElementsByTagNameNS("DAV:", "response")) {
             const hrefs = [...item.children].filter(node => node.namespaceURI === "DAV:" && node.localName === "href");
-            if (hrefs.length !== 1 || !hrefs[0].textContent?.trim()) continue;
+            const href = hrefs.length === 1 ? hrefs[0].textContent?.trim() : "";
+            if (!href) { incomplete = true; continue; }
             let fileId;
             try {
-                const url = new URL(hrefs[0].textContent.trim(), directory), suffix = url.pathname.slice(directory.pathname.length);
-                if (url.origin !== directory.origin || url.username || url.password || url.search || url.hash || !url.pathname.startsWith(directory.pathname) || !suffix || suffix.includes("/")) continue;
-                fileId = decodeURIComponent(suffix);
+                const url = new URL(href, directory);
+                if (url.origin !== directory.origin || url.username || url.password || url.search || url.hash) continue;
+                const segments = url.pathname.split("/").map(segment => decodeURIComponent(segment));
+                if (segments.length !== parentSegments.length + 1 || !parentSegments.every((part, index) => part === segments[index])) continue;
+                fileId = segments[parentSegments.length];
+                if (!fileId) continue;
                 encodeBackupFileName(fileId);
             } catch { continue; }
-            if (seen.has(fileId)) continue;
             const properties = [...item.getElementsByTagNameNS("DAV:", "propstat")].filter(propstat => /\s2\d\d(?:\s|$)/.test(propstat.getElementsByTagNameNS("DAV:", "status")[0]?.textContent || ""));
-            if (properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "collection").length) || !properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "resourcetype").length)) continue;
+            if (properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "collection").length)) {
+                collections.add(fileId);
+                files.delete(fileId);
+                continue;
+            }
+            if (collections.has(fileId) || files.has(fileId)) continue;
             const node = (/** @type {string} */ name) => properties.map(prop => prop.getElementsByTagNameNS("DAV:", name)[0]?.textContent).find(Boolean) || "";
-            seen.add(fileId);
-            files.push({ fileId, name: node("displayname") || fileId, size: Number(node("getcontentlength")) || 0, createTime: node("creationdate") || node("getlastmodified") });
+            const canDelete = properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "resourcetype").length);
+            const length = node("getcontentlength").trim(), size = Number(length);
+            if (!canDelete && !(/\.json$/i.test(fileId) && /^\d+$/.test(length) && Number.isSafeInteger(size))) {
+                incomplete = true;
+                continue;
+            }
+            files.set(fileId, {
+                fileId, name: node("displayname") || fileId, size: size || 0, createTime: node("creationdate") || node("getlastmodified"),
+                ...(canDelete ? {} : { canDelete: /** @type {const} */ (false) }),
+            });
         }
-        return files.reverse();
+        if (!files.size && incomplete) throw new Error("WebDAV 备份列表缺少可识别的文件属性");
+        return [...files.values()].reverse();
     }
     /** @param {string} name */
-    async deleteFile(name) { await this.request("DELETE", `${this.folderName}/${encodeBackupFileName(name)}`, { "Cache-Control": "no-cache" }); }
+    async deleteFile(name) {
+        const encodedName = encodeBackupFileName(name);
+        const deletable = this.#deletableBackupNames;
+        if (!deletable.has(name)) throw new JhsError("INVALID_RESPONSE", "WebDAV 未确认该条目是文件", { source: "WebDavClient" });
+        await this.request("DELETE", `${this.folderName}/${encodedName}`, { "Cache-Control": "no-cache" });
+        deletable.delete(name);
+    }
     /** @param {string} folder */
-    async getBackupList(folder) { this.folderName = folder; await this.ensureFolder(folder); return this.getFileList(folder); }
+    async getBackupList(folder) {
+        await this.ensureFolder(folder);
+        const files = await this.getFileList(folder);
+        this.folderName = folder;
+        this.#deletableBackupNames = new Set(files.filter(file => file.canDelete !== false).map(file => file.fileId));
+        return files;
+    }
     /** Strict href-based listing for verification and destructive retention. @param {string} folder @param {string} sourceId */
     async listManagedBackups(folder, sourceId) {
         const directory = new URL(`${encodeBackupFileName(folder)}/`, this.baseUrl);

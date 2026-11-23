@@ -26,7 +26,7 @@ for (const broken of [false, true]) {
         if (!["https://dav.example.test", "https://cdn.example.test"].includes(origin)) return original(options);
         let response;
         if (options.method === "MKCOL") response = { status: 405, responseText: "" };
-        else if (options.method === "PROPFIND") response = { status: 207, responseText: '<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/JHS-%E6%95%B0%E6%8D%AE%E5%A4%87%E4%BB%BD/</d:href><d:propstat><d:prop><d:getcontentlength>0</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:response><d:href>/dav/JHS-%E6%95%B0%E6%8D%AE%E5%A4%87%E4%BB%BD/backup.json</d:href><d:propstat><d:prop><d:resourcetype/><d:displayname>backup.json</d:displayname><d:getcontentlength>100</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>' };
+        else if (options.method === "PROPFIND") response = { status: 207, responseText: '<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/JHS-%E6%95%B0%E6%8D%AE%E5%A4%87%E4%BB%BD/</d:href><d:propstat><d:prop><d:getcontentlength>0</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:response><d:href>/dav/JHS-%e6%95%b0%e6%8d%ae%e5%a4%87%e4%bb%bd/backup.json</d:href><d:propstat><d:prop><d:displayname>backup.json</d:displayname><d:getcontentlength>100</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>' };
         else {
           window.__previewProbe.downloads.push({ origin, headers: Object.keys(options.headers), anonymous: options.anonymous, redirect: options.redirect });
           response = origin === "https://dav.example.test" ? { status: 301, responseHeaders: broken ? "" : "Location: https://cdn.example.test/backup" } : { status: 200, responseText: encrypted };
@@ -42,6 +42,8 @@ for (const broken of [false, true]) {
     await clickSettingsCategory(settings.locator('.side-menu-item[data-panel="data-panel"]'));
     await settings.locator("#webdavBackupListBtn").click();
     const restore = info.project.name === "mobile" ? page.locator('.jhs-backup-btn[data-action="import"]') : page.locator(".backup-import");
+    await expect(page.locator(".backup-download")).toBeVisible();
+    await expect(page.locator(".backup-delete")).toHaveCount(0);
     await restore.click();
     if (broken) {
       await expect.poll(() => page.evaluate(() => window.__previewProbe.errors.join(" "))).toContain("备份预览失败，请检查文件");

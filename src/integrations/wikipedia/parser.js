@@ -5,8 +5,8 @@ import { collectActressLookupNames, isJapaneseWikipediaArticle, normalizeActress
 /** @param {string} value */
 function compact(value) { return value.replace(/\s+/g, " ").trim(); }
 
-/** @param {Element | null | undefined} element */
-function readVisibleText(element) {
+/** @param {Element | null | undefined} element @param {boolean} [splitAliasLines] */
+function readVisibleText(element, splitAliasLines = false) {
     if (!element) return "";
     const clone = /** @type {Element} */ (element.cloneNode(true));
     for (const node of clone.querySelectorAll("style, script, sup.reference, table, [style]")) {
@@ -24,6 +24,10 @@ function readVisibleText(element) {
         if (node.matches("style, script, sup.reference") || /display\s*:\s*none/i.test(node.getAttribute("style") || "")) {
             node.remove();
         }
+    }
+    if (splitAliasLines) {
+        for (const br of clone.querySelectorAll("br")) br.replaceWith(",");
+        for (const item of clone.querySelectorAll("li")) item.after(",");
     }
     return compact((clone.textContent ?? "").replace(/\[\s*(?:\d+|注\s*\d+)\s*\]/gu, " "));
 }
@@ -56,6 +60,16 @@ function readTopic(url) {
 }
 
 const ACTRESS_SUFFIX = /[ _]*\(AV女優\)$/u;
+const ALIAS_LABEL = /^(?:[別别]名(?:[義义])?|[芸藝艺]名)$/u;
+
+/** Fold documented variants for identity comparison within Japanese Wikipedia. @param {string} name */
+function normalizeIdentityName(name) {
+    return normalizeActressLookupName(name)
+        .replace(/[A-Z]/g, letter => letter.toLowerCase())
+        .replace(/櫻/gu, "桜")
+        .replace(/[澤泽]/gu, "沢")
+        .replace(/[亞亚]/gu, "亜");
+}
 
 /** @param {Document} doc @param {URL} parsedBase @param {string} queriedName @returns {string[]} */
 function extractDisambigUrls(doc, parsedBase, queriedName) {
@@ -78,7 +92,7 @@ function extractDisambigUrls(doc, parsedBase, queriedName) {
         }
         candidate.hash = "";
         const topic = readTopic(candidate);
-        if (!ACTRESS_SUFFIX.test(topic) || normalizeActressLookupName(topic.replace(ACTRESS_SUFFIX, "")) !== queriedName) continue;
+        if (!ACTRESS_SUFFIX.test(topic) || normalizeIdentityName(topic.replace(ACTRESS_SUFFIX, "")) !== queriedName) continue;
         const href = candidate.href;
         if (seen.has(href)) continue;
         seen.add(href);
@@ -93,15 +107,15 @@ export function parseWikipediaActressPage(html, url, queriedName = "") {
     if (typeof html !== "string") throw new TypeError("Wikipedia page must be HTML text");
     const parsedUrl = new URL(url);
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const name = normalizeActressLookupName(queriedName);
+    const name = normalizeIdentityName(queriedName);
     const topic = readTopic(parsedUrl);
     if (name) {
         const actorCategory = [...doc.querySelectorAll("#mw-normal-catlinks a")].some(link =>
             /のAV女優$/u.test(compact(link.textContent ?? "").normalize("NFKC")));
-        const titleMatches = normalizeActressLookupName(topic.replace(ACTRESS_SUFFIX, "")) === name;
+        const titleMatches = normalizeIdentityName(topic.replace(ACTRESS_SUFFIX, "")) === name;
         const aliasMatches = [...doc.querySelectorAll("table.infobox tr")].some(row =>
-            /^(?:別名|別名義|芸名)$/u.test(readVisibleText(row.querySelector(":scope > th")))
-            && collectActressLookupNames(readVisibleText(row.querySelector(":scope > td"))).some(alias => normalizeActressLookupName(alias) === name));
+            ALIAS_LABEL.test(readVisibleText(row.querySelector(":scope > th")))
+            && collectActressLookupNames(readVisibleText(row.querySelector(":scope > td"), true)).some(alias => normalizeIdentityName(alias) === name));
         if (!topic || doc.querySelector("#disambigbox, .dmbox")
             || !(ACTRESS_SUFFIX.test(topic) || actorCategory) || !(titleMatches || aliasMatches)) {
             return Object.freeze({ info: null, disambigUrls: Object.freeze(extractDisambigUrls(doc, parsedUrl, name)) });

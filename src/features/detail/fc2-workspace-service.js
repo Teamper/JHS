@@ -40,6 +40,8 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
  * @property {Fc2Movie} [summaryMovie]
  * @property {Set<string> | undefined} galleryUrls
  * @property {LifecycleScope} [wantScope]
+ * @property {Map<"detail" | "magnets", () => Promise<void>>} [nativeAuthRetries]
+ * @property {number} [nativeLoginRevision]
  * @property {number} [wantGeneration]
  * @property {string | null} [wantRevision]
  * @property {string} [wantMovieId]
@@ -198,7 +200,9 @@ export class Fc2WorkspaceService {
         context.root.attr("data-jhs-movie-code", context.carNum);
         const summary = $('<div class="jhs-fc2-summary"><div class="jhs-fc2-preview" data-jhs-role="main-preview"></div><div class="jhs-fc2-summary__body"><div data-jhs-role="summary-content"></div></div></div>'), toolbar = $('<div class="jhs-fc2-toolbar" role="toolbar" aria-label="影片操作"></div>');
         toolbar.append(createStateActions());
-        toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitles">字幕</button>'), summary.find(".jhs-fc2-summary__body").append(toolbar), context.getSlot("summary").append(summary);
+        toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitles">字幕</button>');
+        summary.find(".jhs-fc2-summary__body").append(createFc2SourceLinks(context, this.getRuntimeService("movie")), toolbar);
+        context.getSlot("summary").append(summary);
         const gallery = $('<div class="jhs-fc2-gallery-grid" data-jhs-role="gallery-grid"></div>'), screenshot = $('<div class="jhs-fc2-screenshot" data-jhs-role="screenshot"></div>');
         gallery.on(`click${context.namespace}`, ".jhs-fc2-gallery-item", (async (/** @type {MouseEvent} */ event) => {
             const trigger = event.currentTarget, image = $(trigger).find("img")[0];
@@ -559,15 +563,38 @@ export class Fc2WorkspaceService {
             if (context.isAlive()) button.removeData("jhsBusy").removeAttr("aria-busy");
         }
     }
+    /** @param {Fc2DetailContext} context @param {JQueryHandle} host @param {"detail" | "magnets"} panel @param {number} revision @param {string} message @param {() => Promise<void>} reload */
+    async renderNativeLoginRequired(context, host, panel, revision, message, reload) {
+        // An anonymous request may finish after another panel has completed login.
+        if (revision !== (context.nativeLoginRevision ?? 0)) return reload();
+        const retries = context.nativeAuthRetries ??= new Map();
+        retries.set(panel, reload);
+        renderFc2State(host, message, () => {
+            if (!context.isAlive()) return;
+            openJavDbLoginDialog({
+                dialog: this.getRuntimeService("dialog"), account: this.getRuntimeService("account"),
+                credential: this.getRuntimeService("credential"), getScope: () => Promise.resolve(this.wantScopeFor(context)),
+                ui: this.getRuntimeService("ui"), notifications: this.getRuntimeService("notifications"), logger: this.logger,
+                onSuccess: async () => {
+                    if (!context.isAlive()) return;
+                    context.nativeLoginRevision = (context.nativeLoginRevision ?? 0) + 1;
+                    const reloads = [...retries.values()];
+                    retries.clear();
+                    await Promise.allSettled(reloads.map(retry => retry()));
+                },
+            });
+        }, "登录 JavDB");
+    }
     /** @param {Fc2DetailContext} context */
     async fetchAndRenderNativeDetail(context) {
+        const scope = this.wantScopeFor(context), revision = context.nativeLoginRevision ?? 0;
+        context.nativeAuthRetries?.delete("detail");
         const host = context.root.find('[data-jhs-role="summary-content"]');
         const status = renderFc2SummaryState(context, "加载中…");
         try {
-            const scope = await this.getRuntimeService("scope")();
             const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
             if (!movie) throw new Error("JavDB 影片详情不存在");
-            if (!context.isAlive()) return;
+            if (!context.isAlive() || scope.disposed) return;
             const resolved = {
                 ...movie,
                 title: movie.title || context.summaryMovie?.title,
@@ -578,28 +605,21 @@ export class Fc2WorkspaceService {
             this.renderSummary(context, resolved);
             renderFc2Gallery(context, resolved.imageUrls, resolved.coverUrl);
         } catch (error) {
-            if (!context.isAlive()) return;
+            if (!context.isAlive() || scope.disposed) return;
             if (/** @type {any} */ (error)?.code === "AUTH_REQUIRED") {
-                renderFc2State(status, "影片信息需要登录，请在脚本中登录 JavDB 账号", () => {
-                    if (!context.isAlive()) return;
-                    openJavDbLoginDialog({
-                        dialog: this.getRuntimeService("dialog"), account: this.getRuntimeService("account"),
-                        credential: this.getRuntimeService("credential"), getScope: () => Promise.resolve(this.wantScopeFor(context)),
-                        ui: this.getRuntimeService("ui"), notifications: this.getRuntimeService("notifications"), logger: this.logger,
-                        onSuccess: async () => {
-                            if (!context.isAlive()) return;
-                            await this.fetchAndRenderNativeDetail(context);
-                            if (context.isAlive()) void this.applyFc2Translation(context);
-                        },
-                    });
-                }, "登录 JavDB");
+                await this.renderNativeLoginRequired(context, status, "detail", revision, "影片信息需要登录，请在脚本中登录 JavDB 账号", async () => {
+                    await this.fetchAndRenderNativeDetail(context);
+                    if (context.isAlive() && !scope.disposed) void this.applyFc2Translation(context);
+                });
             } else {
                 renderFc2State(status, "影片信息加载失败，可重试补全详情", () => void this.fetchAndRenderNativeDetail(context));
                 this.logger.error("FC2 详情加载失败", error);
             }
         } finally {
-            status.attr("aria-busy", "false");
-            host.attr("aria-busy", "false");
+            if (context.isAlive() && !scope.disposed) {
+                status.attr("aria-busy", "false");
+                host.attr("aria-busy", "false");
+            }
         }
     }
     /** @param {Fc2DetailContext} context @param {Fc2Movie} movie */
@@ -615,18 +635,19 @@ export class Fc2WorkspaceService {
         const actressNames = [];
         const actors = $('<div class="jhs-fc2-actors"><strong>主演：</strong></div>');
         (movie.actors || []).forEach((actor => { actors.append($("<a></a>").addClass("jhs-fc2-actor").attr({ href: `/actors/${encodeURIComponent(actor.id)}`, target: "_blank", rel: "noopener noreferrer" }).text(actor.name || "未知演员")), 0 === actor.gender && actressNames.push(actor.name); }));
-        movie.actors?.length || actors.append($("<span></span>").text("暂无演员信息")), body.append(actors, createFc2SourceLinks(context, this.getRuntimeService("movie")), $('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(actressNames.join(" ")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(movie.releaseDate || ""));
+        movie.actors?.length || actors.append($("<span></span>").text("暂无演员信息")), body.append(actors, $('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(actressNames.join(" ")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(movie.releaseDate || ""));
     }
     /** @param {Fc2DetailContext} context @param {string | null | undefined} [movieId] */
     async fetchAndRenderNativeMagnets(context, movieId = context.movieId) {
+        const scope = this.wantScopeFor(context), revision = context.nativeLoginRevision ?? 0;
+        context.nativeAuthRetries?.delete("magnets");
         const host = context.root.find('[data-jhs-role="native-magnets"]');
         host.removeData("jhsNativeEmptyMessage");
         renderFc2State(host, "加载中…");
         try {
             if (!movieId) return this.renderNativeMagnetEmpty(context, `${PRODUCT_NAMES.javdb} 暂无对应影片`);
-            const scope = await this.getRuntimeService("scope")();
             const magnets = /** @type {NativeMagnet[]} */ (await this.getRuntimeService("magnet").listNative({ movieId, providerId: "javdb" }, { scope }));
-            if (!context.isAlive()) return;
+            if (!context.isAlive() || scope.disposed) return;
             host.empty();
             if (!magnets.length) return this.renderNativeMagnetEmpty(context, "暂无站内磁力");
             /** @type {MagnetAssessment[]} */
@@ -640,8 +661,18 @@ export class Fc2WorkspaceService {
                 info.append($("<a></a>").attr("href", magnet).text(item.title || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.sizeMb || 0) / 1024).toFixed(2)} GB · ${Number(item.fileCount) || 0} 个文件${item.createdAt ? ` · ${item.createdAt}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
             }));
             await this.bindNativeMagnetFilter(context, host, assessments.some((item => item.highQuality)));
-        } catch (error) { context.isAlive() && renderFc2State(host, "站内磁力加载失败", (() => void this.fetchAndRenderNativeMagnets(context, movieId))), this.logger.error("FC2 磁力加载失败", error); }
-        finally { host.attr("aria-busy", "false"); }
+        } catch (error) {
+            if (!context.isAlive() || scope.disposed) return;
+            const reload = () => this.fetchAndRenderNativeMagnets(context, movieId);
+            if (/** @type {any} */ (error)?.code === "AUTH_REQUIRED") {
+                await this.renderNativeLoginRequired(context, host, "magnets", revision, "站内磁力需要登录，请在脚本中登录 JavDB 账号", reload);
+            } else {
+                renderFc2State(host, "站内磁力加载失败", () => void reload());
+                this.logger.error("FC2 磁力加载失败", error);
+            }
+        } finally {
+            if (context.isAlive() && !scope.disposed) host.attr("aria-busy", "false");
+        }
     }
     /** Offer external search without making requests while rendering a native empty state. */
     /** @param {Fc2DetailContext} context @param {string} message */

@@ -143,10 +143,12 @@ it("uses a 10-second WebDAV deadline without changing ordinary request settings"
 });
 
 it("treats special backup filenames as one encoded path segment for upload, download and delete", async () => {
-    const request = vi.fn(async () => ({ status: 200, data: "backup" }));
+    const names = ["备份 空格.json", "backup#1?.json", "literal%2Fname.json"];
+    const listing = `<d:multistatus xmlns:d="DAV:">${names.map(name => `<d:response><d:href>/dav/JHS/${encodeURIComponent(name)}</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`).join("")}</d:multistatus>`;
+    const request = vi.fn(async options => ({ status: 200, data: options.method === "PROPFIND" ? listing : "backup" }));
     const client = new WebDavService({ request }).createClient({ url: "https://dav.example/dav", username: "u", password: "p" });
-    client.folderName = "JHS";
-    for (const name of ["备份 空格.json", "backup#1?.json", "literal%2Fname.json"]) {
+    await client.getBackupList("JHS");
+    for (const name of names) {
         await client.backup("JHS", name, "payload");
         await client.getFileContent(name);
         await client.deleteFile(name);

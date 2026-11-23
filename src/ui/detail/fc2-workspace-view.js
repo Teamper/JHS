@@ -1,5 +1,6 @@
 // @ts-check
 
+import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 
 /** @param {unknown} value */
@@ -58,7 +59,8 @@ export function createFc2SourceLinks(context, movieService) {
     const jq = /** @type {any} */ (globalThis).$;
     const links = jq('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>');
     const providerLinks = movieService.sourceUrls({ carNum: context.carNum }, ["fc2ppvdb", "fc2content"]);
-    const values = [["123av" === context.source ? `${PRODUCT_NAMES.av123} 原页面` : `${PRODUCT_NAMES.javdb} 原页面`, normalizeUrl(context.url)], ...providerLinks.map((/** @type {any} */ item) => [item.providerId === "fc2ppvdb" ? "FC2PPVDB" : `${PRODUCT_NAMES.fc2} 市场`, item.url])];
+    const original = normalizeHttpUrl(context.url, context.root[0].ownerDocument.URL);
+    const values = [["123av" === context.source ? `${PRODUCT_NAMES.av123} 原页面` : `${PRODUCT_NAMES.javdb} 原页面`, original], ...providerLinks.map((/** @type {any} */ item) => [item.providerId === "fc2ppvdb" ? "FC2PPVDB" : `${PRODUCT_NAMES.fc2} 市场`, item.url])];
     values.forEach(([label, href]) => href && links.append(jq("<a></a>").addClass("jhs-btn jhs-btn--ghost jhs-btn--sm").attr({ href, target: "_blank", rel: "noopener noreferrer" }).text(label)));
     return links;
 }

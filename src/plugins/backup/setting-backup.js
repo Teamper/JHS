@@ -8,7 +8,7 @@ import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { formatUiDateTime } from "../../core/ui-date-time.js";
 
-/** @typedef {{ name: string, size: number, createTime: string | number, fileId: string }} BackupFile */
+/** @typedef {{ name: string, size: number, createTime: string | number, fileId: string, canDelete?: false }} BackupFile */
 /** @typedef {(diff: any, current: any, imported: any) => void} ShowDiffPreview */
 /** @typedef {any} WebDavHandle */
 /** @typedef {any} DialogHandle */
@@ -205,7 +205,11 @@ export function openFileListDialog(files, client, label, folderName, showDiffPre
         while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
         return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(2)} ${units[i]}`;
     };
-    const buttons = (/** @type {BackupFile} */ file) => `<div data-backup-file="${escapeHtml(file.fileId)}">${[["delete","删除","danger"],["download","下载","secondary"],["import","导入","primary"]].map(([action,text,kind]) => `<button type="button" class="jhs-btn jhs-btn--${kind} backup-${action} jhs-backup-btn jhs-backup-btn-${kind}" data-action="${action}" data-backup-action="${action}">${text}</button>`).join(" ")}</div>`;
+    const buttons = (/** @type {BackupFile} */ file) => {
+        const actions = [["download", "下载", "secondary"], ["import", "导入", "primary"]];
+        if (file.canDelete !== false) actions.unshift(["delete", "删除", "danger"]);
+        return `<div data-backup-file="${escapeHtml(file.fileId)}">${actions.map(([action,text,kind]) => `<button type="button" class="jhs-btn jhs-btn--${kind} backup-${action} jhs-backup-btn jhs-backup-btn-${kind}" data-action="${action}" data-backup-action="${action}">${text}</button>`).join(" ")}</div>`;
+    };
     const mobile = utils.isMobileMode();
     const renderCards = () => files.length ? files.map(file => `<article class="jhs-card jhs-record-card jhs-backup-card"><div class="jhs-backup-card-name">${escapeHtml(file.name)}</div><div class="jhs-backup-card-meta">${formatSize(file.size)} · ${formatUiDateTime(file.createTime)}</div><div class="jhs-backup-card-actions">${buttons(file)}</div></article>`).join("") : '<div class="jhs-state jhs-state--empty jhs-backup-empty"><div class="jhs-state__content"><p class="jhs-state__title">暂无备份</p></div></div>';
     const perform = async (/** @type {string} */ action, /** @type {BackupFile} */ file) => {
