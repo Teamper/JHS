@@ -188,39 +188,70 @@ describe("List Feature auto-page controller", () => {
         scope.dispose();
     });
 
-    it("pauses an empty quick filter and lets each manual action load only one page", async () => {
+    it("loads through pages hidden by a quick filter, then waits for scrolling when the footer moves down", async () => {
         const pages = [
             `<div class="movie-list">${card("ABC-002", "/v/abc-002").outerHTML}</div><a class="pagination-next" href="/page/3">下一页</a>`,
             `<div class="movie-list">${card("ABC-003", "/v/abc-003").outerHTML}</div><a class="pagination-next" href="/page/4">下一页</a>`,
-            `<div class="movie-list">${card("ABC-004", "/v/abc-004").outerHTML}</div><a class="pagination-next" href="/page/5">下一页</a>`,
+            `<div class="movie-list">${card("ABC-004", "/v/abc-004").outerHTML}</div>`,
         ];
-        const fixture = setup("yes", "", { filter: "favorite", visible: 0, total: 30 });
-        fixture.http.request.mockImplementation(async () => ({ data: pages.shift() }));
-        await fixture.controller.mount();
-        fixture.controller.loader.getBoundingClientRect = () => ({ top: 0 });
+        const { controller, eventBus, http, scope } = setup("yes", "", { filter: "all", visible: 1, total: 1 });
+        http.request.mockImplementation(async () => ({ data: pages.shift() }));
+        const threshold = window.innerHeight + 500;
+        let footerTop = threshold + 100;
+        const added = () => eventBus.emit("list-items-added", { items: [document.querySelector(".movie-list .item:last-child")] });
+        try {
+            await controller.mount();
+            controller.loader.getBoundingClientRect = () => ({ top: footerTop });
+            controller.checkLoad();
+            expect(http.request).not.toHaveBeenCalled();
 
-        expect(fixture.controller.loader.textContent).toContain("已加载内容无匹配");
-        fixture.controller.checkLoad();
-        expect(fixture.http.request).not.toHaveBeenCalled();
+            footerTop = 0;
+            const filterChanged = eventBus.emit("list-visibility-changed", { filter: "hasWatch", visible: 0, total: 1 });
+            expect(http.request).toHaveBeenCalledOnce();
+            controller.checkLoad();
+            expect(http.request).toHaveBeenCalledOnce();
+            await filterChanged;
+            await vi.waitFor(() => expect(controller.loadedPage).toBe(2));
 
-        fixture.controller.loader.querySelector(".jhs-scroll__continue").click();
-        await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledOnce());
-        await vi.waitFor(() => expect(document.querySelectorAll(".movie-list .item")).toHaveLength(2));
-        await fixture.eventBus.emit("list-items-added", { items: [document.querySelectorAll(".movie-list .item")[1]] });
-        expect(fixture.http.request).toHaveBeenCalledOnce();
-        expect(fixture.controller.loader.querySelector(".jhs-scroll__continue")).not.toBeNull();
+            await eventBus.emit("list-visibility-changed", { filter: "hasWatch", visible: 0, total: 2 });
+            expect(http.request).toHaveBeenCalledOnce();
+            await added();
+            await vi.waitFor(() => expect(controller.loadedPage).toBe(3));
 
-        fixture.controller.loader.querySelector(".jhs-scroll__continue").click();
-        await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledTimes(2));
-        await vi.waitFor(() => expect(document.querySelectorAll(".movie-list .item")).toHaveLength(3));
-        expect(fixture.http.request).toHaveBeenCalledTimes(2);
-        expect(fixture.controller.pageItems.map(({ page }) => page)).toEqual([1, 2, 3]);
-        expect(fixture.controller.loadedPage).toBe(3);
-        expect(fixture.controller.currentPage).toBe(1);
+            footerTop = threshold;
+            await eventBus.emit("list-visibility-changed", { filter: "hasWatch", visible: 1, total: 3 });
+            await added();
+            expect(http.request).toHaveBeenCalledTimes(2);
 
-        fixture.controller.onVisibilityChanged({ filter: "all", visible: 32, total: 32 });
-        await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledTimes(3));
-        fixture.scope.dispose();
+            footerTop = threshold - 1;
+            window.dispatchEvent(new window.Event("scroll"));
+            await vi.waitFor(() => expect(controller.loader.textContent).toBe("已经到底了"));
+            await added();
+            expect(http.request).toHaveBeenCalledTimes(3);
+            expect(controller.pageItems.map(({ page }) => page)).toEqual([1, 2, 3, 4]);
+        } finally {
+            scope.dispose();
+        }
+    });
+
+    it("keeps a failed filtered page available for manual retry", async () => {
+        const html = `<div class="movie-list">${card("ABC-002", "/v/abc-002").outerHTML}</div>`;
+        const { controller, eventBus, http, scope } = setup("yes", html, { filter: "hasWatch", visible: 0, total: 1 });
+        http.request.mockRejectedValueOnce(new Error("page request failed"));
+        try {
+            await controller.mount();
+            controller.checkLoad();
+            await vi.waitFor(() => expect(controller.loader.textContent).toContain("点击重试"));
+            await eventBus.emit("list-visibility-changed", { filter: "favorite", visible: 0, total: 1 });
+            controller.checkLoad();
+            expect(http.request).toHaveBeenCalledOnce();
+
+            controller.loader.querySelector(".jhs-scroll__retry").click();
+            await vi.waitFor(() => expect(controller.loader.textContent).toBe("已经到底了"));
+            expect(http.request.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual(["/page/2", "/page/2"]);
+        } finally {
+            scope.dispose();
+        }
     });
 
     it("rejects an in-flight page after AutoPage is switched off", async () => {
@@ -230,9 +261,12 @@ describe("List Feature auto-page controller", () => {
         fixture.http.request.mockImplementation(() => pending);
         await fixture.controller.mount();
         const pages = fixture.controller.pageItems, nextUrl = fixture.controller.nextUrl;
+        const liveScope = fixture.controller.liveScope;
         const load = fixture.controller.loadNextPage();
         await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledOnce());
         fixture.settings.update("no");
+        expect(liveScope.disposed).toBe(true);
+        expect(fixture.http.request.mock.calls[0][1]).toBe(liveScope);
         resolveResponse({ data: `<div class="movie-list">${card("ABC-002", "/v/late").outerHTML}</div>` });
         await load;
         expect(document.querySelectorAll(".movie-list .item")).toHaveLength(1);
@@ -251,8 +285,8 @@ describe("List Feature auto-page controller", () => {
             return { data: `<div class="movie-list">${card(`ABC-00${page}`, `/v/page-${page}`).outerHTML}</div><a class="pagination-next" href="/page/${page + 1}">下一页</a>` };
         });
         await fixture.controller.mount();
-        await fixture.controller.loadNextPage({ manual: true });
-        await fixture.controller.loadNextPage({ manual: true });
+        await fixture.controller.loadNextPage();
+        await fixture.controller.loadNextPage();
         const pages = fixture.controller.pageItems;
         expect(pages.map(({ page }) => page)).toEqual([1, 2, 3]);
         expect(fixture.controller.currentPage).toBe(1);
@@ -294,7 +328,7 @@ describe("List Feature auto-page controller", () => {
         fixture.controller.checkScrollPosition();
         expect(fixture.controller.currentPage).toBe(1);
         expect(window.location.href).toBe(initialPageUrl);
-        await fixture.controller.loadNextPage({ manual: true });
+        await fixture.controller.loadNextPage();
         expect(fixture.controller.pageItems.map(({ page }) => page)).toEqual([1, 2, 3, 4]);
         expect(fixture.controller.loadedPage).toBe(4);
         expect(fixture.controller.currentPage).toBe(1);
@@ -326,15 +360,14 @@ describe("List Feature auto-page controller", () => {
         const fixture = setup("yes", "", { filter: "favorite", visible: 0, total: 1 });
         fixture.http.request.mockImplementation(() => pending);
         await fixture.controller.mount();
-        const load = fixture.controller.loadNextPage({ manual: true });
+        const load = fixture.controller.loadNextPage();
         await vi.waitFor(() => expect(fixture.http.request).toHaveBeenCalledOnce());
         fixture.settings.update("no");
         fixture.settings.update("yes");
         await vi.waitFor(() => expect(fixture.controller.loader).toBeInstanceOf(HTMLDivElement));
         rejectResponse(new Error("old request aborted"));
         await load;
-        expect(fixture.controller.loader.classList.contains("waterfall-paused")).toBe(true);
-        expect(fixture.controller.loader.textContent).toContain("已加载内容无匹配");
+        expect(fixture.controller.loader.textContent).toBe("");
         expect(fixture.controller.pageItems.map(({ page }) => page)).toEqual([1]);
         expect(fixture.controller.isLoading).toBe(false);
         expect(fixture.logger.error).not.toHaveBeenCalled();
