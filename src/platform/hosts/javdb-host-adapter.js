@@ -257,7 +257,8 @@ export class JavDbHostAdapter {
     }
     /** Resolve native result ownership equally for live and fetched documents. @param {Document | Element} [sourceRoot] */
     resolveListBoundary(sourceRoot = this.document) {
-        const candidates = [...sourceRoot.querySelectorAll(".movie-list")].filter(root => !root.closest('.layui-layer,[data-jhs-native-recommendations],[data-jhs-native-gallery]'));
+        const listRoots = [...sourceRoot.querySelectorAll(".movie-list")].filter(root => !root.closest('.layui-layer,[data-jhs-native-gallery]'));
+        const candidates = listRoots.filter(root => !root.closest('[data-jhs-native-recommendations]'));
         if (sourceRoot.nodeType === 1 && /** @type {Element} */ (sourceRoot).matches(".movie-list")) candidates.unshift(/** @type {Element} */ (sourceRoot));
         const owned = candidates.filter(root => this.ownedListRoots?.has(root));
         const after = (/** @type {Element} */ anchor) => {
@@ -276,20 +277,31 @@ export class JavDbHostAdapter {
         const root = choices.length === 1 ? choices[0] : null;
         if (!root) return null;
         const container = root.parentElement;
+        const otherLists = listRoots.filter(list => list !== root);
+        const containsOtherList = (/** @type {Element} */ element) => otherLists.some(list => element.contains(list));
         let pagination = null, nextLink = null;
-        for (let node = root.nextElementSibling; node; node = node.nextElementSibling) {
-            if (candidates.includes(node)) break;
-            if (node.matches(".pagination,.pagination-list")) pagination = node;
-            nextLink ||= node.matches(".pagination-next") ? node : node.querySelector(".pagination-next");
+        let sibling = root.nextElementSibling;
+        for (; sibling && !containsOtherList(sibling); sibling = sibling.nextElementSibling) {
+            if (sibling.matches(".pagination,.pagination-list")) pagination = sibling;
+            nextLink ||= sibling.matches(".pagination-next") ? sibling : sibling.querySelector(".pagination-next");
             if (pagination) break;
         }
         // Older host layouts place the only pagination outside the list container.
-        if (candidates.length === 1) {
+        if (!otherLists.length) {
             const regions = [...sourceRoot.querySelectorAll(".pagination")];
             const standalone = [...sourceRoot.querySelectorAll(".pagination-list")];
             pagination ||= regions.length === 1 ? regions[0] : !regions.length && standalone.length === 1 ? standalone[0] : null;
             const links = [...sourceRoot.querySelectorAll(".pagination-next")];
             nextLink ||= links.length === 1 ? links[0] : null;
+        } else if (!sibling && !pagination && !nextLink) {
+            const regions = [];
+            for (let node = container?.nextElementSibling; node && sourceRoot.contains(node) && !containsOtherList(node); node = node.nextElementSibling) {
+                if (node.matches(".pagination,.pagination-list")) regions.push(node);
+            }
+            if (regions.length === 1) {
+                pagination = regions[0];
+                nextLink = pagination.querySelector(".pagination-next");
+            }
         }
         return { root, container, pagination, nextLink };
     }

@@ -209,10 +209,11 @@ export function createImageViewer(runtimeScope) {
                 scope.listen(sourceDocument.defaultView, "pagehide", () => session.close(false));
             }
             const Viewer = (/** @type {any} */ (globalThis)).Viewer;
+            const slideOnTouch = imageKind === "photo" && images.length > 1;
             viewer = new Viewer(host, {
                 className: "jhs-image-viewer jhs-ui", zIndex, url: "data-jhs-viewer-source", initialViewIndex: initialIndex,
                 navbar: false, toolbar: false, title: false, button: false, keyboard: false, focus: false,
-                backdrop: "static", transition: false, toggleOnDblclick: false, slideOnTouch: false,
+                backdrop: "static", transition: false, toggleOnDblclick: false, slideOnTouch, loop: false,
                 zoomOnWheel: true, zoomOnTouch: true, movable: true, zoomRatio: .1,
                 ready: bindControls,
                 shown() { if (!scope.disposed) { viewer.viewer.removeAttribute("aria-labelledby"); viewer.viewer.querySelector(".jhs-image-viewer-close")?.focus({ preventScroll:true }); } },
@@ -221,6 +222,16 @@ export function createImageViewer(runtimeScope) {
                 zoom() { if (!applying) { adjusted = true; setFitState(""); } }, move() { if (!applying) { adjusted = true; setFitState(""); } },
                 hidden() { session.close(); }
             });
+            if (slideOnTouch) {
+                // Viewer.js checks the full viewport. The footer reduces the visible canvas.
+                viewer.isSwitchable = () => {
+                    const canvas = viewer.canvas.getBoundingClientRect();
+                    const photo = viewer.image.getBoundingClientRect();
+                    const tolerance = .01;
+                    return photo.left >= canvas.left - tolerance && photo.top >= canvas.top - tolerance
+                        && photo.right <= canvas.right + tolerance && photo.bottom <= canvas.bottom + tolerance;
+                };
+            }
             // The shared scroll lock owns compensation and nested locks, not Viewer's body padding.
             viewer.open = () => {}; viewer.close = () => {};
             // Native resize reinitializes the image. Refresh the canvas without resetting a user's camera.
