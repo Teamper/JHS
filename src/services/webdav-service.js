@@ -88,32 +88,40 @@ export class WebDavClient {
         /** @type {Map<string, {fileId: string, name: string, size: number, createTime: string, canDelete?: false}>} */
         const files = new Map();
         const collections = new Set();
+        let foundDirectory = false;
         let incomplete = false;
         for (const item of document.getElementsByTagNameNS("DAV:", "response")) {
             const hrefs = [...item.children].filter(node => node.namespaceURI === "DAV:" && node.localName === "href");
             const href = hrefs.length === 1 ? hrefs[0].textContent?.trim() : "";
             if (!href) { incomplete = true; continue; }
-            let fileId;
+            let fileId, trailingSlash;
             try {
                 const url = new URL(href, directory);
                 if (url.origin !== directory.origin || url.username || url.password || url.search || url.hash) continue;
                 const segments = url.pathname.split("/").map(segment => decodeURIComponent(segment));
-                if (segments.length !== parentSegments.length + 1 || !parentSegments.every((part, index) => part === segments[index])) continue;
-                fileId = segments[parentSegments.length];
-                if (!fileId) continue;
-                encodeBackupFileName(fileId);
+                trailingSlash = segments.at(-1) === "";
+                if (trailingSlash) segments.pop();
+                if (segments.length > parentSegments.length + 1 || !parentSegments.every((part, index) => part === segments[index])) continue;
+                const child = segments[parentSegments.length];
+                if (child !== undefined) encodeBackupFileName(child);
+                fileId = child ?? "";
             } catch { continue; }
             const properties = [...item.getElementsByTagNameNS("DAV:", "propstat")].filter(propstat => /\s2\d\d(?:\s|$)/.test(propstat.getElementsByTagNameNS("DAV:", "status")[0]?.textContent || ""));
-            if (properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "collection").length)) {
+            const isCollection = properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "collection").length);
+            const canDelete = properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "resourcetype").length);
+            if (!fileId) {
+                foundDirectory ||= isCollection || (!canDelete && properties.length > 0);
+                continue;
+            }
+            if (isCollection) {
                 collections.add(fileId);
                 files.delete(fileId);
                 continue;
             }
             if (collections.has(fileId) || files.has(fileId)) continue;
             const node = (/** @type {string} */ name) => properties.map(prop => prop.getElementsByTagNameNS("DAV:", name)[0]?.textContent).find(Boolean) || "";
-            const canDelete = properties.some(propstat => propstat.getElementsByTagNameNS("DAV:", "resourcetype").length);
             const length = node("getcontentlength").trim(), size = Number(length);
-            if (!canDelete && !(/\.json$/i.test(fileId) && /^\d+$/.test(length) && Number.isSafeInteger(size))) {
+            if (trailingSlash || (!canDelete && !(/\.json$/i.test(fileId) && /^\d+$/.test(length) && Number.isSafeInteger(size)))) {
                 incomplete = true;
                 continue;
             }
@@ -123,6 +131,7 @@ export class WebDavClient {
             });
         }
         if (!files.size && incomplete) throw new Error("WebDAV 备份列表缺少可识别的文件属性");
+        if (!files.size && !foundDirectory && !collections.size) throw new Error("WebDAV 备份列表无法识别备份目录");
         return [...files.values()].reverse();
     }
     /** @param {string} name */

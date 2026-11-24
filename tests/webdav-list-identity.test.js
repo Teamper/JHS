@@ -53,12 +53,23 @@ describe("manual WebDAV backup file identity", () => {
     it("distinguishes a genuinely empty directory from an untyped entry without successful size metadata", async () => {
         const root = entry("/dav/JHS/", "JHS", "<d:resourcetype><d:collection/></d:resourcetype>");
         await expect(fixture(listing(root)).client.getBackupList("JHS")).resolves.toEqual([]);
+        await expect(fixture(listing(entry("/dav/JHS", "JHS", ""))).client.getBackupList("JHS")).resolves.toEqual([]);
         const unknown = entry("/dav/JHS/old.json", "old.json", "", "404 Not Found");
         await expect(fixture(listing(root + unknown)).client.getBackupList("JHS")).rejects.toThrow("缺少可识别的文件属性");
     });
+    it("rejects a multistatus without evidence of the requested directory", async () => {
+        const missing = '<d:response><d:href>/dav/JHS/</d:href><d:status>HTTP/1.1 404 Not Found</d:status></d:response>';
+        for (const response of [missing, entry("/dav/bystander/a.json"), entry("/dav/JHS", "Not a collection"), ""]) {
+            await expect(fixture(listing(response)).client.getBackupList("JHS")).rejects.toThrow("无法识别备份目录");
+        }
+    });
     it("rejects a collection even when another successful property block claims an empty type", async () => {
-        const conflicting = entry("/dav/JHS/directory", "folder", "<d:resourcetype><d:collection/></d:resourcetype>")
+        const conflicting = entry("/dav/JHS/directory/", "folder", "<d:resourcetype><d:collection/></d:resourcetype>")
             .replace("</d:response>", "<d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>");
         await expect(fixture(listing(conflicting)).client.getBackupList("JHS")).resolves.toEqual([]);
+    });
+    it("does not infer a JSON file from a directory URL that reports only a size", async () => {
+        const untyped = entry("/dav/JHS/archive.json/", "archive.json", "");
+        await expect(fixture(listing(untyped)).client.getBackupList("JHS")).rejects.toThrow("缺少可识别的文件属性");
     });
 });
