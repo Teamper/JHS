@@ -66,6 +66,13 @@ export class NewVideoWorkspaceService {
             catch { /* A failed diagnostic must not reclassify a committed write. */ }
         }
     }
+    requestActressProfileBackfill(options = {}) {
+        if (this.disposed) return;
+        const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        if (!taskPlugin) return;
+        if (options.clearStarIds) taskPlugin.clearProfileAttempts?.(options.clearStarIds);
+        void taskPlugin.triggerProfileBackfill?.(options.backfillOptions ?? {});
+    }
     /** @param {string} name */
     getOptionalDependency(name) { return this.resolveDependency(name); }
     prepareFeatureActivation() {
@@ -472,10 +479,14 @@ export class NewVideoWorkspaceService {
         this.jquery("#checkFavoriteActress").on("click", (event => {
             void this.runManualTask(this.jquery(event.currentTarget), "同步中…", (async () => {
                 if (!this.jquery('a[href*="/users/profile"]').length) return void this.notifications.error(`请先登录 ${PRODUCT_NAMES.javdb}`);
-                await taskPlugin?.checkFavoriteActress?.(!0);
+                const result = await taskPlugin?.checkFavoriteActress?.(!0);
+                if (!result?.fatal) this.requestActressProfileBackfill();
             }));
         })), this.jquery("#checkNewVideo").on("click", (event => {
-            void this.runManualTask(this.jquery(event.currentTarget), "检测中…", (() => taskPlugin?.checkNewVideo?.(!0)));
+            void this.runManualTask(this.jquery(event.currentTarget), "检测中…", (async () => {
+                const result = await taskPlugin?.checkNewVideo?.(!0);
+                if (!result?.fatal) this.requestActressProfileBackfill();
+            }));
         })), this.jquery("#paramActressType,#paramSortBy,#nvSortBy,#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").off("change.jhsNvFilter").on("change.jhsNvFilter", refreshView),
         this.jquery("#nv-filter-panel").off("change.jhsNvBody").on("change.jhsNvBody", ".jhs-nv-cup-checkbox", refreshView),
         this.nvBodyFilterDebounced?.cancel?.(), this.nvBodyFilterDebounced = this.utils.debounce(refreshView, 200),
@@ -819,7 +830,15 @@ export class NewVideoWorkspaceService {
         })), this.jquery(".btn-check-actress").off("click").on("click", (e => {
             e.preventDefault();
             const button = this.jquery(e.currentTarget), starId = button.attr("data-starId"), actress = sortedActresses.find((item => item.starId === starId));
-            void this.runManualTask(button, "检测中…", (() => taskPlugin?.checkOneNewVideo?.(actress)));
+            void this.runManualTask(button, "检测中…", (async () => {
+                await taskPlugin?.checkOneNewVideo?.(actress);
+                if (actress?.starId && !readStoredActressMeasurements(actress)) {
+                    this.requestActressProfileBackfill({
+                        clearStarIds: [actress.starId],
+                        backfillOptions: { starIds: [actress.starId], force: true, refresh: true },
+                    });
+                }
+            }));
         })), this.jquery(".actress-card__menu").each((_, element) => {
             const anchor = element.querySelector("button"), menu = element.querySelector("[role=menu]");
             const popover = new OwnedPopover(anchor, menu);
@@ -1194,8 +1213,13 @@ export class NewVideoWorkspaceService {
                 root.find("#edit-actress-error").prop("hidden", !!name).text(name ? "" : "请输入演员主名称");
                 if (!name) { root.find("#edit-actress-name").trigger("focus"); return false; }
                 const split = text => text.split(/[，,]/).map(item => item.trim()).filter(Boolean);
+                const nextAllName = split(value("#edit-actress-allname"));
+                const previousAllName = Array.isArray(record.allName)
+                    ? record.allName.map(item => String(item || "").trim()).filter(Boolean)
+                    : split(String(record.allName || ""));
+                const namesChanged = String(record.name || "").trim() !== name || JSON.stringify(previousAllName) !== JSON.stringify(nextAllName);
                 const { actressProfile: _ignoredProfile, actressProfileVerifiedUrl: _ignoredVerification, ...editableBase } = record;
-                const updated = { ...editableBase, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")).map(car => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
+                const updated = { ...editableBase, avatar: value("#edit-actress-avatar"), name, allName: nextAllName, newVideoList: split(value("#edit-actress-newvideolist")).map(car => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
                 editor.savePending = true; editor.layer?.find(".layui-layer-btn1").attr("aria-disabled", "true");
                 try {
                     const saved = await this.legacyStorage.updateFavoriteActress(updated);
@@ -1212,6 +1236,12 @@ export class NewVideoWorkspaceService {
                 // The committed change must still invalidate the workspace when the editor closed during its write.
                 if (this.isEditorCurrent(editor)) Object.assign(record, updated);
                 await this.notifyCommittedNewVideoChange("favorite-actress-edited");
+                if (namesChanged && record.starId) {
+                    this.requestActressProfileBackfill({
+                        clearStarIds: [record.starId],
+                        backfillOptions: { starIds: [record.starId], force: true, refresh: true },
+                    });
+                }
                 if (!this.isEditorCurrent(editor)) return false;
                 try { this.notifications.ok("已更新演员信息"); }
                 catch (error) { try { this.logger.warn("演员信息已更新，但成功提示显示失败", error); } catch {} }
@@ -1360,6 +1390,12 @@ export class NewVideoWorkspaceService {
         this.notifications.ok(result.merged ? `已合并到现有演员「${result.actress.name}」（${toStarId}）` : `已重新绑定为「${result.actress.name}」（${toStarId}）`);
         const taskPlugin = this.getOptionalDependency("TaskPlugin");
         if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress);
+        if (!readStoredActressMeasurements(result.actress)) {
+            this.requestActressProfileBackfill({
+                clearStarIds: [fromStarId, toStarId],
+                backfillOptions: { starIds: [toStarId], force: true, refresh: true },
+            });
+        }
         return result.actress;
     }
     async openRebindActorDialog(actress, { ownerScope } = {}) {

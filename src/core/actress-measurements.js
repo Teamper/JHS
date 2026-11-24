@@ -22,6 +22,19 @@ const ACTRESS_PROFILE_FIELDS = Object.freeze(/** @type {const} */ ([
     "matchedName",
 ]));
 const CUP_OPTION_SET = new Set(CUP_FILTER_OPTIONS);
+/** @type {Readonly<Record<string, string>>} */
+const ACTRESS_CHAR_VARIANT_MAP = Object.freeze({
+    亞: "亜", 亚: "亜", 爱: "愛", 苍: "蒼", 澤: "沢", 泽: "沢",
+    櫻: "桜", 樱: "桜", 惠: "恵", 眞: "真", 繪: "絵", 绘: "絵",
+    穗: "穂", 廣: "広", 广: "広", 濱: "浜", 浜: "浜", 實: "実",
+    实: "実", 壽: "寿", 國: "国", 黑: "黒", 嶋: "島", 岛: "島",
+    齊: "斉", 齐: "斉", 齋: "斎", 斋: "斎", 纱: "紗", 华: "華",
+    丽: "麗", 优: "優", 叶: "葉", 遥: "遙", 凉: "涼", 靜: "静",
+    鹤: "鶴", 龍: "竜", 龙: "竜", 榮: "栄", 荣: "栄", 寶: "宝",
+    响: "響", 东: "東", 瀨: "瀬", 濑: "瀬", 髙: "高", 﨑: "崎",
+    邊: "辺", 邉: "辺",
+});
+const ACTRESS_VARIANT_RE = new RegExp(`[${Object.keys(ACTRESS_CHAR_VARIANT_MAP).join("")}]`, "gu");
 
 /**
  * Strip censorship tags like `(無碼)`/`(有碼)` and optionally bracketed notes `[...]`.
@@ -94,7 +107,7 @@ export function parseHeightCm(value) {
         return Number.isFinite(value) && value >= 100 && value <= 230 ? value : null;
     }
     if (typeof value !== "string") return null;
-    const stripped = value.replace(BRACKET_NOTE_RE, " ").trim();
+    const stripped = value.normalize("NFKC").replace(BRACKET_NOTE_RE, " ").trim();
     if (!stripped) return null;
     const segments = stripped.split(ARROW_SPLIT_RE).map((part) => part.trim()).filter(Boolean);
     const segment = segments.at(-1) ?? "";
@@ -116,7 +129,7 @@ export function parseAgeYears(value) {
         return Number.isFinite(value) && value >= 15 && value <= 99 ? Math.trunc(value) : null;
     }
     if (typeof value !== "string") return null;
-    const stripped = value.replace(BRACKET_NOTE_RE, " ").trim();
+    const stripped = value.normalize("NFKC").replace(BRACKET_NOTE_RE, " ").trim();
     if (!stripped) return null;
     const segments = stripped.split(ARROW_SPLIT_RE).map((part) => part.trim()).filter(Boolean);
     const segment = segments.at(-1) ?? "";
@@ -135,7 +148,7 @@ export function parseAgeYears(value) {
  */
 export function parseCupLetter(value) {
     if (typeof value !== "string") return null;
-    const stripped = value.replace(BRACKET_NOTE_RE, " ").trim();
+    const stripped = value.normalize("NFKC").replace(BRACKET_NOTE_RE, " ").trim();
     if (!stripped) return null;
     const segments = stripped.split(ARROW_SPLIT_RE).map((part) => part.trim()).filter(Boolean);
     const segment = (segments.at(-1) ?? "")
@@ -346,6 +359,18 @@ export function normalizeActressLookupName(name) {
     return cleaned === "三上悠亞" ? "三上悠亜" : cleaned;
 }
 
+/**
+ * Normalize an actress name for case-, whitespace-, and CJK-variant-insensitive identity comparison.
+ * @param {unknown} name
+ * @returns {string}
+ */
+export function normalizeActressMatchKey(name) {
+    return normalizeActressLookupName(name)
+        .replace(ACTRESS_VARIANT_RE, (ch) => ACTRESS_CHAR_VARIANT_MAP[ch] ?? ch)
+        .replace(WHITESPACE_RE, "")
+        .toLowerCase();
+}
+
 /** @param {URL} url */
 export function isJapaneseWikipediaArticle(url) {
     return url.origin === "https://ja.wikipedia.org" && !url.username && !url.password
@@ -356,8 +381,9 @@ export function isJapaneseWikipediaArticle(url) {
 export function readVerifiedActressProfile(actress) {
     const profile = normalizeActressProfileData(actress?.actressProfile);
     if (!profile || profile.url !== actress?.actressProfileVerifiedUrl || !isJapaneseWikipediaArticle(new URL(profile.url))) return null;
-    const matchedName = normalizeActressLookupName(profile.matchedName);
-    return collectActressLookupNames(actress.name, actress.allName).some(name => normalizeActressLookupName(name) === matchedName)
+    const matchedKey = normalizeActressMatchKey(profile.matchedName);
+    if (!matchedKey) return null;
+    return collectActressLookupNames(actress.name, actress.allName).some((name) => normalizeActressMatchKey(name) === matchedKey)
         ? profile : null;
 }
 

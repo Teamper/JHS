@@ -171,3 +171,42 @@ it("keeps the original lookup spelling and follows only a unique title after fol
     const ambiguous = '<main id="disambigbox">' + link + '<a href="/wiki/桜井_Alice_(AV女優)">Two</a></main>';
     expect(parseWikipediaActressPage(ambiguous, originalUrl, query)).toEqual({ info: null, disambigUrls: [] });
 });
+
+it("parses <br>-separated aliases, parenthetical notes, spaces, extended headers, case-insensitive disambiguation, and fullwidth cups", async () => {
+    const richAliasHtml = `<!doctype html><html><body>
+        <div id="mw-normal-catlinks"><a>日本のAV女優</a></div>
+        <table class="infobox">
+            <tr><th>別名義（旧名）</th><td>新有菜（中文表記）[1]<br>橋本ありな<br>橋本有菜（中文表記）[2]</td></tr>
+            <tr><th>旧芸名</th><td>鬼頭 桃菜（本名、旧芸名）[1] / 葵（旧名/2020年まで）</td></tr>
+            <tr><th>愛称</th><td>苍井空（中国圏）</td></tr>
+            <tr><th>本名</th><td>二階堂 夢</td></tr>
+            <tr><th>身長</th><td>１６２ｃｍ</td></tr>
+            <tr><th>ブラサイズ</th><td>Ｊ</td></tr>
+        </table>
+    </body></html>`;
+    const canonicalUrl = "https://ja.wikipedia.org/wiki/Rich_Actress";
+    for (const query of ["新有菜", "橋本ありな", "鬼頭桃菜", "葵", "蒼井空", "二階堂夢"]) {
+        const parsed = parseWikipediaActressPage(richAliasHtml, canonicalUrl, query);
+        expect(parsed.info, query).toMatchObject({
+            height: "162cm",
+            braSize: "J",
+            url: canonicalUrl,
+        });
+    }
+
+    const disambigHtml = `<div id="mw-content-text"><a href="/wiki/Miru_(AV%E5%A5%B3%E5%84%AA)">Miru (AV女優)</a></div>`;
+    const actressHtml = `<!doctype html><html><body><table class="infobox">
+        <tr><th>別名</th><td>坂道 みる（旧名）</td></tr>
+        <tr><th>身長</th><td>157 cm</td></tr>
+        <tr><th>ブラサイズ</th><td>Ｅ</td></tr>
+    </table></body></html>`;
+    const request = vi.fn(async ({ url }) => {
+        if (url.endsWith("/wiki/miru")) return { data: disambigHtml, finalUrl: "https://ja.wikipedia.org/wiki/Miru" };
+        return { data: actressHtml, finalUrl: url };
+    });
+    await expect(createWikipediaAdapter({ request }).lookup("miru")).resolves.toMatchObject({
+        height: "157cm",
+        braSize: "E",
+        url: "https://ja.wikipedia.org/wiki/Miru_(AV%E5%A5%B3%E5%84%AA)",
+    });
+});

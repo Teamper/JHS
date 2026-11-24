@@ -122,7 +122,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         return Object.freeze({
             otherSite: this.featureExternalSitesAdapter, listPage: this.getOptionalDependency("ListPagePlugin"),
             newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.getOptionalDependency("BlacklistPlugin"),
-            imageLayout: this.getRuntimeService("busImageLayout"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
+            imageLayout: this.getRuntimeService("busImageLayout"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"),
             settingsRegistry: this.getRuntimeService("settingsRegistry"),
             webdav: this.getRuntimeService("webdav"),
             webdavSync: this.getRuntimeService("webdavSync"),

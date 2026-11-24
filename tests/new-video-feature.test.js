@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { newVideoFeature, schedulerFeature } from "../src/features/discovery/new-video-manifests.js";
+import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 import { TaskExecutionService } from "../src/features/discovery/task-execution-service.js";
 import { TaskCompatibilityBean } from "../src/compat/task-compatibility-bean.js";
 import { NewVideoCompatibilityBean } from "../src/compat/new-video-compatibility-bean.js";
@@ -293,7 +294,17 @@ describe("new video and scheduler feature lifecycle", () => {
             onProgress?.({ processed: 1, total: 1 });
             return { total: 1, updated: 0, unchanged: 1, failed: 0, rateLimited: 0 };
         });
-        taskService.attachFeatureNewVideoScanController({ backfillFavoriteProfiles: backfill });
+        const scanController = new NewVideoScanController({
+            state: {},
+            events,
+            jquery: vi.fn((selector) => selector === "#checkNewVideoMsg" ? msgEl : { length: 0 }),
+            window: pageWindow,
+            logger: { warn: vi.fn(), error: vi.fn() },
+            getTimestamp: () => "2026-11-18",
+            onNewItems: vi.fn(),
+        });
+        scanController.backfillFavoriteProfiles = backfill;
+        taskService.attachFeatureNewVideoScanController(scanController);
 
         expect(taskService.isNetworkBlocked(new DOMException("Scan disposed", "AbortError"))).toBe(true);
 
@@ -322,11 +333,16 @@ describe("new video and scheduler feature lifecycle", () => {
         await taskService.doTask();
         expect(backfill).toHaveBeenCalledTimes(2);
         expect(events.emit).toHaveBeenCalledWith("new-video-changed", { reason: "favorite-profile-backfill", carNums: [] });
-        expect(pageWindow.navigator.locks.request).toHaveBeenCalledWith(taskService.profileBackfillLockKey, { ifAvailable: true }, expect.any(Function));
+        expect(pageWindow.navigator.locks.request).toHaveBeenCalledWith("jhsBackfillActressProfiles", { ifAvailable: true }, expect.any(Function));
 
-        // When neither favoriteActress nor newVideo is due, doTask skips backfillFavoriteProfiles even when logged in
+        // When neither favoriteActress nor newVideo is due, doTask skips backfill if schema is already initialized,
+        // but runs one-time initial backfill when attempts schema is missing/outdated (upgrade or post-restore).
         const futureNext = String(Date.now() + 3600_000);
-        const scheduledStorage = { getLocal: vi.fn((key) => key.endsWith("_next") ? futureNext : null), setLocal: vi.fn() };
+        const attemptsStore = new Map([["jhs_actress_profile_attempts_v1", JSON.stringify({ schema: 3, entries: {} })]]);
+        const scheduledStorage = {
+            getLocal: vi.fn((key) => key.endsWith("_next") ? futureNext : (attemptsStore.get(key) ?? null)),
+            setLocal: vi.fn((key, value) => attemptsStore.set(key, value)),
+        };
         const scheduledService = new TaskExecutionService({
             runtimeServices: {
                 storage: scheduledStorage,
@@ -341,9 +357,238 @@ describe("new video and scheduler feature lifecycle", () => {
             window: pageWindow,
             notifications: { error: vi.fn() },
         });
-        const skippedBackfill = vi.fn();
-        scheduledService.attachFeatureNewVideoScanController({ backfillFavoriteProfiles: skippedBackfill });
+        const scheduledController = new NewVideoScanController({
+            state: {},
+            storage: scheduledStorage,
+            events,
+            window: pageWindow,
+            logger: { warn: vi.fn(), error: vi.fn() },
+            getTimestamp: () => "2026-11-18",
+            onNewItems: vi.fn(),
+        });
+        const skippedBackfill = vi.fn(async () => ({ total: 0, updated: 0, unchanged: 0, failed: 0, rateLimited: 0 }));
+        scheduledController.backfillFavoriteProfiles = skippedBackfill;
+        scheduledService.attachFeatureNewVideoScanController(scheduledController);
         await scheduledService.doTask();
         expect(skippedBackfill).not.toHaveBeenCalled();
+
+        // Simulate old user upgrade / post-restore (missing attempts key) -> runs backfill even though _next is in the future
+        attemptsStore.delete("jhs_actress_profile_attempts_v1");
+        await scheduledService.doTask();
+        expect(skippedBackfill).toHaveBeenCalledTimes(1);
+
+        // triggerProfileBackfill works from non-list pages (manual workspace triggers) and forwards options & clearProfileAttempts
+        pageWindow.isListPage = false;
+        const clearProfileAttempts = vi.spyOn(scheduledController, "clearProfileAttempts");
+        const manualBackfill = vi.fn(async () => ({ total: 1, updated: 1, unchanged: 0, failed: 0, rateLimited: 0 }));
+        scheduledController.backfillFavoriteProfiles = manualBackfill;
+        scheduledService.clearProfileAttempts(["a1"]);
+        expect(clearProfileAttempts).toHaveBeenCalledWith(["a1"]);
+        await expect(scheduledService.triggerProfileBackfill({ starIds: ["a1"], force: true, refresh: true })).resolves.toMatchObject({ updated: 1 });
+        expect(manualBackfill).toHaveBeenCalledWith(expect.objectContaining({ starIds: ["a1"], force: true, refresh: true }));
+        await expect(scheduledService.triggerProfileBackfill({ requireListPage: true })).resolves.toBeNull();
+    });
+
+    it("serializes targeted profile backfill behind active Web Lock, suppresses abort status text, and forwards non-list TaskCompatibilityBean calls", async () => {
+        const createLockManager = () => {
+            let held = false;
+            const queue = [];
+            return {
+                request: vi.fn(async (name, options, callback) => {
+                    if (options?.ifAvailable) {
+                        if (held) return callback(null);
+                        held = true;
+                        try { return await callback({ name }); }
+                        finally { held = false; queue.shift()?.(); }
+                    }
+                    if (options?.signal?.aborted) {
+                        throw Object.assign(new Error("Lock aborted"), { name: "AbortError" });
+                    }
+                    if (held) {
+                        await new Promise((resolve, reject) => {
+                            const onAbort = () => {
+                                const index = queue.indexOf(wake);
+                                if (index >= 0) queue.splice(index, 1);
+                                reject(Object.assign(new Error("Lock aborted"), { name: "AbortError" }));
+                            };
+                            const wake = () => {
+                                options?.signal?.removeEventListener?.("abort", onAbort);
+                                resolve(undefined);
+                            };
+                            queue.push(wake);
+                            options?.signal?.addEventListener?.("abort", onAbort, { once: true });
+                        });
+                    }
+                    held = true;
+                    try { return await callback({ name }); }
+                    finally { held = false; queue.shift()?.(); }
+                }),
+            };
+        };
+
+        // 1) TaskExecutionService forwards to NewVideoScanController: untargeted and empty starIds skip while locked; targeted waits in queue and preserves caller onProgress
+        const locks = createLockManager();
+        const msgEl = { text: vi.fn() };
+        const events = { emit: vi.fn(async () => {}) };
+        const scope = new LifecycleScope("test:lock-queue");
+        const pageWindow = { location: { href: "https://javdb.com/" }, isListPage: true, navigator: { locks } };
+        const taskService = new TaskExecutionService({
+            runtimeServices: {
+                storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
+                movie: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") },
+                events,
+                scope: () => scope,
+            },
+            resolveDependency: () => null,
+            legacyStorage: { getSetting: vi.fn(async () => ({})) },
+            utilities: { getNowStr: () => "2026-11-23" },
+            logger: { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() },
+            jquery: vi.fn(() => msgEl),
+            window: pageWindow,
+            notifications: { error: vi.fn() },
+        });
+        let releaseBackground;
+        const backgroundPending = new Promise((resolve) => { releaseBackground = resolve; });
+        const executionOrder = [];
+        const backfillSpy = vi.fn(async (opts) => {
+            executionOrder.push(opts.starIds ? `targeted:${opts.starIds.join(",")}` : "background");
+            if (!opts.starIds) await backgroundPending;
+            opts.onProgress?.({ processed: 1, total: 1, updated: 1, unchanged: 0, failed: 0, rateLimited: 0 });
+            return { total: 1, updated: 1, unchanged: 0, failed: 0, rateLimited: 0 };
+        });
+        const queueController = new NewVideoScanController({
+            state: {},
+            events,
+            jquery: vi.fn(() => msgEl),
+            window: pageWindow,
+            logger: { warn: vi.fn(), error: vi.fn() },
+            getTimestamp: () => "2026-11-23",
+            onNewItems: vi.fn(),
+        });
+        queueController.backfillFavoriteProfiles = backfillSpy;
+        taskService.attachFeatureNewVideoScanController(queueController);
+
+        const callerProgress = vi.fn();
+        const bgRun = taskService.triggerProfileBackfill();
+        await vi.waitFor(() => expect(backfillSpy).toHaveBeenCalledTimes(1));
+
+        // Untargeted and empty starIds do not wait behind the lock
+        await expect(taskService.triggerProfileBackfill()).resolves.toBeNull();
+        await expect(taskService.triggerProfileBackfill({ starIds: [] })).resolves.toBeNull();
+
+        // Targeted waits until background lock releases, then runs and preserves caller onProgress
+        const targetedRun = taskService.triggerProfileBackfill({ starIds: ["a1"], force: true, refresh: true, onProgress: callerProgress });
+        expect(executionOrder).toEqual(["background"]);
+        releaseBackground();
+        await expect(bgRun).resolves.toMatchObject({ updated: 1 });
+        await expect(targetedRun).resolves.toMatchObject({ updated: 1 });
+        expect(executionOrder).toEqual(["background", "targeted:a1"]);
+        expect(callerProgress).toHaveBeenCalledOnce();
+        expect(msgEl.text).toHaveBeenCalledWith("正在补齐演员资料 (1/1)…");
+        scope.dispose();
+
+        // 2) Non-list page TaskCompatibilityBean forwarding (service === null): emits new-video-changed, acquires lock, suppresses abort failure text, catches errors
+        const nonListWindow = { navigator: { locks: createLockManager() } };
+        vi.stubGlobal("window", nonListWindow);
+        const bean = new TaskCompatibilityBean();
+
+        const nonListEvents = { emit: vi.fn(async () => {}) };
+        const nonListMsgEl = { text: vi.fn() };
+        const nonListScope = new LifecycleScope("test:non-list-bean");
+        const scanController = new NewVideoScanController({
+            state: {
+                getFavoriteActressList: vi.fn(async () => [{ starId: "a1", name: "Alice" }]),
+                batchUpdateFavoriteActressProfiles: vi.fn(async (batch) => batch.length),
+            },
+            actressInfo: {
+                lookupAny: vi.fn(async () => ({ info: { url: "https://ja.wikipedia.org/wiki/Alice", height: "160cm" }, matchedName: "Alice" })),
+            },
+            storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
+            scope: nonListScope,
+            events: nonListEvents,
+            jquery: vi.fn(() => nonListMsgEl),
+            window: nonListWindow,
+            logger: { warn: vi.fn(), error: vi.fn() },
+            getTimestamp: () => "2026-11-23",
+            onNewItems: vi.fn(),
+        });
+        bean.attachFeatureNewVideoScanController(scanController);
+
+        await expect(bean.triggerProfileBackfill({ requireListPage: true })).resolves.toBeNull();
+        await expect(bean.triggerProfileBackfill({ starIds: ["a1"], force: true, refresh: true })).resolves.toMatchObject({ updated: 1 });
+        expect(nonListWindow.navigator.locks.request).toHaveBeenCalledWith(
+            "jhsBackfillActressProfiles",
+            { signal: nonListScope.signal },
+            expect.any(Function)
+        );
+        expect(nonListEvents.emit).toHaveBeenCalledWith("new-video-changed", { reason: "favorite-profile-backfill", carNums: [] });
+        expect(nonListMsgEl.text).toHaveBeenCalledWith("演员资料补齐：更新 1，未变 0，失败 0");
+
+        // AbortError after partial batch commit does NOT write "演员资料补齐失败", and still emits new-video-changed
+        nonListMsgEl.text.mockClear();
+        nonListEvents.emit.mockClear();
+        const origBackfill = scanController.backfillFavoriteProfiles.bind(scanController);
+        scanController.backfillFavoriteProfiles = vi.fn(async ({ onBatchCommitted }) => {
+            onBatchCommitted?.(1);
+            throw Object.assign(new Error("aborted"), { name: "AbortError", code: "ABORTED" });
+        });
+        await expect(bean.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
+        expect(nonListMsgEl.text).not.toHaveBeenCalledWith("演员资料补齐失败");
+        expect(nonListEvents.emit).toHaveBeenCalledWith("new-video-changed", { reason: "favorite-profile-backfill", carNums: [] });
+        scanController.backfillFavoriteProfiles = origBackfill;
+
+        // Error inside non-list forwarding is caught cleanly (no unhandled rejection) and sets failure status
+        scanController.state.getFavoriteActressList.mockRejectedValueOnce(new Error("DB offline"));
+        await expect(bean.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
+        expect(nonListMsgEl.text).toHaveBeenCalledWith("演员资料补齐失败");
+        expect(scanController.logger.error).toHaveBeenCalled();
+        nonListScope.dispose();
+
+        // 3) TaskExecutionService returns null on non-blocked error and aborts lock wait if feature controller disposes
+        const failLocks = createLockManager();
+        const failScope = new LifecycleScope("test:exec-error");
+        const failWindow = { location: { href: "https://javdb.com/" }, isListPage: true, navigator: { locks: failLocks } };
+        const failService = new TaskExecutionService({
+            runtimeServices: {
+                storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
+                movie: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") },
+                events: { emit: vi.fn(async () => {}) },
+                scope: () => failScope,
+            },
+            resolveDependency: () => null,
+            legacyStorage: { getSetting: vi.fn(async () => ({})) },
+            utilities: { getNowStr: () => "2026-11-23" },
+            logger: { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() },
+            jquery: vi.fn(() => ({ text: vi.fn() })),
+            window: failWindow,
+            notifications: { error: vi.fn() },
+        });
+        const ctrlScope = new LifecycleScope("test:ctrl-dispose");
+        const ctrlLogger = { warn: vi.fn(), error: vi.fn() };
+        const ctrlInstance = new NewVideoScanController({
+            state: {},
+            scope: ctrlScope,
+            window: failWindow,
+            logger: ctrlLogger,
+            getTimestamp: () => "2026-11-23",
+            onNewItems: vi.fn(),
+        });
+        ctrlInstance.backfillFavoriteProfiles = vi.fn(async () => { throw new Error("IDB quota exceeded"); });
+        failService.attachFeatureNewVideoScanController(ctrlInstance);
+        await expect(failService.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
+        expect(ctrlLogger.error).toHaveBeenCalledWith("演员身材资料补齐出现错误:", expect.any(Error));
+
+        // While holding the lock, disposing the feature controller's scope aborts the queued lock wait immediately
+        let releaseFirst;
+        const holdLock = new Promise((resolve) => { releaseFirst = resolve; });
+        const holder = failLocks.request("jhsBackfillActressProfiles", {}, async () => { await holdLock; });
+        const queuedRun = failService.triggerProfileBackfill({ starIds: ["a1"], force: true });
+        await vi.waitFor(() => expect(failLocks.request).toHaveBeenCalledTimes(3));
+        ctrlInstance.dispose();
+        ctrlScope.dispose();
+        await expect(queuedRun).resolves.toBeNull();
+        releaseFirst();
+        await holder;
+        failScope.dispose();
     });
 });

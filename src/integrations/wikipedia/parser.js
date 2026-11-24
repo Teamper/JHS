@@ -1,13 +1,18 @@
 // @ts-check
 
-import { collectActressLookupNames, isJapaneseWikipediaArticle, normalizeActressLookupName, parseCupLetter } from "../../core/actress-measurements.js";
+import { cleanActressName, isJapaneseWikipediaArticle, normalizeActressMatchKey, parseCupLetter } from "../../core/actress-measurements.js";
+
+const PAREN_NOTE_RE = /[（(][^()（）]*[)）]/gu;
+const FOOTNOTE_REF_RE = /\[\s*(?:\d+|注\s*\d+)\s*\]/gu;
+const ALIAS_SPLIT_RE = /[\r\n,，、/／;；]+/u;
+const ALIAS_HEADER_RE = /^(?:[別别]名(?:[義义])?|[旧舊]?[芸藝艺]名|[旧舊]名|[愛爱][称稱]|本名)$/u;
 
 /** @param {string} value */
 function compact(value) { return value.replace(/\s+/g, " ").trim(); }
 
-/** @param {Element | null | undefined} element @param {boolean} [splitAliasLines] */
-function readVisibleText(element, splitAliasLines = false) {
-    if (!element) return "";
+/** @param {Element | null | undefined} element @returns {Element | null} */
+function cloneVisibleElement(element) {
+    if (!element) return null;
     const clone = /** @type {Element} */ (element.cloneNode(true));
     for (const node of clone.querySelectorAll("style, script, sup.reference, table, [style]")) {
         if (node.tagName === "TABLE") {
@@ -25,11 +30,27 @@ function readVisibleText(element, splitAliasLines = false) {
             node.remove();
         }
     }
-    if (splitAliasLines) {
-        for (const br of clone.querySelectorAll("br")) br.replaceWith(",");
-        for (const item of clone.querySelectorAll("li")) item.after(",");
-    }
-    return compact((clone.textContent ?? "").replace(/\[\s*(?:\d+|注\s*\d+)\s*\]/gu, " "));
+    return clone;
+}
+
+/** @param {Element | null | undefined} element */
+function readVisibleText(element) {
+    const clone = cloneVisibleElement(element);
+    if (!clone) return "";
+    return compact((clone.textContent ?? "").normalize("NFKC").replace(FOOTNOTE_REF_RE, " "));
+}
+
+/** @param {Element | null | undefined} td @returns {string[]} */
+function extractInfoboxAliases(td) {
+    const clone = cloneVisibleElement(td);
+    if (!clone) return [];
+    for (const br of clone.querySelectorAll("br")) br.replaceWith("\n");
+    for (const block of clone.querySelectorAll("li, p, div, dd, dt")) block.append("\n");
+    const raw = (clone.textContent ?? "").normalize("NFKC").replace(FOOTNOTE_REF_RE, " ").replace(PAREN_NOTE_RE, " ");
+    return raw
+        .split(ALIAS_SPLIT_RE)
+        .map((part) => cleanActressName(part, { stripBrackets: true }))
+        .filter(Boolean);
 }
 
 /** @param {string} birthdayText @param {Date} [now] */
@@ -60,20 +81,10 @@ function readTopic(url) {
 }
 
 const ACTRESS_SUFFIX = /[ _]*\(AV女優\)$/u;
-const ALIAS_LABEL = /^(?:[別别]名(?:[義义])?|[芸藝艺]名)$/u;
 
-/** Fold documented variants for identity comparison within Japanese Wikipedia. @param {string} name */
-function normalizeIdentityName(name) {
-    return normalizeActressLookupName(name)
-        .replace(/[A-Z]/g, letter => letter.toLowerCase())
-        .replace(/櫻/gu, "桜")
-        .replace(/[澤泽]/gu, "沢")
-        .replace(/[亞亚]/gu, "亜");
-}
-
-/** @param {Document} doc @param {URL} parsedBase @param {string} queriedName @returns {string[]} */
-function extractDisambigUrls(doc, parsedBase, queriedName) {
-    if (!queriedName || !isJapaneseWikipediaArticle(parsedBase)) return [];
+/** @param {Document} doc @param {URL} parsedBase @param {string} queriedMatchKey @returns {string[]} */
+function extractDisambigUrls(doc, parsedBase, queriedMatchKey) {
+    if (!queriedMatchKey || !isJapaneseWikipediaArticle(parsedBase)) return [];
     const contentRoot = doc.querySelector("#mw-content-text .mw-parser-output, #mw-content-text, #bodyContent, main") || doc.body;
     if (!contentRoot) return [];
     /** @type {string[]} */
@@ -92,7 +103,7 @@ function extractDisambigUrls(doc, parsedBase, queriedName) {
         }
         candidate.hash = "";
         const topic = readTopic(candidate);
-        if (!ACTRESS_SUFFIX.test(topic) || normalizeIdentityName(topic.replace(ACTRESS_SUFFIX, "")) !== queriedName) continue;
+        if (!ACTRESS_SUFFIX.test(topic) || normalizeActressMatchKey(topic.replace(ACTRESS_SUFFIX, "")) !== queriedMatchKey) continue;
         const href = candidate.href;
         if (seen.has(href)) continue;
         seen.add(href);
@@ -107,18 +118,20 @@ export function parseWikipediaActressPage(html, url, queriedName = "") {
     if (typeof html !== "string") throw new TypeError("Wikipedia page must be HTML text");
     const parsedUrl = new URL(url);
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const name = normalizeIdentityName(queriedName);
+    const matchKey = normalizeActressMatchKey(queriedName);
     const topic = readTopic(parsedUrl);
-    if (name) {
+    if (matchKey) {
         const actorCategory = [...doc.querySelectorAll("#mw-normal-catlinks a")].some(link =>
             /のAV女優$/u.test(compact(link.textContent ?? "").normalize("NFKC")));
-        const titleMatches = normalizeIdentityName(topic.replace(ACTRESS_SUFFIX, "")) === name;
-        const aliasMatches = [...doc.querySelectorAll("table.infobox tr")].some(row =>
-            ALIAS_LABEL.test(readVisibleText(row.querySelector(":scope > th")))
-            && collectActressLookupNames(readVisibleText(row.querySelector(":scope > td"), true)).some(alias => normalizeIdentityName(alias) === name));
+        const titleMatches = normalizeActressMatchKey(topic.replace(ACTRESS_SUFFIX, "")) === matchKey;
+        const aliasMatches = [...doc.querySelectorAll("table.infobox tr")].some((row) => {
+            const headerLabel = readVisibleText(row.querySelector(":scope > th")).replace(PAREN_NOTE_RE, " ").trim();
+            return ALIAS_HEADER_RE.test(headerLabel)
+                && extractInfoboxAliases(row.querySelector(":scope > td")).some((alias) => normalizeActressMatchKey(alias) === matchKey);
+        });
         if (!topic || doc.querySelector("#disambigbox, .dmbox")
             || !(ACTRESS_SUFFIX.test(topic) || actorCategory) || !(titleMatches || aliasMatches)) {
-            return Object.freeze({ info: null, disambigUrls: Object.freeze(extractDisambigUrls(doc, parsedUrl, name)) });
+            return Object.freeze({ info: null, disambigUrls: Object.freeze(extractDisambigUrls(doc, parsedUrl, matchKey)) });
         }
     }
     let birthday = "";
@@ -205,7 +218,7 @@ export function parseWikipediaActressPage(html, url, queriedName = "") {
             if (!braSize && (/^(?:ブラサイズ|カップサイズ|カップ)$/u.test(label) || label.includes("ブラサイズ") || label.includes("カップサイズ"))) {
                 const rawBra = readVisibleText(td);
                 if (rawBra && !/^(?:[―\-—]+|不明|非公開|非公表|未公表)$/u.test(rawBra)) {
-                    braSize = rawBra;
+                    braSize = compact(rawBra.normalize("NFKC"));
                 }
             }
         }
@@ -224,7 +237,7 @@ export function parseWikipediaActressPage(html, url, queriedName = "") {
     const info = hasInfo
         ? Object.freeze({ birthday, age, height, weight, threeSizeText, braSize, url: parsedUrl.href })
         : null;
-    const disambigUrls = info ? Object.freeze([]) : Object.freeze(extractDisambigUrls(doc, parsedUrl, name));
+    const disambigUrls = info ? Object.freeze([]) : Object.freeze(extractDisambigUrls(doc, parsedUrl, matchKey));
     return Object.freeze({ info, disambigUrls });
 }
 

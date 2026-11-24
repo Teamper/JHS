@@ -107,6 +107,18 @@ export class TaskCompatibilityBean {
         return this.service;
     }
 
+    /** @param {Record<string, any>} [options] */
+    async triggerProfileBackfill(options = {}) {
+        if (this.service) return this.service.triggerProfileBackfill(options);
+        return this.featureNewVideoScanController?.triggerProfileBackfill?.(options) ?? null;
+    }
+
+    /** @param {string | string[]} starIds */
+    clearProfileAttempts(starIds) {
+        if (this.service) return this.service.clearProfileAttempts(starIds);
+        this.featureNewVideoScanController?.clearProfileAttempts?.(starIds);
+    }
+
     /** Wait briefly for the idle scheduler Feature when an entry point is used during startup. */
     /** @param {number} [timeoutMs] @param {AbortSignal} [signal] */
     waitForService(timeoutMs = 10_000, signal) {
