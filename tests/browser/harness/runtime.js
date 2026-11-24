@@ -13,15 +13,22 @@ async function addFixtureBytes(page, resource, tag = "script") {
   const source = resource.content ?? `${await readFile(resource.path, "utf8")}${tag === "script" ? `\n//# sourceURL=${resource.path.replace(/\n/g, "")}` : ""}`;
   // File reads, compression, transfer, decoding and execution stay inside the startup interval.
   // Compact protocol arguments preserve the complete original inline script or stylesheet.
-  await page.evaluate(async ({ encoded, tag }) => {
+  await page.evaluate(({ encoded, tag }) => {
     const stream = new Blob([Uint8Array.fromBase64(encoded)]).stream().pipeThrough(new DecompressionStream("gzip"));
-    const script = document.createElement(tag);
-    if (tag === "script") script.type = "text/javascript";
-    script.textContent = new TextDecoder("utf-8", { ignoreBOM: true }).decode(await new Response(stream).arrayBuffer());
-    let error = null;
-    script.onerror = (event) => { error = event; };
-    document.head.appendChild(script);
-    if (error) throw error;
+    const response = new Response(stream);
+    const pendingLoad = Symbol();
+    const completion = response.arrayBuffer().then((bytes) => {
+      const script = document.createElement(tag);
+      if (tag === "script") script.type = "text/javascript";
+      script.textContent = new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
+      let error = null;
+      script.onerror = (event) => { error = event; };
+      document.head.appendChild(script);
+      if (error) throw error;
+    }).finally(() => { delete window[pendingLoad]; });
+    // Chromium's debugger awaits promises through weak references.
+    window[pendingLoad] = { response, completion };
+    return completion;
   }, { encoded: gzipSync(Buffer.from(source, "utf8"), { level: 1 }).toString("base64"), tag });
 }
 
