@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta name="csrf-token" content="fixture-page-csrf"></head>
+<body>
+<section class="video-detail">
+  <h2 class="video-title"><strong>FC2-4995326</strong> Fixture</h2>
+  <div class="video-meta-panel">
+    <nav class="movie-panel-info">
+      <div class="panel-block first-block"><strong>番號:</strong><span class="value">FC2-4995326</span></div>
+      <div class="review-buttons">
+        <div class="panel-block">
+          <form class="button_to" method="post" action="/v/fixture-id/reviews/want_to_watch" data-remote="true">
+            <button class="button" type="submit"><span>想看</span></button>
+            <input type="hidden" name="authenticity_token" value="fixture-want-csrf">
+          </form>
+          <button class="button modal-button" id="review-watched" data-target="modal-review-watched">看過</button>
+        </div>
+        <div class="modal" id="modal-review-watched">
+          <form id="new_review" action="/v/fixture-id/reviews" method="post" data-remote="true">
+            <input type="hidden" name="authenticity_token" value="fixture-create-csrf">
+            <label><input type="radio" name="video_review[score]" value="5">極好</label>
+            <label><input type="radio" name="video_review[score]" value="4">很好</label>
+            <label><input type="radio" name="video_review[score]" value="3">一般</label>
+            <label><input type="radio" name="video_review[score]" value="2">不好</label>
+            <label><input type="radio" name="video_review[score]" value="1">很差</label>
+            <textarea name="video_review[content]"></textarea>
+            <input type="hidden" name="video_review[status]">
+            <button type="submit" name="commit">保存</button>
+          </form>
+        </div>
+      </div>
+    </nav>
+  </div>
+</section>
+</body>
+</html>

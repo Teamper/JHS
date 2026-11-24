@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
-test("FC2 JavDB want login retries without the TOP250 contribution", async ({ context, page }, testInfo) => {
+const externalFc2 = "https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123";
+
+test("External FC2 JavDB want login retries without the TOP250 contribution", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the account dialog");
   await fulfillHostFixtures(context);
-  await page.goto("https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2", { waitUntil: "domcontentloaded" });
+  await page.goto(externalFc2, { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins: ["TOP250Plugin"] });
   await expect(page.locator('.jhs-fc2-workspace[data-jhs-fc2-mode="page"]')).toBeVisible();
   await expect(page.locator('[data-jhs-action="javdb-want"]')).toBeEnabled();
@@ -55,7 +57,7 @@ test("FC2 JavDB want login retries without the TOP250 contribution", async ({ co
 test("FC2 JavDB want remains committed after cache and success-notice failures", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the post-commit boundary");
   await fulfillHostFixtures(context);
-  await page.goto("https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2", { waitUntil: "domcontentloaded" });
+  await page.goto(externalFc2, { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   const button = page.locator('[data-jhs-action="javdb-want"]');
   await expect(button).toBeEnabled();
@@ -94,7 +96,7 @@ test("FC2 JavDB want remains committed after cache and success-notice failures",
 test("FC2 JavDB login continues after its success notice fails", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the account dialog");
   await fulfillHostFixtures(context);
-  await page.goto("https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2", { waitUntil: "domcontentloaded" });
+  await page.goto(externalFc2, { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   const button = page.locator('[data-jhs-action="javdb-want"]');
   await expect(button).toBeEnabled();

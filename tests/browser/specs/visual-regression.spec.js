@@ -1,5 +1,6 @@
 import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { openFavoriteActressDetail } from "../harness/favorite-actresses.js";
 
@@ -11,6 +12,27 @@ import { openFavoriteActressDetail } from "../harness/favorite-actresses.js";
  */
 const ENABLED = process.env.JHS_VISUAL_REGRESSION === "1";
 const VISUAL_PROJECTS = new Set(["desktop-wide", "mobile"]);
+
+async function routeFc2Review(context, movieId, carNum) {
+  const fixture = name => new URL("../../fixtures/integrations/javdb/" + name + ".html", import.meta.url);
+  const [account, review] = await Promise.all([
+    readFile(fixture("web-account"), "utf8"), readFile(fixture("fc2-web-review-unmarked"), "utf8"),
+  ]);
+  await context.route("https://javdb.com/users/edit", route => route.fulfill({ contentType: "text/html", body: account }));
+  await context.route("https://javdb.com/v/" + movieId, route => route.fulfill({
+    contentType: "text/html", body: review.replaceAll("fixture-id", movieId).replaceAll("FC2-4995326", carNum),
+  }));
+}
+
+async function addWebAccountLink(host) {
+  await host.evaluate(() => {
+    const navbar = document.querySelector("#navbar-menu-user") || document.body.appendChild(document.createElement("nav"));
+    navbar.id = "navbar-menu-user";
+    const link = navbar.appendChild(document.createElement("a"));
+    link.href = "/users/edit";
+    link.hidden = true;
+  });
+}
 
 for (const theme of ["light", "dark"]) {
   test(`favorite actress border ${theme} baseline`, async ({ context, page }, info) => {
@@ -35,9 +57,11 @@ for (const [label, url, selector] of pages) {
     test(`${label} ${theme} baseline`, async ({ context, page }, testInfo) => {
       test.skip(!ENABLED || !VISUAL_PROJECTS.has(testInfo.project.name), "visual regression is opt-in via JHS_VISUAL_REGRESSION=1 and pinned to desktop-wide/mobile");
       await fulfillHostFixtures(context);
+      const fc2 = label === "FC2 Detail";
+      if (fc2) await routeFc2Review(context, "fixture-id", "FC2-123");
       await page.goto(url, { waitUntil: "domcontentloaded" });
       // 固定历史页面视觉基线时关闭评论网络加载；默认开启与显式关闭行为由 Review 回归覆盖。
-      await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no" } });
+      await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no" }, ...(fc2 ? { beforeUserscriptInjection: addWebAccountLink } : {}) });
       await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
       await page.evaluate((mode) => {
         const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
@@ -46,6 +70,7 @@ for (const [label, url, selector] of pages) {
       await expect(page.locator("html")).toHaveAttribute("data-jhs-theme", theme);
       await page.waitForTimeout(300);
       await expect(page.locator(selector).first()).toBeVisible();
+      if (fc2) await expect(page.locator('[data-jhs-action="javdb-watched"]')).toBeEnabled();
       await expect(page).toHaveScreenshot(`${label.replace(/\s+/g, "-")}-${theme}.png`, { fullPage: false, maxDiffPixelRatio: 0.02 });
     });
   }
@@ -103,8 +128,10 @@ for (const theme of ["light", "dark"]) {
   test(`JavDB List → FC2 Dialog ${theme}`, async ({ context, page }, testInfo) => {
     test.skip(!ENABLED || !VISUAL_PROJECTS.has(testInfo.project.name), "visual regression is opt-in via JHS_VISUAL_REGRESSION=1 and pinned to desktop-wide/mobile");
     await fulfillHostFixtures(context);
+    await routeFc2Review(context, "fixture-movie-id", "FC2-4959150");
     await page.goto("https://javdb.com/search_advanced?type=3", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page, {
+      beforeUserscriptInjection: addWebAccountLink,
       settingOverrides: {
         enableLoadReview: "yes",
         enableLoadRelated: "yes",
@@ -155,6 +182,7 @@ for (const theme of ["light", "dark"]) {
     await page.evaluate(() => document.querySelector('.movie-list .item a[data-jhs-fc2-primary="true"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
     const dialog = page.locator('.layui-layer').filter({ has: page.locator('.jhs-fc2-dialog-host') }).first();
     await expect(dialog.locator(".jhs-fc2-workspace")).toBeVisible();
+    await expect(dialog.locator('[data-jhs-action="javdb-watched"]')).toBeEnabled();
     await expect(dialog.locator(".jhs-review-item")).toHaveCount(2);
     await expect(dialog.locator(".jhs-related-item")).toHaveCount(2);
     const geometry = await page.evaluate(() => {

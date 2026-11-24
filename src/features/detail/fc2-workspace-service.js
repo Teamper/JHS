@@ -11,6 +11,7 @@ import { normalizeHttpUrl, normalizeBtihHash } from "../../core/feature-helpers.
 import { extractJavDbMovieId } from "../../core/movie-identity.js";
 import { getJavDbWantWatchState, markJavDbWantWatch } from "../../core/javdb-api.js";
 import { openJavDbLoginDialog } from "./javdb-login-dialog.js";
+import { mountFc2WebReview } from "./fc2-web-review-controller.js";
 import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
 import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
 import { createFc2SourceLinks, renderFc2Gallery, renderFc2State, renderFc2SummaryState } from "../../ui/detail/fc2-workspace-view.js";
@@ -200,7 +201,19 @@ export class Fc2WorkspaceService {
         context.root.attr("data-jhs-movie-code", context.carNum);
         const summary = $('<div class="jhs-fc2-summary"><div class="jhs-fc2-preview" data-jhs-role="main-preview"></div><div class="jhs-fc2-summary__body"><div data-jhs-role="summary-content"></div></div></div>'), toolbar = $('<div class="jhs-fc2-toolbar" role="toolbar" aria-label="影片操作"></div>');
         toolbar.append(createStateActions());
-        toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitles">字幕</button>');
+        if (context.source === "fc2") {
+            const accountActions = $('<div class="jhs-fc2-account-actions"></div>');
+            toolbar.append(accountActions);
+            const service = this.runtimeServices.account?.webReview;
+            if (service && context.movieId) mountFc2WebReview({
+                root: accountActions[0], movie: { movieId: context.movieId, carNum: context.carNum },
+                service, scope: this.wantScopeFor(context), dialog: this.getRuntimeService("dialog"),
+                ui: this.getRuntimeService("ui"), notifications: this.getRuntimeService("notifications"),
+            });
+        } else {
+            toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>');
+        }
+        toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitles">字幕</button>');
         summary.find(".jhs-fc2-summary__body").append(createFc2SourceLinks(context, this.getRuntimeService("movie")), toolbar);
         context.getSlot("summary").append(summary);
         const gallery = $('<div class="jhs-fc2-gallery-grid" data-jhs-role="gallery-grid"></div>'), screenshot = $('<div class="jhs-fc2-screenshot" data-jhs-role="screenshot"></div>');
@@ -430,7 +443,8 @@ export class Fc2WorkspaceService {
     /** @param {Fc2DetailContext} context */
     async loadNativeDetail(context) {
         const movieIdPromise = Promise.resolve(context.movieId);
-        this.configureJavDbWantButton(context, movieIdPromise), await Promise.allSettled([ this.fetchAndRenderNativeDetail(context), this.fetchAndRenderNativeMagnets(context), this.mountPanels(context, movieIdPromise) ]);
+        if (context.source !== "fc2") void this.configureJavDbWantButton(context, movieIdPromise);
+        await Promise.allSettled([ this.fetchAndRenderNativeDetail(context), this.fetchAndRenderNativeMagnets(context), this.mountPanels(context, movieIdPromise) ]);
         // 初始详情翻译走统一入口（generation/isActive/单飞都在 applyFc2Translation 内）。
         if (context.isAlive()) void this.applyFc2Translation(context);
     }

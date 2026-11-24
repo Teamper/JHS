@@ -193,7 +193,7 @@ export function createAppContext(runtime) {
     const translation = new TranslationService(integrations, storage, {credential,settings,urlPolicy,enabled:true});
     rootScope.addCleanup(() => translation.dispose());
     const subtitle = new SubtitleService(integrations);
-    const account = new AccountService(integrations);
+    const account = new AccountService(integrations, javdbLists);
     const javdbWant = new JavDbWantService({ http, credential, invalidate: id => runtime.legacyStorage?.deleteCachedRequest(`movie-detail:${id}`) });
     account.want = javdbWant;
     rootScope.addCleanup(bindJavDbWantService(javdbWant));

@@ -6,6 +6,7 @@ import { normalizeMovieCarNum } from "../../core/movie-identity.js";
 import { createJavDbSignature } from "./signature.js";
 import { JhsError } from "../../core/jhs-error.js";
 import { createJavDbWebLists } from "./web-lists.js";
+import { createJavDbWebReview } from "./web-review.js";
 
 const API_ORIGIN = "https://jdforrepam.com";
 
@@ -46,6 +47,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
     return Object.freeze({
         contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList", "AccountSession", "MovieList"],
         ...createJavDbWebLists(http),
+        ...createJavDbWebReview(http),
         actorPlaceholderUrl: () => "https://c0.jdbstatic.com/images/actor_unknow.jpg",
         /** @param {{username: string, password: string}} credentials @param {{scope?: any}} [options] */
         async login(credentials, options = {}) {
@@ -187,9 +189,9 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
 
 export default defineIntegration({
     id: "javdb", trustClass: "builtin-public", hosts: ["javdb.com", "jdforrepam.com", "c0.jdbstatic.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.search", "actor.uncollect", "actor.avatar-placeholder", "account.login", "account.want-read", "account.want-write", "lists.membership"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.search", "actor.uncollect", "actor.avatar-placeholder", "account.login", "account.want-read", "account.want-write", "account.web-review", "lists.membership"],
     requires: [SERVICE.http, PORT.javdbHost, SERVICE.credential],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost], credential: dependencies[SERVICE.credential] }),
     createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter, client.credential), createHostAdapter: null,
-    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.search": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none", "account.want-read": "none", "account.want-write": "none", "lists.membership": "none" }, quality: "silver",
+    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.search": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none", "account.want-read": "none", "account.want-write": "none", "account.web-review": "none", "lists.membership": "none" }, quality: "silver",
 });
