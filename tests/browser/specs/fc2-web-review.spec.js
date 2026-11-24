@@ -4,6 +4,7 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
 import { injectRealLayer } from "../harness/real-layer.js";
 
 const origin = "https://javdb.com";
+const loginPage = '<form action="/login"></form>';
 const owned = origin + "/users/collection_codes?movieId=fixture-id&carNum=FC2-4995326&url=https%3A%2F%2Fjavdb.com%2Fv%2Ffixture-id&source=fc2";
 const file = (name) => new URL("../../fixtures/integrations/javdb/" + name + ".html", import.meta.url);
 
@@ -18,10 +19,10 @@ async function mount(context, page, { entry, loggedIn, loseWrite = false }) {
     let state = "unmarked";
     const writes = [];
     await fulfillHostFixtures(context);
-    await context.route(origin + "/login", route => route.fulfill({ contentType: "text/html", body: '<form action="/login"></form>' }));
-    await context.route(origin + "/users/edit", route => route.fulfill({ contentType: "text/html", body: loggedIn ? account : '<form action="/login"></form>' }));
-    await context.route(origin + "/v/fixture-id", route => loggedIn ? route.fulfill({ contentType: "text/html", body: templates[state] })
-        : route.fulfill({ status: 302, headers: { location: "/login" } }));
+    await context.route(origin + "/login", route => route.fulfill({ contentType: "text/html", body: loginPage }));
+    await context.route(origin + "/users/edit", route => route.fulfill({ contentType: "text/html", body: loggedIn ? account : loginPage }));
+    // Serve the login document here to keep the redirect target off the real network.
+    await context.route(origin + "/v/fixture-id", route => route.fulfill({ contentType: "text/html", body: loggedIn ? templates[state] : loginPage }));
     await context.route(origin + "/v/fixture-id/reviews**", async route => {
         const req = route.request(), pathname = new URL(req.url()).pathname;
         writes.push({ method: req.method(), pathname, body: new URLSearchParams(req.postData()) });
