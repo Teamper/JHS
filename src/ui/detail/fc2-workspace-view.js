@@ -59,7 +59,9 @@ export function createFc2SourceLinks(context, movieService) {
     const jq = /** @type {any} */ (globalThis).$;
     const links = jq('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>');
     const providerLinks = movieService.sourceUrls({ carNum: context.carNum }, ["fc2ppvdb", "fc2content"]);
-    const original = normalizeHttpUrl(context.url, context.root[0].ownerDocument.URL);
+    // A native FC2 record can still carry a third-party source URL.
+    const originalRoute = context.source === "123av" ? context.url : context.movieId && `/v/${encodeURIComponent(context.movieId)}`;
+    const original = normalizeHttpUrl(originalRoute, context.root[0].ownerDocument.URL);
     const values = [["123av" === context.source ? `${PRODUCT_NAMES.av123} 原页面` : `${PRODUCT_NAMES.javdb} 原页面`, original], ...providerLinks.map((/** @type {any} */ item) => [item.providerId === "fc2ppvdb" ? "FC2PPVDB" : `${PRODUCT_NAMES.fc2} 市场`, item.url])];
     values.forEach(([label, href]) => href && links.append(jq("<a></a>").addClass("jhs-btn jhs-btn--ghost jhs-btn--sm").attr({ href, target: "_blank", rel: "noopener noreferrer" }).text(label)));
     return links;

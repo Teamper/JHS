@@ -15,7 +15,9 @@ for (const [entry, screenshotUnavailable] of [["owned", false], ["card", false],
         const image = route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#60758c"/><text x="30" y="210" fill="white" font-size="28">FC2 media fixture</text></svg>' });
         await context.route("https://images.example.test/**", image);
         await context.route("https://img2.javstore.net/**", image);
-        await page.goto(entry === "card" ? "https://javdb.com/tags/fc2" : ownedUrl);
+        const detailsUrl = new URL(ownedUrl);
+        if (screenshotUnavailable) detailsUrl.searchParams.set("url", "https://fc2ppvdb.com/articles/4995326");
+        await page.goto(entry === "card" ? "https://javdb.com/tags/fc2" : detailsUrl.href);
         await injectUserscriptRuntime(page, {
             hostStyles: true, realFeedback: true,
             settingOverrides: { themeMode: info.project.name === "mobile" ? "dark" : "light", enableLoadReview: "no", enableLoadRelated: "no", enableLoadOtherSite: "no", enableLoadScreenShot: "yes", translateTitle: "no" },
