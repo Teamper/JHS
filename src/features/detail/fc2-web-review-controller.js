@@ -112,7 +112,7 @@ export function mountFc2WebReview({ root, movie, service, scope, dialog, ui, not
 
     /** @param {ReviewView} expected */
     function chooseScore(expected) {
-        const content = '<label class="jhs-form-field"><span class="jhs-form-label">评分</span><select class="jhs-field" required>'
+        const content = '<label class="jhs-form-field"><span class="jhs-form-label">评分</span><select class="jhs-field jhs-select-source" required>'
             + '<option value="">请选择评分</option><option value="1">1 分</option><option value="2">2 分</option>'
             + '<option value="3">3 分</option><option value="4">4 分</option><option value="5">5 分</option></select></label>';
         childDialog = dialog.open({

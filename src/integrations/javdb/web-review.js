@@ -26,7 +26,8 @@ function advertisedUrl(element, attribute, base) {
 /** @param {string} token */
 function validToken(token) { return !!token && token.length <= 4096 && !/[\r\n]/.test(token); }
 
-/** @param {Element | null} form @param {URL} base @param {string} path @param {URLSearchParams} fields @returns {ReviewRequest | undefined} */
+/** @param {Element | null} form @param {URL} base @param {string} path @param {URLSearchParams} fields
+ * @returns {ReviewRequest | undefined} */
 function post(form, base, path, fields) {
     const url = advertisedUrl(form, "action", base);
     const token = form?.querySelector('input[type="hidden"][name="authenticity_token"]')?.getAttribute("value") || "";
