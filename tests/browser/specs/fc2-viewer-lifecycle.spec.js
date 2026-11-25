@@ -30,7 +30,16 @@ async function openFixture(page, context) {
         fc2.configureJavDbWantButton = async () => {};
         fc2.getRuntimeService = name => {
             if (name === "movie") return new Proxy(get(name), { get(target, key) { return key === "detail" ? async () => ({title:"Gallery fixture", carNum:"FC2-4959150", imageUrls:["https://images.example.test/1.svg", "https://images.example.test/2.svg"]}) : target[key]; } });
-            if (name === "screenshot") return {isEnabled:()=>true, getScreenshotSettings:()=>({mode:"auto"}), getEnabledProviders:()=>[{id:"javstore"}], resolve:async()=>[{url:"https://images.example.test/sheet.svg"}]};
+            if (name === "screenshot") {
+                const url = "https://images.example.test/sheet.svg";
+                return {
+                    isEnabled: () => true,
+                    getScreenshotSettings: () => ({ mode: "auto" }),
+                    getEnabledProviders: () => [{ id: "javstore" }],
+                    resolve: async () => [{ url }],
+                    resolvePreview: async (_movie, { loadImage }) => ({ url, match: "confirmed", image: await loadImage(url) }),
+                };
+            }
             return get(name);
         };
     });
@@ -111,6 +120,59 @@ test("FC2 images cover the browser viewport and expose touch sized side navigati
     await expect(viewer).toHaveCount(0);
     await expect(page.getByRole("button",{name:"查看剧照 2",exact:true})).toBeFocused();
     await expect(page.locator(".jhs-fc2-workspace")).not.toHaveAttribute("inert");
+});
+
+test("FC2 fitted photos swipe both ways and enlarged photos pan on touch", async ({ page, context }, info) => {
+    test.skip(info.project.name !== "mobile", "390px touch viewport");
+    await page.route(/^https:\/\/images\.example\.test\/[12]\.svg$/, route => {
+        const color = route.request().url().endsWith("/2.svg") ? "#426341" : "#59778f";
+        return route.fulfill({
+            contentType: "image/svg+xml",
+            body: `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420"><rect width="760" height="420" fill="${color}"/></svg>`,
+        });
+    });
+    await openFixture(page, context);
+    await page.getByRole("button", { name: "查看剧照 1", exact: true }).tap();
+    await expectImageFits(page);
+    const viewer = page.locator(".viewer-container");
+    const image = viewer.locator(".viewer-canvas img");
+    const count = viewer.locator(".jhs-image-viewer-count");
+    await expect(count).toHaveText("1 / 2");
+    await expect.poll(() => image.evaluate(node => ({ natural: node.naturalWidth, displayed: Math.round(node.getBoundingClientRect().width) })))
+        .toEqual({ natural: 760, displayed: 390 });
+
+    const cdp = await context.newCDPSession(page);
+    const canvas = await viewer.locator(".viewer-canvas").boundingBox();
+    const point = (position, id = 1) => ({ id, x: canvas.x + canvas.width * position, y: canvas.y + canvas.height / 2 });
+    const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+    async function swipe(direction) {
+        const start = direction === "left" ? .8 : .2;
+        await touch("touchStart", [point(start)]);
+        await touch("touchMove", [point(.5)]);
+        await touch("touchMove", [point(1 - start)]);
+        await touch("touchEnd", []);
+    }
+
+    await swipe("left");
+    await expect(image).toHaveAttribute("src", "https://images.example.test/2.svg");
+    await expect(count).toHaveText("2 / 2");
+    await page.screenshot({ path: info.outputPath("fc2-touch-second-photo.png") });
+    await swipe("left");
+    await expect(count).toHaveText("2 / 2");
+    await swipe("right");
+    await expect(image).toHaveAttribute("src", "https://images.example.test/1.svg");
+    await swipe("right");
+    await expect(count).toHaveText("1 / 2");
+
+    await touch("touchStart", [point(.38), point(.62, 2)]);
+    await touch("touchMove", [point(.25), point(.75, 2)]);
+    await touch("touchEnd", []);
+    await expect.poll(() => image.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(420);
+    const left = await image.evaluate(node => node.getBoundingClientRect().left);
+    await swipe("left");
+    await expect.poll(() => image.evaluate(node => node.getBoundingClientRect().left)).toBeLessThan(left - 10);
+    await expect(count).toHaveText("1 / 2");
+    await cdp.detach();
 });
 
 test("FC2 wheel zooms without switching and preserves camera across resize", async ({page,context}) => {

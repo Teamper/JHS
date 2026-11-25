@@ -172,6 +172,20 @@ it("keeps the original lookup spelling and follows only a unique title after fol
     expect(parseWikipediaActressPage(ambiguous, originalUrl, query)).toEqual({ info: null, disambigUrls: [] });
 });
 
+it("folds line breaks inside an inline alias and preserves explicit block boundaries", () => {
+    const html = `<div id="mw-normal-catlinks"><a>日本のAV女優</a></div>
+        <table class="infobox">
+            <tr><th>別名</th><td><a>Alpha
+                    Beta</a><div>Gamma Delta</div><ul><li>Epsilon<br>Zeta</li></ul></td></tr>
+            <tr><th>身長</th><td>159 cm</td></tr>
+        </table>`;
+    const url = "https://ja.wikipedia.org/wiki/Canonical";
+    for (const alias of ["Alpha Beta", "Gamma Delta", "Epsilon", "Zeta"]) {
+        expect(parseWikipediaActressPage(html, url, alias).info).toMatchObject({ height: "159cm" });
+    }
+    expect(parseWikipediaActressPage(html, url, "Beta").info).toBeNull();
+});
+
 it("parses <br>-separated aliases, parenthetical notes, spaces, extended headers, case-insensitive disambiguation, and fullwidth cups", async () => {
     const richAliasHtml = `<!doctype html><html><body>
         <div id="mw-normal-catlinks"><a>日本のAV女優</a></div>

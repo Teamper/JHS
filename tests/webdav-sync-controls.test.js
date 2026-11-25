@@ -5,7 +5,7 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { bindWebDavSyncControls } from "../src/ui/settings/webdav-sync-controls.js";
 
 describe("webdav sync restore controls", () => {
-    it("clears actress profile cooldown attempts only when data restore is selected", async () => {
+    it("forwards the selected recovery domains to the restore service", async () => {
         document.body.innerHTML = `
             <div id="sync-root">
                 <div id="jhs-auto-backup-status"></div>
@@ -20,7 +20,6 @@ describe("webdav sync restore controls", () => {
         `;
         const scope = new LifecycleScope("test:webdav-controls");
         const restore = vi.fn(async () => {});
-        const removeLocal = vi.fn();
         const webdavSync = Object.assign(new EventTarget(), {
             getStatus: vi.fn(async () => ({ busy: false, paused: false, enabled: true, profileConflict: false })),
             restore,
@@ -28,7 +27,6 @@ describe("webdav sync restore controls", () => {
         const dependencies = {
             jquery,
             scope,
-            storage: { removeLocal },
             notifications: { ok: vi.fn(), error: vi.fn() },
             utilities: { q: vi.fn((_ev, _msg, confirm) => confirm()) },
             webdavSync,
@@ -38,12 +36,12 @@ describe("webdav sync restore controls", () => {
 
         root.find("#webdavSyncRestoreBtn").trigger("click");
         await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(1));
-        expect(removeLocal).not.toHaveBeenCalled();
+        expect(restore).toHaveBeenLastCalledWith("backup-1.json", false, scope, { data: false, preferences: true });
 
         root.find("#webdavSyncRestoreData").prop("checked", true);
         root.find("#webdavSyncRestoreBtn").trigger("click");
         await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(2));
-        expect(removeLocal).toHaveBeenCalledExactlyOnceWith("jhs_actress_profile_attempts_v1");
+        expect(restore).toHaveBeenLastCalledWith("backup-1.json", false, scope, { data: true, preferences: true });
         scope.dispose();
     });
 });

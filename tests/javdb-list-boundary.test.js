@@ -38,9 +38,45 @@ describe("JavDB primary list boundary", () => {
 });
 
 describe("dual-list remote paging", () => {
- it("associates the unique external pagination only on single-list pages",()=>{
+ it("accepts a standalone external next link on single-list pages",()=>{
   const {dom,host,doc}=setup('<main><div class="movie-list"></div></main><ul class="pagination-list"><li><a class="pagination-link is-current">1</a></li></ul><a class="pagination-next" href="?page=2">Next</a>');
   const boundary=host.resolveListBoundary();expect(boundary.pagination).toBe(doc.querySelector(".pagination-list"));expect(boundary.nextLink.getAttribute("href")).toBe("?page=2");dom.window.close();
+ });
+ it("binds the unique outer pager to the primary list in live and fetched pages", () => {
+  const { dom, host, doc } = setup();
+  doc.querySelector("#results").parentElement.after(doc.querySelector(".pagination"));
+  const fetched = new dom.window.DOMParser().parseFromString(doc.documentElement.outerHTML, "text/html");
+  for (const page of [doc, fetched]) {
+   const boundary = host.resolveListBoundary(page);
+   expect(boundary.root).toBe(page.querySelector("#results"));
+   expect(boundary.pagination).toBe(page.querySelector(".pagination"));
+   expect(boundary.nextLink).toBe(page.querySelector(".pagination-next"));
+  }
+  dom.window.close();
+ });
+ it.each(["inside", "outside", "marked outside"])("stops at a wrapped recommendation list %s the main container", placement => {
+  const { dom, host, doc } = setup();
+  const container = doc.querySelector("#results").parentElement;
+  const recommendations = doc.createElement("aside");
+  if (placement === "marked outside") recommendations.setAttribute("data-jhs-native-recommendations", "");
+  recommendations.append(doc.querySelector("#weekly"), doc.querySelector(".pagination"));
+  if (placement === "inside") container.append(recommendations);
+  else container.after(recommendations);
+  const boundary = host.resolveListBoundary();
+  expect(boundary.root).toBe(doc.querySelector("#results"));
+  expect(boundary.pagination).toBeNull();
+  expect(boundary.nextLink).toBeNull();
+  dom.window.close();
+ });
+ it("leaves outer pagination without an owner when two regions follow the result container", () => {
+  const { dom, host, doc } = setup();
+  const pagination = doc.querySelector(".pagination");
+  doc.querySelector("#results").parentElement.after(pagination, pagination.cloneNode(true));
+  const boundary = host.resolveListBoundary();
+  expect(boundary.root).toBe(doc.querySelector("#results"));
+  expect(boundary.pagination).toBeNull();
+  expect(boundary.nextLink).toBeNull();
+  dom.window.close();
  });
  it("appends only fetched results and leaves the recommendation nodes intact", async () => {
   const {dom,host,doc}=setup(); const scope=new LifecycleScope("boundary-paging"); const $=jquery(dom.window);

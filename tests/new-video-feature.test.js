@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { createActressProfileBackfillState } from "../src/core/actress-profile-backfill-state.js";
 import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { newVideoFeature, schedulerFeature } from "../src/features/discovery/new-video-manifests.js";
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
@@ -295,7 +296,7 @@ describe("new video and scheduler feature lifecycle", () => {
             return { total: 1, updated: 0, unchanged: 1, failed: 0, rateLimited: 0 };
         });
         const scanController = new NewVideoScanController({
-            state: {},
+            state: { getActressProfileBackfillState: async () => createActressProfileBackfillState() },
             events,
             jquery: vi.fn((selector) => selector === "#checkNewVideoMsg" ? msgEl : { length: 0 }),
             window: pageWindow,
@@ -335,13 +336,12 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(events.emit).toHaveBeenCalledWith("new-video-changed", { reason: "favorite-profile-backfill", carNums: [] });
         expect(pageWindow.navigator.locks.request).toHaveBeenCalledWith("jhsBackfillActressProfiles", { ifAvailable: true }, expect.any(Function));
 
-        // When neither favoriteActress nor newVideo is due, doTask skips backfill if schema is already initialized,
-        // but runs one-time initial backfill when attempts schema is missing/outdated (upgrade or post-restore).
+        // The first sweep can resume even while the regular checks are scheduled for later.
         const futureNext = String(Date.now() + 3600_000);
-        const attemptsStore = new Map([["jhs_actress_profile_attempts_v1", JSON.stringify({ schema: 3, entries: {} })]]);
+        let initialized = true;
         const scheduledStorage = {
-            getLocal: vi.fn((key) => key.endsWith("_next") ? futureNext : (attemptsStore.get(key) ?? null)),
-            setLocal: vi.fn((key, value) => attemptsStore.set(key, value)),
+            getLocal: vi.fn(key => key.endsWith("_next") ? futureNext : null),
+            setLocal: vi.fn(),
         };
         const scheduledService = new TaskExecutionService({
             runtimeServices: {
@@ -358,8 +358,7 @@ describe("new video and scheduler feature lifecycle", () => {
             notifications: { error: vi.fn() },
         });
         const scheduledController = new NewVideoScanController({
-            state: {},
-            storage: scheduledStorage,
+            state: { getActressProfileBackfillState: async () => ({ ...createActressProfileBackfillState(), initialized }) },
             events,
             window: pageWindow,
             logger: { warn: vi.fn(), error: vi.fn() },
@@ -372,18 +371,14 @@ describe("new video and scheduler feature lifecycle", () => {
         await scheduledService.doTask();
         expect(skippedBackfill).not.toHaveBeenCalled();
 
-        // Simulate old user upgrade / post-restore (missing attempts key) -> runs backfill even though _next is in the future
-        attemptsStore.delete("jhs_actress_profile_attempts_v1");
+        initialized = false;
         await scheduledService.doTask();
         expect(skippedBackfill).toHaveBeenCalledTimes(1);
 
-        // triggerProfileBackfill works from non-list pages (manual workspace triggers) and forwards options & clearProfileAttempts
+        // Manual backfill also works on a non-list page.
         pageWindow.isListPage = false;
-        const clearProfileAttempts = vi.spyOn(scheduledController, "clearProfileAttempts");
         const manualBackfill = vi.fn(async () => ({ total: 1, updated: 1, unchanged: 0, failed: 0, rateLimited: 0 }));
         scheduledController.backfillFavoriteProfiles = manualBackfill;
-        scheduledService.clearProfileAttempts(["a1"]);
-        expect(clearProfileAttempts).toHaveBeenCalledWith(["a1"]);
         await expect(scheduledService.triggerProfileBackfill({ starIds: ["a1"], force: true, refresh: true })).resolves.toMatchObject({ updated: 1 });
         expect(manualBackfill).toHaveBeenCalledWith(expect.objectContaining({ starIds: ["a1"], force: true, refresh: true }));
         await expect(scheduledService.triggerProfileBackfill({ requireListPage: true })).resolves.toBeNull();
@@ -497,7 +492,9 @@ describe("new video and scheduler feature lifecycle", () => {
         const nonListScope = new LifecycleScope("test:non-list-bean");
         const scanController = new NewVideoScanController({
             state: {
-                getFavoriteActressList: vi.fn(async () => [{ starId: "a1", name: "Alice" }]),
+                getActressProfileBackfillSnapshot: vi.fn(async () => ({
+                    actresses: [{ starId: "a1", name: "Alice" }], state: createActressProfileBackfillState(),
+                })),
                 batchUpdateFavoriteActressProfiles: vi.fn(async (batch) => batch.length),
             },
             actressInfo: {
@@ -538,7 +535,7 @@ describe("new video and scheduler feature lifecycle", () => {
         scanController.backfillFavoriteProfiles = origBackfill;
 
         // Error inside non-list forwarding is caught cleanly (no unhandled rejection) and sets failure status
-        scanController.state.getFavoriteActressList.mockRejectedValueOnce(new Error("DB offline"));
+        scanController.state.getActressProfileBackfillSnapshot.mockRejectedValueOnce(new Error("DB offline"));
         await expect(bean.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
         expect(nonListMsgEl.text).toHaveBeenCalledWith("演员资料补齐失败");
         expect(scanController.logger.error).toHaveBeenCalled();

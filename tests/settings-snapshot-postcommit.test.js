@@ -10,8 +10,7 @@ function createDependencies(storage, noticeFailure = new Error("toast unavailabl
     const timers = [];
     const window = { setTimeout: vi.fn((callback, delay) => { timers.push({ callback, delay }); return timers.length; }), location: { reload: vi.fn() } };
     const utilities = { getResponsiveArea: () => ["700px", "auto"], q: vi.fn((_event, _message, confirm) => { utilities.confirmPromise = confirm(); }) };
-    const runtimeStorage = { removeLocal: vi.fn() };
-    return { jquery, legacyStorage: storage, storage: runtimeStorage, utilities, notifications, logger, domUi: { loading: () => ({ close }) }, window, timers, close };
+    return { jquery, legacyStorage: storage, utilities, notifications, logger, domUi: { loading: () => ({ close }) }, window, timers, close };
 }
 
 function installSnapshotTable(deps) {
@@ -42,7 +41,6 @@ describe("settings backup post-commit boundary", () => {
 
         expect(storage.createSnapshot).not.toHaveBeenCalled();
         expect(storage.importData).toHaveBeenCalledExactlyOnceWith(backup, expect.objectContaining({ signal: expect.any(AbortSignal), assertActive: expect.any(Function) }));
-        expect(deps.storage.removeLocal).toHaveBeenCalledExactlyOnceWith("jhs_actress_profile_attempts_v1");
         expect(deps.notifications.error).not.toHaveBeenCalled();
         expect(deps.timers).toHaveLength(1);
         expect(deps.timers[0].delay).toBe(1000);
@@ -59,7 +57,6 @@ describe("settings backup post-commit boundary", () => {
         await deps.utilities.confirmPromise;
 
         expect(storage.restoreSnapshot).toHaveBeenCalledExactlyOnceWith("synthetic-snapshot");
-        expect(deps.storage.removeLocal).toHaveBeenCalledExactlyOnceWith("jhs_actress_profile_attempts_v1");
         expect(deps.notifications.error).not.toHaveBeenCalled();
         expect(deps.timers).toHaveLength(1);
         expect(deps.close).toHaveBeenCalledOnce();
@@ -94,7 +91,6 @@ describe("settings backup post-commit boundary", () => {
         await options.btn2(7);
 
         expect(deps.notifications.error).toHaveBeenCalledWith("数据导入失败，请检查文件");
-        expect(deps.storage.removeLocal).not.toHaveBeenCalled();
         expect(deps.logger.error).toHaveBeenCalledWith(expect.objectContaining({ message: "synthetic write failure" }));
         expect(deps.timers).toHaveLength(0);
         expect(deps.close).toHaveBeenCalledOnce();

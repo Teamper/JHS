@@ -66,12 +66,15 @@ export class NewVideoWorkspaceService {
             catch { /* A failed diagnostic must not reclassify a committed write. */ }
         }
     }
-    requestActressProfileBackfill(options = {}) {
+    async requestActressProfileBackfill({ clearStarIds, backfillOptions = {} } = {}) {
         if (this.disposed) return;
-        const taskPlugin = this.getOptionalDependency("TaskPlugin");
-        if (!taskPlugin) return;
-        if (options.clearStarIds) taskPlugin.clearProfileAttempts?.(options.clearStarIds);
-        void taskPlugin.triggerProfileBackfill?.(options.backfillOptions ?? {});
+        try {
+            if (clearStarIds) await this.getRuntimeService("state").clearActressProfileBackfillAttempts(clearStarIds);
+            if (backfillOptions && !this.disposed) await this.getOptionalDependency("TaskPlugin")?.triggerProfileBackfill?.(backfillOptions);
+        } catch (error) {
+            try { this.logger.warn("演员资料补齐未启动", error); }
+            catch { /* A diagnostic failure must stay outside the completed workspace action. */ }
+        }
     }
     /** @param {string} name */
     getOptionalDependency(name) { return this.resolveDependency(name); }
@@ -1390,12 +1393,10 @@ export class NewVideoWorkspaceService {
         this.notifications.ok(result.merged ? `已合并到现有演员「${result.actress.name}」（${toStarId}）` : `已重新绑定为「${result.actress.name}」（${toStarId}）`);
         const taskPlugin = this.getOptionalDependency("TaskPlugin");
         if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress);
-        if (!readStoredActressMeasurements(result.actress)) {
-            this.requestActressProfileBackfill({
-                clearStarIds: [fromStarId, toStarId],
-                backfillOptions: { starIds: [toStarId], force: true, refresh: true },
-            });
-        }
+        this.requestActressProfileBackfill({
+            clearStarIds: [fromStarId, toStarId],
+            backfillOptions: readStoredActressMeasurements(result.actress) ? null : { starIds: [toStarId], force: true, refresh: true },
+        });
         return result.actress;
     }
     async openRebindActorDialog(actress, { ownerScope } = {}) {

@@ -570,7 +570,7 @@ const regressionMatrix = [
   ["统计面板", [["features/system/stats-controller.js", "class StatsController"], ["features/system/stats-controller.js", "coverageStart"], ["features/system/stats-controller.js", "6.4.0"]]],
   ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
   ["WebDAV 备份", [["services/webdav-service.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["services/webdav-service.js", "PROPFIND"]]],
-  ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/image-viewer.js", "new Viewer"], ["core/image-viewer.js", "zoomOnWheel: true"], ["core/image-viewer.js", "slideOnTouch: false"], ["features/detail/screenshot-controller.js", "class ScreenshotController"]]],
+  ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/image-viewer.js", "new Viewer"], ["core/image-viewer.js", "zoomOnWheel: true"], ["core/image-viewer.js", "slideOnTouch, loop: false"], ["features/detail/screenshot-controller.js", "class ScreenshotController"]]],
   ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["features/external-sites/other-sites-controller.js", "detectOtherSites"]]],
   ["多标签页同步", [["core/event-bus.js", "eventId"], ["core/event-bus.js", "originId"], ["features/list/list-compatibility-service.js", "list-items-added"]]],
   ["快速筛选", [["features/list/list-compatibility-service.js", "createQuickFilter"], ["features/list/list-compatibility-service.js", "setQuickFilter"], ["features/list/list-compatibility-service.js", "blockedItems"]]],

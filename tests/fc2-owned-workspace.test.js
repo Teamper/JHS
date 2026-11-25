@@ -176,17 +176,17 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2ViewSource).toContain('class="jhs-btn jhs-fc2-gallery-item"');
         expect(fc2Source).toContain('showImageViewer(image, "", { imageKind:"photo", galleryRoot: gallery[0], owner: context.root[0], trigger, scope })');
         expect(fc2Source).not.toContain('"data-fancybox"');
-        expect(loggerSource).toContain("zoomOnWheel: true");
-        expect(loggerSource).toContain("slideOnTouch: false");
     });
 
     it("opens the selected gallery image with navigation and centers it in both axes", () => {
         const { dom, instances, scope } = loadImageViewer(), gallery = dom.window.document.querySelector("#gallery"), selected = gallery.querySelectorAll("img")[1];
-        dom.window.showImageViewer(selected, "", { galleryRoot: gallery });
+        dom.window.showImageViewer(selected, "", { galleryRoot: gallery, imageKind: "photo" });
         const viewer = instances[0];
         expect(viewer.host.querySelectorAll("img")).toHaveLength(2);
         expect(viewer.options.initialViewIndex).toBe(1);
         expect(viewer.options.zoomOnWheel).toBe(true);
+        expect(viewer.options.slideOnTouch).toBe(true);
+        expect(viewer.options.loop).toBe(false);
         viewer.options.viewed();
         expect(viewer.zoomTo).toHaveBeenCalledWith(2.5);
         expect(viewer.moveTo).toHaveBeenCalledWith(0, 150);
@@ -217,6 +217,7 @@ describe("FC2 owned detail workspace", () => {
         expect(viewer.host.parentElement).toBe(document.body);
         expect(viewer.options.inline).not.toBe(true);
         expect(viewer.options.initialViewIndex).toBe(0);
+        expect(viewer.options.slideOnTouch).toBe(false);
         expect(viewer.options.url).toBe("data-jhs-viewer-source");
         expect([...viewer.host.querySelectorAll("img")].map(image => image.getAttribute(viewer.options.url))).toEqual(["https://example.test/sheet.jpg"]);
         expect([...viewer.host.querySelectorAll("img")].every(image => image.src.startsWith("data:image/"))).toBe(true);

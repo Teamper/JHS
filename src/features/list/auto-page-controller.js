@@ -10,8 +10,7 @@ export const AUTO_PAGE_STYLES = `
     .jhs-scroll.waterfall-loading { color:var(--jhs-text); }
     .jhs-scroll.waterfall-error { color:var(--jhs-danger-text); }
     .jhs-scroll.waterfall-stopped { color:var(--jhs-warning-text); }
-    .jhs-scroll.waterfall-paused { color:var(--jhs-text); }
-    .jhs-scroll__continue, .jhs-scroll__retry { display:inline-flex; margin-inline-start:var(--jhs-space-2); }
+    .jhs-scroll__retry { display:inline-flex; margin-inline-start:var(--jhs-space-2); }
     .jhs-scroll.waterfall-no-more { color:var(--jhs-success-text); }
 `;
 
@@ -43,11 +42,10 @@ export class AutoPageController {
         /** @type {string | null} */ this.nextUrl = null;
         this.hasMore = false;
         this.isLoading = false;
-        this.pausedFilter = null;
         /** @type {Element | null} */ this.knownCarContainer = null;
         /** @type {Set<string> | null} */ this.knownCarNums = null;
         /** @type {WeakSet<Element>} */ this.appendedCards = new WeakSet();
-        this.visibilitySnapshot = this.list?.getVisibilitySnapshot?.() ?? null;
+        /** @type {string | null} */ this.activeFilter = this.list?.getVisibilitySnapshot?.()?.filter ?? null;
         this.mounted = false;
         this.disposed = false;
         this.settingsListener = null;
@@ -66,7 +64,6 @@ export class AutoPageController {
         this.settings.addEventListener("settings.changed", this.settingsListener);
         this.scope.addCleanup(() => this.settings.removeEventListener("settings.changed", this.settingsListener));
         this.unsubscribeItems = this.eventBus?.on?.("list-items-added", (/** @type {any} */ payload) => {
-            this.visibilitySnapshot = this.list?.getVisibilitySnapshot?.() ?? this.visibilitySnapshot;
             if (payload?.items?.length) this.checkLoad();
         }) ?? null;
         if (this.unsubscribeItems) this.scope.addCleanup(this.unsubscribeItems);
@@ -101,7 +98,6 @@ export class AutoPageController {
         this.liveScope?.dispose();
         this.liveScope = null;
         this.isLoading = false;
-        this.pausedFilter = null;
         /** @type {Element | null} */ this.knownCarContainer = null;
         /** @type {Set<string> | null} */ this.knownCarNums = null;
         this.appendedCards = new WeakSet();
@@ -189,7 +185,10 @@ export class AutoPageController {
         this.loader = loader;
         loader.className = "jhs-scroll";
         container.parentNode.insertBefore(loader, container.nextSibling);
-        loader.addEventListener("click", (/** @type {MouseEvent} */ event) => this.handleLoaderClick(event));
+        loader.addEventListener("click", () => {
+            if (!loader.classList.contains("waterfall-error") || !this.isCurrent(generation, scope)) return;
+            void this.loadNextPage().catch((/** @type {unknown} */ error) => this.log("error", "瀑布流重试失败", error));
+        });
         let scheduled = false;
         scope.listen(this.window, "scroll", () => {
             if (scheduled) return;
@@ -199,36 +198,16 @@ export class AutoPageController {
                 scheduled = false;
             }) ?? setTimeout(() => { if (this.isCurrent(generation, scope)) { this.checkLoad(); this.checkScrollPosition(); } scheduled = false; }, 0);
         });
-        this.onVisibilityChanged(this.list?.getVisibilitySnapshot?.() ?? this.visibilitySnapshot);
         scope.ownTimeout(setTimeout(() => this.checkLoad(), 1000));
         if (!this.hasMore) this.setState("waterfall-no-more", "已经到底了");
     }
 
-    /** Pause automatic pagination when a quick filter has no matching loaded cards. */
-    /** @param {any} snapshot */
-    onVisibilityChanged(snapshot) {
-        if (!snapshot || !Number.isFinite(snapshot.visible) || !Number.isFinite(snapshot.total)) return;
+    /** @param {{filter: string}} snapshot */
+    onVisibilityChanged({ filter }) {
         this.invalidatePagePositions();
-        const previousFilter = this.visibilitySnapshot?.filter;
-        this.visibilitySnapshot = snapshot;
-        const filter = String(snapshot.filter || "waitCheck");
-        const hasNoMatches = filter !== "all" && snapshot.visible === 0;
-        if (this.pausedFilter) {
-            if (filter !== previousFilter && !hasNoMatches) {
-                this.pausedFilter = null;
-                if (!this.hasMore) return this.loader?.classList.contains("waterfall-stopped") ? undefined : this.setState("waterfall-no-more", "已经到底了");
-                this.setState("waterfall-loading", "");
-                this.checkLoad();
-                return;
-            }
-            this.pausedFilter = filter;
-            this.renderPausedState();
-            return;
-        }
-        if (hasNoMatches) {
-            this.pausedFilter = filter;
-            this.renderPausedState();
-        }
+        if (filter === this.activeFilter) return;
+        this.activeFilter = filter;
+        this.checkLoad();
     }
 
     renderErrorState() {
@@ -241,23 +220,9 @@ export class AutoPageController {
         this.loader.append(" ", button);
     }
 
-    renderPausedState() {
-        if (!this.loader || this.isLoading) return;
-        if (!this.hasMore) return this.loader.classList.contains("waterfall-stopped") ? undefined : this.setState("waterfall-no-more", "已经到底了");
-        const hasMatches = this.visibilitySnapshot?.filter === this.pausedFilter && this.visibilitySnapshot.visible > 0;
-        this.setState("waterfall-paused", hasMatches ? "自动翻页已暂停" : "已加载内容无匹配");
-        const button = this.document.createElement("button");
-        button.type = "button";
-        button.className = "jhs-btn jhs-btn--secondary jhs-scroll__continue";
-        button.textContent = "继续加载一页";
-        this.loader.append(" ", button);
-    }
-
-    /** @param {{manual?: boolean}} [options] */
-    async loadNextPage({ manual = false } = {}) {
+    async loadNextPage() {
         if (!this.started) return;
         if (this.settings.snapshot().autoPage === "no") return this.setState("waterfall-loading", "");
-        if (this.pausedFilter && !manual) return;
         if (this.isLoading || !this.nextUrl || !this.container) return;
         if (!this.list) {
             this.nextUrl = null;
@@ -319,24 +284,7 @@ export class AutoPageController {
             this.renderErrorState();
             this.log("error", "加载失败:", error);
         } finally {
-            if (generation === this.generation) {
-                this.isLoading = false;
-                if (this.pausedFilter) this.renderPausedState();
-            }
-        }
-    }
-
-    /** @param {MouseEvent} event */
-    handleLoaderClick(event) {
-        if (!this.loader) return;
-        if (event.target instanceof Element && event.target.closest(".jhs-scroll__continue")) {
-            event.preventDefault();
-            event.stopPropagation();
-            void this.loadNextPage({ manual: true }).catch((/** @type {unknown} */ error) => this.log("error", "手动加载下一页失败", error));
-            return;
-        }
-        if (this.loader.classList.contains("waterfall-error") || (event.target instanceof Element && event.target.closest(".jhs-scroll__retry"))) {
-            void this.loadNextPage({ manual: Boolean(this.pausedFilter) }).catch((/** @type {unknown} */ error) => this.log("error", "瀑布流重试失败", error));
+            if (generation === this.generation) this.isLoading = false;
         }
     }
 
@@ -395,7 +343,7 @@ export class AutoPageController {
     }
 
     checkLoad() {
-        if (!this.loader || !this.hasMore || this.pausedFilter || this.loader.classList.contains("waterfall-error") || this.loader.classList.contains("waterfall-stopped")) return;
+        if (!this.loader || !this.hasMore || this.loader.classList.contains("waterfall-error") || this.loader.classList.contains("waterfall-stopped")) return;
         if (this.loader.getBoundingClientRect().top < this.window.innerHeight + this.preloadDistance) {
             void this.loadNextPage().catch((/** @type {unknown} */ error) => this.log("error", "瀑布流自动加载失败", error));
         }

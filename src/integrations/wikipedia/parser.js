@@ -44,8 +44,15 @@ function readVisibleText(element) {
 function extractInfoboxAliases(td) {
     const clone = cloneVisibleElement(td);
     if (!clone) return [];
+    const textNodes = clone.ownerDocument.createTreeWalker(clone, 4); // NodeFilter.SHOW_TEXT
+    for (let node = textNodes.nextNode(); node; node = textNodes.nextNode()) {
+        node.nodeValue = (node.nodeValue ?? "").replace(/\s+/gu, " ");
+    }
     for (const br of clone.querySelectorAll("br")) br.replaceWith("\n");
-    for (const block of clone.querySelectorAll("li, p, div, dd, dt")) block.append("\n");
+    for (const block of clone.querySelectorAll("li, p, div, dd, dt")) {
+        block.prepend("\n");
+        block.append("\n");
+    }
     const raw = (clone.textContent ?? "").normalize("NFKC").replace(FOOTNOTE_REF_RE, " ").replace(PAREN_NOTE_RE, " ");
     return raw
         .split(ALIAS_SPLIT_RE)

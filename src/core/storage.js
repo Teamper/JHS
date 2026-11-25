@@ -1,6 +1,7 @@
 import { A, B, D, P, a, d, escapeHtml, g, h, i, normalizeCarNum, p, s } from "./constants.js";
 import { LEGACY_DATA_ALIASES, assertSupportedDataVersion, getPortableDataKeys, normalizeLegacyDomains, normalizeLegacySettings, normalizePortableData, selectPortableSettings } from "./migration.js";
 import { prepareAtomicImport } from "./atomic-import.js";
+import { ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState, readActressProfileBackfillState } from "./actress-profile-backfill-state.js";
 import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 import { readReviewKeywords } from "./review-keywords.js";
@@ -192,8 +193,35 @@ export class StorageManager {
         d && (h.remark = d), h.updateDate = utils.getNowStr(), await this._setItemAndInvalidate(this.favorite_actresses_key, t.map((item => item === existing ? h : item)));
         return true;
     }
-    async batchUpdateFavoriteActressProfiles(updates) {
-        if (!Array.isArray(updates) || !updates.length) return 0;
+    async getActressProfileBackfillState() {
+        return readActressProfileBackfillState(await this.forage.getItem(ACTRESS_PROFILE_BACKFILL_KEY));
+    }
+    async getActressProfileBackfillSnapshot() {
+        const snapshot = await this.atomicStorage.readAtomicSnapshot([this.favorite_actresses_key, ACTRESS_PROFILE_BACKFILL_KEY]);
+        return {
+            actresses: snapshot[this.favorite_actresses_key].value ?? [],
+            state: readActressProfileBackfillState(snapshot[ACTRESS_PROFILE_BACKFILL_KEY].value),
+        };
+    }
+    /** @param {string[]} [starIds] */
+    async clearActressProfileBackfillAttempts(starIds) {
+        const ids = starIds?.map(id => id.trim()).filter(Boolean);
+        if (ids?.length === 0) return;
+        await this.withActressLock(async () => {
+            const expected = await this.atomicStorage.readAtomicSnapshot([ACTRESS_PROFILE_BACKFILL_KEY]);
+            const current = readActressProfileBackfillState(expected[ACTRESS_PROFILE_BACKFILL_KEY].value);
+            const revision = crypto.randomUUID();
+            const next = ids ? { ...current, entries: { ...current.entries } } : createActressProfileBackfillState(revision);
+            if (ids) {
+                for (const id of ids) delete next.entries[id];
+                next.actorRevisions = { ...next.actorRevisions, ...Object.fromEntries(ids.map(id => [id, revision])) };
+            }
+            await this.atomicStorage.commitAtomicBatch({ expected, puts: { [ACTRESS_PROFILE_BACKFILL_KEY]: next }, deletes: [] });
+        });
+    }
+    /** @param {any[]} updates @param {import("./actress-profile-backfill-state.js").ActressProfileBackfillProgress} [progress] */
+    async batchUpdateFavoriteActressProfiles(updates, progress) {
+        if (!progress && (!Array.isArray(updates) || !updates.length)) return 0;
         const normalizedByStarId = new Map();
         for (const entry of updates) {
             const starId = String(entry?.starId || "").trim();
@@ -201,22 +229,48 @@ export class StorageManager {
             if (!starId || !profile) continue;
             normalizedByStarId.set(starId, profile);
         }
-        if (!normalizedByStarId.size) return 0;
+        if (!progress && !normalizedByStarId.size) return 0;
         return this.withActressLock(async () => {
-            const list = await this.getFavoriteActressList();
-            if (!Array.isArray(list) || !list.length) return 0;
-            const now = utils.getNowStr();
+            const favoriteKey = this.favorite_actresses_key;
+            const expected = progress && await this.atomicStorage.readAtomicSnapshot([favoriteKey, ACTRESS_PROFILE_BACKFILL_KEY]);
+            const checkpoint = expected && readActressProfileBackfillState(expected[ACTRESS_PROFILE_BACKFILL_KEY].value);
+            if (checkpoint && checkpoint.generation !== progress.generation) {
+                throw new DOMException("演员资料补齐已被恢复或缓存清理重置", "AbortError");
+            }
+            const isCurrent = (/** @type {string} */ starId) =>
+                !checkpoint || checkpoint.actorRevisions[starId] === progress.actorRevisions[starId];
+            const records = expected ? expected[favoriteKey].value : await this.getFavoriteActressList();
+            const list = Array.isArray(records) ? records : [];
+            const currentIds = new Set();
+            const now = normalizedByStarId.size ? utils.getNowStr() : "";
             let updated = 0;
             const nextList = list.map((actress) => {
                 const starId = String(actress?.starId || "").trim();
-                if (!starId || !normalizedByStarId.has(starId)) return actress;
+                if (starId) currentIds.add(starId);
+                if (!normalizedByStarId.has(starId) || !isCurrent(starId)) return actress;
                 const nextProfile = normalizedByStarId.get(starId);
                 const next = { ...actress, actressProfile: nextProfile, actressProfileVerifiedUrl: nextProfile.url };
                 if (!readVerifiedActressProfile(next) || isSameActressProfile(readVerifiedActressProfile(actress), nextProfile)) return actress;
                 updated += 1;
                 return { ...next, updateDate: now };
             });
-            if (updated > 0) await this._setItemAndInvalidate(this.favorite_actresses_key, nextList);
+            if (!checkpoint) {
+                if (updated > 0) await this._setItemAndInvalidate(favoriteKey, nextList);
+                return updated;
+            }
+            const entries = new Map(Object.entries(checkpoint.entries).filter(([id]) => currentIds.has(id)));
+            for (const [id, time] of progress.attempts) {
+                if (currentIds.has(id) && isCurrent(id)) entries.set(id, time);
+            }
+            const initialized = checkpoint.initialized || (progress.completeInitialRun && [...currentIds].every(isCurrent));
+            const puts = { [ACTRESS_PROFILE_BACKFILL_KEY]: { ...checkpoint, initialized, entries: Object.fromEntries(entries) } };
+            if (updated > 0) {
+                await this.backupChanges?.capture(favoriteKey);
+                await this.syncState?.capture(favoriteKey);
+                puts[favoriteKey] = nextList;
+            }
+            await this.atomicStorage.commitAtomicBatch({ expected, puts, deletes: [], signal: progress.signal });
+            if (updated > 0) this._invalidateCache(favoriteKey);
             return updated;
         });
     }
@@ -750,7 +804,7 @@ export class StorageManager {
                 if (!atomic?.readAtomicSnapshot || !atomic?.commitAtomicBatch) throw Object.assign(new Error("当前存储不支持安全导入，数据未修改；仍可导出备份"), { code: "ATOMIC_IMPORT_UNAVAILABLE" });
                 await this.stateService?.recoverPendingTransactionWithoutLock?.();
                 if (options.prepareData) ({ data: imported, warnings } = normalizePortableData(await options.prepareData()));
-                const batch = await prepareAtomicImport(this, atomic, imported, warnings, targetVersion);
+                const batch = await prepareAtomicImport(this, atomic, imported, warnings, targetVersion, options.resetActressProfileBackfill !== false);
                 await options.assertActive?.();
                 for (const key of Object.keys(batch.puts)) await this.backupChanges?.capture(key);
                 await atomic.commitAtomicBatch({ ...batch, signal: options.signal });

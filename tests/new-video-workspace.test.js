@@ -33,6 +33,7 @@ function createHarness() {
         getSetting: vi.fn(async () => 8760)
     };
     const stateService = {
+        clearActressProfileBackfillAttempts: vi.fn(async () => {}),
         getNewVideoDecisions: vi.fn(async () => ({})),
         getFavoriteActressList: vi.fn(() => storageManager.getFavoriteActressList()),
         getCarMap: vi.fn(() => storageManager.getCarMap()),
@@ -978,7 +979,6 @@ describe("new video interaction ownership", () => {
         beans.TaskPlugin.singleTaskKey = "jhs-single-task";
         beans.TaskPlugin.checkFavoriteActress = vi.fn(async () => ({ completed: true, fatal: false }));
         beans.TaskPlugin.checkNewVideo = vi.fn(async () => ({ completed: true, fatal: false }));
-        beans.TaskPlugin.clearProfileAttempts = vi.fn();
         beans.TaskPlugin.triggerProfileBackfill = vi.fn(async () => ({ total: 1, updated: 1 }));
 
         $(".newVideoToolBox").append('<a href="/users/profile">profile</a><button id="checkFavoriteActress"><span>手动同步演员</span></button><button id="checkNewVideo"><span>检测新作品</span></button>');
@@ -996,13 +996,17 @@ describe("new video interaction ownership", () => {
         await plugin.editActress(actresses[0]);
         plugin.editor.root.find("#edit-remark").val("remark only");
         await dialog.open.mock.calls[0][0].btn2(plugin.editor.id);
-        expect(beans.TaskPlugin.clearProfileAttempts).not.toHaveBeenCalled();
+        expect(stateService.clearActressProfileBackfillAttempts).not.toHaveBeenCalled();
 
         await plugin.editActress(actresses[0]);
         plugin.editor.root.find("#edit-actress-allname").val("Alice, Alice Alias");
+        let releaseClear;
+        stateService.clearActressProfileBackfillAttempts.mockImplementationOnce(() => new Promise(resolve => { releaseClear = resolve; }));
         await dialog.open.mock.calls[1][0].btn2(plugin.editor.id);
-        expect(beans.TaskPlugin.clearProfileAttempts).toHaveBeenCalledWith(["alice"]);
-        expect(beans.TaskPlugin.triggerProfileBackfill).toHaveBeenLastCalledWith({ starIds: ["alice"], force: true, refresh: true });
+        expect(stateService.clearActressProfileBackfillAttempts).toHaveBeenCalledWith(["alice"]);
+        expect(beans.TaskPlugin.triggerProfileBackfill).toHaveBeenCalledTimes(2);
+        releaseClear();
+        await vi.waitFor(() => expect(beans.TaskPlugin.triggerProfileBackfill).toHaveBeenLastCalledWith({ starIds: ["alice"], force: true, refresh: true }));
 
         // Single-actor recheck triggers targeted backfill when verified profile is missing
         plugin._viewMode = "actress";
@@ -1012,13 +1016,13 @@ describe("new video interaction ownership", () => {
         await plugin.renderActressCards();
         $(".btn-check-actress").first().trigger("click");
         await vi.waitFor(() => expect(beans.TaskPlugin.triggerProfileBackfill).toHaveBeenCalledTimes(4));
-        expect(beans.TaskPlugin.clearProfileAttempts).toHaveBeenLastCalledWith(["alice"]);
+        expect(stateService.clearActressProfileBackfillAttempts).toHaveBeenLastCalledWith(["alice"]);
 
         // Rebind clears source + target cooldown and triggers targeted refresh for rebound actress without verified profile
         stateService.rebindFavoriteActress.mockResolvedValueOnce({ ok: true, merged: false, actress: { ...actresses[0], starId: "rebound" } });
         await plugin.applyActorRebind(actresses[0], { starId: "rebound", name: "Rebound" });
-        expect(beans.TaskPlugin.clearProfileAttempts).toHaveBeenLastCalledWith(["alice", "rebound"]);
-        expect(beans.TaskPlugin.triggerProfileBackfill).toHaveBeenLastCalledWith({ starIds: ["rebound"], force: true, refresh: true });
+        expect(stateService.clearActressProfileBackfillAttempts).toHaveBeenLastCalledWith(["alice", "rebound"]);
+        await vi.waitFor(() => expect(beans.TaskPlugin.triggerProfileBackfill).toHaveBeenLastCalledWith({ starIds: ["rebound"], force: true, refresh: true }));
 
         dom.window.close();
     });

@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
+import { StateService } from "../src/core/state-service.js";
+import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
+import { ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState } from "../src/core/actress-profile-backfill-state.js";
+import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
 import { normalizePortableData } from "../src/core/migration.js";
 import { emptySyncModel, materializeSyncData, projectSyncData, validateSyncState, versionSyncDiff } from "../src/core/webdav-sync-model.js";
 import { CACHE_TTL } from "../src/core/cache-policy.js";
@@ -398,467 +402,194 @@ describe("NewVideoScanController", () => {
         expect(state.updateFavoriteActress).toHaveBeenCalledOnce();
         expect(logger.warn).toHaveBeenCalledOnce();
     });
+});
 
-    it("backfills due favorite actress profiles, respects 7d/24h cooldowns, skips unchanged writes, preserves existing profiles on null lookup, and prunes orphans", async () => {
-        const localStore = new Map([
-            ["jhs_actress_profile_attempts_v1", JSON.stringify({
-                schema: 3,
-                entries: {
-                    "fresh-pos": 1000,
-                    "fresh-neg": 1000 + CACHE_TTL.actressInfoNegative - 100,
-                    "orphan-id": 500,
-                },
-            })],
-        ]);
-        const storage = {
-            getLocal: vi.fn((key) => localStore.get(key) ?? null),
-            setLocal: vi.fn((key, value) => localStore.set(key, value)),
-        };
-        const existingProfile = {
-            url: "https://ja.wikipedia.org/wiki/Existing",
-            birthday: "1995年1月1日", age: "31岁", height: "160cm", weight: "45kg",
-            threeSizeText: "85 - 58 - 86", braSize: "D", matchedName: "Existing",
-        };
-        const preservedProfile = {
-            url: "https://ja.wikipedia.org/wiki/Preserved",
-            birthday: "1996年2月2日", age: "30岁", height: "165cm", weight: "48kg",
-            threeSizeText: "88 - 59 - 88", braSize: "E", matchedName: "Preserved",
-        };
-        const state = {
-            getFavoriteActressList: vi.fn(async () => [
-                { starId: "fresh-pos", name: "FreshPos", allName: ["Existing"], actressProfile: existingProfile, actressProfileVerifiedUrl: existingProfile.url },
-                { starId: "fresh-neg", name: "FreshNeg" },
-                { starId: "due-same", name: "DueSame", allName: ["Existing"], actressProfile: existingProfile, actressProfileVerifiedUrl: existingProfile.url },
-                { starId: "due-null", name: "DueNull", allName: ["Preserved"], actressProfile: preservedProfile, actressProfileVerifiedUrl: preservedProfile.url },
-                { starId: "due-new", name: "DueNew", allName: ["DueAlias"] },
-            ]),
-            batchUpdateFavoriteActressProfiles: vi.fn(async (updates) => updates.length),
-        };
-        const actressInfo = {
-            lookupAny: vi.fn(async (names) => {
-                if (names.includes("DueSame")) return { info: { ...existingProfile }, matchedName: "Existing" };
-                if (names.includes("DueNull")) return null;
-                if (names.includes("DueNew")) return { info: { url: "https://ja.wikipedia.org/wiki/DueNew", birthday: "1998年5月6日", age: "28岁", height: "158cm", weight: "", threeSizeText: "83 - 57 - 84", braSize: "C" }, matchedName: "DueAlias" };
-                return null;
-            }),
-        };
-        const scope = new LifecycleScope("test:backfill");
-        const onProgress = vi.fn();
-        const now = 1000 + CACHE_TTL.actressInfoNegative + 500;
-        const controller = new NewVideoScanController({ state, actressInfo, storage, scope, getTimestamp: () => "2026-11-18", onNewItems: vi.fn() });
+describe("favorite actress profile backfill", () => {
+    beforeEach(() => vi.stubGlobal("utils", { getNowStr: () => "2026-11-25 12:00:00" }));
+    afterEach(() => vi.unstubAllGlobals());
 
-        const summary = await controller.backfillFavoriteProfiles({ now, concurrency: 2, delayMs: 0, onProgress });
-        expect(summary).toEqual({ total: 3, updated: 1, unchanged: 2, failed: 0, rateLimited: 0 });
-        expect(onProgress).toHaveBeenCalledTimes(3);
-        expect(state.batchUpdateFavoriteActressProfiles).toHaveBeenCalledExactlyOnceWith([
-            {
-                starId: "due-new",
-                actressProfile: {
-                    url: "https://ja.wikipedia.org/wiki/DueNew",
-                    birthday: "1998年5月6日", age: "28岁", height: "158cm", weight: "",
-                    threeSizeText: "83 - 57 - 84", braSize: "C", matchedName: "DueAlias",
-                },
-            },
-        ]);
-        const persisted = JSON.parse(localStore.get("jhs_actress_profile_attempts_v1"));
-        expect(persisted.entries["orphan-id"]).toBeUndefined();
-        expect(persisted.entries["due-new"]).toBe(now);
-        expect(persisted.entries["due-null"]).toBe(now);
-        expect(persisted.entries["due-same"]).toBe(now);
-        scope.dispose();
-    });
-
-    it("skips state batch write when all backfilled profiles are unchanged", async () => {
-        const existingProfile = {
-            url: "https://ja.wikipedia.org/wiki/Same",
-            birthday: "", age: "", height: "160cm", weight: "", threeSizeText: "", braSize: "C", matchedName: "Same",
-        };
-        const state = {
-            getFavoriteActressList: vi.fn(async () => [{ starId: "same", name: "Same", actressProfile: existingProfile, actressProfileVerifiedUrl: existingProfile.url }]),
-            batchUpdateFavoriteActressProfiles: vi.fn(),
-        };
-        const actressInfo = { lookupAny: vi.fn(async () => ({ info: { ...existingProfile }, matchedName: "Same" })) };
-        const controller = new NewVideoScanController({ state, actressInfo, scope: {}, getTimestamp: () => "2026-11-18", onNewItems: vi.fn() });
-
-        const first = await controller.backfillFavoriteProfiles({ now: 10_000, concurrency: 1, delayMs: 0 });
-        expect(first).toEqual({ total: 1, updated: 0, unchanged: 1, failed: 0, rateLimited: 0 });
-        expect(state.batchUpdateFavoriteActressProfiles).not.toHaveBeenCalled();
-
-        // In-memory fallback Map keeps cooldown when storage is omitted
-        const second = await controller.backfillFavoriteProfiles({ now: 11_000, concurrency: 1, delayMs: 0 });
-        expect(second).toEqual({ total: 0, updated: 0, unchanged: 0, failed: 0, rateLimited: 0 });
-        expect(actressInfo.lookupAny).toHaveBeenCalledOnce();
-    });
-
-    it("stops claiming items on transient block error and aborts cleanly on scope cancellation", async () => {
-        const state = {
-            getFavoriteActressList: vi.fn(async () => [
-                { starId: "a1", name: "A1" },
-                { starId: "a2", name: "A2" },
-                { starId: "a3", name: "A3" },
-            ]),
-            batchUpdateFavoriteActressProfiles: vi.fn(),
-        };
-        const actressInfo = {
-            lookupAny: vi.fn(async () => { throw Object.assign(new Error("429"), { code: "RATE_LIMITED" }); }),
-        };
-        const controller = new NewVideoScanController({ state, actressInfo, scope: {}, logger: { warn: vi.fn() }, getTimestamp: () => "2026-11-18", onNewItems: vi.fn() });
-        const rateSummary = await controller.backfillFavoriteProfiles({ now: 5000, concurrency: 1, delayMs: 0 });
-        expect(rateSummary).toEqual({ total: 3, updated: 0, unchanged: 0, failed: 0, rateLimited: 1 });
-        expect(actressInfo.lookupAny).toHaveBeenCalledOnce();
-        expect(state.batchUpdateFavoriteActressProfiles).not.toHaveBeenCalled();
-
-        const abortScope = new LifecycleScope("test:abort-backfill");
-        const abortController = new NewVideoScanController({
-            state,
-            actressInfo: {
-                lookupAny: vi.fn(async (_names, { scope }) => {
-                    abortScope.dispose();
-                    throw Object.assign(new Error("aborted"), { name: "AbortError", code: "ABORTED", cause: scope.signal.reason });
-                }),
-            },
-            scope: abortScope,
-            getTimestamp: () => "2026-11-18",
-            onNewItems: vi.fn(),
+    function profile(name, height = "160cm") {
+        return { url: new URL("/wiki/" + name, "https://ja.wikipedia.org").href, height, matchedName: name };
+    }
+    function createBackfill(actresses, { initial, beforeWrite, lookup = async ([name]) => ({ info: profile(name), matchedName: name }) } = {}) {
+        const data = new Map([["favorite_actresses", actresses]]);
+        if (initial) data.set(ACTRESS_PROFILE_BACKFILL_KEY, initial);
+        const storage = Object.assign(Object.create(StorageManager.prototype), {
+            favorite_actresses_key: "favorite_actresses",
+            forage: { getItem: async key => data.get(key) ?? null },
+            atomicStorage: memoryAtomicStorage(data, { beforeWrite }),
+            mutationCoordinator: new StorageMutationCoordinator({ lockManager: null }),
+            _actressLock: Promise.resolve(),
+            _invalidateCache: vi.fn(),
         });
-        await expect(abortController.backfillFavoriteProfiles({ now: 5000, concurrency: 1, delayMs: 0 })).rejects.toMatchObject({ code: "ABORTED" });
-        expect(state.batchUpdateFavoriteActressProfiles).not.toHaveBeenCalled();
-
-        abortController.dispose();
-        expect(() => abortController.assertActive()).toThrow();
-        try {
-            abortController.assertActive();
-        } catch (error) {
-            expect(error).toMatchObject({ name: "AbortError", code: "ABORTED" });
-        }
-    });
-
-    it("writes attempts only after IndexedDB batch write succeeds and reconciles committed update counts", async () => {
-        const localStore = new Map();
-        const storage = {
-            getLocal: vi.fn((key) => localStore.get(key) ?? null),
-            setLocal: vi.fn((key, value) => localStore.set(key, value)),
-        };
-        const order = [];
-        const actressInfo = {
-            lookupAny: vi.fn(async () => ({
-                info: { url: "https://ja.wikipedia.org/wiki/A1", height: "161cm" },
-                matchedName: "A1",
-            })),
-        };
-        const failingState = {
-            getFavoriteActressList: vi.fn(async () => [{ starId: "a1", name: "A1" }]),
-            batchUpdateFavoriteActressProfiles: vi.fn(async () => {
-                order.push("db-fail");
-                throw new Error("IndexedDB quota exceeded");
-            }),
-        };
-        const failCtrl = new NewVideoScanController({ state: failingState, actressInfo, storage, scope: {}, getTimestamp: () => "2026-11-18", onNewItems: vi.fn() });
-        await expect(failCtrl.backfillFavoriteProfiles({ now: 1000, concurrency: 1, delayMs: 0 })).rejects.toThrow("IndexedDB quota exceeded");
-        expect(storage.setLocal).not.toHaveBeenCalled();
-
-        order.length = 0;
-        const reconciledState = {
-            getFavoriteActressList: vi.fn(async () => [{ starId: "a1", name: "A1" }]),
-            batchUpdateFavoriteActressProfiles: vi.fn(async () => {
-                order.push("db-commit");
-                return 0;
-            }),
-        };
-        storage.setLocal.mockImplementation((key, value) => {
-            order.push("attempts-write");
-            localStore.set(key, value);
-        });
-        const okCtrl = new NewVideoScanController({ state: reconciledState, actressInfo, storage, scope: {}, getTimestamp: () => "2026-11-18", onNewItems: vi.fn() });
-        const summary = await okCtrl.backfillFavoriteProfiles({ now: 2000, concurrency: 1, delayMs: 0 });
-        expect(summary).toEqual({ total: 1, updated: 0, unchanged: 1, failed: 0, rateLimited: 0 });
-        expect(order).toEqual(["db-commit", "attempts-write"]);
-    });
-
-    it("resolves backfillFavoriteProfiles cleanly even when writing local cooldown cache throws QuotaExceededError", async () => {
-        const storage = {
-            getLocal: vi.fn(() => null),
-            setLocal: vi.fn(() => { throw new Error("QuotaExceededError"); }),
-        };
+        const state = new StateService(storage, {});
+        const lookupAny = vi.fn(lookup);
         const logger = { warn: vi.fn() };
-        const state = {
-            getFavoriteActressList: vi.fn(async () => [{ starId: "a1", name: "A1" }]),
-            batchUpdateFavoriteActressProfiles: vi.fn(async () => 1),
-        };
-        const actressInfo = {
-            lookupAny: vi.fn(async () => ({
-                info: { url: "https://ja.wikipedia.org/wiki/A1", height: "161cm" },
-                matchedName: "A1",
-            })),
-        };
-        const controller = new NewVideoScanController({ state, actressInfo, storage, logger, scope: {}, getTimestamp: () => "2026-11-18", onNewItems: vi.fn() });
-        const summary = await controller.backfillFavoriteProfiles({ now: 3000, concurrency: 1, delayMs: 0 });
-        expect(summary).toEqual({ total: 1, updated: 1, unchanged: 0, failed: 0, rateLimited: 0 });
-        expect(logger.warn).toHaveBeenCalledOnce();
+        const controller = (scope = new LifecycleScope("test:backfill")) => new NewVideoScanController({
+            state, scope, logger, actressInfo: { lookupAny }, getTimestamp: () => "",
+            onNewItems: () => {},
+        });
+        return { data, state, controller, lookupAny };
+    }
+    const actresses = (...names) => names.map(name => ({ starId: name.toLowerCase(), name }));
+
+    it("respects positive and negative cooldowns, preserves unchanged profiles, and prunes removed actors", async () => {
+        const records = actresses("Recent", "Missing", "Same", "Kept", "New");
+        for (const index of [0, 2, 3]) {
+            const saved = profile(records[index].name);
+            Object.assign(records[index], { actressProfile: saved, actressProfileVerifiedUrl: saved.url });
+        }
+        const now = CACHE_TTL.actressInfoNegative + 1500;
+        const writes = [];
+        const h = createBackfill(records, {
+            initial: { ...createActressProfileBackfillState(), initialized: true, entries: { recent: 1000, missing: now - 100, removed: 500 } },
+            beforeWrite: async key => writes.push(key),
+            lookup: async ([name]) => name === "Kept" ? null : { info: profile(name), matchedName: name },
+        });
+        const onProgress = vi.fn();
+        const ctrl = h.controller();
+        const summary = await ctrl.backfillFavoriteProfiles({ now, delayMs: 0, onProgress });
+        expect(summary).toEqual({ total: 3, updated: 1, unchanged: 2, failed: 0, rateLimited: 0 });
+        expect(h.lookupAny.mock.calls.map(([names]) => names[0])).toEqual(["Same", "Kept", "New"]);
+        expect(onProgress).toHaveBeenCalledTimes(3);
+        expect(writes).toContain("favorite_actresses");
+        expect(h.data.get("favorite_actresses")).toEqual([
+            ...records.slice(0, 4), expect.objectContaining({
+                starId: "new", actressProfile: expect.objectContaining(profile("New")), actressProfileVerifiedUrl: profile("New").url,
+            }),
+        ]);
+        expect((await h.state.getActressProfileBackfillState()).entries).toEqual({
+            recent: 1000, missing: now - 100, same: now, kept: now, new: now,
+        });
+        writes.length = 0;
+        await ctrl.backfillFavoriteProfiles({ now: now + 1, starIds: ["same"], force: true, refresh: true, delayMs: 0 });
+        expect(writes).toEqual([ACTRESS_PROFILE_BACKFILL_KEY]);
+        expect(h.lookupAny).toHaveBeenLastCalledWith(["Same"], { scope: ctrl.scope, refresh: true });
     });
 
-    it("commits updates incrementally per commitBatchSize, flushes completed batches before AbortError, and supports clearProfileAttempts + targeted refresh", async () => {
-        const localStore = new Map();
-        const storage = {
-            getLocal: vi.fn((key) => localStore.get(key) ?? null),
-            setLocal: vi.fn((key, value) => localStore.set(key, value)),
-        };
-        const committedBatches = [];
-        const state = {
-            getFavoriteActressList: vi.fn(async () => [
-                { starId: "a1", name: "A1" },
-                { starId: "a2", name: "A2" },
-                { starId: "a3", name: "A3" },
-            ]),
-            batchUpdateFavoriteActressProfiles: vi.fn(async (batch) => {
-                committedBatches.push(batch.map((item) => item.starId));
-                return batch.length;
-            }),
-        };
-        const abortScope = new LifecycleScope("test:partial-abort");
-        const actressInfo = {
-            lookupAny: vi.fn(async (names, opts) => {
-                if (names.includes("A3")) {
-                    abortScope.dispose();
-                    throw Object.assign(new Error("aborted"), { name: "AbortError", code: "ABORTED", cause: opts.scope.signal.reason });
+    it("keeps the first sweep pending after targeted success and resumes after a committed batch and cancellation", async () => {
+        const scope = new LifecycleScope("test:closed-page");
+        let interrupt = true;
+        const h = createBackfill(actresses("Alice", "Bella", "Cara"), {
+            lookup: async ([name], { scope: requestScope }) => {
+                if (name === "Cara" && interrupt) {
+                    scope.dispose();
+                    throw requestScope.signal.reason;
                 }
-                const target = names[0];
-                return { info: { url: `https://ja.wikipedia.org/wiki/${target}`, height: "160cm" }, matchedName: target };
-            }),
-        };
-        const controller = new NewVideoScanController({ state, actressInfo, storage, scope: abortScope, getTimestamp: () => "2026-11-21", onNewItems: vi.fn() });
-        await expect(controller.backfillFavoriteProfiles({ now: 5000, concurrency: 1, delayMs: 0, commitBatchSize: 1 })).rejects.toMatchObject({ code: "ABORTED" });
-        expect(committedBatches).toEqual([["a1"], ["a2"]]);
-        const persistedAfterAbort = JSON.parse(localStore.get("jhs_actress_profile_attempts_v1"));
-        expect(persistedAfterAbort.schema).toBe(3);
-        expect(persistedAfterAbort.entries).toEqual({ a1: 5000, a2: 5000 });
-
-        // clearProfileAttempts + targeted { starIds, force, refresh }
-        const freshScope = new LifecycleScope("test:targeted");
-        const targetedLookup = vi.fn(async (names) => ({ info: { url: `https://ja.wikipedia.org/wiki/${names[0]}`, height: "165cm" }, matchedName: names[0] }));
-        const targetedCtrl = new NewVideoScanController({
-            state,
-            actressInfo: { lookupAny: targetedLookup },
-            storage,
-            scope: freshScope,
-            getTimestamp: () => "2026-11-21",
-            onNewItems: vi.fn(),
+                return { info: profile(name), matchedName: name };
+            },
         });
-        targetedCtrl.clearProfileAttempts("a1");
-        expect(JSON.parse(localStore.get("jhs_actress_profile_attempts_v1")).entries).toEqual({ a2: 5000 });
-
-        const targetedSummary = await targetedCtrl.backfillFavoriteProfiles({ now: 6000, concurrency: 1, delayMs: 0, starIds: ["a2"], force: true, refresh: true });
-        expect(targetedSummary).toEqual({ total: 1, updated: 1, unchanged: 0, failed: 0, rateLimited: 0 });
-        expect(targetedLookup).toHaveBeenCalledExactlyOnceWith(["A2"], { scope: freshScope, refresh: true });
-        freshScope.dispose();
+        await h.controller().backfillFavoriteProfiles({ now: 1000, starIds: ["alice"], force: true, delayMs: 0 });
+        expect(await h.controller().needsProfileBackfillInit()).toBe(true);
+        await expect(h.controller(scope).backfillFavoriteProfiles({
+            now: 2000, concurrency: 1, commitBatchSize: 1, delayMs: 0,
+        })).rejects.toMatchObject({ name: "AbortError" });
+        expect(await h.state.getActressProfileBackfillState()).toMatchObject({
+            initialized: false, entries: { alice: 1000, bella: 2000 },
+        });
+        interrupt = false;
+        h.lookupAny.mockClear();
+        const reopened = h.controller();
+        expect(await reopened.needsProfileBackfillInit()).toBe(true);
+        await reopened.backfillFavoriteProfiles({ now: 3000, delayMs: 0 });
+        expect(h.lookupAny).toHaveBeenCalledExactlyOnceWith(["Cara"], { scope: reopened.scope });
+        expect(await h.state.getActressProfileBackfillState()).toMatchObject({
+            initialized: true, entries: { alice: 1000, bella: 2000, cara: 3000 },
+        });
     });
 
-    it("propagates incremental batch persistence failures without recording failed batch attempts", async () => {
-        const localStore = new Map();
-        const storage = {
-            getLocal: vi.fn((key) => localStore.get(key) ?? null),
-            setLocal: vi.fn((key, value) => localStore.set(key, value)),
-        };
-        const state = {
-            getFavoriteActressList: vi.fn(async () => [
-                { starId: "a1", name: "A1" },
-                { starId: "a2", name: "A2" },
-                { starId: "a3", name: "A3" },
-            ]),
-            batchUpdateFavoriteActressProfiles: vi.fn()
-                .mockResolvedValueOnce(1)
-                .mockRejectedValueOnce(new Error("IndexedDB batch failure")),
-        };
-        const actressInfo = {
-            lookupAny: vi.fn(async (names) => ({
-                info: { url: `https://ja.wikipedia.org/wiki/${names[0]}`, height: "160cm" },
-                matchedName: names[0],
-            })),
-        };
-        const controller = new NewVideoScanController({ state, actressInfo, storage, scope: {}, getTimestamp: () => "2026-11-21", onNewItems: vi.fn() });
-
-        await expect(controller.backfillFavoriteProfiles({ now: 7000, concurrency: 1, delayMs: 0, commitBatchSize: 1 })).rejects.toThrow("IndexedDB batch failure");
-        expect(actressInfo.lookupAny).toHaveBeenCalledTimes(2);
-        expect(JSON.parse(localStore.get("jhs_actress_profile_attempts_v1")).entries).toEqual({ a1: 7000 });
+    it("treats legacy cooling data as pending and marks completion for an empty untargeted run", async () => {
+        const h = createBackfill([], { initial: { schema: 3, entries: { obsolete: 1000 } } });
+        const ctrl = h.controller();
+        expect(await ctrl.needsProfileBackfillInit()).toBe(true);
+        await ctrl.backfillFavoriteProfiles({ starIds: ["missing"] });
+        expect(await ctrl.needsProfileBackfillInit()).toBe(true);
+        await ctrl.backfillFavoriteProfiles();
+        expect(await h.state.getActressProfileBackfillState()).toEqual({ ...createActressProfileBackfillState(), initialized: true });
+        expect(await ctrl.needsProfileBackfillInit()).toBe(false);
     });
 
-    it("stops concurrent workers from retrying a failed batch, preserves mid-run additions, and discards stale cleared lookups", async () => {
-        const localStore = new Map([
-            ["jhs_actress_profile_attempts_v1", JSON.stringify({
-                schema: 3,
-                entries: { "orphan-id": 500 },
-            })],
+    it("rejects future cooling data before any lookup or mutation", async () => {
+        const future = { schema: 5, entries: { other: 1000 } };
+        const h = createBackfill(actresses("Alice"), { initial: future });
+        await expect(h.controller().backfillFavoriteProfiles()).rejects.toThrow("来自更新版本");
+        expect(h.lookupAny).not.toHaveBeenCalled();
+        expect(h.data.get(ACTRESS_PROFILE_BACKFILL_KEY)).toEqual(future);
+    });
+
+    it("keeps rate-limited sweeps pending and leaves failed actors eligible after a fully attempted sweep", async () => {
+        let limited = true;
+        const h = createBackfill(actresses("Alice", "Bella", "Cara"), {
+            lookup: async ([name]) => {
+                if (name === "Bella" && limited) throw Object.assign(new Error("limited"), { code: "RATE_LIMITED" });
+                if (name === "Bella") throw new Error("offline");
+                return { info: profile(name), matchedName: name };
+            },
+        });
+        const ctrl = h.controller();
+        expect(await ctrl.backfillFavoriteProfiles({ now: 1000, concurrency: 1, delayMs: 0 })).toMatchObject({ updated: 1, rateLimited: 1 });
+        expect(h.lookupAny).toHaveBeenCalledTimes(2);
+        expect(await h.state.getActressProfileBackfillState()).toMatchObject({ initialized: false, entries: { alice: 1000 } });
+        limited = false;
+        expect(await ctrl.backfillFavoriteProfiles({ now: 2000, delayMs: 0 })).toMatchObject({ total: 2, updated: 1, failed: 1 });
+        expect(await h.state.getActressProfileBackfillState()).toMatchObject({ initialized: true, entries: { alice: 1000, cara: 2000 } });
+    });
+
+    it("keeps committed batches and rolls the failed actor and its cooldown back together", async () => {
+        const h = createBackfill(actresses("Alice", "Bella", "Cara"), {
+            beforeWrite: async (key, value) => {
+                if (key === "favorite_actresses" && value[1].actressProfile) throw new Error("IndexedDB quota exceeded");
+            },
+        });
+        await expect(h.controller().backfillFavoriteProfiles({ now: 1000, concurrency: 1, commitBatchSize: 1, delayMs: 0 }))
+            .rejects.toThrow("IndexedDB quota exceeded");
+        expect(h.lookupAny).toHaveBeenCalledTimes(2);
+        expect(await h.state.getActressProfileBackfillState()).toMatchObject({ initialized: false, entries: { alice: 1000 } });
+        expect(h.data.get("favorite_actresses")).toEqual([
+            expect.objectContaining({ actressProfile: expect.objectContaining(profile("Alice")) }),
+            { starId: "bella", name: "Bella" },
+            { starId: "cara", name: "Cara" },
         ]);
-        const storage = {
-            getLocal: vi.fn((key) => localStore.get(key) ?? null),
-            setLocal: vi.fn((key, value) => localStore.set(key, value)),
-        };
-        let releaseSecond;
-        const secondInFlight = new Promise((resolve) => { releaseSecond = resolve; });
-        const batchState = {
-            getFavoriteActressList: vi.fn(async () => [
-                { starId: "a1", name: "A1" },
-                { starId: "a2", name: "A2" },
-                { starId: "a3", name: "A3" },
-            ]),
-            batchUpdateFavoriteActressProfiles: vi.fn()
-                .mockRejectedValueOnce(new Error("Batch 1 failed")),
-        };
-        const batchController = new NewVideoScanController({
-            state: batchState,
-            actressInfo: {
-                lookupAny: vi.fn(async (names) => {
-                    if (names.includes("A2")) await secondInFlight;
-                    return { info: { url: `https://ja.wikipedia.org/wiki/${names[0]}`, height: "160cm" }, matchedName: names[0] };
-                }),
-            },
-            storage,
-            scope: {},
-            getTimestamp: () => "2026-11-23",
-            onNewItems: vi.fn(),
-        });
-
-        const pendingBatchFail = batchController.backfillFavoriteProfiles({ now: 8000, concurrency: 2, delayMs: 0, commitBatchSize: 1 });
-        await vi.waitFor(() => expect(batchState.batchUpdateFavoriteActressProfiles).toHaveBeenCalledTimes(1));
-        releaseSecond();
-        await expect(pendingBatchFail).rejects.toThrow("Batch 1 failed");
-        expect(batchState.batchUpdateFavoriteActressProfiles).toHaveBeenCalledTimes(1);
-
-        // Concurrent new favorite cooldown + in-flight clearProfileAttempts epoch guard
-        let releaseRenameTarget;
-        const renameInFlight = new Promise((resolve) => { releaseRenameTarget = resolve; });
-        const raceState = {
-            getFavoriteActressList: vi.fn(async () => [
-                { starId: "a1", name: "OldA1" },
-                { starId: "a2", name: "A2" },
-            ]),
-            batchUpdateFavoriteActressProfiles: vi.fn(async (updates) => updates.length),
-        };
-        const raceController = new NewVideoScanController({
-            state: raceState,
-            actressInfo: {
-                lookupAny: vi.fn(async (names) => {
-                    if (names.includes("OldA1")) {
-                        await renameInFlight;
-                        return { info: { url: "https://ja.wikipedia.org/wiki/OldA1", height: "155cm" }, matchedName: "OldA1" };
-                    }
-                    // Simulate another flow adding a newly favorited actress cooldown mid-run
-                    const current = JSON.parse(localStore.get("jhs_actress_profile_attempts_v1"));
-                    current.entries["a-new"] = 9000;
-                    localStore.set("jhs_actress_profile_attempts_v1", JSON.stringify(current));
-                    return null;
-                }),
-            },
-            storage,
-            scope: {},
-            getTimestamp: () => "2026-11-23",
-            onNewItems: vi.fn(),
-        });
-
-        const pendingRace = raceController.backfillFavoriteProfiles({ now: 9500, concurrency: 2, delayMs: 0 });
-        await vi.waitFor(() => expect(raceController.actressInfo.lookupAny).toHaveBeenCalledTimes(2));
-        raceController.clearProfileAttempts("a1");
-        releaseRenameTarget();
-        const raceSummary = await pendingRace;
-        expect(raceSummary).toEqual({ total: 2, updated: 0, unchanged: 2, failed: 0, rateLimited: 0 });
-        expect(raceState.batchUpdateFavoriteActressProfiles).not.toHaveBeenCalled();
-        expect(JSON.parse(localStore.get("jhs_actress_profile_attempts_v1")).entries).toEqual({
-            a2: 9500,
-            "a-new": 9000,
-        });
-
-        // Queued update and unchanged cooldown cleared after lookup completes but before flushProgress commits
-        const toctouStore = new Map();
-        const toctouStorage = {
-            getLocal: vi.fn((key) => toctouStore.get(key) ?? null),
-            setLocal: vi.fn((key, value) => toctouStore.set(key, value)),
-        };
-        let releaseThirdLookup;
-        const thirdLookupGate = new Promise((resolve) => { releaseThirdLookup = resolve; });
-        let lookupCount = 0;
-        const toctouState = {
-            getFavoriteActressList: vi.fn(async () => [
-                { starId: "a1", name: "A1" },
-                { starId: "a2", name: "A2" },
-                { starId: "a3", name: "A3" },
-            ]),
-            batchUpdateFavoriteActressProfiles: vi.fn(async (updates) => updates.length),
-        };
-        const toctouController = new NewVideoScanController({
-            state: toctouState,
-            actressInfo: {
-                lookupAny: vi.fn(async (names) => {
-                    lookupCount += 1;
-                    if (names.includes("A2")) return null;
-                    if (names.includes("A3")) await thirdLookupGate;
-                    return { info: { url: `https://ja.wikipedia.org/wiki/${names[0]}`, height: "160cm" }, matchedName: names[0] };
-                }),
-            },
-            storage: toctouStorage,
-            scope: {},
-            getTimestamp: () => "2026-11-23",
-            onNewItems: vi.fn(),
-        });
-        const pendingToctou = toctouController.backfillFavoriteProfiles({ now: 9800, concurrency: 1, delayMs: 0, commitBatchSize: 2 });
-        await vi.waitFor(() => expect(lookupCount).toBe(3));
-        // At this point a1 (updated) sits in profileUpdates and a2 (unchanged) sits in pendingUpdates
-        toctouController.clearProfileAttempts(["a1", "a2"]);
-        releaseThirdLookup();
-        const toctouSummary = await pendingToctou;
-        expect(toctouSummary).toEqual({ total: 3, updated: 1, unchanged: 2, failed: 0, rateLimited: 0 });
-        expect(toctouState.batchUpdateFavoriteActressProfiles).toHaveBeenCalledExactlyOnceWith([
-            expect.objectContaining({ starId: "a3" }),
-        ]);
-        const toctouEntries = JSON.parse(toctouStore.get("jhs_actress_profile_attempts_v1")).entries;
-        expect(toctouEntries.a1).toBeUndefined();
-        expect(toctouEntries.a2).toBeUndefined();
-        expect(toctouEntries.a3).toBe(9800);
     });
 
-    it("detects uninitialized/outdated attempts schema and marks it initialized after an untargeted empty backfill", async () => {
-        const localStore = new Map();
-        const storage = {
-            getLocal: vi.fn((key) => localStore.get(key) ?? null),
-            setLocal: vi.fn((key, value) => localStore.set(key, value)),
-        };
-        const controller = new NewVideoScanController({
-            state: { getFavoriteActressList: vi.fn(async () => []) },
-            actressInfo: { lookupAny: vi.fn() },
-            storage,
-            scope: {},
-            getTimestamp: () => "2026-11-23",
-            onNewItems: vi.fn(),
+    it("stops concurrent workers from retrying a failed batch", async () => {
+        let release;
+        const blocked = new Promise(resolve => { release = resolve; });
+        const beforeWrite = vi.fn(async () => { throw new Error("write failed"); });
+        const h = createBackfill(actresses("Alice", "Bella"), {
+            beforeWrite, lookup: async ([name]) => {
+                if (name === "Bella") await blocked;
+                return { info: profile(name), matchedName: name };
+            },
         });
+        const running = h.controller().backfillFavoriteProfiles({ delayMs: 0, commitBatchSize: 1 });
+        await vi.waitFor(() => expect(beforeWrite).toHaveBeenCalledTimes(1));
+        release();
+        await expect(running).rejects.toThrow("write failed");
+        expect(beforeWrite).toHaveBeenCalledTimes(1);
+        expect(h.data.has(ACTRESS_PROFILE_BACKFILL_KEY)).toBe(false);
+    });
 
-        // Missing or old schema requires initial backfill
-        expect(controller.needsProfileBackfillInit()).toBe(true);
-        localStore.set("jhs_actress_profile_attempts_v1", JSON.stringify({ schema: 2, entries: { a1: 1000 } }));
-        expect(controller.needsProfileBackfillInit()).toBe(true);
-
-        // Targeted empty run must NOT mark schema initialized before full backfill runs
-        await controller.backfillFavoriteProfiles({ now: 1000, starIds: ["missing"] });
-        expect(controller.needsProfileBackfillInit()).toBe(true);
-
-        // Untargeted empty run persists schema 3 so future loads skip redundant init
-        await controller.backfillFavoriteProfiles({ now: 1000 });
-        expect(controller.needsProfileBackfillInit()).toBe(false);
-        expect(JSON.parse(localStore.get("jhs_actress_profile_attempts_v1"))).toEqual({ schema: 3, entries: {} });
-
-        // Network-blocked full run also initializes schema 3 without recording failed actors in cooldown
-        localStore.delete("jhs_actress_profile_attempts_v1");
-        const failingCtrl = new NewVideoScanController({
-            state: { getFavoriteActressList: vi.fn(async () => [{ starId: "a1", name: "A1" }]) },
-            actressInfo: { lookupAny: vi.fn(async () => { throw new Error("offline"); }) },
-            storage,
-            scope: {},
-            logger: { warn: vi.fn() },
-            getTimestamp: () => "2026-11-23",
-            onNewItems: vi.fn(),
+    it("invalidates only cleared actors, including completed lookups waiting for their batch", async () => {
+        let release;
+        const blocked = new Promise(resolve => { release = resolve; });
+        const h = createBackfill(actresses("Alice", "Bella", "Cara", "Recent"), {
+            initial: { ...createActressProfileBackfillState(), entries: { recent: 950 } },
+            lookup: async ([name]) => {
+                if (name === "Bella") return null;
+                if (name === "Cara") await blocked;
+                return { info: profile(name), matchedName: name };
+            },
         });
-        await expect(failingCtrl.backfillFavoriteProfiles({ now: 2000, delayMs: 0 })).resolves.toEqual({
-            total: 1, updated: 0, unchanged: 0, failed: 1, rateLimited: 0,
+        const running = h.controller().backfillFavoriteProfiles({ now: 1000, concurrency: 1, delayMs: 0 });
+        await vi.waitFor(() => expect(h.lookupAny).toHaveBeenCalledTimes(3));
+        await h.state.clearActressProfileBackfillAttempts(["alice", "bella"]);
+        release();
+        await expect(running).resolves.toEqual({ total: 3, updated: 1, unchanged: 2, failed: 0, rateLimited: 0 });
+        expect(await h.state.getActressProfileBackfillState()).toMatchObject({
+            initialized: false, entries: { recent: 950, cara: 1000 },
         });
-        expect(failingCtrl.needsProfileBackfillInit()).toBe(false);
-        expect(JSON.parse(localStore.get("jhs_actress_profile_attempts_v1"))).toEqual({ schema: 3, entries: {} });
+        expect(Object.keys((await h.state.getActressProfileBackfillState()).entries).sort()).toEqual(["cara", "recent"]);
+        expect(h.data.get("favorite_actresses").slice(0, 2)).toEqual(actresses("Alice", "Bella"));
     });
 });

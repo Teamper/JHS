@@ -14,7 +14,7 @@ import { formatUiDateTime } from "../../core/ui-date-time.js";
 /** @typedef {{ state?: string, cooldownMs?: number, openTime?: number, failCount?: number }} CircuitBreakerRecord */
 /** @typedef {{ count: number, errors: number, lastUsed?: number }} DomainStatsRecord */
 /** @typedef {{ message: string, count: number }} HealthIssue */
-/** @typedef {{ jquery: (value: any) => any, legacyStorage: any, storage?: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window, root?: any, draftSettings?: any, scope?: LifecycleScope, isActive?: () => boolean }} SettingsUiDependencies */
+/** @typedef {{ jquery: (value: any) => any, legacyStorage: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window, root?: any, draftSettings?: any, scope?: LifecycleScope, isActive?: () => boolean }} SettingsUiDependencies */
 
 /** Restrict panel selectors to the settings instance that requested them. @param {SettingsUiDependencies} dependencies */
 function panelQuery(dependencies) {
@@ -28,8 +28,6 @@ const snapshotPanels = new WeakMap();
 /** @param {SettingsUiDependencies} dependencies @param {string} message */
 function finishCommittedDataChange(dependencies, message) {
     const { notifications: show, logger: clog, window } = dependencies;
-    try { dependencies.storage?.removeLocal?.("jhs_actress_profile_attempts_v1"); }
-    catch { /* committed data wins */ }
     try { show.ok(message); }
     catch (error) { try { clog.warn("数据已写入，但完成提示失败", error); } catch { /* committed data wins */ } }
     try { window.setTimeout(() => window.location.reload(), 1e3); }

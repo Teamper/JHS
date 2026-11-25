@@ -52,6 +52,7 @@
     "src/core/migration.js",
     "src/core/movie-identity.js",
     "src/core/actress-measurements.js",
+    "src/core/actress-profile-backfill-state.js",
     "src/core/favorite-actress-highlight.js",
     "src/core/subtitle-asset.js",
     "src/ui/detail/subtitle-workspace.js",

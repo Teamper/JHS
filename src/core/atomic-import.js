@@ -1,6 +1,7 @@
 // @ts-check
 
 import { PORTABLE_DATA_KEYS, getPortableDataKeys, hasPortableUserData, mergePortableSettings, runDataMigrations } from "./migration.js";
+import { ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState, hasFutureActressProfileBackfillSchema } from "./actress-profile-backfill-state.js";
 import { SyncPendingLedger, SYNC_PENDING_KEY } from "./sync-pending-ledger.js";
 import { SYNC_DOMAINS } from "./webdav-sync-model.js";
 
@@ -35,9 +36,10 @@ function createDraft(storage, expected) {
     return { draft, values, touched };
 }
 
-/** Prepare every business and synchronization write before opening the commit transaction. @param {any} storage @param {any} atomic @param {any} imported @param {any[]} warnings @param {number} version */
-export async function prepareAtomicImport(storage, atomic, imported, warnings, version) {
+/** Prepare every business and synchronization write before opening the commit transaction. @param {any} storage @param {any} atomic @param {any} imported @param {any[]} warnings @param {number} version @param {boolean} resetActressProfileBackfill */
+export async function prepareAtomicImport(storage, atomic, imported, warnings, version, resetActressProfileBackfill) {
     const keys = [...PORTABLE_DATA_KEYS, ...getPortableDataKeys(0), "data_version", "data_health_warnings", "snapshots", SYNC_PENDING_KEY, SYNC_STATE_KEY];
+    if (resetActressProfileBackfill) keys.push(ACTRESS_PROFILE_BACKFILL_KEY);
     // V3 removes the old HTTP cache namespace as part of the same batch.
     if (version < 3) keys.push(...(await storage.forage.keys()).filter((/** @type {string} */ key) => key.startsWith("jhs_http_public_cache:v1:")));
     const expected = await atomic.readAtomicSnapshot([...new Set(keys)]);
@@ -46,6 +48,9 @@ export async function prepareAtomicImport(storage, atomic, imported, warnings, v
     await runDataMigrations(draft, null, true);
     if (Object.hasOwn(imported, "setting")) imported.setting = mergePortableSettings(await draft.forage.getItem("setting") || {}, imported.setting);
     for (const [key, value] of Object.entries(imported)) await draft._setItemAndInvalidate(key, value);
+    if (resetActressProfileBackfill && !hasFutureActressProfileBackfillSchema(expected[ACTRESS_PROFILE_BACKFILL_KEY]?.value)) {
+        await draft.forage.setItem(ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState(crypto.randomUUID()));
+    }
     if (warnings.length) await draft.forage.setItem("data_health_warnings", [...(await draft.forage.getItem("data_health_warnings") || []), ...warnings]);
     const changed = [...touched].filter(key => !expected[key]?.exists || !values.has(key) || JSON.stringify(expected[key].value) !== JSON.stringify(values.get(key)));
     const domains = changed.filter(key => SYNC_DOMAINS.includes(key));

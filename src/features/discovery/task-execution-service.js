@@ -275,8 +275,8 @@ export class TaskExecutionService {
                         loggedInJavDb ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : this.logger.debug("未登录 JavDB，跳过自动同步演员");
                     } else this.logger.warn("自动同步已收藏的演员-禁用");
                     this.taskConfig.enableCheckNewVideo === _ ? await this.runBackgroundTask("新作品整批检测", (() => this.checkNewVideo())) : this.logger.warn("自动检测已收藏演员的最新作品-禁用");
-                    const needsProfileInit = (favoriteEnabled || newVideoEnabled) && Boolean(this.featureNewVideoScanController?.needsProfileBackfillInit?.());
-                    allowProfileBackfill = favoriteDue || newVideoDue || needsProfileInit;
+                    allowProfileBackfill = favoriteDue || newVideoDue || ((favoriteEnabled || newVideoEnabled)
+                        && Boolean(await this.featureNewVideoScanController?.needsProfileBackfillInit?.()));
                 }
             } else this.logger.debug("争夺任务锁失败, 跳过执行");
         })).catch((e => {
@@ -300,10 +300,6 @@ export class TaskExecutionService {
             isDisposed: () => this.disposed,
             isListPage: () => Boolean(this.getHostListPageFlag()),
         });
-    }
-    /** @param {string | string[]} starIds */
-    clearProfileAttempts(starIds) {
-        this.featureNewVideoScanController?.clearProfileAttempts?.(starIds);
     }
     async loadConfig() {
         if (this.configLoadPromise) return this.configLoadQueued = !0, this.configLoadPromise;

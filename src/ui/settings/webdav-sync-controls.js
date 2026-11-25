@@ -64,12 +64,7 @@ export function bindWebDavSyncControls(root, dependencies) {
         if (!name) throw new Error("请先选择恢复版本");
         const confirmed = await new Promise(resolve => dependencies.utilities.q(null, "恢复所选版本将更新本机数据，并自动同步到其他端。继续？", () => resolve(true), () => resolve(false), { confirmText: "恢复", cancelText: "取消" }));
         if (!confirmed || !active()) return;
-        const restoreData = root.find("#webdavSyncRestoreData").is(":checked");
-        await service.restore(name, root.find("#webdavSyncRestoreLayout").is(":checked"), dependencies.scope, { data: restoreData, preferences: root.find("#webdavSyncRestorePreferences").is(":checked") });
-        if (restoreData) {
-            try { dependencies.storage?.removeLocal?.("jhs_actress_profile_attempts_v1"); }
-            catch { /* committed restore wins */ }
-        }
+        await service.restore(name, root.find("#webdavSyncRestoreLayout").is(":checked"), dependencies.scope, { data: root.find("#webdavSyncRestoreData").is(":checked"), preferences: root.find("#webdavSyncRestorePreferences").is(":checked") });
         if (active()) dependencies.notifications.ok("恢复完成，已安排自动同步");
     });
     root.on("jhsAutoBackupFormLoaded.jhsSync", () => { void render(); });
