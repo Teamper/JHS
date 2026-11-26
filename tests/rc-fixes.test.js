@@ -71,7 +71,7 @@ describe("RC 收口：UI surface 与宿主 DOM 边界", () => {
 describe("RC 收口：预览 capability / FC2 稳定槽与翻译单入口", () => {
     const fc2By123 = readTestFile(join(process.cwd(), "src/features/external-bridge/fc2-catalog-controller.js"), "utf8");
     const commandbar = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-controller.js"), "utf8");
-    const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
+    const setting = readTestFile(join(process.cwd(), "src/features/settings/settings-controller.js"), "utf8");
 
     it("card and JavBus preview buttons are gated by real DMM capability", () => {
         expect(coverButton).toContain("canUseCardPreview(settings)");

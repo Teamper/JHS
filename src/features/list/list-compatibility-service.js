@@ -10,7 +10,7 @@ import { buildFavoriteActressWorkIndex, resolveFavoriteActressHighlightStyle } f
 import { assertMovieStateEligible } from "../../core/movie-identity.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
-import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../core/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
 import { ListItemIndex } from "../../features/list/list-item-index.js";

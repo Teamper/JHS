@@ -33,7 +33,7 @@ describe("resource settings service", () => {
 });
 
 describe("resource settings UI contracts", () => {
-    const template = readTestFile(join(import.meta.dirname, "../src/plugins/backup/setting-templates.js"), "utf8"), setting = readTestFile(join(import.meta.dirname, "../src/plugins/backup/setting.js"), "utf8");
+    const template = readTestFile(join(import.meta.dirname, "../src/ui/settings/setting-templates.js"), "utf8"), setting = readTestFile(join(import.meta.dirname, "../src/features/settings/settings-controller.js"), "utf8");
     it("keeps JSON advanced and separates cloud and data tools", () => { expect(template).not.toContain("自定义磁力源 JSON"); expect(template).toContain('id="cloud-services-panel"'); expect(template).toContain('id="data-tools-panel"'); expect(template).toContain("资源设置导入与导出"); });
     it("renders cloud controls from the shared catalog instead of a second binding", () => { expect(template).toContain('id="cloud-settings-catalog"'); expect(setting).toContain("renderCloudSettings(root, cloud)"); expect(setting).not.toContain("resourceCloudState"); expect(setting).not.toContain("saveCloudSetting(key, value)"); });
     it("custom delete requires confirmation and built-ins are not deletable", () => { expect(setting).toContain('utils.q(event, `删除来源'); expect(setting).toContain("card(source, false"); });

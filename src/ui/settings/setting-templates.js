@@ -1,9 +1,9 @@
-import { DEFAULT_QUICK_FILTER_OPTIONS } from "../../features/list/list-filters.js";
+import { DEFAULT_QUICK_FILTER_OPTIONS } from "../../core/list-filters.js";
 // @ts-check
 
 import { L, r, escapeHtml } from "../../core/constants.js";
 import { PRODUCT_NAMES } from "../../core/product-names.js";
-import { buildQuickSettingsHtml } from "../../ui/settings/setting-control-renderer.js";
+import { buildQuickSettingsHtml } from "./setting-control-renderer.js";
 import { DETAIL_SHORTCUT_ACTIONS } from "../../core/detail-shortcuts.js";
 
 /**

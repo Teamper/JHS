@@ -13,14 +13,14 @@ import { getIcon } from "../../core/icons.js";
 import { i, l, normalizeCarNum, r, escapeHtml } from "../../core/constants.js";
 import { buildFallbackCarUrl, parseCarNumberText } from "../../core/feature-helpers.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
-import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
+import { normalizeQuickFilterKey } from "../../core/list-filters.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "../../services/resource-settings-service.js";
 import { BUILT_IN_SCREENSHOT_SOURCES } from "../../services/screenshot-sources.js";
 import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData, openFileListDialog } from "./setting-backup.js";
 import { applyLayoutRangeValue, disposeQuickSettingHost, initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";
-import { buildSettingCss } from "./setting-styles.js";
+import { buildSettingCss } from "../../ui/settings/setting-styles.js";
 import { bindSettingControl } from "../../ui/settings/setting-binding-controller.js";
 import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
@@ -215,7 +215,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 canOpen: () => !this._settingsDialog,
                 onOpen: () => { for (const other of this._desktopQuickSurfaces.values()) if (other.box !== box) other.close(); },
                 initialize: async () => {
-                    const { buildQuickSettingHtml } = await import("./setting-templates.js");
+                    const { buildQuickSettingHtml } = await import("../../ui/settings/setting-templates.js");
                     if (surface.scope.disposed || !box.isConnected) return;
                     disposeQuickSettingHost(host, this.jquery);
                     this.jquery(host).html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry")));
@@ -286,7 +286,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         try {
             await this.getRuntimeService("settings").waitForIdle();
             if (closed) return;
-            const { buildQuickSettingHtml } = await import("./setting-templates.js");
+            const { buildQuickSettingHtml } = await import("../../ui/settings/setting-templates.js");
             if (closed) return;
             backdrop = this.jquery('<div id="jhs-quick-setting-backdrop" class="jhs-quick-setting-backdrop"></div>');
             sheet = this.jquery(`<section id="jhs-quick-setting-sheet" class="jhs-quick-setting-sheet jhs-ui" role="dialog" aria-modal="true" aria-labelledby="jhs-quick-setting-title">
@@ -354,7 +354,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         for (const surface of this._desktopQuickSurfaces.values()) surface.close();
         closeOwnedPopover(this.document);
         await this.getRuntimeService("settings").waitForIdle();
-        const [templates, panels] = await Promise.all([import("./setting-templates.js"), import("./setting-panels.js")]);
+        const [templates, panels] = await Promise.all([import("../../ui/settings/setting-templates.js"), import("../../ui/settings/setting-panels.js")]);
         if (instance.scope.disposed || this._settingsDialog !== instance) return;
         this._settingPanels = panels;
         this._settingTemplates = templates;

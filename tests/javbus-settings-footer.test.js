@@ -2,7 +2,7 @@
 import { afterEach, expect, it } from "vitest";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { injectCoreCss } from "../src/core/css-injection.js";
-import { buildSettingDialogHtml, buildQuickSettingHtml } from "../src/plugins/backup/setting-templates.js";
+import { buildSettingDialogHtml, buildQuickSettingHtml } from "../src/ui/settings/setting-templates.js";
 
 afterEach(() => { document.head.innerHTML = ""; document.body.innerHTML = ""; initializeRuntimeConstants(new URL("https://javdb.com/")); });
 

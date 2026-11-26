@@ -6,7 +6,7 @@ import { JavDbPreviewController as PreviewVideoPlugin } from "../src/features/de
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { isBatchRunActive } from "../src/features/list/batch-coordinator.js";
-import { saveSettingForm } from "../src/plugins/backup/setting-forms.js";
+import { saveSettingForm } from "../src/features/settings/setting-forms.js";
 import { BlacklistCompatibilityBean } from "../src/compat/blacklist-compatibility-bean.js";
 
 let dom;

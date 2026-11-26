@@ -11,7 +11,7 @@ import { NewVideoCompatibilityBean } from "../src/compat/new-video-compatibility
 import { NEW_VIDEO_STYLES } from "../src/features/discovery/new-video-styles.js";
 import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
 import { SupplementaryCardsController } from "../src/features/list/supplementary-cards-controller.js";
-import { NewVideoWorkspaceService } from "../src/plugins/new-video/new-video.js";
+import { NewVideoWorkspaceService } from "../src/features/discovery/new-video-workspace-service.js";
 
 afterEach(() => {
     vi.useRealTimers();

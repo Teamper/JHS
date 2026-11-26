@@ -55,8 +55,8 @@ describe("build-time core styles", () => {
         expect(await prebuildStyles('src/features/fixture.js', source)).toBe(source);
     });
     it("compacts only shared settings CSS and preserves per-site runtime dimensions", async () => {
-        const source = (await readFile(new URL('../src/plugins/backup/setting-styles.js', import.meta.url), 'utf8')).replace(/^export \{.*\} from .*;$/m, '');
-        const transformed = await prebuildStyles('src/plugins/backup/setting-styles.js', source);
+        const source = (await readFile(new URL('../src/ui/settings/setting-styles.js', import.meta.url), 'utf8')).replace(/^export \{.*\} from .*;$/m, '');
+        const transformed = await prebuildStyles('src/ui/settings/setting-styles.js', source);
         const originalModule = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
         const compiledModule = await import('data:text/javascript;base64,' + Buffer.from(transformed).toString('base64'));
         expect(source.length - transformed.length).toBeGreaterThan(3000);

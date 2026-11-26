@@ -14,8 +14,8 @@ import { mapLimit, normalizeHttpUrl, parseNumberSetting, shouldSkipStopped } fro
 import { FEATURE_ICONS } from "../../core/feature-icons.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
-import { parseTaskInterval } from "../../features/discovery/task-intervals.js";
-import { isMissingActorSource } from "../../features/discovery/actor-source-health.js";
+import { parseTaskInterval } from "./task-intervals.js";
+import { isMissingActorSource } from "./actor-source-health.js";
 
 const AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
 

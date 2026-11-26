@@ -32,7 +32,7 @@ function loadListObserver() {
         hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key]))
     });
     const source = [
-        readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/core/list-filters.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-refresh-coordinator.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-cover-image-controller.js"), "utf8"),

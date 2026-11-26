@@ -4,9 +4,9 @@ import { JSDOM } from "jsdom";
 import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";
-import { SettingPlugin } from "../src/plugins/backup/setting.js";
-import { buildSettingDialogHtml } from "../src/plugins/backup/setting-templates.js";
-import { normalizeQuickFilterKey } from "../src/features/list/list-filters.js";
+import { SettingPlugin } from "../src/features/settings/settings-controller.js";
+import { buildSettingDialogHtml } from "../src/ui/settings/setting-templates.js";
+import { normalizeQuickFilterKey } from "../src/core/list-filters.js";
 
 const harnesses = [];
 

@@ -3,8 +3,8 @@
 import { getIcon } from "../../core/icons.js";
 import { C, _, r, escapeHtml } from "../../core/constants.js";
 import { parseNumberSetting } from "../../core/feature-helpers.js";
-import { applyImageMode } from "./setting-styles.js";
-import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
+import { applyImageMode } from "../../ui/settings/setting-styles.js";
+import { normalizeQuickFilterKey } from "../../core/list-filters.js";
 import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
 import { SYNC_DEFAULTS, syncRetention } from "../../core/webdav-sync-model.js";
 import { SettingsDraft } from "../../ui/settings/settings-draft.js";

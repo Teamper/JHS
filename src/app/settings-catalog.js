@@ -9,7 +9,7 @@
  * changes apply immediately through the feature owner's mount/unmount/reconfigure.
  */
 import { PRODUCT_NAMES } from "../core/product-names.js";
-import { DEFAULT_QUICK_FILTER_OPTIONS } from "../features/list/list-filters.js";
+import { DEFAULT_QUICK_FILTER_OPTIONS } from "../core/list-filters.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
 import { SYNC_DEFAULTS } from "../core/webdav-sync-model.js";
 import { stringList, booleanMap, resourceValidators } from "./settings-sync-validation.js";

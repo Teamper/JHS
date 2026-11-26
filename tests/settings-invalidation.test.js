@@ -10,9 +10,9 @@ import { describe, expect, it, vi } from "vitest";
 
 const storage = readTestFile(join(process.cwd(), "src/core/storage.js"), "utf8");
 const settingsService = readTestFile(join(process.cwd(), "src/services/settings-service.js"), "utf8");
-const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
-const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
-const settingTemplates = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
+const settingForms = readTestFile(join(process.cwd(), "src/features/settings/setting-forms.js"), "utf8");
+const settingPlugin = readTestFile(join(process.cwd(), "src/features/settings/settings-controller.js"), "utf8");
+const settingTemplates = readTestFile(join(process.cwd(), "src/ui/settings/setting-templates.js"), "utf8");
 const settingsEffects = readTestFile(join(process.cwd(), "src/features/system/settings-effects-controller.js"), "utf8");
 const systemCatalog = readTestFile(join(process.cwd(), "src/features/system/catalog.js"), "utf8");
 

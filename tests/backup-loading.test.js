@@ -6,7 +6,7 @@ vi.mock("../src/core/credential-crypto.js", () => ({
     encryptPortableBackup: vi.fn(async value => `encrypted:${value}`),
 }));
 
-import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData } from "../src/plugins/backup/setting-backup.js";
+import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData } from "../src/features/settings/setting-backup.js";
 
 function createDependencies(overrides = {}) {
     return {

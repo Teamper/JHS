@@ -2,7 +2,7 @@
 import jquery from "jquery";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseTaskInterval } from "../src/features/discovery/task-intervals.js";
-import { NewVideoWorkspaceService } from "../src/plugins/new-video/new-video.js";
+import { NewVideoWorkspaceService } from "../src/features/discovery/new-video-workspace-service.js";
 
 afterEach(() => { document.body.innerHTML = ""; vi.restoreAllMocks(); });
 
