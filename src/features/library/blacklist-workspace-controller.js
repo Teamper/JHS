@@ -38,7 +38,6 @@ export class BlacklistWorkspaceController {
         this.taskStatusUnsubscribe = null;
         this.checkBlacklistRuleTime = 8760;
         this.currentCarCount = 0;
-        /** @type {AbortController | null} */ this.manualScanAbortController = null;
         this.disposed = false;
     }
 
@@ -141,14 +140,12 @@ export class BlacklistWorkspaceController {
         }
         button.attr("aria-busy", "true").prop("disabled", true);
         label.text("检测中…");
-        const readyAbort = new AbortController();
-        this.manualScanAbortController = readyAbort;
         try {
-            await this.task.waitForService?.(10_000, readyAbort.signal);
+            const task = await this.task.activate();
             if (!this.isCurrent(generation)) return;
             await locks.request(this.task.singleTaskKey, { ifAvailable: true }, async (lock) => {
                 if (!this.isCurrent(generation)) return;
-                if (lock) await this.task.checkBlacklist(true);
+                if (lock) await task?.checkBlacklist(true);
                 else this.notifications.error("后台任务正在运行，请稍后再试");
             });
         } catch (error) {
@@ -157,7 +154,6 @@ export class BlacklistWorkspaceController {
                 this.notifications.error("黑名单更新失败，请重试");
             }
         } finally {
-            if (this.manualScanAbortController === readyAbort) this.manualScanAbortController = null;
             if (this.isCurrent(generation)) {
                 button.removeAttr("aria-busy").prop("disabled", false);
                 label.text(previous);
@@ -169,7 +165,7 @@ export class BlacklistWorkspaceController {
         const container = this.blacklistRoot?.find("#blacklist-task-status");
         if (!container?.length) return;
         if (!this.task) return void container.empty().text("后台任务功能已禁用");
-        const status = renderTaskStatus(this.$, "blacklist", this.task.getTaskStatusSnapshot("blacklist"), this.settings.snapshot());
+        const status = renderTaskStatus(this.$, "blacklist", this.task.current()?.getTaskStatusSnapshot("blacklist"), this.settings.snapshot());
         container.empty().append(status.children());
     }
 
@@ -301,8 +297,6 @@ export class BlacklistWorkspaceController {
     /** @param {number} generation @param {boolean} emit */
     async finishDialog(generation, emit) {
         if (generation !== this.dialogGeneration) return;
-        this.manualScanAbortController?.abort();
-        this.manualScanAbortController = null;
         this.blacklistRoot = null;
         this.dialogId = null;
         this.blacklistSearchDebounced?.cancel?.();

@@ -36,6 +36,7 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
         state: { getState: vi.fn(async () => null) },
         logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), openDialog: vi.fn() },
         notifications: { error: vi.fn() }, capabilities: beans,
+        blacklist: { available: () => Boolean(beans.BlacklistPlugin), open: async () => beans.BlacklistPlugin?.openBlacklistDialog?.() },
         openNewVideo, history, newVideoAvailable: () => Boolean(beans.NewVideoPlugin),
         magnetActions: { filterAvailable: () => hasMagnetFilter, hubAvailable: () => Boolean(beans.MagnetHubPlugin) },
     });

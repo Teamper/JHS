@@ -12,13 +12,12 @@ const TRANSLATION_STYLES = `
 
 /** Feature-owned detail and list title translation with a narrow legacy attachment point. */
 export class ExternalBridgeTranslationController {
-    /** @param {{document: Document, window: Window, route: string, hostAdapter: any, listPage: any, settings: any, translation: any, styles: any, diagnostics: any, scope: any, privacy?:any}} options */
+    /** @param {{document: Document, window: Window, route: string, hostAdapter: any, settings: any, translation: any, styles: any, diagnostics: any, scope: any, privacy?:any}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
         this.route = options.route;
         this.hostAdapter = options.hostAdapter;
-        this.listPage = options.listPage ?? null;
         this.settings = options.settings;
         this.translation = options.translation;
         this.styles = options.styles;
@@ -60,7 +59,6 @@ export class ExternalBridgeTranslationController {
         if (typeof this.translation.addEventListener === "function") this.scope.listen(this.translation,"translation.changed",() => { void this.reconfigure().catch(error => this.report(error)); });
         const releaseStyle = this.styles?.register?.("external-bridge-translation", TRANSLATION_STYLES);
         if (releaseStyle) this.scope.addCleanup(releaseStyle);
-        if (this.route === "list") this.listPage?.attachFeatureListTranslationAdapter?.(this);
         if (this.route === "detail" && this.hostAdapter?.site === "javdb") {
             this.scope.observe(this.document.body, (/** @type {MutationRecord[]} */ records) => {
                 if (records.some(record => [...record.addedNodes].some(node => node.nodeType === 1 &&
@@ -317,6 +315,5 @@ export class ExternalBridgeTranslationController {
         this.generation += 1;
         this.listGeneration += 1;
         this.revertTranslation();
-        this.listPage?.detachFeatureListTranslationAdapter?.(this);
     }
 }

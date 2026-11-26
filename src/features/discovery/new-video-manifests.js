@@ -32,24 +32,12 @@ export const newVideoFeature = defineFeature({
             import("./new-video-workspace-service.js"),
         ]);
         const sourceHealth = new ActorSourceHealth(deps[SERVICE.storage]);
-        const plugin = new NewVideoWorkspaceService({
-            runtimeServices: {
-                sourceHealth, dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], actressInfo: deps[SERVICE.actressInfo],
-                movie: deps[SERVICE.movie], state: deps[SERVICE.state], settings: deps[SERVICE.settings], profile: deps[SERVICE.profile],
-                scope: () => runtime.scope,
-            },
-            resolveDependency: (/** @type {string} */ name) => runtime.resolveCompatibilityBean(name),
-            jquery: deps[SERVICE.domUi].jquery, legacyStorage: deps[SERVICE.legacyStorage],
-            utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
-            logger: deps[SERVICE.clog], events: deps[SERVICE.events],
-            createImageHoverPreview: (/** @type {Record<string, any>} */ config) => deps[SERVICE.domUi].createImageHoverPreview(config),
-            document, window,
-        });
+        const schedulerEnabled = () => runtime.isContributionEnabled("scheduler", "discovery.scheduler", "TaskPlugin");
+        const activateScheduler = () => runtime.executeCommand("scheduler.service");
         const batchController = new NewVideoBatchController({ state: deps[SERVICE.state] });
         const workspaceController = new NewVideoWorkspaceController({
             state: deps[SERVICE.state], settings: deps[SERVICE.settings], movie: deps[SERVICE.movie],
         });
-        const taskPlugin = runtime.resolveCompatibilityBean("TaskPlugin");
         const scanController = new NewVideoScanController({
             sourceHealth, backgroundWork: deps[SERVICE.backgroundWork],
             state: deps[SERVICE.state],
@@ -63,16 +51,9 @@ export const newVideoFeature = defineFeature({
             getTimestamp: () => deps[SERVICE.legacyUtils].getNowStr(),
             onNewItems: (name, count) => deps[SERVICE.clog].html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${count}部</span>`),
         });
-        plugin.attachFeatureNewVideoBatchController?.(batchController);
-        plugin.attachFeatureNewVideoWorkspaceController?.(workspaceController);
-        taskPlugin?.attachFeatureNewVideoScanController?.(scanController);
+        runtime.provideCapability?.("discovery.new-video-scan", scanController);
+        runtime.scope.addCleanup(() => scanController.dispose());
         runtime.scope.addCleanup(() => {
-            taskPlugin?.detachFeatureNewVideoScanController?.(scanController);
-            scanController.dispose();
-        });
-        runtime.scope.addCleanup(() => {
-            plugin.detachFeatureNewVideoBatchController?.(batchController);
-            plugin.detachFeatureNewVideoWorkspaceController?.(workspaceController);
             batchController.dispose();
             workspaceController.dispose();
         });
@@ -89,8 +70,33 @@ export const newVideoFeature = defineFeature({
             });
             return stylePromise;
         };
-        plugin.attachFeatureNewVideoStyleLoader?.(ensureStyles);
-        runtime.scope.addCleanup(() => plugin.detachFeatureNewVideoStyleLoader?.(ensureStyles));
+        const plugin = new NewVideoWorkspaceService({
+            runtimeServices: {
+                sourceHealth, dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], actressInfo: deps[SERVICE.actressInfo],
+                movie: deps[SERVICE.movie], state: deps[SERVICE.state], settings: deps[SERVICE.settings], profile: deps[SERVICE.profile],
+                scope: () => runtime.scope,
+            },
+            task: {
+                available: () => schedulerEnabled() && runtime.isCommandAvailable("scheduler.service"),
+                current: () => runtime.getCapability?.("discovery.scheduler"),
+                activate: activateScheduler,
+            },
+            requestProfileBackfill: async (/** @type {Record<string, any>} */ options) => {
+                if (!schedulerEnabled()) return;
+                if (runtime.isCommandAvailable("scheduler.service")) {
+                    const task = await activateScheduler();
+                    return task?.triggerProfileBackfill(options);
+                }
+                return scanController.triggerProfileBackfill(options);
+            },
+            batchController, workspaceController, loadStyles: ensureStyles,
+            openTaskSettings: (callback) => runtime.getCapability?.("settings.core")?.openSettingDialog("task-panel", callback),
+            jquery: deps[SERVICE.domUi].jquery, legacyStorage: deps[SERVICE.legacyStorage],
+            utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
+            logger: deps[SERVICE.clog], events: deps[SERVICE.events],
+            createImageHoverPreview: (/** @type {Record<string, any>} */ config) => deps[SERVICE.domUi].createImageHoverPreview(config),
+            document, window,
+        });
         const controller = new NewVideoLifecycleController({
             plugin, events: deps[SERVICE.events], scope: runtime.scope,
             onError: (error) => runtime.diagnostics.recordError({
@@ -99,6 +105,7 @@ export const newVideoFeature = defineFeature({
             }),
         });
         if (!controller.start()) return { activeContributions: [] };
+        runtime.provideCapability?.("discovery.new-video", plugin);
         runtime.inspect?.("newVideo", plugin);
         const release = runtime.registerCompatibilityBean?.("NewVideoPlugin", plugin);
         if (release) runtime.scope.addCleanup(release);
@@ -110,31 +117,35 @@ export const schedulerFeature = defineFeature({
     optionalRequires: [SERVICE.backgroundWork],
     id: "scheduler", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "idle",
     requires: [PORT.javdbHost, PORT.javbusHost, SERVICE.events, SERVICE.storage, SERVICE.settings, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, SERVICE.state, SERVICE.domUi, SERVICE.hostListParser, SERVICE.clog, SERVICE.notifications],
-    contributes: ["discovery.scheduler"], providesCommands: [],
+    contributes: ["discovery.scheduler"], providesCommands: ["scheduler.service"],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "discovery.scheduler";
-        if (!runtime.enabledContributions.includes(id)) return { activeContributions: [] };
+        if (!runtime.enabledContributions.includes(id)) return { activeContributions: [], commands: { "scheduler.service": () => null } };
         return Promise.all([import("./task-scheduler-controller.js"), import("./task-execution-service.js")]).then(([
             { TaskSchedulerController },
             { TaskExecutionService },
         ]) => {
-        const taskAdapter = runtime.resolveCompatibilityBean("TaskPlugin");
-        if (!taskAdapter?.connect) throw new Error("Scheduler feature requires the TaskPlugin compatibility bean");
         const taskService = new TaskExecutionService({
             runtimeServices: {
                 storage: deps[SERVICE.storage], http: deps[SERVICE.http], actressInfo: deps[SERVICE.actressInfo],
                 movie: deps[SERVICE.movie], state: deps[SERVICE.state], events: deps[SERVICE.events], scope: () => runtime.scope,
                 hostAdapters: { javdb: deps[PORT.javdbHost], javbus: deps[PORT.javbusHost] }, hostListParser: deps[SERVICE.hostListParser],
             },
-            resolveDependency: (name) => runtime.resolveCompatibilityBean(name),
+            blacklist: {
+                available: () => runtime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin"),
+                parseAndSave: (page, name, starId, site) => runtime.executeCommand("library.blacklist.parse-and-save", page, name, starId, site),
+                resetStatus: () => runtime.executeCommand("library.blacklist.reset-tooltip"),
+            },
+            getNewVideoScanner: () => runtime.getCapability?.("discovery.new-video-scan"),
+            getBlacklistScanner: () => runtime.getCapability?.("library.blacklist-scan"),
             legacyStorage: deps[SERVICE.legacyStorage], utilities: deps[SERVICE.legacyUtils], logger: deps[SERVICE.clog],
             jquery: deps[SERVICE.domUi].jquery, window, notifications: deps[SERVICE.notifications],
         });
-        taskAdapter.connect(taskService);
-        runtime.scope.addCleanup(() => {
-            taskAdapter.disconnect(taskService);
-            taskService.dispose();
-        });
+        runtime.provideCapability?.(id, taskService);
+        runtime.inspect?.("scheduler", taskService);
+        const release = runtime.registerCompatibilityBean?.("TaskPlugin", taskService);
+        if (release) runtime.scope.addCleanup(release);
+        runtime.scope.addCleanup(() => taskService.dispose());
         const controller = new TaskSchedulerController({
             backgroundWork: deps[SERVICE.backgroundWork],
             window,
@@ -151,7 +162,7 @@ export const schedulerFeature = defineFeature({
             }),
         });
         controller.start();
-        return { activeContributions: [id] };
+        return { activeContributions: [id], commands: { "scheduler.service": () => taskService } };
         });
     },
 });

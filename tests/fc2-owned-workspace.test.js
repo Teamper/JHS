@@ -146,13 +146,15 @@ describe("FC2 owned detail workspace", () => {
     it("restores the FC2 third-party slot when its Feature adapter attaches after page startup", () => {
         const dom = new JSDOM('<main id="host"><div class="jhs-fc2-workspace"><div data-jhs-slot="resources"><section class="jhs-fc2-resource-group"><div data-jhs-role="native-magnets"></div></section><section class="jhs-fc2-resource-group"><div data-jhs-role="magnet-hub"></div></section></div></div></main>', { url: "https://javdb.com/users/collection_codes" });
         const $ = jqueryFactory(dom.window), workspace = $(dom.window.document.querySelector(".jhs-fc2-workspace")), resources = workspace.find('[data-jhs-slot="resources"]');
-        const context = { isAlive: () => true, getSlot: () => resources, otherSiteGeneration: 0 };
+        const context = { root: workspace, isAlive: () => true, getSlot: () => resources, otherSiteGeneration: 0 };
         workspace.data("jhsFc2Context", context);
-        const plugin = new Fc2Plugin(), adapter = {};
+        const adapter = {};
+        let externalSites = adapter;
+        const plugin = new Fc2Plugin({ readExternalSites: () => externalSites });
         const mount = vi.spyOn(plugin, "mountFc2OtherSites").mockImplementation(() => {});
         vi.stubGlobal("$", $);
         try {
-            plugin.attachFeatureExternalSitesAdapter(adapter);
+            plugin.refreshExternalSites();
             const sitesGroup = resources.find('[data-jhs-role="other-sites"]').closest(".jhs-fc2-resource-group");
             expect(sitesGroup).toHaveLength(1);
             expect(sitesGroup.next().find('[data-jhs-role="magnet-hub"]')).toHaveLength(1);
@@ -161,7 +163,8 @@ describe("FC2 owned detail workspace", () => {
             expect(mount.mock.calls[0][1][0]).toBe(sitesGroup[0]);
             expect(mount.mock.calls[0][2]).toBe(adapter);
 
-            plugin.detachFeatureExternalSitesAdapter(adapter);
+            externalSites = null;
+            plugin.refreshExternalSites();
             expect(resources.find('[data-jhs-role="other-sites"]')).toHaveLength(0);
             expect(context.otherSiteGeneration).toBe(1);
         } finally {

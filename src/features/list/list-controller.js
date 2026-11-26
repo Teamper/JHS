@@ -21,9 +21,10 @@ import { resolveFavoriteActressHighlightStyle } from "../../core/favorite-actres
 
 /** Own ListPagePlugin startup while its implementation migrates into FeatureRuntime. */
 export class ListController {
-    /** @param {{legacyPlugin: any, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, legacyStorage?: any, readFilterSources?: (options?: {stateOnly?: boolean}) => Promise<any>, isFavoriteActressesFeatureEnabled?: () => boolean, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug">, window?: any}} options */
+    /** @param {{legacyPlugin: any, controllers?: Record<string, any>, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, legacyStorage?: any, readFilterSources?: (options?: {stateOnly?: boolean}) => Promise<any>, isFavoriteActressesFeatureEnabled?: () => boolean, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug">, window?: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin;
+        this.controllers = options.controllers ?? {};
         this.hostAdapter = options.hostAdapter;
         /** @type {Element | null} */ this.boundListRoot = null;
         /** @type {MutationObserver | null} */ this.rootBoundaryObserver = null;
@@ -44,60 +45,42 @@ export class ListController {
         this.paginationController = new ListPaginationController({ hostAdapter: this.hostAdapter, navigation: options.navigation, scope: this.scope });
         this.hostMarkupController = new ListHostMarkupController({ hostAdapter: this.hostAdapter });
         this.coverImageController = new ListCoverImageController({ hostAdapter: this.hostAdapter, scope: this.scope, window: options.window });
-        this.legacyPlugin.attachFeatureCoverImageAdapter?.(this.coverImageController);
-        let coverImageAdapterAttached = true;
-        this.detachCoverImageAdapter = () => {
-            if (!coverImageAdapterAttached) return;
-            coverImageAdapterAttached = false;
+        this.controllers.coverImages = this.coverImageController;
+        this.detachCoverImageAdapter = this.scope.addCleanup(() => {
+            delete this.controllers.coverImages;
             this.coverImageController.dispose();
-            this.legacyPlugin.detachFeatureCoverImageAdapter?.(this.coverImageController);
-        };
-        this.scope.addCleanup(this.detachCoverImageAdapter);
+        });
         this.hoverPreviewController = new ListHoverPreviewController({
             hostAdapter: this.hostAdapter, settings: this.settings, ui: options.ui, scope: this.scope, window: options.window,
         });
-        this.hoverPreviewAdapterAttached = false;
-        this.detachHoverPreviewAdapter = () => {
-            if (this.hoverPreviewAdapterAttached) this.legacyPlugin.detachFeatureListHoverPreviewAdapter?.(this.hoverPreviewController);
-            this.hoverPreviewAdapterAttached = false;
+        this.detachHoverPreviewAdapter = this.scope.addCleanup(() => {
+            delete this.controllers.hoverPreview;
             this.hoverPreviewController.dispose();
-        };
-        this.scope.addCleanup(this.detachHoverPreviewAdapter);
+        });
         this.tagExpansionController = new ListTagExpansionController({
             hostAdapter: this.hostAdapter, storage: options.storage, scope: this.scope, diagnostics: options.diagnostics,
         });
-        this.tagExpansionAdapterAttached = false;
-        this.detachTagExpansionAdapter = () => {
-            if (this.tagExpansionAdapterAttached) this.legacyPlugin.detachFeatureListTagExpansionAdapter?.(this.tagExpansionController);
-            this.tagExpansionAdapterAttached = false;
+        this.detachTagExpansionAdapter = this.scope.addCleanup(() => {
+            delete this.controllers.tagExpansion;
             this.tagExpansionController.dispose();
-        };
-        this.scope.addCleanup(this.detachTagExpansionAdapter);
+        });
         this.listNavigationController = new ListNavigationController({
             hostAdapter: this.hostAdapter, list: this.legacyPlugin, ui: options.ui,
         });
-        this.legacyPlugin.attachFeatureListNavigationAdapter?.(this.listNavigationController);
-        let navigationAdapterAttached = true;
-        this.detachListNavigationAdapter = () => {
-            if (!navigationAdapterAttached) return;
-            navigationAdapterAttached = false;
+        this.controllers.navigation = this.listNavigationController;
+        this.detachListNavigationAdapter = this.scope.addCleanup(() => {
+            delete this.controllers.navigation;
             this.listNavigationController.dispose();
-            this.legacyPlugin.detachFeatureListNavigationAdapter?.(this.listNavigationController);
-        };
-        this.scope.addCleanup(this.detachListNavigationAdapter);
+        });
         this.contextMenuController = new ListContextMenuController({
             hostAdapter: this.hostAdapter, list: this.legacyPlugin, state: this.state,
             ui: options.ui, notifications: options.notifications, scope: this.scope, diagnostics: options.diagnostics,
         });
-        this.legacyPlugin.attachFeatureListContextMenuAdapter?.(this.contextMenuController);
-        let contextMenuAdapterAttached = true;
-        this.detachContextMenuAdapter = () => {
-            if (!contextMenuAdapterAttached) return;
-            contextMenuAdapterAttached = false;
+        this.controllers.contextMenu = this.contextMenuController;
+        this.detachContextMenuAdapter = this.scope.addCleanup(() => {
+            delete this.controllers.contextMenu;
             this.contextMenuController.dispose();
-            this.legacyPlugin.detachFeatureListContextMenuAdapter?.(this.contextMenuController);
-        };
-        this.scope.addCleanup(this.detachContextMenuAdapter);
+        });
         this.batchUi = options.batchUi ?? null;
         this.listRefreshController = new ListRefreshCoordinator({
             advanceGeneration: () => this.legacyPlugin.advanceListGeneration?.(),
@@ -114,23 +97,15 @@ export class ListController {
             reconcile: (items, revision) => this.reconcileListItems(items, revision),
             syncHistory: () => this.legacyPlugin.refreshHistory?.(),
         });
-        this.legacyPlugin.attachFeatureListRefreshAdapter?.(this.listRefreshController);
-        let listRefreshAdapterAttached = true;
-        this.detachListRefreshAdapter = () => {
-            if (!listRefreshAdapterAttached) return;
-            listRefreshAdapterAttached = false;
+        this.controllers.refresh = this.listRefreshController;
+        this.detachListRefreshAdapter = this.scope.addCleanup(() => {
+            delete this.controllers.refresh;
             this.listRefreshController.dispose();
-            this.legacyPlugin.detachFeatureListRefreshAdapter?.(this.listRefreshController);
-        };
-        this.scope.addCleanup(this.detachListRefreshAdapter);
-        this.legacyPlugin.attachFeatureListAddedItemsAdapter?.(this);
-        let addedItemsAdapterAttached = true;
-        this.detachAddedItemsAdapter = () => {
-            if (!addedItemsAdapterAttached) return;
-            addedItemsAdapterAttached = false;
-            this.legacyPlugin.detachFeatureListAddedItemsAdapter?.(this);
-        };
-        this.scope.addCleanup(this.detachAddedItemsAdapter);
+        });
+        this.controllers.items = this;
+        this.detachAddedItemsAdapter = this.scope.addCleanup(() => {
+            delete this.controllers.items;
+        });
         /** @type {ListCardStatePresenter | null} */ this.cardStatePresenter = new ListCardStatePresenter({
             hostAdapter: this.hostAdapter,
             document: this.hostAdapter?.document,
@@ -287,17 +262,11 @@ export class ListController {
         return Promise.resolve()
             .then(() => {
                 if (!this.hoverPreviewController.start()) return;
-                if (typeof this.legacyPlugin.attachFeatureListHoverPreviewAdapter === "function") {
-                    this.legacyPlugin.attachFeatureListHoverPreviewAdapter(this.hoverPreviewController);
-                    this.hoverPreviewAdapterAttached = true;
-                }
+                this.controllers.hoverPreview = this.hoverPreviewController;
             })
             .then(() => {
                 if (!this.tagExpansionController.start()) return;
-                if (typeof this.legacyPlugin.attachFeatureListTagExpansionAdapter === "function") {
-                    this.legacyPlugin.attachFeatureListTagExpansionAdapter(this.tagExpansionController);
-                    this.tagExpansionAdapterAttached = true;
-                }
+                this.controllers.tagExpansion = this.tagExpansionController;
             })
             .then(() => this.contextMenuController.start())
             .then(() => this.paginationController.start())

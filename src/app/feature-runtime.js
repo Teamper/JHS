@@ -16,6 +16,7 @@ export class FeatureRuntime {
         /** @type {Record<string, unknown> | undefined} */ this.inspection = undefined;
         this.container = options.container;
         /** @type {Map<string, unknown>} */ this.capabilities = new Map();
+        this.capabilityEvents = new EventTarget();
         this.commands = options.commands;
         this.diagnostics = options.diagnostics;
         this.disabled = new Set(migrateDisabledPlugins(options.disabled));
@@ -285,8 +286,15 @@ export class FeatureRuntime {
                 provideCapability: (/** @type {string} */ id, /** @type {unknown} */ value) => {
                     scope.assertActive();
                     this.capabilities.set(id, value);
-                    return scope.addCleanup(() => { if (this.capabilities.get(id) === value) this.capabilities.delete(id); });
+                    const release = scope.addCleanup(() => {
+                        if (this.capabilities.get(id) !== value) return;
+                        this.capabilities.delete(id);
+                        this.capabilityEvents.dispatchEvent(new Event(id));
+                    });
+                    this.capabilityEvents.dispatchEvent(new Event(id));
+                    return release;
                 },
+                onCapabilityChanged: (/** @type {string} */ id, /** @type {() => void} */ listener) => scope.listen(this.capabilityEvents, id, listener),
                 isCompatibilityBeanAvailable: (/** @type {string} */ name) => this.isCompatibilityBeanAvailable(name),
                 resolveCompatibilityBean: (/** @type {string} */ name) => this.compatibilityBeanResolver?.(name),
                 registerCompatibilityBean: (/** @type {string} */ name, /** @type {any} */ bean) => this.compatibilityBeanRegistrar?.(name, bean),

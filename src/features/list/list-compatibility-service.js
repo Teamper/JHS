@@ -109,7 +109,7 @@ export class ListPageCompatibilityService {
     async initCss() {
         return `<style>.status-tag .tag{color:inherit!important}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
-    /** @param {{runtimeServices?: Record<string, any>, refreshHistory?: () => Promise<unknown>}} [options] */
+    /** @param {{runtimeServices?: Record<string, any>, refreshHistory?: () => Promise<unknown>, controllers?: Record<string, any>, readTranslation?: () => any}} [options] */
     constructor(options = {}) {
         this.runtimeServices = Object.freeze({ ...(options.runtimeServices ?? {}) });
         this.logger = this.runtimeServices.logger ?? {
@@ -118,6 +118,8 @@ export class ListPageCompatibilityService {
             html: console.log.bind(console),
         };
         this.refreshHistory = options.refreshHistory;
+        this.controllers = options.controllers ?? {};
+        this.readTranslation = options.readTranslation ?? (() => null);
         this.managedByFeature = true;
         this.runtimeStatus = "managed-feature";
         /** @type {import("../../features/list/list-view.js").ListView | null} */ this.listView = null;
@@ -132,7 +134,6 @@ export class ListPageCompatibilityService {
         /** @type {any} */ this.filterContext = null;
         /** @type {import("../../features/list/list-filter-context.js").ListFilterContextProvider | null} */ this.filterContextProvider = null;
         /** @type {import("../../features/list/list-card-state-presenter.js").ListCardStatePresenter | null} */ this.cardStatePresenter = null;
-        /** @type {any} */ this.featureListTranslationAdapter = null;
         /** @type {Set<Element>} */ this.pendingItems = new Set();
         /** @type {ReturnType<typeof setTimeout> | null} */ this.processTimer = null;
         /** @type {IntersectionObserver | null} */ this.hdImageObserver = null;
@@ -153,17 +154,13 @@ export class ListPageCompatibilityService {
         /** @type {number} */ this.listGeneration = 0;
         /** @type {number} */ this.filterRevision = 0;
         /** @type {ListRefreshCoordinator | null} */ this.legacyListRefreshCoordinator = null;
-        /** @type {ListRefreshCoordinator | null} */ this.featureListRefreshAdapter = null;
         /** @type {import("../../features/list/list-batch-controller.js").ListBatchController | null} */ this.listBatchController = null;
         /** @type {import("../../features/list/list-sort-controller.js").ListSortController | null} */ this.listSortController = null;
-        /** @type {any} */ this.featureCoverButtonAdapter = null;
-        /** @type {any} */ this.featureCoverImageAdapter = null;
-        /** @type {any} */ this.featureListContextMenuAdapter = null;
-        /** @type {any} */ this.featureListHoverPreviewAdapter = null;
-        /** @type {any} */ this.featureListTagExpansionAdapter = null;
-        /** @type {any} */ this.featureListNavigationAdapter = null;
-        /** @type {{processAddedItems: (items: Element[], revision?: string) => Promise<any>, getVisibilitySnapshot?: () => any, getBoundItemCount?: () => number | null} | null} */ this.featureListAddedItemsAdapter = null;
     }
+    get featureListHoverPreviewAdapter() { return this.controllers.hoverPreview; }
+    get featureListTagExpansionAdapter() { return this.controllers.tagExpansion; }
+    get featureListNavigationAdapter() { return this.controllers.navigation; }
+    get featureCoverButtonAdapter() { return this.controllers.coverButtons; }
     getName() {
         return "ListPagePlugin";
     }
@@ -184,52 +181,13 @@ export class ListPageCompatibilityService {
             parseActressName: (/** @type {string} */ url, /** @type {import("../../core/lifecycle-scope.js").LifecycleScope | undefined} */ scope = undefined) => this.parseActressName(url, scope),
         });
     }
-    /** @param {any} adapter */
-    attachFeatureCoverButtonAdapter(adapter) { this.featureCoverButtonAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureCoverButtonAdapter(adapter) { if (this.featureCoverButtonAdapter === adapter) this.featureCoverButtonAdapter = null; }
     /** Exposes the cover upgrade operation required by native list pagination. */
     getAutoPageCapability() {
         return Object.freeze({
             replaceCoverImages: (/** @type {any} */ images) => this.replaceHdImg(images),
-            getVisibilitySnapshot: () => this.featureListAddedItemsAdapter?.getVisibilitySnapshot?.() ?? null,
+            getVisibilitySnapshot: () => this.controllers.items?.getVisibilitySnapshot?.() ?? null,
         });
     }
-    /** @param {any} adapter */
-    attachFeatureCoverImageAdapter(adapter) { this.featureCoverImageAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureCoverImageAdapter(adapter) { if (this.featureCoverImageAdapter === adapter) this.featureCoverImageAdapter = null; }
-    /** @param {any} adapter */
-    attachFeatureListContextMenuAdapter(adapter) {
-        this.featureListContextMenuAdapter = adapter;
-        $(this.getSelector().boxSelector).off("contextmenu.jhsListMenu");
-    }
-    /** @param {any} adapter */
-    detachFeatureListContextMenuAdapter(adapter) { if (this.featureListContextMenuAdapter === adapter) this.featureListContextMenuAdapter = null; }
-    /** @param {any} adapter */
-    attachFeatureListHoverPreviewAdapter(adapter) { this.featureListHoverPreviewAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureListHoverPreviewAdapter(adapter) { if (this.featureListHoverPreviewAdapter === adapter) this.featureListHoverPreviewAdapter = null; }
-    /** @param {any} adapter */
-    attachFeatureListTagExpansionAdapter(adapter) { this.featureListTagExpansionAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureListTagExpansionAdapter(adapter) { if (this.featureListTagExpansionAdapter === adapter) this.featureListTagExpansionAdapter = null; }
-    /** @param {any} adapter */
-    attachFeatureListNavigationAdapter(adapter) { this.featureListNavigationAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureListNavigationAdapter(adapter) { if (this.featureListNavigationAdapter === adapter) this.featureListNavigationAdapter = null; }
-    /** @param {ListRefreshCoordinator} adapter */
-    attachFeatureListRefreshAdapter(adapter) {
-        this.legacyListRefreshCoordinator?.dispose();
-        this.legacyListRefreshCoordinator = null;
-        this.featureListRefreshAdapter = adapter;
-    }
-    /** @param {ListRefreshCoordinator} adapter */
-    detachFeatureListRefreshAdapter(adapter) { if (this.featureListRefreshAdapter === adapter) this.featureListRefreshAdapter = null; }
-    /** @param {{processAddedItems: (items: Element[], revision?: string) => Promise<any>, getVisibilitySnapshot?: () => any}} adapter */
-    attachFeatureListAddedItemsAdapter(adapter) { this.featureListAddedItemsAdapter = adapter; }
-    /** @param {{processAddedItems: (items: Element[], revision?: string) => Promise<any>}} adapter */
-    detachFeatureListAddedItemsAdapter(adapter) { if (this.featureListAddedItemsAdapter === adapter) this.featureListAddedItemsAdapter = null; }
     /** Update the compatibility filter value and invalidate pending list generations. */
     /** @param {unknown} filter */
     beginQuickFilterTransition(filter) {
@@ -242,10 +200,6 @@ export class ListPageCompatibilityService {
         this.cardStatePresenter = presenter;
         return () => { if (this.cardStatePresenter === presenter) this.cardStatePresenter = null; };
     }
-    /** @param {any} adapter */
-    attachFeatureListTranslationAdapter(adapter) { this.featureListTranslationAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureListTranslationAdapter(adapter) { if (this.featureListTranslationAdapter === adapter) this.featureListTranslationAdapter = null; }
     /** @param {import("../../features/list/list-filter-context.js").ListFilterContextProvider} provider */
     attachFilterContextProvider(provider) {
         this.filterContextProvider = provider;
@@ -271,7 +225,7 @@ export class ListPageCompatibilityService {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
             if (names.includes("hoverBigImg")) this.configureHoverPreview(settingsService.snapshot().hoverBigImg === "yes" ? "yes" : "no");
         };
-        if (!this.featureListHoverPreviewAdapter) {
+        if (!this.controllers.hoverPreview) {
             settingsService.addEventListener("settings.changed", onSettingsChanged);
             scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
         }
@@ -305,7 +259,7 @@ export class ListPageCompatibilityService {
             this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
             this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
             this.hdPendingCleanups.forEach((cleanup) => cleanup()), this.hdPendingCleanups.clear();
-            if (!this.featureListHoverPreviewAdapter) this.configureHoverPreview("no");
+            if (!this.controllers.hoverPreview) this.configureHoverPreview("no");
             this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
             this.advanceListGeneration(), this.legacyListRefreshCoordinator?.dispose(), this.legacyListRefreshCoordinator = null;
             if (options.view) $(this.getSelector().boxSelector).off(".jhsListMenu");
@@ -316,7 +270,7 @@ export class ListPageCompatibilityService {
         if (options.featureOwnsStartup) return;
         // 原生榜单与普通列表共用卡片处理和状态刷新监听。
         const hoverBigImg = settingsService.snapshot().hoverBigImg;
-        if (!this.featureListHoverPreviewAdapter) this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
+        if (!this.controllers.hoverPreview) this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
         if (!this.listView) this.replaceHdImg();
         const revision = this.advanceListGeneration();
         await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
@@ -343,7 +297,7 @@ export class ListPageCompatibilityService {
         const diagnostics = /** @type {any} */ (globalThis).__jhsBrowserDiagnostics;
         if (!diagnostics) return;
         const phases = diagnostics.listPhases ||= [];
-        const count = itemCount ?? this.featureListAddedItemsAdapter?.getBoundItemCount?.() ?? $(this.getSelector().itemSelector).length;
+        const count = itemCount ?? this.controllers.items?.getBoundItemCount?.() ?? $(this.getSelector().itemSelector).length;
         phases.push({ phase, generation: this.listGeneration, filterRevision: this.filterRevision, activeQuickFilter: this.activeQuickFilter || "waitCheck", itemCount: count });
         phases.length > 200 && phases.splice(0, phases.length - 200);
     }
@@ -380,7 +334,7 @@ export class ListPageCompatibilityService {
     /** Coalesces refresh work in List Feature with the same coordinator as the compatibility path. */
     /** @param {{items?: Element[] | null, reason?: string, full?: boolean, visibilityOnly?: boolean}} [options] */
     requestListRefresh(options = {}) {
-        const coordinator = this.featureListRefreshAdapter || (this.legacyListRefreshCoordinator ||= this.createListRefreshCoordinator());
+        const coordinator = this.controllers.refresh || (this.legacyListRefreshCoordinator ||= this.createListRefreshCoordinator());
         return coordinator.request(options);
     }
     /** Broadcast and parent-close notices share one serial queue; only a new pass invalidates its snapshot. */
@@ -476,7 +430,7 @@ export class ListPageCompatibilityService {
         syncQuickFilterPresentation(root, root.find(".jhs-filter-option"), filter);
     }
     rememberTagExpand() {
-        if (this.featureListTagExpansionAdapter) return this.featureListTagExpansionAdapter.start();
+        if (this.controllers.tagExpansion) return this.controllers.tagExpansion.start();
         if (!window.location.href.includes("actors")) return;
         const e = $(".tag-expand");
         if (0 === e.length) return;
@@ -517,12 +471,12 @@ export class ListPageCompatibilityService {
     }
     /** @param {Element[]} items @param {string} [revision] @returns {Promise<boolean | void>} */
     async processAddedItems(items, revision = this.captureListRevision()) {
-        if (this.featureListAddedItemsAdapter) return this.featureListAddedItemsAdapter.processAddedItems(items, revision);
+        if (this.controllers.items) return this.controllers.items.processAddedItems(items, revision);
         const selector = this.getSelector(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
         if (!this.listView) this.replaceHdImg(covers);
         const filtered = await this.requestListRefresh({ items, reason: "dom-added" });
         if (!filtered) return;
-        await this.listSortController?.sortItems?.(), await this.featureCoverButtonAdapter?.addSvgBtn?.(items),
+        await this.listSortController?.sortItems?.(), await this.controllers.coverButtons?.addSvgBtn?.(items),
         items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await this.getRuntimeService("events").emit("list-items-added", { items }, { broadcast: !1 });
     }
     rebuildItemIndex() {
@@ -666,7 +620,7 @@ export class ListPageCompatibilityService {
     }
     /** @param {(Element|JQueryHandle)[]} e */
     async translateListItems(e) {
-        if (this.featureListTranslationAdapter?.translateListItems) return this.featureListTranslationAdapter.translateListItems(e.map((item) => item?.jquery ? item[0] : item));
+        if (this.readTranslation()?.translateListItems) return this.readTranslation().translateListItems(e.map((item) => item?.jquery ? item[0] : item));
         if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
         let failed = 0;
         /** @type {unknown} */
@@ -765,7 +719,7 @@ export class ListPageCompatibilityService {
                 video.paused ? await safePlay(video, { context: "列表视频", notify: !0 }) : video.pause();
             }));
         }
-        if (this.featureListContextMenuAdapter) $(e.boxSelector).off("contextmenu.jhsListMenu");
+        if (this.controllers.contextMenu) $(e.boxSelector).off("contextmenu.jhsListMenu");
         else $(e.boxSelector).off("contextmenu.jhsListMenu").on("contextmenu.jhsListMenu", ".item img, .item video", (async (/** @type {any} */ e) => {
             try {
                 e.preventDefault();
@@ -790,7 +744,7 @@ export class ListPageCompatibilityService {
     /** 从任意列表卡片进入统一详情导航。 */
     /** @param {any} item @param {{ event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean }} [options] */
     async openMovieDetail(item, { event = null, autoplay = !1, newTab = !1 } = {}) {
-        if (this.featureListNavigationAdapter) return this.featureListNavigationAdapter.openMovieDetail(item, { event, autoplay, newTab });
+        if (this.controllers.navigation) return this.controllers.navigation.openMovieDetail(item, { event, autoplay, newTab });
         const card = item?.jquery ? item : $(item), {carNum, aHref} = this.findCarNumAndHref(card);
         if (!aHref) return;
         const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
@@ -860,7 +814,7 @@ export class ListPageCompatibilityService {
     }
     /** @param {any} [e] */
     replaceHdImg(e) {
-        if (this.featureCoverImageAdapter) return this.featureCoverImageAdapter.replace(e);
+        if (this.controllers.coverImages) return this.controllers.coverImages.replace(e);
         if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getSelector().coverImgSelector)),
         !e.length) return;
         const t = Array.from(/** @type {Iterable<HTMLImageElement>} */ (e)).filter((/** @type {HTMLImageElement} */ e) => "true" !== e.dataset.hdReplaced && "true" !== e.dataset.jhsHdObserved);
@@ -877,7 +831,7 @@ export class ListPageCompatibilityService {
     /** hoverBigImg 唯一生命周期入口：ON→绑定，OFF→销毁。 */
     /** @param {string} enabled */
     configureHoverPreview(enabled) {
-        if (this.featureListHoverPreviewAdapter) return this.featureListHoverPreviewAdapter.configure(enabled);
+        if (this.controllers.hoverPreview) return this.controllers.hoverPreview.configure(enabled);
         const runtimeWindow = /** @type {any} */ (window);
         if (this.hoverPreviewState === enabled && ("no" === enabled || runtimeWindow.imageHoverPreviewObj)) return;
         if (runtimeWindow.imageHoverPreviewObj) {
@@ -895,7 +849,7 @@ export class ListPageCompatibilityService {
     }
     /** 使在途列表翻译作废（Translate OFF 时调用）。 */
     invalidateTranslations() {
-        if (this.featureListTranslationAdapter?.invalidateListTranslations) return this.featureListTranslationAdapter.invalidateListTranslations();
+        if (this.readTranslation()?.invalidateListTranslations) return this.readTranslation().invalidateListTranslations();
         this.translationGeneration++;
     }
     /** @param {Element|JQueryHandle} input */
@@ -913,7 +867,7 @@ export class ListPageCompatibilityService {
         this.applyTranslatedTitle(e, translated, n);
     }
     async revertTranslation() {
-        if (this.featureListTranslationAdapter?.revertListTranslations) return this.featureListTranslationAdapter.revertListTranslations();
+        if (this.readTranslation()?.revertListTranslations) return this.readTranslation().revertListTranslations();
         $(this.getSelector().itemSelector).toArray().forEach((/** @type {Element} */ e) => {
             let t = $(e);
             const n = t.find(".box").attr("title") || t.find(".video-title").attr("title") || t.find("img").attr("data-title");

@@ -34,11 +34,14 @@ export default defineFeature({
         const pageActionsController = runtime.route === "detail" && runtime.enabledContributions.includes("detail.page-state-actions")
             ? new DetailPageActionsController({
                 hostAdapter: deps[PORT.host], route: runtime.route, scope: runtime.scope,
+                readMagnetHub: () => runtime.getCapability?.("detail.external-magnets"),
+                readMagnetFilter: () => runtime.getCapability?.("detail.native-magnets"),
                 settings: deps[SERVICE.settings], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle],
                 openSubtitles: (movie) => runtime.isCommandAvailable?.("subtitle.open") ? runtime.executeCommand("subtitle.open", movie) : Promise.resolve(null),
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], events: deps[SERVICE.events], diagnostics: runtime.diagnostics,
             })
             : null;
+        if (pageActionsController) runtime.onCapabilityChanged?.("detail.external-magnets", () => pageActionsController.closeMagnetDialog());
         const pageActions = pageActionsController?.getFeatureStateActionsAdapter() ?? null;
         const workspaceUi = runtime.enabledContributions.includes("detail.workspace") ? deps[SERVICE.domUi] : null;
         const featureActivatedContributions = new Set(["detail.shortcuts", "detail.native-magnets", "detail.javdb-preview", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.screenshot"]);
@@ -80,8 +83,6 @@ export default defineFeature({
                 });
                 if (magnetFilter.start()) {
                     runtime.provideCapability?.("detail.native-magnets", magnetFilter.compatibilityAdapter);
-                    pageActionsController?.attachFeatureMagnetFilterAdapter(magnetFilter.compatibilityAdapter);
-                    runtime.scope.addCleanup(() => pageActionsController?.detachFeatureMagnetFilterAdapter(magnetFilter.compatibilityAdapter));
                     runtime.scope.addCleanup(releaseStyle);
                     activeContributions.push("detail.native-magnets");
                 } else releaseStyle();

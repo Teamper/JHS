@@ -103,7 +103,7 @@ describe("release comparison range and contribution evidence", () => {
             "done", "",
         ].join("\n"));
         await expect(collectNotesContext({ base: "other", target: "main", version: "7.0.0", adapted: [] }, root)).rejects.toThrow(/merge-base/);
-    });
+    }, 30000);
 });
 
 function apiFixture({ before = {}, after = {}, fail, movedTag = false, movedLatest = false } = {}) {

@@ -33,6 +33,8 @@ export class SettingPlugin {
     constructor(options) {
         this.runtimeServices = options.runtimeServices;
         this.capabilities = options.capabilities;
+        this.readTask = options.readTask;
+        this.readBlacklist = options.readBlacklist;
         this.resolveDependency = options.resolveDependency ?? ((name) => this.capabilities[name] ?? null);
         this.jquery = options.jquery;
         this.utils = options.utilities;
@@ -54,8 +56,8 @@ export class SettingPlugin {
         this._settingsDialog = null;
         this._settingsDialogOpenPromise = null;
         /** @type {(() => Promise<void>) | null} */ this.fullSettingsStyleLoader = null;
-        /** @type {any} */ this.featureExternalSitesAdapter = null;
-        /** @type {any} */ this.featureCoverButtonAdapter = null;
+        this.readExternalSites = options.readExternalSites;
+        this.readCoverButtons = options.readCoverButtons;
         i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService(this.legacyStorage)), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
 i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "_cloudSettingBinding", null), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
@@ -110,19 +112,11 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         if (!selectors) throw new Error("类型错误: 无法确定选择器类型 (JavDb 或 JavBus)");
         return selectors;
     }
-    /** @param {any} adapter */
-    attachFeatureExternalSitesAdapter(adapter) { this.featureExternalSitesAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureExternalSitesAdapter(adapter) { if (this.featureExternalSitesAdapter === adapter) this.featureExternalSitesAdapter = null; }
-    /** @param {any} adapter */
-    attachFeatureCoverButtonAdapter(adapter) { this.featureCoverButtonAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureCoverButtonAdapter(adapter) { if (this.featureCoverButtonAdapter === adapter) this.featureCoverButtonAdapter = null; }
     getFormDependencies() {
         const instance = this._settingsDialog;
         return Object.freeze({
-            otherSite: this.featureExternalSitesAdapter, listPage: this.getOptionalDependency("ListPagePlugin"),
-            newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.getOptionalDependency("BlacklistPlugin"),
+            otherSite: this.readExternalSites?.(), listPage: this.getOptionalDependency("ListPagePlugin"),
+            newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.readBlacklist?.(),
             imageLayout: this.getRuntimeService("busImageLayout"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
             settingsRegistry: this.getRuntimeService("settingsRegistry"),
             webdav: this.getRuntimeService("webdav"),
@@ -444,7 +438,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 this._cloudSettingBinding = null;
                 this._settingsFocusCleanup = null;
                 this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
-                this.featureCoverButtonAdapter?.enableSvgBtn?.();
+                this.readCoverButtons?.()?.enableSvgBtn();
             }
         });
     }
@@ -609,7 +603,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     renderTaskStatuses(layerRoot = null) {
         const container = layerRoot ? this.jquery(layerRoot).find("#setting-task-status-list") : this.jquery("#setting-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        const taskPlugin = this.readTask?.();
         if (!taskPlugin?.getTaskStatusSnapshot) return void container.empty();
         const settings = this.getRuntimeService("settings").snapshot();
         container.empty();

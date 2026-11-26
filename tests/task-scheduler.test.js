@@ -105,7 +105,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
             },
             hostListParser: { parseDetailPage: context.parseDetailPage },
         },
-        resolveDependency: name => beans[name] ?? null,
+        blacklist: { available: () => Boolean(beans.BlacklistPlugin), parseAndSave: (...args) => beans.BlacklistPlugin.parseAndSaveFilterInfo(...args) },
         legacyStorage: storageManager, utilities: context.utils, logger: context.clog, jquery: $,
         window: context.window, notifications: { error: context.show.error },
     });
@@ -310,9 +310,9 @@ describe("task scheduler state machine", () => {
         const harness = createHarness();
         harness.plugin.taskConfig = { checkConcurrencyCount: 1, checkRequestSleep: 0, checkNewVideo_intervalTime: 12, checkNewVideo_ruleTime: 0 };
         harness.plugin.javDbUrl = "https://javdb.com";
-        harness.plugin.featureNewVideoScanController = {
+        harness.plugin.getNewVideoScanner = () => ({
             scanActresses: async () => ({ actressCount: 1, success: 1, parseFailed: 0, networkFailed: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, fatal: false, blockedError: null }),
-        };
+        });
         harness.plugin.logger.html = vi.fn(message => {
             if (String(message).includes("检测最新作品---结束")) throw new Error("notice unavailable");
         });
@@ -326,7 +326,8 @@ describe("task scheduler state machine", () => {
     it("keeps a saved manual actress scan when its closing notice fails", async () => {
         const harness = createHarness();
         harness.plugin.javDbUrl = "https://javdb.com";
-        harness.plugin.featureNewVideoScanController = { scanActress: vi.fn(async () => 1) };
+        const scanner = { scanActress: vi.fn(async () => 1) };
+        harness.plugin.getNewVideoScanner = () => scanner;
         harness.plugin.logger.html = vi.fn(message => {
             if (String(message).includes("检测最新作品---结束")) throw new Error("notice unavailable");
         });
@@ -344,7 +345,7 @@ describe("task scheduler state machine", () => {
         const harness = createHarness();
         harness.plugin.javDbUrl = "https://javdb.com";
         const failure = new Error("write failed");
-        harness.plugin.featureNewVideoScanController = { scanActress: vi.fn(async () => { throw failure; }) };
+        harness.plugin.getNewVideoScanner = () => ({ scanActress: vi.fn(async () => { throw failure; }) });
 
         await harness.plugin.checkOneNewVideo({ starId: "actor-1", name: "Actor One" });
 
@@ -359,7 +360,7 @@ describe("task scheduler state machine", () => {
         const harness = createHarness();
         harness.plugin.taskConfig = { checkFavoriteActress_IntervalTime: 24 };
         harness.plugin.javDbUrl = "https://javdb.com";
-        harness.plugin.featureNewVideoScanController = { syncFavoriteActresses: async () => ({ actors: [], pages: 1 }) };
+        harness.plugin.getNewVideoScanner = () => ({ syncFavoriteActresses: async () => ({ actors: [], pages: 1 }) });
         harness.plugin.logger.log = vi.fn(message => {
             if (String(message).includes("所有演员信息已收集")) throw new Error("notice unavailable");
         });

@@ -11,7 +11,7 @@ import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 /** Detail-page controls owned by the Detail Feature; the returned adapter keeps old cross-feature calls stable. */
 export class DetailPageActionsController {
-    /** @param {{hostAdapter: any, route: string, scope: import("../../core/lifecycle-scope.js").LifecycleScope, settings: any, dialog: any, subtitle: any, ui: any, notifications: any, events: any, diagnostics: any, openSubtitles?: (movie: any) => Promise<any>}} options */
+    /** @param {{hostAdapter: any, route: string, scope: import("../../core/lifecycle-scope.js").LifecycleScope, settings: any, dialog: any, subtitle: any, ui: any, notifications: any, events: any, diagnostics: any, readMagnetHub?: () => any, readMagnetFilter?: () => any, openSubtitles?: (movie: any) => Promise<any>}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.route = options.route;
@@ -28,8 +28,8 @@ export class DetailPageActionsController {
         this.jquery = this.ui.jquery;
         this.stateActions = null;
         this.featureWorkspace = null;
-        this.featureMagnetFilterAdapter = null;
-        this.featureMagnetHubAdapter = null;
+        this.readMagnetFilter = options.readMagnetFilter ?? (() => null);
+        this.readMagnetHub = options.readMagnetHub ?? (() => null);
         this.magnetDialog = null;
         this.stateBinding = null;
         /** @type {WeakMap<LifecycleScope, Map<string, LifecycleScope>>} */
@@ -57,15 +57,6 @@ export class DetailPageActionsController {
         };
     }
 
-    /** @param {any} adapter */
-    attachFeatureMagnetFilterAdapter(adapter) { this.featureMagnetFilterAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureMagnetFilterAdapter(adapter) { if (this.featureMagnetFilterAdapter === adapter) this.featureMagnetFilterAdapter = null; }
-    /** @param {any} adapter */
-    attachFeatureMagnetHubAdapter(adapter) { this.featureMagnetHubAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeatureMagnetHubAdapter(adapter) { if (this.featureMagnetHubAdapter === adapter) { this.featureMagnetHubAdapter = null; this.closeMagnetDialog(); } }
-
     closeMagnetDialog() {
         const active = this.magnetDialog;
         if (!active) return;
@@ -77,7 +68,7 @@ export class DetailPageActionsController {
     /** Await the source surface inside its own dialog and discard late results after closing. */
     /** @param {string} carNum */
     openMagnetDialog(carNum) {
-        const magnetHub = this.featureMagnetHubAdapter;
+        const magnetHub = this.readMagnetHub();
         if (!magnetHub) return void this.notifications.info("磁力搜索功能已关闭");
         if (this.magnetDialog?.open) return;
         /** @type {{open: boolean, index: number|null, content: any}} */
@@ -89,7 +80,7 @@ export class DetailPageActionsController {
             content.attr("aria-busy", "true").empty().text("加载中…");
             try {
                 const hub = await magnetHub.createMagnetHub(carNum);
-                if (!active.open || this.scope.disposed || this.featureMagnetHubAdapter !== magnetHub || !content[0]?.isConnected) return;
+                if (!active.open || this.scope.disposed || this.readMagnetHub() !== magnetHub || !content[0]?.isConnected) return;
                 content.removeAttr("role").empty().append(hub);
             } catch (error) {
                 if (!active.open || this.scope.disposed || !content[0]?.isConnected) return;
@@ -162,7 +153,7 @@ export class DetailPageActionsController {
 
         row.on("click.jhsDetailActions", "#magnetSearchBtn", () => this.openMagnetDialog(carNum ?? ""));
 
-        const magnetFilter = this.featureMagnetFilterAdapter, current = this.settings.snapshot().enableMagnetsFilter ?? _;
+        const magnetFilter = this.readMagnetFilter(), current = this.settings.snapshot().enableMagnetsFilter ?? _;
         if (!magnetFilter) row.find("#enable-magnets-filter").remove();
         row.find("#magnets-span").text(current === _ ? "关闭磁力过滤" : "开启磁力过滤");
         magnetFilter?.reconfigure?.();

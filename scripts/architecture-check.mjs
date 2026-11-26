@@ -27,7 +27,6 @@ async function checkImportGraph() {
         services: new Set(["contracts", "core"]),
         integrations: new Set(["contracts", "core"]),
         ui: new Set(["contracts", "core"]),
-        compat: new Set(["core"]),
         platform: new Set(["contracts", "core"]),
         contracts: new Set(["core"]),
     };
@@ -47,8 +46,7 @@ async function checkImportGraph() {
             const sameIntegration = sourceLayer === "integrations" && targetLayer === "integrations" && sourceRelative[1] === targetRelative[1];
             const sameSharedLayer = sourceLayer === targetLayer && [ "services", "ui" ].includes(sourceLayer);
             const featureCatalog = sourceRelative.join("/") === "features/catalog.js" && targetLayer === "features";
-            const pluginCompatibilityAdapter = sourceRelative.join("/") === "features/compatibility/contribution-catalog.js" && [ "compat/detail-workspace-adapter.js", "compat/blacklist-compatibility-bean.js", "compat/task-compatibility-bean.js" ].includes(targetRelative.join("/"));
-            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !featureCatalog && !pluginCompatibilityAdapter) {
+            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !featureCatalog) {
                 boundaryErrors.push(`${sourceLayer} -> ${targetLayer}: ${path.relative(rootDir, file)} imports ${path.relative(rootDir, dependency)}`);
             }
         }

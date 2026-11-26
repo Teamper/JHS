@@ -114,11 +114,10 @@ test("Library Feature owns blacklist behavior without registering the legacy plu
       style: document.getElementById("jhs-library-blacklist-feature")?.textContent.includes(".jhs-blacklist-layout") ?? false,
       contribution: manager.diagnostics.exportSnapshot().activeContributions.includes("library.blacklist"),
       legacyExecutor: manager.getPluginNames().includes("BlacklistPlugin"),
-      compatibilityFacade: typeof manager.getBean("BlacklistPlugin")?.addBlacklist === "function",
       runtimeStatus: manager.getTimings().find(({ name }) => name === "BlacklistPlugin")?.status ?? null,
     };
   });
-  expect(ownership).toEqual({ style: true, contribution: true, legacyExecutor: false, compatibilityFacade: true, runtimeStatus: null });
+  expect(ownership).toEqual({ style: true, contribution: true, legacyExecutor: false, runtimeStatus: null });
 });
 
 test("Library Feature owns the blacklist workspace filter and actor deletion flow", async ({ context, page }, testInfo) => {

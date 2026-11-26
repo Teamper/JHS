@@ -47,10 +47,15 @@ export const systemFeatureManifests = Object.freeze([
                     settingsRegistry: deps[REGISTRY.settings], scope: () => runtime.scope,
                 },
                 resolveDependency: (/** @type {string} */ name) => runtime.resolveCompatibilityBean(name),
+                readTask: () => runtime.getCapability?.("discovery.scheduler"),
+                readCoverButtons: () => runtime.getCapability?.("detail.cover-state-actions"),
+                readExternalSites: () => runtime.getCapability?.("detail.external-sites"),
+                readBlacklist: () => runtime.getCapability?.("library.blacklist"),
                 jquery: deps[SERVICE.domUi].jquery, utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
                 logger: deps[SERVICE.clog], legacyStorage: deps[SERVICE.legacyStorage], events: deps[SERVICE.events], domUi: deps[SERVICE.domUi],
                 document: pageDocument, window: pageWindow, site: runtime.site, route: runtime.route,
             });
+            runtime.provideCapability?.("settings.core", adapter);
             const release = runtime.registerCompatibilityBean?.("SettingPlugin", adapter);
             if (release) runtime.scope.addCleanup(release);
             try {
@@ -86,7 +91,7 @@ export const systemFeatureManifests = Object.freeze([
         id: "settings", kind: "system", disableable: false, sites: [], routes: [], startup: "on-command",
         requires: [SERVICE.diagnostics], contributes: [], providesCommands: ["settings.open"],
         activate: (/** @type {any} */ _deps, /** @type {any} */ runtime) => {
-            const adapter = runtime.resolveCompatibilityBean("SettingPlugin");
+            const adapter = runtime.getCapability?.("settings.core");
             const cleanup = typeof adapter?.openSettingDialog === "function"
                 ? registerSettingsUiOwner((panel) => adapter.openSettingDialog(panel))
                 : () => {};
@@ -121,6 +126,10 @@ export const systemFeatureManifests = Object.freeze([
                     hubAvailable: () => Boolean(runtime.getCapability("detail.external-magnets")),
                 },
                 newVideoAvailable: () => runtime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin"),
+                blacklist: {
+                    available: () => runtime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin"),
+                    open: () => runtime.executeCommand("library.blacklist.open"),
+                },
                 history: {
                     available: () => runtime.isContributionEnabled("library", "library.history", "HistoryPlugin"),
                     open: () => runtime.executeCommand("library.history.open"),

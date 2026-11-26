@@ -33,7 +33,6 @@ describe("RC 收口：async 回流 gate", () => {
         expect(listPage).toContain("invalidateTranslations()");
         expect(listPage).toContain("generation !== this.translationGeneration");
         expect(translate).toContain("this.listGeneration += 1");
-        expect(listPage).toContain("this.featureListTranslationAdapter?.invalidateListTranslations");
         expect(translate).toContain("generation === this.generation");
         expect(translate).toContain("!this.scope.disposed");
         expect(titleTranslation).toContain("options.isActive && !options.isActive()");

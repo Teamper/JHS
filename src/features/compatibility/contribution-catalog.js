@@ -2,9 +2,7 @@
 
 import { defineContribution } from "../../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
-import { BlacklistCompatibilityBean } from "../../compat/blacklist-compatibility-bean.js";
 
-import { TaskCompatibilityBean } from "../../compat/task-compatibility-bean.js";
 
 /** @param {string} id @param {string} featureId @param {any} plugin @param {string[]} sites @param {Record<string, number>} order @param {symbol[]} [requires] @param {{legacyPluginId?: string, executionOwner?: string, lifecycleOwner?: string, runtimeCapabilities?: Record<string, any>, routes?: string[], surfaces?: string[]}} [options] */
 const manifest = (id, featureId, plugin, sites, order, requires = [], options = {}) => {
@@ -80,27 +78,12 @@ for (const contribution of compatibilityContributionCatalog) {
 /** Register only compatibility lookup beans; FeatureRuntime owns all behavior. @param {import("../../core/compatibility-bean-registry.js").CompatibilityBeanRegistry} compatibilityBeans @param {import("../../app/feature-runtime.js").FeatureRuntime} featureRuntime @param {string} site */
 export function registerSiteCompatibility(compatibilityBeans, featureRuntime, site) {
     featureRuntime.compatibilityRefresh = () => registerSiteCompatibility(compatibilityBeans, featureRuntime, site);
-    const register = (/** @type {string} */ name, /** @type {any} */ bean) => { if (!compatibilityBeans.lookupCompatibilityBean(name)) compatibilityBeans.registerCompatibilityBean(name, bean); };
     featureRuntime.setContributionCatalog?.(compatibilityContributionCatalog);
     featureRuntime.setCompatibilityBeanResolver?.((name) => compatibilityBeans.lookupCompatibilityBean(name));
     featureRuntime.setCompatibilityBeanRegistrar?.((name, bean) => {
         compatibilityBeans.registerCompatibilityBean(name, bean);
         return () => compatibilityBeans.unregisterCompatibilityBean(name, bean);
     });
-    if (featureRuntime.isContributionEnabled("scheduler", "discovery.scheduler", "TaskPlugin")) {
-        register("TaskPlugin", new TaskCompatibilityBean());
-    }
-    if (featureRuntime.route === "list" && featureRuntime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin")) {
-        register("BlacklistPlugin", new BlacklistCompatibilityBean({
-            executeCommand: (command, ...args) => featureRuntime.commands.execute(command, ...args),
-            getSubjectInfo: () => featureRuntime.commands.execute("library.blacklist.subject-info"),
-            batchAllVideos: (name, options = {}) => {
-                const list = compatibilityBeans.lookupCompatibilityBean("ListPagePlugin");
-                if (typeof list?.batchSaveAllVideos !== "function") throw new Error("List Feature 批处理控制器尚未就绪");
-                return list.batchSaveAllVideos({ kind: "actor", displayName: name, recordName: name }, "filter", options);
-            },
-        }));
-    }
     compatibilityBeans.setCatalogDescriptors(compatibilityContributionCatalog
         .filter((item) => item.sites.includes(site))
         .map((item) => ({ name: item.legacyPluginId, disableable: featureRuntime.isFeatureDisableable(item.featureId) })));

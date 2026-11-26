@@ -46,8 +46,12 @@ export default defineFeature({
                     }
                 },
             },
-            resolveDependency: (name) => runtime.resolveCompatibilityBean(name),
+            readMagnetHub: () => runtime.getCapability?.("detail.external-magnets"),
+            readExternalSites: () => runtime.getCapability?.("detail.external-sites"),
+            readCatalog: () => runtime.getCapability?.("detail.fc2-lookup"),
         });
+        runtime.onCapabilityChanged?.("detail.external-magnets", () => service.refreshMagnetHubAvailability());
+        runtime.onCapabilityChanged?.("detail.external-sites", () => service.refreshExternalSites());
         runtime.scope.listen(deps[SERVICE.credential], "credentials.changed", (/** @type {any} */ event) => { if (event.detail?.key === "jhs_appAuthorization") service.refreshWantAccounts(); });
         runtime.scope.addCleanup(() => service.disposeWantContexts());
         runtime.scope.addCleanup(deps[PORT.style].register("jhs-fc2-workspace-feature", FC2_WORKSPACE_STYLES));

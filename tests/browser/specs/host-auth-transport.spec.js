@@ -17,10 +17,10 @@ test("blacklist host scans use the current site's login session before GM fallba
   await injectUserscriptRuntime(page, {
     settingOverrides: { enableCheckBlacklist: "yes", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" },
   });
-  await expect.poll(() => page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.featureBlacklistScanController))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureBlacklistScanController))).toBe(true);
 
   const result = await page.evaluate(async (url) => {
-    const controller = window.unsafeWindow.pluginManager.getBean("TaskPlugin").featureBlacklistScanController;
+    const controller = window.__jhsBrowserDiagnostics.features.scheduler.featureBlacklistScanController;
     const item = { starId: "jhs-auth-fixture", name: "Synthetic Actor", allName: ["Synthetic Actor"], role: "actor", movieType: "", url, createTime: "2026-09-29" };
     await window.unsafeWindow.storageManager.addBlacklistItem(item);
     await controller.scanActor({ item, site: "javdb" }, {
@@ -60,10 +60,10 @@ test("JavBus blacklist scans skip the native actor profile item", async ({ conte
   await injectUserscriptRuntime(page, {
     settingOverrides: { enableCheckBlacklist: "yes", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" },
   });
-  await expect.poll(() => page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.featureBlacklistScanController))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureBlacklistScanController))).toBe(true);
 
   const result = await page.evaluate(async (url) => {
-    const controller = window.unsafeWindow.pluginManager.getBean("TaskPlugin").featureBlacklistScanController;
+    const controller = window.__jhsBrowserDiagnostics.features.scheduler.featureBlacklistScanController;
     const item = { starId: "jhs-auth-fixture", name: "Synthetic Actor", allName: ["Synthetic Actor"], role: "actor", movieType: "", url, createTime: "2026-09-29" };
     await window.unsafeWindow.storageManager.addBlacklistItem(item);
     await controller.scanActor({ item, site: "javbus" }, {

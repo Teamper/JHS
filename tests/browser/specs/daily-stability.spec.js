@@ -50,7 +50,7 @@ for (const theme of ["light", "dark"]) test(`actor source exceptions expose a sa
         for (const actor of [allActors[0], ...extra]) {
             plugin.getRuntimeService("sourceHealth").unavailable("https://javdb.com", { starId: actor.starId, name: actor.name });
         }
-        window.unsafeWindow.pluginManager.getBean("TaskPlugin").checkOneNewVideo = async actress => plugin.getRuntimeService("sourceHealth").clear("https://javdb.com", actress.starId);
+        (await window.__jhsBrowserDiagnostics.executeCommand("scheduler.service")).checkOneNewVideo = async actress => plugin.getRuntimeService("sourceHealth").clear("https://javdb.com", actress.starId);
         plugin.openDialog();
     });
     const workspace = page.locator(".newVideoToolBox");
@@ -88,7 +88,7 @@ test("a closed actor retry cannot move focus in a later workspace", async ({ pag
         plugin.getRuntimeService("sourceHealth").unavailable("https://javdb.com", actors[0]);
         const run = plugin.runManualTask.bind(plugin);
         plugin.runManualTask = async (...args) => { try { return await run(...args); } finally { window.actorRetryFinished = true; } };
-        window.unsafeWindow.pluginManager.getBean("TaskPlugin").checkOneNewVideo = () => new Promise(resolve => { window.releaseActorRetry = resolve; });
+        (await window.__jhsBrowserDiagnostics.executeCommand("scheduler.service")).checkOneNewVideo = () => new Promise(resolve => { window.releaseActorRetry = resolve; });
         plugin.openDialog();
     });
     const root = page.locator(".newVideoToolBox");

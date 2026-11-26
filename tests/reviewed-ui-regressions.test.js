@@ -7,7 +7,6 @@ import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js"
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { isBatchRunActive } from "../src/features/list/batch-coordinator.js";
 import { saveSettingForm } from "../src/features/settings/setting-forms.js";
-import { BlacklistCompatibilityBean } from "../src/compat/blacklist-compatibility-bean.js";
 
 let dom;
 function setup(html, url = "https://www.javbus.com/search/1234567/3") {
@@ -19,15 +18,6 @@ function setup(html, url = "https://www.javbus.com/search/1234567/3") {
 }
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
 describe("reviewed UI regressions", () => {
-    it("routes the legacy blacklist batch API through the List Feature controller", async () => {
-        setup('<button id="filterAllVideo"></button>');
-        const batch = vi.fn(async (scope, flag, options) => ({ matched: 2, updated: 2 }));
-        const plugin = new BlacklistCompatibilityBean({ executeCommand: vi.fn(), getSubjectInfo: vi.fn(), batchAllVideos: batch });
-        await expect(plugin.filterAllVideo("Actor", { filter: "all", confirm: false, root: null })).resolves.toEqual({ matched: 2, updated: 2 });
-        expect(batch).toHaveBeenCalledWith(
-            "Actor", { filter: "all", confirm: false, root: null },
-        );
-    });
     it("does not submit a stale password when only the username was edited", async () => {
         const $ = setup('<div id="form"><input id="webDavUsername" value="new-user"><input id="webDavPassword" value="stale-password"></div>');
         const root = $("#form").data("jhsDirtyManualKeys", new Set(["webDavUsername"]));
@@ -40,7 +30,7 @@ describe("reviewed UI regressions", () => {
     });
     it("restores JavBus text without losing the host link", async () => {
         const $ = setup('<div class="item"><a href="/ABC-123"><img data-title="原題"><div class="video-title" title="原題">翻译标题</div></a></div>');
-        const plugin = Object.create(ListPagePlugin.prototype);
+        const plugin = new ListPagePlugin();
         plugin.getSelector = () => ({ itemSelector: ".item" });
         await plugin.revertTranslation();
         expect($(".video-title").text().trim()).toBe("原題");

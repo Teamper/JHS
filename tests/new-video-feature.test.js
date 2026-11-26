@@ -6,7 +6,6 @@ import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { newVideoFeature, schedulerFeature } from "../src/features/discovery/new-video-manifests.js";
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 import { TaskExecutionService } from "../src/features/discovery/task-execution-service.js";
-import { TaskCompatibilityBean } from "../src/compat/task-compatibility-bean.js";
 import { NEW_VIDEO_STYLES } from "../src/features/discovery/new-video-styles.js";
 import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
 import { SupplementaryCardsController } from "../src/features/list/supplementary-cards-controller.js";
@@ -23,7 +22,8 @@ function createRuntime(id, plugin, events = { on: vi.fn(() => vi.fn()) }) {
         enabledContributions: [id],
         scope: new LifecycleScope(`feature:${id}`),
         diagnostics: { recordError: vi.fn() },
-        resolveCompatibilityBean: vi.fn((name) => name === "TaskPlugin" ? plugin : null),
+        resolveCompatibilityBean: vi.fn(() => null),
+        provideCapability: vi.fn(),
         events,
     };
 }
@@ -37,15 +37,11 @@ describe("new video and scheduler feature lifecycle", () => {
         const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://javdb.com/" });
         vi.stubGlobal("document", dom.window.document);
         vi.stubGlobal("window", dom.window);
-        let loadFeatureStyles;
         const releaseStyle = vi.fn(), handlers = new Map(), events = {
             on: vi.fn((type, handler) => { handlers.set(type, handler); return () => handlers.delete(type); }),
         }, plugin = {
-            prepareFeatureActivation: vi.fn(), attachFeatureNewVideoStyleLoader: vi.fn((loader) => { loadFeatureStyles = loader; }),
-            detachFeatureNewVideoStyleLoader: vi.fn(), initializeLocalState: vi.fn(), showNewVideoCount: vi.fn(),
-            attachFeatureNewVideoBatchController: vi.fn(), detachFeatureNewVideoBatchController: vi.fn(),
-            attachFeatureNewVideoWorkspaceController: vi.fn(), detachFeatureNewVideoWorkspaceController: vi.fn(),
-            attachFeatureNewVideoScanController: vi.fn(), detachFeatureNewVideoScanController: vi.fn(),
+            prepareFeatureActivation: vi.fn(),
+            initializeLocalState: vi.fn(), showNewVideoCount: vi.fn(),
             openDialog: vi.fn(),
             scheduleWorkspaceReload: vi.fn(), isWorkspaceMounted: vi.fn(() => true), renderTaskStatuses: vi.fn(), dispose: vi.fn(),
         };
@@ -73,16 +69,16 @@ describe("new video and scheduler feature lifecycle", () => {
         };
         const result = await newVideoFeature.activate(dependencies, runtime);
         expect(styles.register).not.toHaveBeenCalled();
-        await loadFeatureStyles();
+        const workspace = runtime.provideCapability.mock.calls.find(([id]) => id === "discovery.new-video")[1];
+        await workspace.loadStyles();
         expect(styles.register).toHaveBeenCalledWith("feature-new-video-workspace", NEW_VIDEO_STYLES);
         expect(NEW_VIDEO_STYLES).toContain(".newVideoToolBox");
         expect(plugin.prepareFeatureActivation).toHaveBeenCalledOnce();
-        expect(plugin.attachFeatureNewVideoBatchController).toHaveBeenCalledOnce();
-        const batchController = plugin.attachFeatureNewVideoBatchController.mock.calls[0][0];
+        const batchController = workspace.featureNewVideoBatchController;
         await batchController.run("favorite", [{ carNum: "ABC-001" }]);
         expect(state.patch).toHaveBeenCalledWith(["ABC-001"], { favorite: true }, expect.objectContaining({ type: "new-video-batch-state" }));
-        const workspaceController = plugin.attachFeatureNewVideoWorkspaceController.mock.calls[0][0];
-        const scanController = plugin.attachFeatureNewVideoScanController.mock.calls[0][0];
+        const workspaceController = workspace.featureNewVideoWorkspaceController;
+        const scanController = runtime.provideCapability.mock.calls.find(([id]) => id === "discovery.new-video-scan")?.[1];
         expect(scanController).toBeDefined();
         await expect(scanController.scanActresses({ baseUrl: "https://javdb.com", concurrency: 2, sleepMs: 0, intervalHours: 12, ruleHours: 8760, force: false, isUnnecessaryCheck: () => false, isNetworkBlocked: () => false, sleep: async () => {} })).resolves.toMatchObject({ actressCount: 0, eligibleCount: 0 });
         expect(await workspaceController.getPendingSummary()).toEqual({ count: 0, decisions: {} });
@@ -103,10 +99,6 @@ describe("new video and scheduler feature lifecycle", () => {
 
         expect(styles.register).toHaveBeenCalledWith("feature-new-video-workspace", NEW_VIDEO_STYLES);
         runtime.scope.dispose();
-        expect(plugin.detachFeatureNewVideoStyleLoader).toHaveBeenCalledOnce();
-        expect(plugin.detachFeatureNewVideoBatchController).toHaveBeenCalledWith(batchController);
-        expect(plugin.detachFeatureNewVideoWorkspaceController).toHaveBeenCalledWith(workspaceController);
-        expect(plugin.detachFeatureNewVideoScanController).toHaveBeenCalledWith(scanController);
         await expect(batchController.run("favorite", [{ carNum: "ABC-001" }])).rejects.toMatchObject({ name: "AbortError" });
         await expect(workspaceController.loadWorkspace()).rejects.toMatchObject({ name: "AbortError" });
         await expect(scanController.parseActorMovies([{ carNum: "ABC-123" }], "actor-1", "Actor One", [], new Set())).rejects.toMatchObject({ name: "AbortError" });
@@ -123,7 +115,7 @@ describe("new video and scheduler feature lifecycle", () => {
     });
 
     it("does not resolve, style, or schedule a disabled contribution", async () => {
-        const plugin = { attachFeatureNewVideoStyleLoader: vi.fn() }, runtime = createRuntime("discovery.new-video", plugin);
+        const plugin = {}, runtime = createRuntime("discovery.new-video", plugin);
         runtime.enabledContributions = [];
         const styles = { register: vi.fn() };
 
@@ -155,7 +147,6 @@ describe("new video and scheduler feature lifecycle", () => {
         const pageDocument = Object.assign(new EventTarget(), { hidden: true });
         vi.stubGlobal("window", pageWindow);
         vi.stubGlobal("document", pageDocument);
-        const taskBean = new TaskCompatibilityBean();
         const eventHandlers = new Map();
         const events = {
             on: vi.fn((name, handler) => {
@@ -167,7 +158,7 @@ describe("new video and scheduler feature lifecycle", () => {
         const legacyStorage = { getSetting: vi.fn(async () => ({})) };
         const legacyUtils = { getNowStr: vi.fn(() => "2026-08-01 00:00:00"), sleep: vi.fn(async () => {}), getHourDifference: vi.fn(() => 100) };
         const logger = { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() };
-        const runtime = createRuntime("discovery.scheduler", taskBean);
+        const runtime = createRuntime("discovery.scheduler");
 
         const dependencies = {
             [PORT.javdbHost]: { getListSelectors: vi.fn(() => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item" })) },
@@ -181,14 +172,13 @@ describe("new video and scheduler feature lifecycle", () => {
         };
         const result = await schedulerFeature.activate(dependencies, runtime);
         expect(result.activeContributions).toEqual(["discovery.scheduler"]);
-        expect(taskBean.service).toBeInstanceOf(TaskExecutionService);
-        expect(taskBean.service.legacyStorage).toBe(legacyStorage);
-        expect(taskBean.service.getRuntimeService("storage")).toBe(storage);
-        const taskService = taskBean.service;
+        const taskService = result.commands["scheduler.service"]();
+        expect(taskService).toBeInstanceOf(TaskExecutionService);
+        expect(taskService.legacyStorage).toBe(legacyStorage);
+        expect(taskService.getRuntimeService("storage")).toBe(storage);
         expect(events.on).toHaveBeenCalledWith("settings-changed", expect.any(Function));
         runtime.scope.dispose();
         expect(taskService.disposed).toBe(true);
-        expect(taskBean.service).toBeNull();
         expect(eventHandlers.has("settings-changed")).toBe(false);
     });
 
@@ -286,7 +276,7 @@ describe("new video and scheduler feature lifecycle", () => {
             onNewItems: vi.fn(),
         });
         scanController.backfillFavoriteProfiles = backfill;
-        taskService.attachFeatureNewVideoScanController(scanController);
+        taskService.getNewVideoScanner = () => scanController;
 
         expect(taskService.isNetworkBlocked(new DOMException("Scan disposed", "AbortError"))).toBe(true);
 
@@ -348,7 +338,7 @@ describe("new video and scheduler feature lifecycle", () => {
         });
         const skippedBackfill = vi.fn(async () => ({ total: 0, updated: 0, unchanged: 0, failed: 0, rateLimited: 0 }));
         scheduledController.backfillFavoriteProfiles = skippedBackfill;
-        scheduledService.attachFeatureNewVideoScanController(scheduledController);
+        scheduledService.getNewVideoScanner = () => scheduledController;
         await scheduledService.doTask();
         expect(skippedBackfill).not.toHaveBeenCalled();
 
@@ -365,7 +355,7 @@ describe("new video and scheduler feature lifecycle", () => {
         await expect(scheduledService.triggerProfileBackfill({ requireListPage: true })).resolves.toBeNull();
     });
 
-    it("serializes targeted profile backfill behind active Web Lock, suppresses abort status text, and forwards non-list TaskCompatibilityBean calls", async () => {
+    it("serializes targeted profile backfill behind active Web Lock, suppresses abort status text, and keeps explicit profile backfill on non-list routes", async () => {
         const createLockManager = () => {
             let held = false;
             const queue = [];
@@ -442,7 +432,7 @@ describe("new video and scheduler feature lifecycle", () => {
             onNewItems: vi.fn(),
         });
         queueController.backfillFavoriteProfiles = backfillSpy;
-        taskService.attachFeatureNewVideoScanController(queueController);
+        taskService.getNewVideoScanner = () => queueController;
 
         const callerProgress = vi.fn();
         const bgRun = taskService.triggerProfileBackfill();
@@ -463,14 +453,13 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(msgEl.text).toHaveBeenCalledWith("正在补齐演员资料 (1/1)…");
         scope.dispose();
 
-        // 2) Non-list page TaskCompatibilityBean forwarding (service === null): emits new-video-changed, acquires lock, suppresses abort failure text, catches errors
+        // Explicit profile backfill remains available without a list scheduler.
         const nonListWindow = { navigator: { locks: createLockManager() } };
         vi.stubGlobal("window", nonListWindow);
-        const bean = new TaskCompatibilityBean();
 
         const nonListEvents = { emit: vi.fn(async () => {}) };
         const nonListMsgEl = { text: vi.fn() };
-        const nonListScope = new LifecycleScope("test:non-list-bean");
+        const nonListScope = new LifecycleScope("test:non-list-scan");
         const scanController = new NewVideoScanController({
             state: {
                 getActressProfileBackfillSnapshot: vi.fn(async () => ({
@@ -490,10 +479,9 @@ describe("new video and scheduler feature lifecycle", () => {
             getTimestamp: () => "2026-11-23",
             onNewItems: vi.fn(),
         });
-        bean.attachFeatureNewVideoScanController(scanController);
 
-        await expect(bean.triggerProfileBackfill({ requireListPage: true })).resolves.toBeNull();
-        await expect(bean.triggerProfileBackfill({ starIds: ["a1"], force: true, refresh: true })).resolves.toMatchObject({ updated: 1 });
+        await expect(scanController.triggerProfileBackfill({ requireListPage: true })).resolves.toBeNull();
+        await expect(scanController.triggerProfileBackfill({ starIds: ["a1"], force: true, refresh: true })).resolves.toMatchObject({ updated: 1 });
         expect(nonListWindow.navigator.locks.request).toHaveBeenCalledWith(
             "jhsBackfillActressProfiles",
             { signal: nonListScope.signal },
@@ -510,14 +498,14 @@ describe("new video and scheduler feature lifecycle", () => {
             onBatchCommitted?.(1);
             throw Object.assign(new Error("aborted"), { name: "AbortError", code: "ABORTED" });
         });
-        await expect(bean.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
+        await expect(scanController.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
         expect(nonListMsgEl.text).not.toHaveBeenCalledWith("演员资料补齐失败");
         expect(nonListEvents.emit).toHaveBeenCalledWith("new-video-changed", { reason: "favorite-profile-backfill", carNums: [] });
         scanController.backfillFavoriteProfiles = origBackfill;
 
         // Error inside non-list forwarding is caught cleanly (no unhandled rejection) and sets failure status
         scanController.state.getActressProfileBackfillSnapshot.mockRejectedValueOnce(new Error("DB offline"));
-        await expect(bean.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
+        await expect(scanController.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
         expect(nonListMsgEl.text).toHaveBeenCalledWith("演员资料补齐失败");
         expect(scanController.logger.error).toHaveBeenCalled();
         nonListScope.dispose();
@@ -552,7 +540,7 @@ describe("new video and scheduler feature lifecycle", () => {
             onNewItems: vi.fn(),
         });
         ctrlInstance.backfillFavoriteProfiles = vi.fn(async () => { throw new Error("IDB quota exceeded"); });
-        failService.attachFeatureNewVideoScanController(ctrlInstance);
+        failService.getNewVideoScanner = () => ctrlInstance;
         await expect(failService.triggerProfileBackfill({ starIds: ["a1"], force: true })).resolves.toBeNull();
         expect(ctrlLogger.error).toHaveBeenCalledWith("演员身材资料补齐出现错误:", expect.any(Error));
 

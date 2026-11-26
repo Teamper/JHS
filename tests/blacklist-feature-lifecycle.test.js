@@ -11,7 +11,7 @@ import { BlacklistEntryController } from "../src/features/library/blacklist-entr
 
 afterEach(() => vi.unstubAllGlobals());
 
-function createRuntime(dom, { register = vi.fn(() => vi.fn()), taskPlugin = {} } = {}) {
+function createRuntime(dom, { register = vi.fn(() => vi.fn()) } = {}) {
     const jquery = jqueryFactory(dom.window);
     vi.stubGlobal("window", dom.window);
     vi.stubGlobal("document", dom.window.document);
@@ -23,7 +23,8 @@ function createRuntime(dom, { register = vi.fn(() => vi.fn()), taskPlugin = {} }
     const diagnostics = { recordError: vi.fn() };
     const runtime = {
         enabledContributions: ["library.blacklist"], diagnostics, scope, site: "javdb", route: "list",
-        resolveCompatibilityBean: vi.fn((name) => name === "TaskPlugin" ? taskPlugin : null),
+        isContributionEnabled: vi.fn(() => true),
+        provideCapability: vi.fn(),
         executeCommand: vi.fn(async () => {}),
     };
     const dependencies = {
@@ -37,25 +38,24 @@ function createRuntime(dom, { register = vi.fn(() => vi.fn()), taskPlugin = {} }
         [SERVICE.dialog]: dialog, [SERVICE.clog]: { error: vi.fn(), warn: vi.fn() },
         [SERVICE.titleKeywords]: {}, [SERVICE.profile]: {},
     };
-    return { scope, runtime, dependencies, dialog, diagnostics, ui, register, taskPlugin };
+    return { scope, runtime, dependencies, dialog, diagnostics, ui, register };
 }
 
 describe("library blacklist Feature lifecycle", () => {
     it("owns the blacklist entry, scanner and dialog inside Library scope and exposes commands", async () => {
         const dom = new JSDOM('<body><div class="movie-list"></div></body>', { url: "https://javdb.com/actors/a" });
-        const taskPlugin = { singleTaskKey: "task-lock", attachFeatureBlacklistScanController: vi.fn(), detachFeatureBlacklistScanController: vi.fn() };
-        const harness = createRuntime(dom, { taskPlugin });
+        const harness = createRuntime(dom);
         const activated = await library.activate(harness.dependencies, harness.runtime);
         expect(harness.register).toHaveBeenCalledExactlyOnceWith("jhs-library-blacklist-feature", BLACKLIST_STYLES);
         expect(activated.activeContributions).toEqual(["library.blacklist"]);
         expect(activated.commands["library.blacklist.open"]()).toBe(9);
-        expect(taskPlugin.attachFeatureBlacklistScanController).toHaveBeenCalledOnce();
-        const scan = taskPlugin.attachFeatureBlacklistScanController.mock.calls[0][0];
+        expect(harness.runtime.provideCapability).toHaveBeenCalledWith("library.blacklist-scan", expect.any(BlacklistScanController));
+        expect(harness.runtime.provideCapability).toHaveBeenCalledWith("library.blacklist", expect.any(BlacklistWorkspaceController));
+        const scan = harness.runtime.provideCapability.mock.calls.find(([id]) => id === "library.blacklist-scan")[1];
         expect(scan).toBeInstanceOf(BlacklistScanController);
-        expect(harness.runtime.resolveCompatibilityBean).toHaveBeenCalledExactlyOnceWith("TaskPlugin");
+        expect(harness.runtime.isContributionEnabled).toHaveBeenCalledWith("scheduler", "discovery.scheduler", "TaskPlugin");
         activated.dispose();
         harness.scope.dispose();
-        expect(taskPlugin.detachFeatureBlacklistScanController).toHaveBeenCalledWith(scan);
         expect(scan.disposed).toBe(true);
         dom.window.close();
     });
@@ -76,7 +76,7 @@ describe("library blacklist Feature lifecycle", () => {
         const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" });
         const harness = createRuntime(dom);
         const activated = await library.activate(harness.dependencies, harness.runtime);
-        expect(harness.runtime.resolveCompatibilityBean).toHaveBeenCalledWith("TaskPlugin");
+        expect(harness.runtime.provideCapability).toHaveBeenCalledWith("library.blacklist-scan", expect.any(BlacklistScanController));
         expect(activated.commands["library.blacklist.parse"]).toBeTypeOf("function");
         expect(activated.commands["library.blacklist.add"]).toBeTypeOf("function");
         activated.dispose();

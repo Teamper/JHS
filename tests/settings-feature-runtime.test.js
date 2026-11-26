@@ -25,10 +25,8 @@ describe("Settings system Feature UI ownership", () => {
             site: "javdb",
             route: "list",
         });
-        runtime.setCompatibilityBeanResolver((name) => name === "SettingPlugin" ? { openSettingDialog } : undefined);
-        runtime.setContributionCatalog([
-            { id: "settings.core", featureId: "settings-entry", legacyPluginId: "SettingPlugin", executionOwner: "feature", sites: ["javdb", "javbus"] },
-        ]);
+        runtime.register({ id: "settings-owner-fixture", kind: "system", disableable: false, sites: [], routes: [], startup: "eager", requires: [], contributes: [], providesCommands: [], activate: (_deps, api) => { api.provideCapability("settings.core", { openSettingDialog }); } });
+        await runtime.activate("settings-owner-fixture");
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings"));
         commands.setActivator((id) => runtime.activate(id));
 

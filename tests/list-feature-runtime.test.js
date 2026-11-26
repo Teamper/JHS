@@ -83,7 +83,6 @@ describe("List FeatureRuntime ownership", () => {
         const order = [], card = { isConnected: true, dataset: {} };
         const legacyPlugin = {
             handle: vi.fn(async () => {}),
-            attachFeatureListAddedItemsAdapter: vi.fn(), detachFeatureListAddedItemsAdapter: vi.fn(),
             advanceListGeneration: vi.fn(() => ++generation), captureListRevision: vi.fn(() => `${generation}:0`),
             isCurrentListGeneration: vi.fn((revision) => revision === `${generation}:0`),
         };
@@ -103,10 +102,10 @@ describe("List FeatureRuntime ownership", () => {
         expect(card.dataset.jhsProcessed).toBe("true");
         expect(controller.itemIndex.add).toHaveBeenCalledWith([card]);
         expect(controller.events.emit).toHaveBeenCalledWith("list-items-added", { items: [card] }, { broadcast: false });
-        expect(legacyPlugin.attachFeatureListAddedItemsAdapter).toHaveBeenCalledWith(controller);
+        expect(controller.controllers.items).toBe(controller);
 
         controller.dispose();
-        expect(legacyPlugin.detachFeatureListAddedItemsAdapter).toHaveBeenCalledWith(controller);
+        expect(controller.controllers.items).toBeUndefined();
     });
 
     it("does not decorate or publish appended cards when filtering finishes after disposal", async () => {
@@ -137,11 +136,8 @@ describe("List FeatureRuntime ownership", () => {
     });
 
     it("owns and disposes the shared refresh coordinator through the legacy capability boundary", async () => {
-        let attached = null;
         const legacyPlugin = {
             handle: vi.fn(async () => {}),
-            attachFeatureListRefreshAdapter: vi.fn((adapter) => { attached = adapter; }),
-            detachFeatureListRefreshAdapter: vi.fn((adapter) => { if (attached === adapter) attached = null; }),
             advanceListGeneration: vi.fn(),
             captureListRevision: vi.fn(() => "4:0"),
             isCurrentListGeneration: vi.fn(() => true),
@@ -150,16 +146,15 @@ describe("List FeatureRuntime ownership", () => {
         controller.filterListItems = vi.fn(async () => true);
 
         await controller.start();
-        expect(attached).toBe(controller.listRefreshController);
+        expect(controller.controllers.refresh).toBe(controller.listRefreshController);
         const applyVisibility = vi.spyOn(controller.view, "applyVisibility");
-        await attached.request({ full: true, reason: "test" });
+        await controller.controllers.refresh.request({ full: true, reason: "test" });
         expect(controller.filterListItems).toHaveBeenCalledWith(null, "4:0");
         expect(applyVisibility).toHaveBeenCalledWith(null, "waitCheck", expect.any(Function));
         expect(legacyPlugin.advanceListGeneration).toHaveBeenCalledOnce();
 
         controller.dispose();
-        expect(attached).toBeNull();
-        expect(legacyPlugin.detachFeatureListRefreshAdapter).toHaveBeenCalledOnce();
+        expect(controller.controllers.refresh).toBeUndefined();
         await expect(controller.listRefreshController.request({ full: true })).resolves.toBe(false);
     });
 
@@ -308,7 +303,7 @@ describe("List FeatureRuntime ownership", () => {
         controller.dispose();
         scope.dispose();
         expect(detach).toHaveBeenCalledOnce();
-        expect(attached).toBeNull();
+        expect(controller.controllers.coverImages).toBeUndefined();
     });
 
     it("passes the feature scope to the legacy page implementation once", async () => {
@@ -349,12 +344,9 @@ describe("List FeatureRuntime ownership", () => {
             getListSelectors: () => ({ boxSelector: ".masonry", itemSelector: ".masonry .item", coverImgSelector: ".masonry img.cover" }),
             locateListRoot: () => dom.window.document.querySelector(".masonry"),
         };
-        let attached = null;
         const legacyPlugin = {
             handle: vi.fn(async () => {}),
             findCarNumAndHref: () => ({ carNum: "ABC-001", title: "Synthetic" }),
-            attachFeatureCoverImageAdapter: vi.fn((adapter) => { attached = adapter; }),
-            detachFeatureCoverImageAdapter: vi.fn((adapter) => { if (attached === adapter) attached = null; }),
         };
         const scope = new LifecycleScope("feature:list");
         const controller = new ListController({ legacyPlugin, hostAdapter: host, scope, window: {}, readFilterSources: async () => ({ titleKeywords: [], activity: { entries: [] } }) });
@@ -362,16 +354,15 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
 
         expect(image.src).toBe("https://www.javbus.com/imgs/cover/abc_b.jpg");
-        expect(attached).toBe(controller.coverImageController);
+        expect(controller.controllers.coverImages).toBe(controller.coverImageController);
         const dynamic = dom.window.document.createElement("img");
         dynamic.src = "https://www.javbus.com/pics/thumb/def.jpg";
         Object.defineProperty(dynamic, "complete", { configurable: true, value: true });
-        attached.replace([dynamic]);
+        controller.controllers.coverImages.replace([dynamic]);
         expect(dynamic.src).toBe("https://www.javbus.com/pics/cover/def_b.jpg");
 
         controller.dispose();
-        expect(attached).toBeNull();
-        expect(legacyPlugin.detachFeatureCoverImageAdapter).toHaveBeenCalledOnce();
+        expect(controller.controllers.coverImages).toBeUndefined();
         scope.dispose();
         dom.window.close();
     });

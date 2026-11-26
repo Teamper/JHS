@@ -222,7 +222,6 @@ describe("v6.5 architecture runtime contracts", () => {
         registerSiteCompatibility(javdb, createRuntime("javdb"), "javdb");
         expect(javdb.getPluginNames()).toEqual([]);
         expect(javdb.getPluginNames()).not.toContain("HistoryPlugin");
-        expect(javdb.getBean("BlacklistPlugin")).toMatchObject({ getName: expect.any(Function), addBlacklist: expect.any(Function), filterAllVideo: expect.any(Function) });
         expect(javdb.getPluginNames()).not.toContain("MobileBottomBarPlugin");
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "MobileBottomBarPlugin", disableable: false });
         expect(javdb.getPluginNames()).not.toContain("WantAndWatchedVideosPlugin");
@@ -239,7 +238,6 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "CompatibilityEnhancementsPlugin", disableable: true });
         expect(javdb.getPluginNames()).not.toContain("HitShowPlugin");
         expect(javdb.getPluginNames()).not.toContain("TaskPlugin");
-        expect(javdb.getBean("TaskPlugin")).toMatchObject({ getName: expect.any(Function), connect: expect.any(Function) });
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "TaskPlugin", disableable: true });
         expect(javdb.getBean("AutoPagePlugin")).toBeUndefined();
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "AutoPagePlugin", disableable: true });

@@ -295,12 +295,12 @@ test("scheduled actor scans run and persist through the injected Discovery contr
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page, { settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
-    await expect.poll(() => page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.featureNewVideoScanController))).toBe(true);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureNewVideoScanController))).toBe(true);
     const result = await page.evaluate(async () => {
         const manager = window.unsafeWindow.pluginManager;
-        const task = manager.getBean("TaskPlugin");
+        const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const controller = task.featureNewVideoScanController;
-        if (!controller) throw new Error("Discovery scan controller was not attached to TaskPlugin");
+        if (!controller) throw new Error("Discovery scan controller unavailable");
         const actor = { starId: "feature-scan-actor", name: "Synthetic Actor", allName: ["Synthetic Actor"], avatar: "", newVideoList: [] };
         await window.unsafeWindow.storageManager.addFavoriteActressList([actor]);
         const delegated = [];
@@ -341,9 +341,9 @@ test("scheduler does not report a saved scan after another tab removes its actor
         disabledPlugins: ["NewVideoPlugin"],
         settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" },
     });
-    await expect.poll(() => page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.service))).toBe(true);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler))).toBe(true);
     const result = await page.evaluate(async () => {
-        const task = window.unsafeWindow.pluginManager.getBean("TaskPlugin");
+        const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const storage = window.unsafeWindow.storageManager;
         const actor = { starId: "removed-during-scan", name: "Synthetic Actor", allName: ["Synthetic Actor"], avatar: "", newVideoList: [] };
         await storage.addFavoriteActressList([actor]);
@@ -372,12 +372,12 @@ test("full saved-actress sync paginates and persists through the injected Discov
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page, { settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
-    await expect.poll(() => page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.featureNewVideoScanController))).toBe(true);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureNewVideoScanController))).toBe(true);
     const result = await page.evaluate(async () => {
         const manager = window.unsafeWindow.pluginManager;
-        const task = manager.getBean("TaskPlugin");
+        const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const controller = task.featureNewVideoScanController;
-        if (!controller) throw new Error("Discovery scan controller was not attached to TaskPlugin");
+        if (!controller) throw new Error("Discovery scan controller unavailable");
         const pages = [];
         controller.actressInfo.collection = async (_provider, { pageUrl }) => {
             pages.push(pageUrl);
@@ -413,12 +413,12 @@ test("scheduled blacklist scans use the Library Feature controller and preserve 
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page, { settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
     await expect.poll(() => page.evaluate(() => {
-        const task = window.unsafeWindow.pluginManager.getBean("TaskPlugin");
-        return Boolean(task?.service && task.featureBlacklistScanController);
+        const task = window.__jhsBrowserDiagnostics.features.scheduler;
+        return Boolean(task?.featureBlacklistScanController);
     })).toBe(true);
     const result = await page.evaluate(async () => {
         const manager = window.unsafeWindow.pluginManager;
-        const task = manager.getBean("TaskPlugin");
+        const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const controller = task.featureBlacklistScanController;
         const starId = "feature-blacklist-scan-actor";
         await window.unsafeWindow.storageManager.addBlacklistItem({

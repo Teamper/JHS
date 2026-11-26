@@ -44,8 +44,11 @@ export default defineFeature({
         /** @type {import("./list-actions-controller.js").ListActionsController | null} */ let listActionsController = null;
         /** @type {import("./cover-button-controller.js").CoverButtonController | null} */ let coverButtonController = null;
         /** @type {import("./list-compatibility-service.js").ListPageCompatibilityService | null} */ let listCompatibilityService = null;
+        /** @type {Record<string, any>} */ const listControllers = {};
         if (runtime.enabledContributions.includes("list.core")) {
             listCompatibilityService = new ListPageCompatibilityService({
+                controllers: listControllers,
+                readTranslation: () => runtime.getCapability?.("external-bridge.translation"),
                 runtimeServices: {
                     host: deps[PORT.host], translation: deps[SERVICE.translation], http: deps[SERVICE.http], diagnostics: runtime.diagnostics,
                     storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage],
@@ -75,12 +78,11 @@ export default defineFeature({
                 coverButtonController = coverButtons;
                 releaseStyle = deps[PORT.style].register("jhs-cover-button-feature", coverButtons.getStyles().replace(/^\s*<style>|<\/style>\s*$/g, ""));
                 coverScope.addCleanup(releaseStyle);
-                const consumers = [listCompatibilityService, runtime.resolveCompatibilityBean?.("SettingPlugin")].filter(Boolean);
-                for (const consumer of consumers) consumer.attachFeatureCoverButtonAdapter?.(coverButtons);
-                coverScope.addCleanup(() => {
-                    for (const consumer of consumers) consumer.detachFeatureCoverButtonAdapter?.(coverButtons);
-                });
+                listControllers.coverButtons = coverButtons;
+                coverScope.addCleanup(() => { delete listControllers.coverButtons; });
                 await coverButtons.start();
+                const releaseCapability = runtime.provideCapability?.("detail.cover-state-actions", coverButtons);
+                if (releaseCapability) coverScope.addCleanup(releaseCapability);
                 const releaseCompatibility = runtime.registerCompatibilityBean?.("CoverButtonPlugin", coverButtons);
                 if (typeof releaseCompatibility === "function") coverScope.addCleanup(releaseCompatibility);
                 activeContributions.push("detail.cover-state-actions");
@@ -120,7 +122,7 @@ export default defineFeature({
                 return { titleKeywords, blacklistMap, blacklistCars, settings: deps[SERVICE.settings].snapshot(), carMap, activity, favoriteActresses, favoriteActressesEnabled: isFavoriteActressesFeatureEnabled() };
             };
             controller = new ListController({
-                legacyPlugin, hostAdapter: deps[PORT.host], scope: runtime.scope, styles: deps[PORT.style],
+                legacyPlugin, controllers: listControllers, hostAdapter: deps[PORT.host], scope: runtime.scope, styles: deps[PORT.style],
                 state: deps[SERVICE.state], storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage], readFilterSources,
                 isFavoriteActressesFeatureEnabled,
                 readCardIdentity: (item) => readListItem(deps[SERVICE.domUi].jquery(item)), http: deps[SERVICE.http],

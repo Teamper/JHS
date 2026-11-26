@@ -20,10 +20,12 @@ import { isMissingActorSource } from "./actor-source-health.js";
 const AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
 
 export class NewVideoWorkspaceService {
-    /** @param {{runtimeServices?: Record<string, any>, resolveDependency?: (name: string) => any, jquery: (value: any) => any, legacyStorage: any, utilities: any, notifications: any, logger: any, events: any, createImageHoverPreview: (config: Record<string, any>) => any, document: Document, window: Window & typeof globalThis}} options */
+    /** @param {{runtimeServices?: Record<string, any>, task?: {available: () => boolean, current: () => any, activate: () => Promise<any>}, requestProfileBackfill?: (options: Record<string, any>) => Promise<any>, openTaskSettings?: (callback: () => void) => unknown, batchController?: any, workspaceController?: any, loadStyles?: () => Promise<void>, jquery: (value: any) => any, legacyStorage: any, utilities: any, notifications: any, logger: any, events: any, createImageHoverPreview: (config: Record<string, any>) => any, document: Document, window: Window & typeof globalThis}} options */
     constructor(options) {
         this.runtimeServices = options.runtimeServices ?? {};
-        this.resolveDependency = options.resolveDependency ?? (() => null);
+        this.openTaskSettings = options.openTaskSettings;
+        this.task = options.task;
+        this.requestProfileBackfill = options.requestProfileBackfill;
         this.jquery = options.jquery;
         this.legacyStorage = options.legacyStorage;
         this.utils = options.utilities;
@@ -49,9 +51,9 @@ export class NewVideoWorkspaceService {
         Object.assign(this, FEATURE_ICONS);
         i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvMeasurementsByStarId", new Map), i(this, "nvMeasurementsByName", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvBodyFilterDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvCoverPreview", null), i(this, "nvWorkspaceRoot", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
         i(this, "nvWorkspaceFullReloadRequested", !1), i(this, "nvPendingRemovals", new Set), i(this, "nvRemovingCards", new Set);
-        /** @type {(() => Promise<void>) | null} */ this.featureNewVideoStyleLoader = null;
-        /** @type {any} */ this.featureNewVideoBatchController = null;
-        /** @type {any} */ this.featureNewVideoWorkspaceController = null;
+        /** @type {(() => Promise<void>) | null} */ this.loadStyles = options.loadStyles;
+        /** @type {any} */ this.featureNewVideoBatchController = options.batchController;
+        /** @type {any} */ this.featureNewVideoWorkspaceController = options.workspaceController;
     }
     getName() {
         return "NewVideoPlugin";
@@ -70,29 +72,15 @@ export class NewVideoWorkspaceService {
         if (this.disposed) return;
         try {
             if (clearStarIds) await this.getRuntimeService("state").clearActressProfileBackfillAttempts(clearStarIds);
-            if (backfillOptions && !this.disposed) await this.getOptionalDependency("TaskPlugin")?.triggerProfileBackfill?.(backfillOptions);
+            if (backfillOptions && !this.disposed) await this.requestProfileBackfill?.(backfillOptions);
         } catch (error) {
             try { this.logger.warn("演员资料补齐未启动", error); }
             catch { /* A diagnostic failure must stay outside the completed workspace action. */ }
         }
     }
-    /** @param {string} name */
-    getOptionalDependency(name) { return this.resolveDependency(name); }
     prepareFeatureActivation() {
         this.disposed = false;
     }
-    /** @param {() => Promise<void>} loader */
-    attachFeatureNewVideoStyleLoader(loader) { this.featureNewVideoStyleLoader = loader; }
-    /** @param {() => Promise<void>} loader */
-    detachFeatureNewVideoStyleLoader(loader) { if (this.featureNewVideoStyleLoader === loader) this.featureNewVideoStyleLoader = null; }
-    /** @param {any} controller */
-    attachFeatureNewVideoBatchController(controller) { this.featureNewVideoBatchController = controller; }
-    /** @param {any} controller */
-    detachFeatureNewVideoBatchController(controller) { if (this.featureNewVideoBatchController === controller) this.featureNewVideoBatchController = null; }
-    /** @param {any} controller */
-    attachFeatureNewVideoWorkspaceController(controller) { this.featureNewVideoWorkspaceController = controller; }
-    /** @param {any} controller */
-    detachFeatureNewVideoWorkspaceController(controller) { if (this.featureNewVideoWorkspaceController === controller) this.featureNewVideoWorkspaceController = null; }
     getStartupMode() {
         return "idle";
     }
@@ -189,10 +177,10 @@ export class NewVideoWorkspaceService {
         this.jquery("#newVideoCount").text(`${e}`);
     }
     async getTaskButtonTips() {
-        const task = this.getOptionalDependency("TaskPlugin");
-        if (!task) return { favorite: "后台任务已关闭", newVideo: "后台任务已关闭" };
+        const task = this.task?.current();
+        if (!this.task?.available()) return { favorite: "后台任务已关闭", newVideo: "后台任务已关闭" };
         const storage = this.getRuntimeService("storage"), settings = await this.legacyStorage.getSetting();
-        const interval = async (name, value) => typeof task.getLatestTaskInterval === "function"
+        const interval = async (name, value) => typeof task?.getLatestTaskInterval === "function"
             ? await task.getLatestTaskInterval(name)
             : parseTaskInterval(name, value);
         const [favoriteHours, newVideoHours] = await Promise.all([
@@ -200,8 +188,8 @@ export class NewVideoWorkspaceService {
             interval("newVideo", settings.checkNewVideo_intervalTime),
         ]);
         return {
-            favorite: `上次完整同步: ${storage.getLocal(task.lastCheckFavoriteActressTimeKey) || "无"}; 检测间隔时间: ${favoriteHours}小时`,
-            newVideo: `上次整批检测: ${storage.getLocal(task.lastCheckNewVideoTimeKey) || "无"}; 检测间隔时间: ${newVideoHours}小时`,
+            favorite: `上次完整同步: ${storage.getLocal("jhs_time_checkFavoriteActress") || "无"}; 检测间隔时间: ${favoriteHours}小时`,
+            newVideo: `上次整批检测: ${storage.getLocal("jhs_time_checkNewVideo") || "无"}; 检测间隔时间: ${newVideoHours}小时`,
         };
     }
     async resetBtnTip(instance = null) {
@@ -224,7 +212,7 @@ export class NewVideoWorkspaceService {
     }
     /** Opens one workspace after its prerequisites finish for the current activation. */
     async openNewVideoDialog(generation) {
-        await this.featureNewVideoStyleLoader?.();
+        await this.loadStyles?.();
         if (this.disposed || generation !== this.nvDialogGeneration) return;
         const storage = this.getRuntimeService("storage");
         this.cleanupNewVideoWorkspace(), this._viewMode = "list" === storage.getLocal("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
@@ -453,11 +441,10 @@ export class NewVideoWorkspaceService {
         return this.renderCurrentView();
     }
     bindClick() {
-        const taskPlugin = this.getOptionalDependency("TaskPlugin");
         const refreshView = () => {
             void this.refreshCurrentView({ resetPage: true });
         };
-        taskPlugin || this.jquery("#checkFavoriteActress,#checkNewVideo").prop("disabled", !0).attr("title", "后台任务已关闭");
+        this.task?.available() || this.jquery("#checkFavoriteActress,#checkNewVideo").prop("disabled", !0).attr("title", "后台任务已关闭");
         this.jquery("#reLoad").on("click", (() => {
             void this.reloadNewVideoWorkspaceData(), this.jquery("#checkNewVideoMsg").text("");
         })), this.jquery("#new-video-list-container").on("click", ".nv-card__link", (async e => {
@@ -471,23 +458,23 @@ export class NewVideoWorkspaceService {
                 this.logger.error("移除新作品标记失败:", n);
             }
         })), this.jquery("#toSetting").on("click", (e => {
-            this.getOptionalDependency("SettingPlugin")?.openSettingDialog?.("task-panel", (() => {
+            this.openTaskSettings?.(() => {
                 this.jquery("#setting-checkFavoriteActress").css({
                     border: "1px solid var(--jhs-accent)"
                 }), this.jquery("#setting-checkNewVideo").css({
                     border: "1px solid var(--jhs-accent)"
                 });
-            }));
+            });
         }));
         this.jquery("#checkFavoriteActress").on("click", (event => {
-            void this.runManualTask(this.jquery(event.currentTarget), "同步中…", (async () => {
+            void this.runManualTask(this.jquery(event.currentTarget), "同步中…", (async task => {
                 if (!this.jquery('a[href*="/users/profile"]').length) return void this.notifications.error(`请先登录 ${PRODUCT_NAMES.javdb}`);
-                const result = await taskPlugin?.checkFavoriteActress?.(!0);
+                const result = await task.checkFavoriteActress(!0);
                 if (!result?.fatal) this.requestActressProfileBackfill();
             }));
         })), this.jquery("#checkNewVideo").on("click", (event => {
-            void this.runManualTask(this.jquery(event.currentTarget), "检测中…", (async () => {
-                const result = await taskPlugin?.checkNewVideo?.(!0);
+            void this.runManualTask(this.jquery(event.currentTarget), "检测中…", (async task => {
+                const result = await task.checkNewVideo(!0);
                 if (!result?.fatal) this.requestActressProfileBackfill();
             }));
         })), this.jquery("#paramActressType,#paramSortBy,#nvSortBy,#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").off("change.jhsNvFilter").on("change.jhsNvFilter", refreshView),
@@ -512,19 +499,21 @@ export class NewVideoWorkspaceService {
         if (button.attr("aria-busy") === "true") return;
         const instance = { root: this.nvWorkspaceRoot, generation: this.nvDialogGeneration };
         const current = () => !this.disposed && instance.root === this.nvWorkspaceRoot && instance.generation === this.nvDialogGeneration;
-        const task = this.getOptionalDependency("TaskPlugin");
-        if (!task) return void this.notifications.info("后台任务已关闭");
+        if (!this.task?.available()) return void this.notifications.info("后台任务已关闭");
         const label = button.find("span").last(), previous = label.text();
         button.attr("aria-busy", "true").prop("disabled", !0), label.text(busyLabel);
+        let task;
         try {
+            task = await this.task.activate();
+            if (!current() || !task) return;
             await this.window.navigator.locks.request(task.singleTaskKey, { ifAvailable: !0 }, (async lock => {
                 if (!current()) return;
                 if (!lock) return void this.notifications.error("后台任务正在运行，请稍后再试");
-                await runner();
+                await runner(task);
             }));
         } catch (error) {
             this.logger.error("手动任务执行失败", error);
-            if (current()) this.notifications.error(task.isNetworkBlocked?.(error) ? "网络访问受限，请稍后重试" : "手动任务执行失败，请稍后重试");
+            if (current()) this.notifications.error(task?.isNetworkBlocked?.(error) ? "网络访问受限，请稍后重试" : "手动任务执行失败，请稍后重试");
         } finally {
             if (current()) {
                 button.removeAttr("aria-busy").prop("disabled", !1); label.text(previous);
@@ -593,7 +582,7 @@ export class NewVideoWorkspaceService {
     renderTaskStatuses() {
         const container = this.jquery("#jhs-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        const taskPlugin = this.task?.current();
         const settings = this.getRuntimeService("settings").snapshot();
         container.empty();
         const statuses = new Map();
@@ -677,7 +666,7 @@ export class NewVideoWorkspaceService {
                     if (this.disposed || !this.nvWorkspaceMounted || generation !== this.nvDialogGeneration) return;
                     if (retry.attr("aria-busy") === "true" || retry.prop("disabled")) return;
                     if (!actress) return void this.notifications.info("本地收藏中已没有该演员");
-                    await this.runManualTask(retry, "检测中…", () => taskPlugin?.checkOneNewVideo?.(actress));
+                    await this.runManualTask(retry, "检测中…", task => task.checkOneNewVideo(actress));
                     if (!this.disposed && this.nvWorkspaceMounted && generation === this.nvDialogGeneration) (this.jquery('[data-source-retry]').filter((_, node) => node.getAttribute("data-source-retry") === starId)[0] || this.jquery("#nvTaskToggle:visible")[0] || this.jquery(".jhs-new-video-view [role='tab'][aria-selected='true']")[0])?.focus({ preventScroll: true });
                 });
                 remove.on("click", event => {
@@ -758,7 +747,7 @@ export class NewVideoWorkspaceService {
         const sortedActresses = this.utils.genericSort(t, sortMap[sortBy] || defaultSort);
         const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / this.pageSize), pageStart = (this.currentPage - 1) * this.pageSize, pageEnd = pageStart + this.pageSize;
         totalPages > 0 && this.currentPage > totalPages && (this.currentPage = totalPages);
-        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getOptionalDependency("TaskPlugin"), ruleTime = this.nvRuleTime;
+        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, ruleTime = this.nvRuleTime;
         if (0 === pageActresses.length) {
             const hasActressFilter = this.nvActressesCache.length > 0 && (n !== "all" || bodyActive);
             renderStateView(e, {
@@ -833,8 +822,8 @@ export class NewVideoWorkspaceService {
         })), this.jquery(".btn-check-actress").off("click").on("click", (e => {
             e.preventDefault();
             const button = this.jquery(e.currentTarget), starId = button.attr("data-starId"), actress = sortedActresses.find((item => item.starId === starId));
-            void this.runManualTask(button, "检测中…", (async () => {
-                await taskPlugin?.checkOneNewVideo?.(actress);
+            void this.runManualTask(button, "检测中…", (async task => {
+                await task.checkOneNewVideo(actress);
                 if (actress?.starId && !readStoredActressMeasurements(actress)) {
                     this.requestActressProfileBackfill({
                         clearStarIds: [actress.starId],
@@ -1391,8 +1380,10 @@ export class NewVideoWorkspaceService {
         }
         await this.notifyCommittedNewVideoChange("favorite-actress-rebound");
         this.notifications.ok(result.merged ? `已合并到现有演员「${result.actress.name}」（${toStarId}）` : `已重新绑定为「${result.actress.name}」（${toStarId}）`);
-        const taskPlugin = this.getOptionalDependency("TaskPlugin");
-        if (typeof taskPlugin?.checkOneNewVideo === "function") await taskPlugin.checkOneNewVideo(result.actress);
+        if (this.task?.available()) {
+            const task = await this.task.activate();
+            await task?.checkOneNewVideo(result.actress);
+        }
         this.requestActressProfileBackfill({
             clearStarIds: [fromStarId, toStarId],
             backfillOptions: readStoredActressMeasurements(result.actress) ? null : { starIds: [toStarId], force: true, refresh: true },

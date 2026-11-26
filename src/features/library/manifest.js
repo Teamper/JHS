@@ -131,14 +131,19 @@ export default defineFeature({
                 stylesReady = false;
                 runtime.diagnostics.recordError({ source: "library-feature", featureId: "library", contributionId: "library.blacklist", message: error instanceof Error ? error.message : String(error) });
             }
-            const taskPlugin = runtime.resolveCompatibilityBean?.("TaskPlugin");
+            const task = runtime.isContributionEnabled?.("scheduler", "discovery.scheduler", "TaskPlugin") ? {
+                singleTaskKey: "checkNewActressActorFilterCar",
+                lastCheckBlacklistTimeKey: "jhs_time_checkBlacklist",
+                activate: () => runtime.executeCommand("scheduler.service"),
+                current: () => runtime.getCapability?.("discovery.scheduler"),
+            } : null;
             if (stylesReady) {
                 const jquery = deps[SERVICE.domUi].jquery;
                 const getSubjectInfo = () => deps[PORT.host].getBlacklistSubjectInfo();
                 const entryController = new BlacklistEntryController({
                     document, window, location: window.location, jquery, site: runtime.site, state: deps[SERVICE.state], http: deps[SERVICE.http],
                     ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog],
-                    scope: runtime.scope, task: taskPlugin, getSubjectInfo,
+                    scope: runtime.scope, task, getSubjectInfo,
                     parsePage: /** @type {(page: any, name: string, starId: string, site: string) => any} */ ((page, name, starId, site) => deps[PORT.host].parseBlacklistFilterPage(page, name, starId, site)),
                 });
                 blacklistEntry = entryController;
@@ -148,18 +153,16 @@ export default defineFeature({
                         item.name, item.starId, jquery(new window.DOMParser().parseFromString(html, "text/html")), site,
                     )),
                 });
-                if (taskPlugin?.attachFeatureBlacklistScanController) taskPlugin.attachFeatureBlacklistScanController(controller);
-                runtime.scope.addCleanup(() => {
-                    taskPlugin?.detachFeatureBlacklistScanController?.(controller);
-                    controller.dispose();
-                });
+                runtime.provideCapability?.("library.blacklist-scan", controller);
+                runtime.scope.addCleanup(() => controller.dispose());
                 blacklistWorkspace = new BlacklistWorkspaceController({
                     document, window, jquery: deps[SERVICE.domUi].jquery, site: runtime.site,
                     state: deps[SERVICE.state], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
                     events: deps[SERVICE.events], dialog: deps[SERVICE.dialog], ui: deps[SERVICE.domUi],
                     notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog], scope: runtime.scope,
-                    task: taskPlugin, openSettings: () => runtime.executeCommand("settings.open", "task-panel"),
+                    task, openSettings: () => runtime.executeCommand("settings.open", "task-panel"),
                 });
+                runtime.provideCapability?.("library.blacklist", blacklistWorkspace);
                 runtime.scope.addCleanup(() => {
                     blacklistWorkspace?.dispose();
                     blacklistEntry?.dispose();

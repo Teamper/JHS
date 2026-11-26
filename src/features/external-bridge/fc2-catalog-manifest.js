@@ -14,7 +14,6 @@ export default defineFeature({
         if (!runtime.enabledContributions.includes(id)) return { activeContributions: [], commands: { "fc2-catalog.ensure": () => null } };
         const unavailable = { "fc2-catalog.ensure": () => null };
         /** @type {Fc2CatalogController | null} */ let controller = null;
-        let detachConsumer = () => {};
         let unregisterCompatibilityBean = () => {};
         try {
             const listPage = runtime.resolveCompatibilityBean?.("ListPagePlugin");
@@ -25,16 +24,6 @@ export default defineFeature({
                 processAddedItems: typeof listPage?.processAddedItems === "function" ? (items) => listPage.processAddedItems(items) : undefined,
             });
             if (!(await controller.start())) return { activeContributions: [], commands: unavailable };
-            const fc2Enabled = runtime.isContributionEnabled("fc2-workspace", "detail.fc2-owned", "Fc2Plugin");
-            const fc2 = fc2Enabled ? await runtime.executeCommand("detail.fc2.workspace") : null;
-            fc2?.attachFeature123AvAdapter?.(controller);
-            let consumerDetached = false;
-            detachConsumer = () => {
-                if (consumerDetached) return;
-                consumerDetached = true;
-                fc2?.detachFeature123AvAdapter?.(controller);
-            };
-            runtime.scope.addCleanup(detachConsumer);
             const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("Fc2By123AvPlugin", controller);
             let beanReleased = false;
             unregisterCompatibilityBean = () => {
@@ -43,10 +32,10 @@ export default defineFeature({
                 if (typeof releaseCompatibilityBean === "function") releaseCompatibilityBean();
             };
             runtime.scope.addCleanup(unregisterCompatibilityBean);
+            runtime.provideCapability?.(id, controller);
             return { activeContributions: [id], commands: { "fc2-catalog.ensure": () => controller } };
         } catch (error) {
             controller?.dispose();
-            detachConsumer();
             unregisterCompatibilityBean();
             runtime.diagnostics.recordError({ source: "fc2-catalog-feature", featureId: "fc2-catalog", contributionId: id, message: error instanceof Error ? error.message : String(error) });
             return { activeContributions: [], commands: unavailable };
