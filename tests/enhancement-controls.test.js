@@ -90,7 +90,6 @@ it("refreshes optional capability consumers and their adapter dependents when co
     runtime.register({...base,id:"library",contributes:["library.blacklist"],activate:()=>({})});
     runtime.register({...base,id:"list",configurationDependencies:["library.blacklist"],activate:(_deps,{scope})=>{parent();scope.addCleanup(cleanup);return {};}});
     runtime.register({...base,id:"dependent",requiresFeaturesByRoute:{list:["list"]},activate:()=>{child();return {};}});
-    runtime.setContributionCatalog([{id:"library.blacklist",legacyPluginId:"BlacklistPlugin"}]);
     await runtime.start();
     expect(runtime.isCompatibilityBeanAvailable("BlacklistPlugin")).toBe(true);
     await runtime.reconcileConfiguration({disabledPlugins:'["library.blacklist"]'});

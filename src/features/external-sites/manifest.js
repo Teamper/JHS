@@ -6,6 +6,7 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 export default defineFeature({
     id: "external-sites", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.storage, SERVICE.settings, SERVICE.events, SERVICE.domUi, SERVICE.notifications],
+    contributionRoutes: ["detail", "owned-detail"],
     contributes: ["detail.external-sites"], providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const contributionId = "detail.external-sites";

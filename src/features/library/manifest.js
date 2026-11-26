@@ -6,6 +6,12 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 export default defineFeature({
     id: "library", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.movie, SERVICE.titleKeywords, SERVICE.domUi, SERVICE.notifications, SERVICE.events, SERVICE.profile, SERVICE.dialog, SERVICE.clipboard, SERVICE.clog],
+    contributionAvailability: {
+        "library.keyword-filter": { routes: ["list", "detail", "owned-detail"] },
+        "library.state-actions": { sites: ["javdb"], routes: ["list"] },
+        "library.blacklist": { routes: ["list"] },
+        "library.favorite-actresses": { sites: ["javdb"] },
+    },
     contributes: ["library.history", "library.keyword-filter", "library.state-actions", "library.blacklist", "library.favorite-actresses"],
     providesCommands: ["library.history.open", "library.history.refresh", "library.blacklist.open", "library.blacklist.add", "library.blacklist.subject-info", "library.blacklist.parse", "library.blacklist.parse-and-save", "library.blacklist.scan-pages", "library.blacklist.reset-tooltip"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {

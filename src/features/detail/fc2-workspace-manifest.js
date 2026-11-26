@@ -15,6 +15,7 @@ export default defineFeature({
     id: "fc2-workspace", kind: "feature", disableable: true,
     sites: ["javdb"], routes: ["list", "detail", "owned-detail"], startup: "eager",
     requires: [PORT.style, SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.account, SERVICE.credential, SERVICE.translation, SERVICE.privacy, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state, SERVICE.domUi, SERVICE.notifications, SERVICE.clog],
+    contributionRoutes: ["list", "detail", "owned-detail"],
     contributes: [contributionId], providesCommands: [commandId],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         if (!runtime.enabledContributions.includes(contributionId)) {

@@ -7,6 +7,7 @@ import { ONE115_RENAME_STYLES } from "../../ui/detail/one115-rename-preview.js";
 export default defineFeature({
     id: "one-one-five", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list", "detail"], startup: "idle",
     requires: [PORT.host, PORT.style, SERVICE.dialog, SERVICE.settings, SERVICE.events, SERVICE.offline, SERVICE.one115Match, SERVICE.notifications, SERVICE.domUi, SERVICE.diagnostics],
+    contributionRoutes: ["list", "detail"],
     contributes: ["external-bridge.115-match"], providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "external-bridge.115-match";

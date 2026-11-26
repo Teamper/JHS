@@ -103,9 +103,6 @@ describe("Settings system Feature UI ownership", () => {
             controller = value;
             return () => { controller = undefined; };
         });
-        runtime.setContributionCatalog([
-            { id: "settings.core", featureId: "settings-entry", legacyPluginId: "SettingPlugin", executionOwner: "feature", plugin: null, sites: ["javdb", "javbus"] },
-        ]);
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings-entry"));
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings"));
 

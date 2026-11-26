@@ -6,6 +6,12 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.clog, SERVICE.titleKeywords, SERVICE.state, SERVICE.settings, SERVICE.storageMutation, SERVICE.notifications, SERVICE.dialog, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clipboard, SERVICE.navigation, SERVICE.screenshot, SERVICE.movie],
+    contributionAvailability: {
+        "detail.fc2-navigation": { sites: ["javdb"], routes: ["list"] },
+        "list.fold-category": { sites: ["javdb"] },
+        "detail.javbus-images": { sites: ["javbus"], routes: ["list"] },
+        "detail.cover-state-actions": { routes: ["list"] },
+    },
     contributes: ["list.core", "list.auto-page", "detail.fc2-navigation", "list.fold-category", "list.actions", "detail.javbus-images", "detail.cover-state-actions"],
     configurationDependencies: ["new-video", "discovery.new-video", "library", "library.blacklist", "library.favorite-actresses"],
     providesCommands: ["list.current-page-summary", "list.set-quick-filter", "list.get-page-actions", "list.execute-page-action"],

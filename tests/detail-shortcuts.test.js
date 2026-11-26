@@ -7,7 +7,6 @@ import { DetailShortcutController } from "../src/features/detail/detail-shortcut
 import { bindShortcutRecorder } from "../src/ui/settings/shortcut-recorder.js";
 import { buildSettingDialogHtml, resolveSettingPanel } from "../src/ui/settings/setting-templates.js";
 import detailManifest from "../src/features/detail/manifest.js";
-import { compatibilityContributionCatalog } from "../src/features/compatibility/contribution-catalog.js";
 
 const cleanups = [];
 afterEach(() => { while (cleanups.length) cleanups.pop()(); vi.unstubAllGlobals(); });
@@ -37,7 +36,6 @@ describe("detail shortcut ownership", () => {
     it("is Feature-owned and FC2-eligible without starting the Detail Feature on lists", () => {
         expect(detailManifest.routes).not.toContain("list");
         expect(detailManifest.contributes).toContain("detail.shortcuts");
-        expect(compatibilityContributionCatalog.find(item => item.id === "detail.shortcuts")).toMatchObject({ featureId: "detail", executionOwner: "feature", plugin: null, routes: ["list", "detail", "owned-detail"] });
         expect(resolveSettingPanel("shortcut-panel")).toEqual({ group: "browse-panel", section: "detail-shortcut-settings" });
     });
 

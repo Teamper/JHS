@@ -34,7 +34,6 @@ export class FeatureRuntime {
         this.manifests = new Map();
         /** @type {Map<string, string>} */
         this.contributionOwners = new Map();
-        this.contributionManifests = new Map();
         /** @type {Map<string, Promise<Record<string, any>>>} */
         this.activations = new Map();
         /** @type {Map<string, LifecycleScope>} */
@@ -49,20 +48,11 @@ export class FeatureRuntime {
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
     }
 
-    /** @param {ReadonlyArray<Record<string, any>>} manifests */
-    setContributionCatalog(manifests) { this.contributionManifests = new Map(manifests.map((item) => [item.id, item])); }
-
     /** @param {(name: string) => any} resolver */
     setCompatibilityBeanResolver(resolver) { this.compatibilityBeanResolver = resolver; }
 
     /** @param {(name: string, bean: any) => (() => void) | void} registrar */
     setCompatibilityBeanRegistrar(registrar) { this.compatibilityBeanRegistrar = registrar; }
-
-    activeSurfaces() {
-        if (this.route === "list") return new Set(["global", "list", "list-page", "list-card"]);
-        if (this.route === "detail" || this.route === "owned-detail") return new Set(["global", "detail", "detail-page", this.route]);
-        return new Set(["global", this.route]);
-    }
 
     /** @param {Record<string, any>} manifest */
     register(manifest) {
@@ -92,7 +82,7 @@ export class FeatureRuntime {
         const metadata = /** @type {any} */ (ENHANCEMENT_METADATA)[manifest.id];
         if (metadata?.dependencies.some((/** @type {string} */ id) => {
             const owner = this.contributionOwners.get(id);
-            return owner && !this.isContributionEnabled(owner, id, this.contributionManifests.get(id)?.legacyPluginId || id);
+            return owner && !this.isContributionEnabled(owner, id);
         })) return false;
         return true;
     }
@@ -144,7 +134,7 @@ export class FeatureRuntime {
         for (const id of affected) this.activationScopes.get(id)?.dispose();
         for (const [id, scope] of this.contributionScopes) {
             const owner = this.contributionOwners.get(id);
-            if (owner && !this.isContributionEnabled(owner, id, this.contributionManifests.get(id)?.legacyPluginId || id)) {
+            if (owner && !this.isContributionEnabled(owner, id)) {
                 scope.dispose();
                 this.contributionScopes.delete(id);
             }
@@ -167,16 +157,16 @@ export class FeatureRuntime {
         return this.configurationQueue;
     }
 
-    /** Check user disablement preference for a contribution regardless of current site/route gating. @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
-    isContributionPreferenceEnabled(featureId, contributionId, legacyPluginId) {
+    /** Check user disablement preference for a contribution regardless of current site/route gating. @param {string} featureId @param {string} contributionId @param {string} [legacyPluginId] */
+    isContributionPreferenceEnabled(featureId, contributionId, legacyPluginId = contributionId) {
         const manifest = this.manifests.get(featureId);
         if (!manifest) return false;
         if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
         return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
     }
 
-    /** @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
-    isContributionEnabled(featureId, contributionId, legacyPluginId) {
+    /** @param {string} featureId @param {string} contributionId @param {string} [legacyPluginId] */
+    isContributionEnabled(featureId, contributionId, legacyPluginId = contributionId) {
         const manifest = this.manifests.get(featureId);
         if (!manifest) return false;
         if (manifest.sites.length && !manifest.sites.includes(this.site)) return false;
@@ -184,10 +174,10 @@ export class FeatureRuntime {
         if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
 
         if (manifest.kind === "system") return true;
-        const contribution = this.contributionManifests.get(contributionId);
-        if (contribution?.sites?.length && !contribution.sites.includes(this.site)) return false;
-        if (contribution?.routes?.length && !contribution.routes.includes(this.route)) return false;
-        if (contribution?.surfaces?.length && !contribution.surfaces.some((/** @type {string} */ surface) => this.activeSurfaces().has(surface))) return false;
+        const availability = manifest.contributionAvailability?.[contributionId];
+        if (availability?.sites && !availability.sites.includes(this.site)) return false;
+        const routes = availability?.routes ?? manifest.contributionRoutes;
+        if (routes?.length && !routes.includes(this.route)) return false;
         return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
     }
 
@@ -208,8 +198,8 @@ export class FeatureRuntime {
         return (await this.activate(featureId)).scope;
     }
 
-    /** Return a page-lifetime scope owned by one enabled legacy contribution. @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
-    getContributionScope(featureId, contributionId, legacyPluginId) {
+    /** Return a page-lifetime scope owned by one enabled legacy contribution. @param {string} featureId @param {string} contributionId @param {string} [legacyPluginId] */
+    getContributionScope(featureId, contributionId, legacyPluginId = contributionId) {
         if (!this.isContributionEnabled(featureId, contributionId, legacyPluginId)) {
             return Promise.reject(new Error(`Contribution is disabled or ineligible: ${contributionId}`));
         }
@@ -271,10 +261,7 @@ export class FeatureRuntime {
             if (!Array.isArray(requiredFeatures)) throw new TypeError(`Feature ${manifest.id} has invalid route dependencies for ${this.route}`);
             for (const featureId of requiredFeatures) await this.activate(featureId);
             const dependencies = this.container.resolveDeclared(manifest.requires, manifest.optionalRequires ?? []);
-            const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => {
-                const contribution = this.contributionManifests.get(id);
-                return this.isContributionEnabled(manifest.id, id, contribution?.legacyPluginId || id);
-            }));
+            const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => this.isContributionEnabled(manifest.id, id)));
             const inspection = this.inspection;
             result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, site: this.site, route: this.route,

@@ -36,11 +36,6 @@ describe("Library Feature history ownership", () => {
             commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), disabled, site: "javdb", route: "list",
         });
         runtime.setCompatibilityBeanResolver(() => undefined);
-        runtime.setContributionCatalog([
-            { id: "library.history", legacyPluginId: "HistoryPlugin", executionOwner: "feature", lifecycleOwner: "feature", sites: ["javdb"], routes: [], surfaces: [] },
-            { id: "library.state-actions", legacyPluginId: "WantAndWatchedVideosPlugin", executionOwner: "feature", sites: ["javdb"], routes: ["list"], surfaces: ["list-page"] },
-            { id: "library.favorite-actresses", legacyPluginId: "FavoriteActressesPlugin", executionOwner: "feature", sites: ["javdb"], routes: [], surfaces: [] },
-        ]);
         runtime.register(library);
         return { runtime, storage, state, styleRegistration, styleRelease, dialog };
     }

@@ -15,6 +15,7 @@ test("blacklist host scans use the current site's login session before GM fallba
   });
   await page.goto("https://javdb.com/");
   await injectUserscriptRuntime(page, {
+    disabledPlugins: ["AutoPagePlugin"],
     settingOverrides: { enableCheckBlacklist: "yes", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" },
   });
   await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureBlacklistScanController))).toBe(true);
@@ -58,6 +59,7 @@ test("JavBus blacklist scans skip the native actor profile item", async ({ conte
   });
   await page.goto("https://www.javbus.com/");
   await injectUserscriptRuntime(page, {
+    disabledPlugins: ["AutoPagePlugin"],
     settingOverrides: { enableCheckBlacklist: "yes", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" },
   });
   await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureBlacklistScanController))).toBe(true);

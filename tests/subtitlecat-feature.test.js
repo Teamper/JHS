@@ -1,8 +1,8 @@
+import { migrateDisabledPlugins } from "../src/core/legacy-plugin-contributions.js";
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { compatibilityContributionCatalog } from "../src/features/compatibility/contribution-catalog.js";
 import { SubtitleCatController } from "../src/features/external-bridge/subtitlecat-controller.js";
 
 afterEach(() => {
@@ -11,9 +11,8 @@ afterEach(() => {
 });
 
 describe("SubtitleCat Feature controller", () => {
-    it("keeps the legacy disable ID without registering the old plugin executor", () => {
-        expect(compatibilityContributionCatalog.find((item) => item.id === "external-bridge.subtitle"))
-            .toMatchObject({ legacyPluginId: "SubTitleCatPlugin", executionOwner: "feature", plugin: null });
+    it("migrates the previous subtitle disable preference", () => {
+        expect(migrateDisabledPlugins(["SubTitleCatPlugin"])).toEqual(["external-bridge.subtitle"]);
     });
 
     it("filters rows by the search query, updates only the leading count, and restores owned styles", () => {
