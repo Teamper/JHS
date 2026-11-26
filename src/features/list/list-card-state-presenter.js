@@ -3,7 +3,7 @@
 import { b, k, u, y } from "../../core/constants.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { readCardNames, readCardStarIds } from "../../core/list-item-reader.js";
-import { isHardHidden } from "./list-filters.js";
+import { isHardHidden } from "../../core/list-filters.js";
 import { evaluateListItem, findMatchedTitleKeyword } from "./list-evaluator.js";
 import { OwnedPopover } from "../../core/owned-popover.js";
 

@@ -5,7 +5,7 @@ import { getIcon } from "../../core/icons.js";
 import { escapeHtml } from "../../core/constants.js";
 import { disabledIdForPlugin, parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
 import { getPluginCategories } from "./setting-templates.js";
-import { createJhsTable } from "../../ui/table/create-jhs-table.js";
+import { createJhsTable } from "../table/create-jhs-table.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { formatUiDateTime } from "../../core/ui-date-time.js";
 

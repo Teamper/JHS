@@ -4,7 +4,7 @@ import { NewVideoWorkspaceController } from "../src/features/discovery/new-video
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { NewVideoWorkspaceService } from "../src/plugins/new-video/new-video.js";
+import { NewVideoWorkspaceService } from "../src/features/discovery/new-video-workspace-service.js";
 import { JhsEventBus } from "../src/core/event-bus.js";
 import { normalizeCarNum } from "../src/core/constants.js";
 import { StateService } from "../src/core/state-service.js";

@@ -15,7 +15,7 @@ import { ListContextMenuController } from "./list-context-menu-controller.js";
 import { ListHoverPreviewController } from "./list-hover-preview-controller.js";
 import { ListNavigationController } from "./list-navigation-controller.js";
 import { ListTagExpansionController } from "./list-tag-expansion-controller.js";
-import { normalizeQuickFilterKey } from "./list-filters.js";
+import { normalizeQuickFilterKey } from "../../core/list-filters.js";
 import { ListRefreshCoordinator } from "./list-refresh-coordinator.js";
 import { resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
 

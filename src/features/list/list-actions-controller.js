@@ -4,7 +4,7 @@ import { cleanActressName, readCleanActorElementText } from "../../core/actress-
 import { OwnedPopover } from "../../core/owned-popover.js";
 import { _, d, g, h } from "../../core/constants.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
-import { isHardHidden } from "./list-filters.js";
+import { isHardHidden } from "../../core/list-filters.js";
 import { isBatchRunActive } from "./batch-coordinator.js";
 
 /** @typedef {import("../../core/lifecycle-scope.js").LifecycleScope} LifecycleScope */

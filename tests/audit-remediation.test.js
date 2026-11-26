@@ -116,7 +116,7 @@ describe("6.2.0 audit remediation", () => {
     });
 
     it("keeps all JHS UI layout decisions on mobileMode", () => {
-        const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/features/identity/image-search-controller.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-controller.js"), "utf8");
+        const setting = readTestFile(join(process.cwd(), "src/features/settings/settings-controller.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/features/identity/image-search-controller.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-controller.js"), "utf8");
         expect(setting).not.toContain("utils.isMobile()");
         expect(search).not.toContain("utils.isMobile()");
         expect(search).toContain("this.settings.snapshot().mobileMode");

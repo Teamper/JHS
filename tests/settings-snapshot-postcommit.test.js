@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import jquery from "jquery";
-import { renderSnapshotPanel, showDiffPreview } from "../src/plugins/backup/setting-panels.js";
+import { renderSnapshotPanel, showDiffPreview } from "../src/ui/settings/setting-panels.js";
 
 function createDependencies(storage, noticeFailure = new Error("toast unavailable")) {
     const notifications = { ok: vi.fn(() => { throw noticeFailure; }), error: vi.fn() };

@@ -12,7 +12,7 @@ const builders = new Map([
 const staticStyleFiles = new Set([
     "src/features/discovery/new-video-styles.js", "src/features/library/history-styles.js",
     "src/features/library/blacklist-styles.js", "src/ui/detail/fc2-workspace-styles.js",
-    "src/plugins/backup/setting-styles.js", "src/ui/settings/shortcut-recorder.js",
+    "src/ui/settings/setting-styles.js", "src/ui/settings/shortcut-recorder.js",
     "src/features/detail/detail-shortcut-controller.js",
     "src/features/system/responsive-shell-controller.js", "src/features/list/cover-button-controller.js",
     "src/features/detail/javbus-preview-controller.js",

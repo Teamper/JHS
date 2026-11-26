@@ -107,7 +107,7 @@ describe("preview playback contracts", () => {
         expect(cover).toContain("const settings = this.settings.snapshot()");
     });
     it("keeps native play calls inside safePlay only", () => {
-        const allRuntime = [ preview, bus, cover, readTestFile(join(import.meta.dirname, "../src/features/list/list-filters.js"), "utf8"), readTestFile(join(import.meta.dirname, "../src/features/list/list-compatibility-service.js"), "utf8") ].join("\n");
+        const allRuntime = [ preview, bus, cover, readTestFile(join(import.meta.dirname, "../src/core/list-filters.js"), "utf8"), readTestFile(join(import.meta.dirname, "../src/features/list/list-compatibility-service.js"), "utf8") ].join("\n");
         expect(allRuntime).not.toMatch(/\.play\s*\(/);
     });
     it("does not interpolate remote media URLs into HTML templates", () => {

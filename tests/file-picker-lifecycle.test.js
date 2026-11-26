@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jquery from "jquery";
-import { importSettingData } from "../src/plugins/backup/setting-backup.js";
+import { importSettingData } from "../src/features/settings/setting-backup.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
 describe("temporary backup picker", () => {

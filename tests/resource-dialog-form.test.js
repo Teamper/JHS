@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import jquery from "jquery";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SettingPlugin } from "../src/plugins/backup/setting.js";
+import { SettingPlugin } from "../src/features/settings/settings-controller.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES } from "../src/services/resource-settings-service.js";
 import { BUILT_IN_SCREENSHOT_SOURCES } from "../src/services/screenshot-sources.js";
 

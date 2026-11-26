@@ -2,7 +2,7 @@
 import jquery from "jquery";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { SettingPlugin } from "../src/plugins/backup/setting.js";
+import { SettingPlugin } from "../src/features/settings/settings-controller.js";
 
 const $ = jquery;
 afterEach(() => { document.body.innerHTML = ""; vi.restoreAllMocks(); vi.unstubAllGlobals(); });

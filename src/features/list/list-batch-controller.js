@@ -8,7 +8,7 @@ import { classifyJavDbPage } from "../../core/site-context.js";
 import { isBatchRunCancelled, isActiveBatchRun, requestCancelBatchRun, tryBeginBatchRun, endBatchRun } from "./batch-coordinator.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
-import { QUICK_FILTER_LABELS, normalizeQuickFilterKey } from "./list-filters.js";
+import { QUICK_FILTER_LABELS, normalizeQuickFilterKey } from "../../core/list-filters.js";
 
 /** Feature-owned cross-page batch operations over injected evaluation and presentation capabilities. */
 export class ListBatchController {

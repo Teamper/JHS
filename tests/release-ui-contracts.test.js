@@ -6,12 +6,12 @@ import { describe, expect, it } from "vitest";
 const read = file => readTestFile(join(process.cwd(), file), "utf8");
 
 describe("v6.4.1 frozen UI contracts", () => {
-    const newVideo = read("src/plugins/new-video/new-video.js");
+    const newVideo = read("src/features/discovery/new-video-workspace-service.js");
     const mobile = read("src/features/system/responsive-shell-controller.js");
     const logger = read("src/core/logger.js");
     const offline = read("src/features/external-bridge/unified-offline-controller.js");
-    const setting = read("src/plugins/backup/setting.js");
-    const settingTemplate = read("src/plugins/backup/setting-templates.js");
+    const setting = read("src/features/settings/settings-controller.js");
+    const settingTemplate = read("src/ui/settings/setting-templates.js");
     const blacklist = read("src/features/library/blacklist-workspace-controller.js");
 
     it("uses native, tokenized Avatar candidate buttons without hover scaling", () => {

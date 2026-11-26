@@ -2,8 +2,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import $ from "jquery";
 import { SettingsDraft } from "../src/ui/settings/settings-draft.js";
-import { saveSettingForm } from "../src/plugins/backup/setting-forms.js";
-import { SettingPlugin } from "../src/plugins/backup/setting.js";
+import { saveSettingForm } from "../src/features/settings/setting-forms.js";
+import { SettingPlugin } from "../src/features/settings/settings-controller.js";
 
 let draft;
 afterEach(() => { draft?.dispose(); document.body.replaceChildren(); });

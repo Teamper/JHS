@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as api from "../src/features/list/list-filters.js";
+import * as api from "../src/core/list-filters.js";
 
 const flags = (...active) => Object.fromEntries(["favorite", "downloaded", "watched", "blocked"].map(key => [key, active.includes(key)]));
 const reasons = (...active) => Object.fromEntries(["keyword", "actorBlacklist", "actressBlacklist"].map(key => [key, active.includes(key)]));

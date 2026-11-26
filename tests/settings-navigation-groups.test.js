@@ -2,13 +2,13 @@
 import jquery from "jquery";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
-import { SettingPlugin } from "../src/plugins/backup/setting.js";
-import { MANUAL_FORM_SELECTORS, loadSettingForm, saveSettingForm } from "../src/plugins/backup/setting-forms.js";
+import { SettingPlugin } from "../src/features/settings/settings-controller.js";
+import { MANUAL_FORM_SELECTORS, loadSettingForm, saveSettingForm } from "../src/features/settings/setting-forms.js";
 import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { Utils } from "../src/core/utils.js";
-import * as templates from "../src/plugins/backup/setting-templates.js";
+import * as templates from "../src/ui/settings/setting-templates.js";
 
 import { FullSettingsSession } from "../src/ui/settings/full-settings-session.js";
 const $ = jquery;

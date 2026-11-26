@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import jquery from "jquery";
-import { SettingPlugin } from "../src/plugins/backup/setting.js";
+import { SettingPlugin } from "../src/features/settings/settings-controller.js";
 import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { FullSettingsSession } from "../src/ui/settings/full-settings-session.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { getPluginCategories } from "../src/plugins/backup/setting-templates.js";
-import { renderPluginMgmtPanel, renderSnapshotPanel, showDiffPreview } from "../src/plugins/backup/setting-panels.js";
+import { getPluginCategories } from "../src/ui/settings/setting-templates.js";
+import { renderPluginMgmtPanel, renderSnapshotPanel, showDiffPreview } from "../src/ui/settings/setting-panels.js";
 import { HistoryDialogController } from "../src/features/library/history-dialog-controller.js";
 import { DetailStateController } from "../src/core/detail-state-controller.js";
 import { ListBatchController } from "../src/features/list/list-batch-controller.js";
 import { ListBatchUi } from "../src/features/list/list-batch-ui.js";
 import { createListEvaluationContext } from "../src/features/list/list-evaluator.js";
-import { backupListBtnByWebDav, openFileListDialog } from "../src/plugins/backup/setting-backup.js";
+import { backupListBtnByWebDav, openFileListDialog } from "../src/features/settings/setting-backup.js";
 
 vi.mock("../src/core/credential-crypto.js", () => ({decryptCredential: vi.fn(), decryptPortableBackup: vi.fn(async value => value), encryptPortableBackup: vi.fn(async value => value)}));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes,no) => {resolve=yes;reject=no;}); return {promise,resolve,reject}; };

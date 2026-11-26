@@ -75,7 +75,7 @@ function createHarness() {
         T: "javdb", I: "javbus", D: "filter", A: "uncensored", _: "yes", l: false
     });
     context.globalThis = context;
-    const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("class NewVideoWorkspaceService");
+    const source = readTestFile(join(repoRoot, "src/features/discovery/new-video-workspace-service.js"), "utf8"), start = source.indexOf("class NewVideoWorkspaceService");
     vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoWorkspaceService`, context);
     const plugin = new context.TestPlugin({ runtimeServices: { ...runtimeServices, settings:{snapshot:()=>({})}, state: stateService, scope: () => Promise.resolve({ assertActive() {}, disposed: false }) }, resolveDependency: name => beans[name], jquery: $, legacyStorage: storageManager, utilities: context.utils, notifications: context.show, logger: context.clog, events: context.jhsEventBus, createImageHoverPreview: config => new dom.window.ImageHoverPreview(config), document: dom.window.document, window: dom.window });
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";
@@ -326,7 +326,7 @@ describe("new video workspace snapshot", () => {
         expect(await plugin.getPendingNewVideoTotal()).toBe(2);
     });
     it("routes workspace, editor, CDN and avatar dialogs through DialogService", () => {
-        const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/features/discovery/new-video-workspace-service.js"), "utf8");
         expect(source).toContain('getRuntimeService("dialog")');
         expect(source).not.toContain("layer.open");
         expect(source).not.toContain("layer.close");

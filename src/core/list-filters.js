@@ -1,8 +1,8 @@
 // @ts-check
 
-import { hasAnyState } from "../../core/state-model.js";
+import { hasAnyState } from "./state-model.js";
 
-/** @typedef {import("../../core/state-model.js").StateFlags} StateFlags */
+/** @typedef {import("./state-model.js").StateFlags} StateFlags */
 /** @typedef {{ keyword?: boolean, actorBlacklist?: boolean, actressBlacklist?: boolean }} VisibilityReasons */
 
 export const QUICK_FILTER_LABELS = Object.freeze({

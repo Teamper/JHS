@@ -3,7 +3,7 @@
 import { normalizeStateFlags } from "../../core/state-model.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
 import { buildFavoriteActressWorkIndex, matchCollectedActressesForWork, resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
-import { isHardHidden, matchesQuickFilter } from "./list-filters.js";
+import { isHardHidden, matchesQuickFilter } from "../../core/list-filters.js";
 
 /** @typedef {import("../../core/state-model.js").StateFlags} StateFlags */
 /** @typedef {{ keyword?: boolean, actorBlacklist?: boolean, actressBlacklist?: boolean }} VisibilityReasons */

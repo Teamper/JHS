@@ -7,8 +7,8 @@ import { WebDavService } from "../src/services/webdav-service.js";
 import { DialogService } from "../src/services/dialog-service.js";
 import { LayerDialogAdapter } from "../src/platform/userscript/layer-dialog-adapter.js";
 import { Utils } from "../src/core/utils.js";
-import { loadSettingForm, saveSettingForm } from "../src/plugins/backup/setting-forms.js";
-import { buildSettingDialogHtml, injectNetworkPanel } from "../src/plugins/backup/setting-templates.js";
+import { loadSettingForm, saveSettingForm } from "../src/features/settings/setting-forms.js";
+import { buildSettingDialogHtml, injectNetworkPanel } from "../src/ui/settings/setting-templates.js";
 
 const $ = jquery;
 beforeEach(() => initializeRuntimeConstants(new URL("https://javdb.com/")));

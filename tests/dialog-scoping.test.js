@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
-import { openFileListDialog } from "../src/plugins/backup/setting-backup.js";
+import { openFileListDialog } from "../src/features/settings/setting-backup.js";
 
 const blacklist = readTestFile(join(process.cwd(), "src/features/library/blacklist-workspace-controller.js"), "utf8");
 const history = readTestFile(join(process.cwd(), "src/features/library/history-dialog-controller.js"), "utf8");

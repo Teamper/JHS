@@ -10,7 +10,7 @@ import { ReviewPanel } from "../../ui/detail/review-panel.js";
 import { BlacklistCompatibilityBean } from "../../compat/blacklist-compatibility-bean.js";
 import { HistoryCompatibilityBean } from "../../compat/history-compatibility-bean.js";
 import { SettingsCompatibilityBean } from "../../compat/settings-compatibility-bean.js";
-import { SettingPlugin } from "../../plugins/backup/setting.js";
+import { SettingPlugin } from "../settings/settings-controller.js";
 
 import { TaskCompatibilityBean } from "../../compat/task-compatibility-bean.js";
 import { NewVideoCompatibilityBean } from "../../compat/new-video-compatibility-bean.js";
@@ -125,7 +125,7 @@ export function registerSiteCompatibility(compatibilityBeans, featureRuntime, si
     if (featureRuntime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin")) {
         register("NewVideoPlugin", new NewVideoCompatibilityBean(
             (command, ...args) => featureRuntime.commands.execute(command, ...args),
-            (options) => import("../../plugins/new-video/new-video.js").then(({ NewVideoWorkspaceService }) => new NewVideoWorkspaceService(/** @type {ConstructorParameters<typeof NewVideoWorkspaceService>[0]} */ (options))),
+            (options) => import("../discovery/new-video-workspace-service.js").then(({ NewVideoWorkspaceService }) => new NewVideoWorkspaceService(/** @type {ConstructorParameters<typeof NewVideoWorkspaceService>[0]} */ (options))),
         ));
     }
     compatibilityBeans.setCatalogDescriptors(compatibilityContributionCatalog

@@ -1,7 +1,7 @@
 import {describe,expect,it,vi} from "vitest";
 import {JSDOM} from "jsdom";
 import jquery from "jquery";
-import {SettingPlugin} from "../src/plugins/backup/setting.js";
+import {SettingPlugin} from "../src/features/settings/settings-controller.js";
 
 
 function setup(){const dom=new JSDOM('<main><textarea id="car-number-import"></textarea><select id="car-number-import-status"><option value="">请选择</option><option value="hasDown">已下载</option></select><button id="confirm-car-number-import" disabled></button><p id="car-number-import-help"></p><div id="car-number-import-preview" hidden></div></main>'),$=jquery(dom.window);let confirm;const patch=vi.fn(async()=>{});const plugin=Object.assign(Object.create(SettingPlugin.prototype),{jquery:$,document:dom.window.document,_carImportRevision:0,notifications:{ok:vi.fn(),info:vi.fn(),error:vi.fn()},logger:{warn:vi.fn()},legacyStorage:{getCarList:vi.fn(async()=>[])},getRuntimeService:()=>({patch}),utils:{q:(_event,_message,callback)=>{confirm=callback;}}});return {dom,$,root:$('main'),plugin,patch,confirm:()=>confirm()};}

@@ -5,7 +5,7 @@ import { SettingsService } from "../src/services/settings-service.js";
 import { DETAIL_SHORTCUT_ACTIONS, readDetailShortcuts, shortcutFromEvent } from "../src/core/detail-shortcuts.js";
 import { DetailShortcutController } from "../src/features/detail/detail-shortcut-controller.js";
 import { bindShortcutRecorder } from "../src/ui/settings/shortcut-recorder.js";
-import { buildSettingDialogHtml, resolveSettingPanel } from "../src/plugins/backup/setting-templates.js";
+import { buildSettingDialogHtml, resolveSettingPanel } from "../src/ui/settings/setting-templates.js";
 import detailManifest from "../src/features/detail/manifest.js";
 import { compatibilityContributionCatalog } from "../src/features/compatibility/contribution-catalog.js";
 
