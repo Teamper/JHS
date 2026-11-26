@@ -101,18 +101,11 @@ describe("settings invalidation ownership", () => {
 
 describe("migration write ownership", () => {
     const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
-    const migration = readFileSync(join(process.cwd(), "src/core/settings-migration.js"), "utf8");
 
     it("bootstrap local-origin migration is deferred to an atomic settings update", () => {
         expect(bootstrap).toContain("async function resolveLocalOrigins");
-        expect(bootstrap).toContain("async function persistLocalOriginMigration");
+        expect(bootstrap).toContain("await persistBootstrapMigration(");
         expect(bootstrap).not.toContain("saveSetting({ ...settings");
-    });
-
-    it("runtime screenshot migration uses one atomic update and never replace()s", () => {
-        expect(migration).toContain("settings.update");
-        expect(migration).toContain("draft.enableScreenSvg");
-        expect(migration).not.toContain("settings.replace");
     });
 
     it("async_merge_other uses updateSetting instead of whole-object saveSetting(e)", () => {

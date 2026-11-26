@@ -2,7 +2,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { StateService } from "../src/core/state-service.js";
 import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
 import { WebDavSyncStore, SYNC_STATE_KEY } from "../src/core/webdav-sync-store.js";
-import { BackupChangeTracker, AUTO_BACKUP_STATE_KEY } from "../src/core/backup-change-tracker.js";
 import { SYNC_PENDING_KEY } from "../src/core/sync-pending-ledger.js";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -18,9 +17,8 @@ async function fixture({ unavailable = false, fail = false } = {}) {
     const coordinator = new StorageMutationCoordinator({ lockManager: null });
     const sync = new WebDavSyncStore({ forage, coordinator });
     await sync.initialize(); sync.enabled = true;
-    const backup = new BackupChangeTracker(forage, coordinator); backup.enabled = true;
-    coordinator.observer = { begin() { sync.begin(); backup.begin(); }, async finish(ok) { await sync.finish(ok); await backup.finish(ok); } };
-    const storage = { car_list_key: "car_list", favorite_actresses_key: "favorite_actresses", forage, syncState: sync, backupChanges: backup,
+    coordinator.observer = sync;
+    const storage = { car_list_key: "car_list", favorite_actresses_key: "favorite_actresses", forage, syncState: sync,
         _invalidateCache: vi.fn(), _getCacheGeneration: () => 0,
         atomicStorage: { commitLockedBatch: vi.fn(async ({ puts }) => {
             if (unavailable) return false;
@@ -32,16 +30,15 @@ async function fixture({ unavailable = false, fail = false } = {}) {
     };
     const state = new StateService(storage, { emit: vi.fn() }, coordinator);
     forage.setItem.mockClear();
-    return { state, storage, values, sync, backup };
+    return { state, storage, values, sync };
 }
-it("commits business data, activity, sync receipt and backup count together", async () => {
+it("commits business data, activity, and sync receipt together", async () => {
     const f = await fixture();
     try {
         const result = await f.state.toggle("ABC-123", "favorite");
         expect(f.values.get("car_list")[0].stateFlags.favorite).toBe(true);
         expect(f.values.get("activity_log").entries[0].commitState).toBe("committed");
         expect(f.values.get(SYNC_PENDING_KEY).localUndoIds).toContain(result.transactionId);
-        expect(f.values.get(AUTO_BACKUP_STATE_KEY).totalRevision).toBe(1);
         expect(f.storage.forage.setItem.mock.calls.some(([key]) => key === "mutation_journal")).toBe(false);
         expect(f.storage.atomicStorage.commitLockedBatch).toHaveBeenCalledOnce();
         expect(f.sync.canUndo(result.transactionId)).toBe(true);

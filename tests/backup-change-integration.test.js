@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
 import { StateService } from "../src/core/state-service.js";
 import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
-import { BackupChangeTracker } from "../src/core/backup-change-tracker.js";
 import { IndexedDbStorageAdapter } from "../src/platform/userscript/indexeddb-storage-adapter.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 
@@ -23,53 +22,52 @@ function fixture(initial = {}) {
     vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => forage });
     const storage = new StorageManager(), coordinator = new StorageMutationCoordinator({ lockManager: null });
     storage.atomicStorage = memoryAtomicStorage(values);
-    const tracker = new BackupChangeTracker(forage, coordinator);
-    storage.mutationCoordinator = coordinator; storage.backupChanges = tracker;
+    storage.mutationCoordinator = coordinator;
     const state = new StateService(storage, { emit: vi.fn(async () => {}) }, coordinator);
-    storage.stateService = state; coordinator.observer = tracker; tracker.enabled = true;
-    return { values, forage, storage, coordinator, tracker, state };
+    storage.stateService = state;
+    return { values, forage, storage, coordinator, state };
 }
 
-describe("backup accounting at real persistence boundaries", () => {
-    it("counts StateService batches once despite journal and new-video side effects", async () => {
+describe("business writes at real persistence boundaries", () => {
+    it("commits each changed movie once and undoes its new-video side effects", async () => {
         const f = fixture({ favorite_actresses: [{ starId: "actor", newVideoList: [{ carNum: "ABC-101" }, { carNum: "ABC-102" }] }] });
         const first = await f.state.patch(["ABC-101", "ABC-102"], { favorite: true });
-        expect((await f.tracker.read()).totalRevision).toBe(2);
+        expect(f.values.get("car_list").map(row => row.stateFlags.favorite)).toEqual([true, true]);
         await f.state.patch(["ABC-101", "ABC-102"], { favorite: true });
-        expect((await f.tracker.read()).totalRevision).toBe(2);
+        expect(f.values.get("activity_log").entries).toHaveLength(1);
         await f.state.undoTransaction(first.transactionId);
-        expect((await f.tracker.read()).totalRevision).toBe(4);
         await f.state.recoverPendingTransaction();
-        expect((await f.tracker.read()).totalRevision).toBe(4);
+        expect(f.values.get("car_list").some(row => row.stateFlags.favorite)).toBe(false);
+        expect(f.values.get("favorite_actresses")[0].newVideoList.map(row => row.carNum)).toEqual(["ABC-101", "ABC-102"]);
     });
-    it("captures actor changes before in-place cache mutation and skips no-op writes", async () => {
+    it("persists actor edits and removal through StorageManager", async () => {
         const f = fixture({ favorite_actresses: [{ starId: "actor", name: "Actor", newVideoList: [] }] });
         await f.storage.updateFavoriteActress({ starId: "actor", remark: "new note" });
-        expect((await f.tracker.read()).totalRevision).toBe(1);
+        expect(f.values.get("favorite_actresses")[0].remark).toBe("new note");
         await f.storage.updateFavoriteActress({ starId: "actor", remark: "new note" });
-        expect((await f.tracker.read()).totalRevision).toBe(1);
+        expect(f.values.get("favorite_actresses")).toHaveLength(1);
         await f.storage.removeFavoriteActress("actor");
-        expect((await f.tracker.read()).totalRevision).toBe(2);
+        expect(f.values.get("favorite_actresses")).toEqual([]);
     });
-    it("covers the legacy tag API and the native Feature's direct storage adapter", async () => {
+    it("shares highlighted tags between StorageManager and IndexedDbStorageAdapter", async () => {
         const f = fixture();
-        await f.storage.setHighlightedTags(["one"]);
         const adapter = new IndexedDbStorageAdapter(f.forage, {}, () => {}, () => {});
-        adapter.beforeSet = key => f.tracker.capture(key);
+        await f.storage.setHighlightedTags(["one"]);
+        expect(await adapter.get("highlighted_tags")).toEqual(["one"]);
         await f.coordinator.runExclusive(() => adapter.set("highlighted_tags", ["one", "two"]));
-        expect((await f.tracker.read()).totalRevision).toBe(2);
+        expect(f.values.get("highlighted_tags")).toEqual(["one", "two"]);
     });
-    it("counts successful import differences once and preserves the local schedule", async () => {
+    it("imports business records and preserves the local schedule", async () => {
         const f = fixture({ car_list: [{ carNum: "ABC-101", remark: "old" }], setting: { webDavAutoBackupEnabled: "no", webDavAutoBackupMinutes: 30 } });
         await f.storage.importData({ data_version: 3, car_list: [{ carNum: "ABC-101", remark: "new" }, { carNum: "ABC-102" }], setting: { webDavAutoBackupEnabled: "yes", webDavAutoBackupMinutes: 1 } });
-        expect((await f.tracker.read()).totalRevision).toBe(2);
+        expect(f.values.get("car_list")).toMatchObject([{ carNum: "ABC-101", remark: "new" }, { carNum: "ABC-102" }]);
         expect(f.values.get("setting")).toMatchObject({ webDavAutoBackupEnabled: "no", webDavAutoBackupMinutes: 30 });
     });
-    it("does not count a failed import that restored all business tables", async () => {
+    it("leaves the original business tables intact after a failed import", async () => {
         const f = fixture({ car_list: [{ carNum: "ABC-101", remark: "old" }] });
         f.storage.atomicStorage = memoryAtomicStorage(f.values, { beforeWrite: async key => { if (key === "favorite_actresses") throw new Error("injected import failure"); } });
         await expect(f.storage.importData({ data_version: 3, car_list: [{ carNum: "ABC-102" }], favorite_actresses: [{ starId: "actor" }] })).rejects.toThrow("injected");
         expect(f.values.get("car_list")).toEqual([{ carNum: "ABC-101", remark: "old" }]);
-        expect((await f.tracker.read()).totalRevision).toBe(0);
+        expect(f.values.get("favorite_actresses")).toEqual([]);
     });
 });

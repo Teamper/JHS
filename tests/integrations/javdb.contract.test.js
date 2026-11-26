@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
-import jquery from "jquery";
 import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
-import { parseJavDbActorList } from "../../src/integrations/javdb/parser.js";
 import { createJavDbAdapter } from "../../src/integrations/javdb/manifest.js";
 import { HttpService } from "../../src/services/http-service.js";
 import { CacheService } from "../../src/services/cache-service.js";
@@ -15,8 +13,8 @@ import { AccountService } from "../../src/services/account-service.js";
 import { JavDbHostAdapter } from "../../src/platform/hosts/javdb-host-adapter.js";
 
 it("normalizes JavDB actor contracts", () => {
-    const dom = new JSDOM('<div id="actors"><div class="actor-box"><a href="/actors/a1" title="Actor"><span class="info">有码</span></a></div></div>');
-    expect(parseJavDbActorList(jquery(dom.window.document), "https://javdb.com")).toMatchObject({ state: "valid", actors: [{ starId: "a1", name: "Actor" }] });
+    const html = '<div id="actors"><div class="actor-box"><a href="/actors/a1" title="Actor"><span class="info">有码</span></a></div></div>';
+    expect(new JavDbHostAdapter().parseActorCollection(html, "https://javdb.com")).toMatchObject({ state: "valid", actors: [{ starId: "a1", name: "Actor" }] });
 });
 
 it("owns JavDB list roots and creates host-compatible JHS list surfaces", () => {
