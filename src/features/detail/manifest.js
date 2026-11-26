@@ -62,14 +62,6 @@ export default defineFeature({
             pageActions, workspaceUi, styles: deps[PORT.style], eventBus: deps[SERVICE.events],
             onWorkspaceError: (error) => runtime.diagnostics.recordError({ source: "detail-feature", featureId: "detail", contributionId: "detail.workspace", message: error instanceof Error ? error.message : String(error) }),
         });
-        let releasePageActionsBean = () => {};
-        if (pageActionsController) {
-            const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("DetailPageButtonPlugin", pageActionsController);
-            if (typeof releaseCompatibilityBean === "function") {
-                releasePageActionsBean = releaseCompatibilityBean;
-                runtime.scope.addCleanup(releaseCompatibilityBean);
-            }
-        }
         const result = controller.start();
         /** @type {string[]} */ const activeContributions = [...result.activeContributions];
         if (runtime.enabledContributions.includes("detail.screenshot")) {
@@ -105,12 +97,13 @@ export default defineFeature({
                 if (!pageActionsController.start()) {
                     const index = activeContributions.indexOf("detail.page-state-actions");
                     if (index >= 0) activeContributions.splice(index, 1);
-                    releasePageActionsBean();
+                } else {
+                    runtime.provideCapability?.("detail.page-state-actions", pageActionsController);
+                    runtime.inspect?.("detail.page-state-actions", pageActionsController);
                 }
             } catch (error) {
                 const index = activeContributions.indexOf("detail.page-state-actions");
                 if (index >= 0) activeContributions.splice(index, 1);
-                releasePageActionsBean();
                 runtime.diagnostics.recordError({ source: "detail-feature", featureId: "detail", contributionId: "detail.page-state-actions", message: error instanceof Error ? error.message : String(error) });
             }
         }
@@ -134,12 +127,11 @@ export default defineFeature({
                     settings: deps[SERVICE.settings], events: deps[SERVICE.events], scope: runtime.scope,
                     storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog],
                     hostAdapter: deps[PORT.host], route: runtime.route,
-                    detailActions: runtime.resolveCompatibilityBean?.("DetailPageButtonPlugin") ?? null,
+                    detailActions: pageActionsController?.stateBinding ? pageActionsController : null,
                 });
                 if (!(await previewController.start())) { releaseStyle(); return false; }
                 runtime.scope.addCleanup(releaseStyle);
-                const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("PreviewVideoPlugin", previewController);
-                if (typeof releaseCompatibilityBean === "function") runtime.scope.addCleanup(releaseCompatibilityBean);
+                runtime.inspect?.("detail.javdb-preview", previewController);
                 return true;
             } catch (error) {
                 releaseStyle();

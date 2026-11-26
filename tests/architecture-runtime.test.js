@@ -13,7 +13,6 @@ import { featureManifests } from "../src/features/catalog.js";
 import fc2Catalog from "../src/features/external-bridge/fc2-catalog-manifest.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { openSettingsUi, registerSettingsUiOwner } from "../src/core/settings-ui-owner.js";
-import { CompatibilityBeanRegistry } from "../src/core/compatibility-bean-registry.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { createIntegrationRequestFacade } from "../src/app/integration-registry.js";
 
@@ -58,19 +57,6 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(document.querySelector("#jhs-123av-nav")).toBeNull();
     });
 
-    it("exposes only compatibility beans through the retired plugin facade", () => {
-        const manager = new CompatibilityBeanRegistry(), facade = { managedByFeature: true };
-        manager.registerCompatibilityBean("UnifiedOfflinePlugin", facade);
-        expect(manager.getBean("UnifiedOfflinePlugin")).toBe(facade);
-        expect(manager.getPluginNames()).toEqual([]);
-        expect(manager.getTimings()).toEqual([]);
-        expect(manager.getCssTimings()).toEqual([]);
-        expect(manager.getStartupReport()).toEqual({ registeredPlugins: 0, registrationMs: 0, cssMs: 0, immediateMs: 0, readyMs: 0, idlePending: 0, idleCompleted: 0 });
-        expect(manager.register).toBeUndefined();
-        expect(manager.processPlugins).toBeUndefined();
-        expect(manager.prepareCss).toBeUndefined();
-    });
-
     it("injects only declared tokens and rejects duplicate or missing dependencies", () => {
         const diagnostics = new DiagnosticsService();
         const container = new DependencyContainer(diagnostics);
@@ -91,17 +77,6 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(dependencies[SERVICE.dialog]).toBe(dialog);
         expect(dependencies[PORT.host]).toBeUndefined();
         expect(() => dependencies[SERVICE.state]).toThrow(/Undeclared dependency access/);
-    });
-
-    it("records zero plugin execution in diagnostics while retaining contribution settings", () => {
-        const diagnostics = new DiagnosticsService(), manager = new CompatibilityBeanRegistry({ diagnostics });
-        manager.setCatalogDescriptors([{ name: "ListPagePlugin", disableable: true }]);
-        expect(diagnostics.exportSnapshot()).toMatchObject({
-            legacyPlugins: [],
-            legacyPluginDescriptors: [{ name: "ListPagePlugin", disableable: true }],
-            legacyStartup: { registeredPlugins: 0, registrationMs: 0, cssMs: 0, immediateMs: 0, readyMs: 0, idlePending: 0, idleCompleted: 0 },
-            legacyTimings: [],
-        });
     });
 
     it("exports measured and redacted diagnostics", () => {
@@ -181,40 +156,24 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(diagnostics.exportSnapshot().activeFeatures).toContain("diagnostics");
     });
 
-    it("resolves compatibility beans directly through the injected lookup boundary", async () => {
-        const runtime = new FeatureRuntime({ container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), site: "javdb", route: "list" });
-        const adapter = {};
-        let resolvedAdapter = null;
-        runtime.setCompatibilityBeanResolver((name) => name === "LegacyAdapter" ? adapter : null);
-        runtime.register(defineFeature({ id: "migration", kind: "feature", disableable: true, sites: ["javdb"], routes: [], startup: "eager", requires: [], contributes: ["migration.adapter"], providesCommands: [], activate: (_deps, api) => {
-            resolvedAdapter = api.resolveCompatibilityBean("LegacyAdapter");
-            return {};
-        } }));
-        expect((await runtime.activate("migration")).enabledContributions).toEqual(["migration.adapter"]);
-        expect(resolvedAdapter).toBe(adapter);
-    });
-
-    it("registers a legacy-named compatibility bean for a native feature only within its lifetime", async () => {
-        const beans = new Map();
-        const runtime = new FeatureRuntime({ container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), site: "javdb", route: "detail" });
-        runtime.setCompatibilityBeanRegistrar((name, bean) => {
-            beans.set(name, bean);
-            return () => { if (beans.get(name) === bean) beans.delete(name); };
-        });
-        const controller = { managedByFeature: true };
-        runtime.register(defineFeature({
-            id: "detail", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"], startup: "eager", requires: [],
-            contributes: ["detail.javdb-preview"], providesCommands: [],
-            activate: (_deps, api) => {
-                const release = api.registerCompatibilityBean("PreviewVideoPlugin", controller);
-                if (typeof release === "function") api.scope.addCleanup(release);
-                return {};
-            },
-        }));
-        const activation = await runtime.activate("detail");
-        expect(beans.get("PreviewVideoPlugin")).toBe(controller);
-        activation.dispose();
-        expect(beans.has("PreviewVideoPlugin")).toBe(false);
+    it("notifies current consumers when a scoped capability appears and is released", async () => {
+        const runtime = new FeatureRuntime({ container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService() });
+        const observations = [];
+        const controller = {};
+        runtime.register({ id: "capability-consumer", kind: "feature", disableable: true, sites: [], routes: [], startup: "on-command", requires: [], contributes: [], providesCommands: [], activate: (_deps, api) => {
+            api.onCapabilityChanged("surface", () => observations.push(api.getCapability("surface")));
+        } });
+        runtime.register({ id: "capability-provider", kind: "feature", disableable: true, sites: [], routes: [], startup: "on-command", requires: [], contributes: [], providesCommands: [], activate: (_deps, api) => {
+            api.provideCapability("surface", controller);
+        } });
+        const consumer = await runtime.activate("capability-consumer");
+        const provider = await runtime.activate("capability-provider");
+        provider.dispose();
+        expect(observations).toEqual([controller, undefined]);
+        consumer.dispose();
+        const replacement = await runtime.activate("capability-provider");
+        expect(observations).toHaveLength(2);
+        replacement.dispose();
     });
 
     it("starts independent eager Features concurrently and isolates optional startup failures", async () => {
@@ -289,40 +248,6 @@ describe("v6.5 architecture runtime contracts", () => {
         await expect(runtime.start()).rejects.toThrow("system startup failed");
         expect(cleanup).toHaveBeenCalledOnce();
         expect(runtime.getActiveFeatureIds()).toEqual([]);
-    });
-
-    it("gives a legacy contribution a route-independent scope without activating its owner feature", async () => {
-        const diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
-            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
-            site: "javdb", route: "list",
-        });
-        runtime.register(defineFeature({
-            id: "detail", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
-            startup: "on-demand", requires: [], contributes: ["detail.fc2"], providesCommands: [], activate: () => ({}),
-        }));
-        await expect(runtime.getScope("detail")).rejects.toThrow(/ineligible/);
-        const scope = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
-        expect(scope.id).toBe("contribution:detail.fc2");
-        expect(runtime.getActiveFeatureIds()).not.toContain("detail");
-    });
-
-    it("disposes contribution scopes when the owning feature is disposed", async () => {
-        const diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
-            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
-            site: "javdb", route: "detail",
-        });
-        runtime.register(defineFeature({
-            id: "detail", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
-            startup: "eager", requires: [], contributes: ["detail.fc2", "detail.related"], providesCommands: [], activate: () => ({}),
-        }));
-        const scope = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
-        const activation = await runtime.activate("detail");
-        activation.dispose();
-        expect(scope.disposed).toBe(true);
-        // contribution scopes are recreated lazily after disposal (activate -> dispose -> activate cycle)
-        const scope2 = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
-        expect(scope2.disposed).toBe(false);
-        expect(scope2).not.toBe(scope);
     });
 
     it("opens Settings through its registered owner without a DOM trigger", async () => {

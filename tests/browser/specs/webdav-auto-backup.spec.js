@@ -3,16 +3,16 @@ import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { isolatedDav, sharedUserscriptInstallation } from "../harness/sync-dav.js";
 
-const service = (page, method = "check", ...args) => page.evaluate(({ method, args }) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup")[method](...args), { method, args });
+const service = (page, method = "check", ...args) => page.evaluate(({ method, args }) => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("autoBackup")[method](...args), { method, args });
 async function openSettings(page) {
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("data-panel"));
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("data-panel"));
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavAutoVerifyBtn") });
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
     return dialog;
 }
 async function configure(page, url) {
-    await page.evaluate(url => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav").saveProfile({ url, username: "synthetic", password: "synthetic-password" }), url);
+    await page.evaluate(url => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdav").saveProfile({ url, username: "synthetic", password: "synthetic-password" }), url);
     await expect.poll(async () => (await service(page, "getStatus")).lastSuccessAt, { timeout: 12000 }).toBeGreaterThan(0);
 }
 const carList = page => page.evaluate(() => window.storageManager.forage.getItem("car_list"));
@@ -28,7 +28,7 @@ test("isolated DAV automatically converges across devices and sites, including p
         await injectUserscriptRuntime(page, { beforeUserscriptInjection: installA });
         await configure(page, dav.url);
         await page.evaluate(async () => {
-            const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+            const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
             await settings.patch({ themeMode: "dark", containerColumns: 7 });
             await window.stateService.patch(["SYNC-101"], { favorite: true });
         });
@@ -38,12 +38,12 @@ test("isolated DAV automatically converges across devices and sites, including p
         await injectUserscriptRuntime(b, { settingOverrides: { containerColumns: 2 }, beforeUserscriptInjection: installB });
         await configure(b, dav.url);
         await expect.poll(async () => (await carList(b))?.[0]?.stateFlags.favorite).toBe(true);
-        expect(await b.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().containerColumns)).toBe(2);
+        expect(await b.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().containerColumns)).toBe(2);
         await expect(b.locator("html")).toHaveAttribute("data-jhs-theme", "dark");
         const dialog = await openSettings(b); await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="browse-panel"]')); await dialog.locator("#waitCheckCount").fill("11");
         await page.evaluate(async () => {
             await window.stateService.patch(["SYNC-101"], { watched: true });
-            await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("waitCheckCount", "10");
+            await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("waitCheckCount", "10");
         });
         await b.evaluate(() => window.stateService.patch(["SYNC-101"], { downloaded: true }));
         await Promise.all([service(page), service(b)]); await service(page); await service(b);
@@ -52,7 +52,7 @@ test("isolated DAV automatically converges across devices and sites, including p
         await expect(dialog.locator("#waitCheckCount")).toHaveValue("11");
         await dialog.locator("#saveBtn").click();
         await service(b); await service(page);
-        expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().waitCheckCount)).toBe("11");
+        expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().waitCheckCount)).toBe("11");
         const bus = await context.newPage(); await bus.goto("https://www.javbus.com/");
         await injectUserscriptRuntime(bus, { beforeUserscriptInjection: installA });
         await expect.poll(async () => (await service(bus, "getStatus")).lastSuccessAt).toBeGreaterThan(0);
@@ -157,10 +157,10 @@ test("manual actress backfill discards a late result after data recovery in anot
         }, url);
         await configure(page, dav.url);
         await service(page, "pause", true);
-        await page.waitForFunction(() => window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.service?.featureNewVideoScanController);
+        await page.waitForFunction(() => window.__jhsBrowserDiagnostics.features["discovery.scheduler"]?.service?.featureNewVideoScanController);
         await page.evaluate(async () => {
             await window.stateService.updateFavoriteActress({ starId: "fixture", actressProfile: null });
-            const task = window.unsafeWindow.pluginManager.getBean("TaskPlugin").service;
+            const task = window.__jhsBrowserDiagnostics.features["discovery.scheduler"].service;
             task.checkNewVideo = async () => ({ completed: true, fatal: false });
             task.featureNewVideoScanController.actressInfo = {
                 lookupAny: () => new Promise(resolve => { window.finishFixtureActorLookup = resolve; }),
@@ -251,7 +251,7 @@ test("an upload keeps newer changes pending after another tab misses the network
             return Date.now();
         });
         await expect.poll(() => other.evaluate(async changedAt => {
-            const status = await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").getStatus();
+            const status = await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("autoBackup").getStatus();
             const now = Date.now();
             return { retryScheduled: now >= changedAt + 5000 && !status.busy && status.nextDueAt > now && status.nextDueAt <= now + 1500, status };
         }, changedAt), { timeout: 8500 }).toMatchObject({ retryScheduled: true });
@@ -277,7 +277,7 @@ for (const theme of ["light", "dark"]) test(`多端同步布局 ${theme}`, async
     await injectUserscriptRuntime(page, { hostStyles: true, settingOverrides: { themeMode: theme } });
     const dialog = await openSettings(page);
     await service(page); await expect.poll(async () => (await service(page, "getStatus")).busy).toBe(false);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").cancel());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("autoBackup").cancel());
     await dialog.locator("#webDavSyncKeepCount").evaluate(input => input.closest("details").open = true);
     const keep = dialog.locator("#webDavSyncKeepCount"); await keep.scrollIntoViewIfNeeded(); await keep.focus();
     await page.keyboard.press("ArrowUp"); await expect(keep).toHaveValue("6");

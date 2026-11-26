@@ -58,8 +58,7 @@ test("AutoPage Feature fetches the next host page and stops live when disabled",
   await secondCover.scrollIntoViewIfNeeded();
   await expect(secondCover).toHaveAttribute("src", "https://c0.jdbstatic.com/covers/second-fixture.jpg");
 
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("autoPage", "no"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("autoPage", "no"));
   await expect(page.locator(".jhs-scroll")).toHaveCount(0);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("AutoPagePlugin"))).toBe(false);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "AutoPagePlugin"))).toBe(true);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "list.auto-page"))).toBe(true);
 });

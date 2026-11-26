@@ -53,7 +53,7 @@ for (const theme of ["light", "dark"]) test(`home list ownership ${theme}`, asyn
  await expect(page.locator('#weekly')).toHaveAttribute('data-jhs-card-list','true');
  if (process.env.JHS_VISUAL_REGRESSION === '1') await expect(page.locator('section > .container')).toHaveScreenshot(`home-boundary-${theme}.png`);
  if (info.project.name === "desktop-wide") await page.locator('[data-jhs-filter="favorite"]').first().click();
- else await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter("favorite"));
+ else await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].setQuickFilter("favorite"));
  await expect(page.locator('#results > .item:visible')).toHaveCount(0);
  await expect(page.locator('#weekly > .item')).toBeVisible();
  expect(await original.evaluate(e=>e.parentElement.id)).toBe("weekly");
@@ -79,7 +79,7 @@ test("recommendation cards support previews, state actions and late insertion", 
  await page.evaluate(()=>{const root=document.querySelector('#weekly').cloneNode(true);root.id='late';root.querySelectorAll('.jhs-cover-tools,.jhs-status-tags').forEach(e=>e.remove());document.querySelector('.container').prepend(root);});
  await expect(page.locator("#late .jhs-cover-tools")).toHaveCount(1);
  await expect(page.locator("#late .jhs-status-tags")).toContainText("收藏");
- await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("hoverBigImg","no"));
+ await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("hoverBigImg","no"));
  await expect(page.locator(".image-hover-preview")).toHaveCount(0);
  await page.locator("#late").evaluate(e=>e.remove());
  await expect(page.locator("#weekly .jhs-cover-tools")).toHaveCount(1);

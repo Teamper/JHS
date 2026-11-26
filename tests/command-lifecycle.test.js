@@ -61,13 +61,16 @@ describe("command activation ownership", () => {
         }
     });
 
-    it("still releases commands, contribution scopes and bookkeeping when business disposal throws", async () => {
-        const { runtime, commands } = fixture(() => ({ commands: { "owned.open": () => 1 }, dispose() { throw new Error("business cleanup"); } }));
+    it("still releases commands, capabilities and bookkeeping when business disposal throws", async () => {
+        const { runtime, commands } = fixture((_deps, api) => {
+            api.provideCapability("owned.surface", 1);
+            return { commands: { "owned.open": () => 1 }, dispose() { throw new Error("business cleanup"); } };
+        });
         const activation = await runtime.activate("owned");
-        const contribution = await runtime.getContributionScope("owned", "owned.surface", "owned.surface");
+        expect(runtime.capabilities.get("owned.surface")).toBe(1);
         expect(() => activation.dispose()).toThrow("business cleanup");
         expect(activation.scope.disposed).toBe(true);
-        expect(contribution.disposed).toBe(true);
+        expect(runtime.capabilities.has("owned.surface")).toBe(false);
         expect(commands.handlers.has("owned.open")).toBe(false);
         expect(runtime.getActiveFeatureIds()).toEqual([]);
         expect(() => activation.dispose()).not.toThrow();

@@ -147,7 +147,7 @@ npm --prefix tests/browser run test:functional -- specs/continuous-browsing-perf
 实站诊断可在浏览器控制台显式启动现有诊断服务，采集默认关闭，只保存有限数量的数值统计，不记录页面正文或凭证。完成采样后断开观察器：
 
 ```javascript
-const diagnostics = window.pluginManager.diagnostics;
+const diagnostics = window.jhsDiagnostics;
 diagnostics.startPerformanceCapture();
 // 滚动、收藏、筛选，并观察至少两个同步周期。
 diagnostics.stopPerformanceCapture();

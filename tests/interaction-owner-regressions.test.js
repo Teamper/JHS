@@ -66,7 +66,7 @@ describe("settings instance and management",()=>{
         let stored={disabledPlugins:'["future.contribution"]'};
         const write=vi.fn(async(_key,value)=>{stored={...value};}), settings=new SettingsService({get:async()=>stored,set:write});await settings.load();
         const deps={jquery,legacyStorage:{getSetting:async()=>stored.disabledPlugins,getCacheHitStats:()=>({})},notifications:{ok:vi.fn(),error:vi.fn()},logger:{error:vi.fn()},domUi:{},window};
-        const diagnostics={exportSnapshot:()=>({legacyPluginDescriptors:[{name:"AutoPagePlugin",disableable:true},{name:"NewVideoPlugin",disableable:true}],legacyPlugins:[],legacyTimings:[],activeFeatures:[],errors:[]})};
+        const diagnostics={exportSnapshot:()=>({contributionDescriptors:[{id:"list.auto-page",disableable:true},{id:"discovery.new-video",disableable:true}],activeFeatures:[],errors:[]})};
         await renderPluginMgmtPanel(diagnostics,settings,deps);
         jquery('[data-plugin="AutoPagePlugin"]').prop("checked",false).trigger("change");jquery('[data-plugin="NewVideoPlugin"]').prop("checked",false).trigger("change");
         await settings.waitForIdle();expect(JSON.parse(stored.disabledPlugins).sort()).toEqual(["discovery.new-video","future.contribution","list.auto-page"]);
@@ -78,7 +78,7 @@ describe("settings instance and management",()=>{
         const settings=new SettingsService({get:async()=>({disabledPlugins:"[]"}),set:vi.fn()});await settings.load();
         const session=new FullSettingsSession(settings);
         const deps={jquery,draftSettings:session,legacyStorage:{getCacheHitStats:()=>({})},notifications:{ok:vi.fn()},logger:{error:vi.fn()},domUi:{},window};
-        const diagnostics={exportSnapshot:()=>({legacyPluginDescriptors:[{name:"AutoPagePlugin",disableable:true}],legacyPlugins:[],legacyTimings:[],activeFeatures:[],errors:[]})};
+        const diagnostics={exportSnapshot:()=>({contributionDescriptors:[{id:"list.auto-page",disableable:true}],activeFeatures:[],errors:[]})};
         await renderPluginMgmtPanel(diagnostics,session,deps);
         const toggle=document.querySelector('.pm-toggle');
         const disabled=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"disabled");

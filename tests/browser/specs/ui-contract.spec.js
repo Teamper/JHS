@@ -15,7 +15,7 @@ test("detail state actions obey shared geometry across widths and themes", async
     await boot(page, context, "https://javdb.com/v/test-id");
     for (const width of [360,390,768,992,1248,1408]) for (const theme of ["light","dark"]) {
         await page.setViewportSize({width,height:900});
-        await page.evaluate(theme => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("themeMode",theme), theme);
+        await page.evaluate(theme => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("themeMode",theme), theme);
         const values = await page.locator("#filterBtn,#favoriteBtn,#hasDownBtn,#hasWatchBtn").evaluateAll(buttons => buttons.map(button => {
             const style=getComputedStyle(button), rect=button.getBoundingClientRect();
             return {height:rect.height,width:rect.width,radius:style.borderRadius,top:rect.top,left:rect.left,pressed:button.getAttribute("aria-pressed")};
@@ -29,7 +29,7 @@ test("detail state actions obey shared geometry across widths and themes", async
 });
 test("settings dialog clamps after resize and preserves keyboard close", async ({page,context}) => {
     await boot(page,context,"https://javdb.com/");
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     const dialog=page.locator(".layui-layer");
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
     await page.setViewportSize({width:390,height:640});
@@ -40,7 +40,7 @@ test("settings dialog clamps after resize and preserves keyboard close", async (
 });
 test("every settings category keeps visible controls inside its panel", async ({page,context}) => {
     await boot(page,context,"https://javdb.com/");
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     const dialog=page.locator(".layui-layer");
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
     const panels=await dialog.locator(".side-menu-item[data-panel]").evaluateAll(nodes=>nodes.map(node=>node.getAttribute("data-panel")));

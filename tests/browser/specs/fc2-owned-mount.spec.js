@@ -31,7 +31,7 @@ test("owned FC2 mounts in the main content while preserving and restoring host n
   expect(bounds.scroll).toBeLessThanOrEqual(bounds.client + 1);
   await assertNoHorizontalOverflow(page);
   await workspace.screenshot({ path: info.outputPath("fc2-owned-visible.png") });
-  await page.evaluate(async () => (await window.unsafeWindow.pluginManager.getBean("Fc2Plugin").getRuntimeService("scope")()).dispose());
+  await page.evaluate(async () => (await window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].getRuntimeService("scope")()).dispose());
   await expect(workspace).toHaveCount(0);
   expect(await page.evaluate(() => {
     const probe = window.__ownedMountProbe;
@@ -72,7 +72,7 @@ for (const [name, count] of [["missing", 0], ["ambiguous", 2]]) {
     await expect(page.locator(".jhs-fc2-workspace")).toHaveCount(0);
     expect(await page.evaluate(() => window.__ownedRetainedNodes.every(({ node, text, descendants }) => node.isConnected && node.textContent === text
       && descendants.every(({ element, children }) => element.childNodes.length === children.length && [...element.childNodes].every((child, index) => child === children[index]))))).toBe(true);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().errors.map(error => error.message)))
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().errors.map(error => error.message)))
       .toContain(`FC2 详情正文容器匹配异常：预期 1 个，实际 ${count} 个`);
   });
 }

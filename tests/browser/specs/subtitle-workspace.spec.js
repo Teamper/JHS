@@ -62,7 +62,7 @@ async function boot(page, context, theme, upload = false) {
         },
     });
     await page.evaluate(() => {
-        const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+        const owner = window.__jhsBrowserDiagnostics.features["detail.page-state-actions"];
         const open = owner.openSubtitles;
         owner.openSubtitles = async (...args) => { try { return await open(...args); } catch (error) { console.error("SUBTITLE_WORKSPACE_ERROR", error.stack); throw error; } };
     });

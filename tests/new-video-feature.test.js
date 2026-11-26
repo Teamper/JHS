@@ -22,7 +22,7 @@ function createRuntime(id, plugin, events = { on: vi.fn(() => vi.fn()) }) {
         enabledContributions: [id],
         scope: new LifecycleScope(`feature:${id}`),
         diagnostics: { recordError: vi.fn() },
-        resolveCompatibilityBean: vi.fn(() => null),
+        getCapability: vi.fn(() => null),
         provideCapability: vi.fn(),
         events,
     };
@@ -122,7 +122,7 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(await newVideoFeature.activate({ [PORT.style]: styles }, runtime)).toMatchObject({
             activeContributions: [], commands: { "new-video.open": expect.any(Function) },
         });
-        expect(runtime.resolveCompatibilityBean).not.toHaveBeenCalled();
+        expect(runtime.getCapability).not.toHaveBeenCalled();
         expect(styles.register).not.toHaveBeenCalled();
         expect(plugin.initializeLocalState).toBeUndefined();
     });

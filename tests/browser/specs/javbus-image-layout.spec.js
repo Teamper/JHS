@@ -30,8 +30,8 @@ test.describe("JavBus image layout Feature migration", () => {
         item.append(image);
         root.append(item);
       }
-      const manager = window.unsafeWindow.pluginManager;
-      const setting = manager.getBean("SettingPlugin");
+      const manager = window.__jhsBrowserDiagnostics;
+      const setting = manager.features["settings.core"];
       await setting.getRuntimeService("busImageLayout").logImageHeightsByRow({ vertical: "no", columns: 3 });
       return [...root.querySelectorAll("img")].map((image) => ({ height: image.style.getPropertyValue("height"), priority: image.style.getPropertyPriority("height") }));
     });
@@ -41,8 +41,7 @@ test.describe("JavBus image layout Feature migration", () => {
       { height: "100px", priority: "important" },
       { height: "100px", priority: "important" },
     ]);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("BusImgPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "BusImgPlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "detail.javbus-images"))).toBe(true);
   });
 
   test("the old BusImgPlugin disable ID keeps the feature contribution inactive", async ({ context, page }, testInfo) => {
@@ -67,11 +66,10 @@ test.describe("JavBus image layout Feature migration", () => {
         item.append(image);
         root.append(item);
       }
-      await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("busImageLayout").logImageHeightsByRow({ vertical: "no", columns: 3 });
+      await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("busImageLayout").logImageHeightsByRow({ vertical: "no", columns: 3 });
       return [...root.querySelectorAll("img")].map((image) => image.style.getPropertyValue("height"));
     });
 
     expect(heights).toEqual(["", "", ""]);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("BusImgPlugin"))).toBe(false);
   });
 });

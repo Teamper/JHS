@@ -39,7 +39,7 @@ test('card long screenshot mounts the real Viewer and releases its temporary hos
   await fulfillHostFixtures(context);await page.goto('https://javdb.com/');await page.locator('.tags').evaluateAll(nodes=>nodes.forEach(node=>node.style.removeProperty('display')));
   await injectUserscriptRuntime(page,{hostStyles:true,realFeedback:true,beforeUserscriptInjection:injectRealLayer,settingOverrides:{enableLoadReview:'no',enableLoadOtherSite:'no',enableScreenSvg:'yes',defaultQuickFilterTab:'all'}});
   await page.evaluate(()=>{
-    const capability=window.unsafeWindow.pluginManager.getBean('CoverButtonPlugin');
+    const capability=window.__jhsBrowserDiagnostics.features["detail.cover-state-actions"];
     if(!capability)throw new Error('cover capability missing');
     const screenshot=capability.screenshot;
     screenshot.resolve=async()=>({url:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="900"/%3E'});

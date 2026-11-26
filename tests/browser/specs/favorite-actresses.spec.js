@@ -22,17 +22,17 @@ for (const theme of ["light", "dark"]) {
     await expect(actor).toBeFocused();
     expect(await actor.evaluate(node => getComputedStyle(node).outlineStyle)).not.toBe("none");
     await page.evaluate(async () => {
-      const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+      const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
       await settings.set("highlightedTagNumber", 3);
       await settings.set("highlightedTagColor", "#123456");
     });
     await expect(actor).toHaveCSS("border-top-width", "3px");
     await expect(actor).toHaveCSS("border-top-color", "rgb(18, 52, 86)");
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableFavoriteActresses", "no"));
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableFavoriteActresses", "no"));
     await expect(actor).toHaveCSS("border-top-width", "0px");
     await expect(actor).toHaveAttribute("title", "原提示");
     await expect(page.locator("#jhs-favorite-actresses-feature")).toHaveCount(0);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableFavoriteActresses", "yes"));
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableFavoriteActresses", "yes"));
     await expect(actor).toHaveCSS("border-top-width", "3px");
   });
 }
@@ -64,10 +64,9 @@ test("favorite actress actions are feature-owned and retain the legacy disable I
   await expect.poll(async () => (await readFavoriteActresses(page)).length).toBe(1);
   expect(await readFavoriteActresses(page)).toMatchObject([{ starId: "fixtureactor", name: "演员甲", allName: ["演员甲", "Actor A", "演员乙"], avatar: "https://img.example/avatar.jpg" }]);
   const runtime = await page.evaluate(() => ({
-    pluginRegistered: window.unsafeWindow.pluginManager.getPluginNames().includes("FavoriteActressesPlugin"),
-    descriptorPreserved: window.unsafeWindow.pluginManager.getPluginDescriptors().some(item => item.name === "FavoriteActressesPlugin"),
+    descriptorPreserved: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(item => item.id === "library.favorite-actresses"),
   }));
-  expect(runtime).toEqual({ pluginRegistered: false, descriptorPreserved: true });
+  expect(runtime).toEqual({ descriptorPreserved: true });
 
   const disabledContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
@@ -134,7 +133,7 @@ for (const theme of ["light", "dark"]) {
     }
 
     await page.evaluate(async () => {
-      const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+      const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
       await settings.set("enableFavoriteActresses", "no");
     });
     await expect(cardAbc).not.toHaveAttribute("data-jhs-favorite-actress", "yes");
@@ -142,7 +141,7 @@ for (const theme of ["light", "dark"]) {
     await expect(cardAbc).toHaveCSS("box-shadow", "none");
 
     await page.evaluate(async () => {
-      const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+      const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
       await settings.set("highlightedTagColor", "#10ac84");
       await settings.set("enableFavoriteActresses", "yes");
     });

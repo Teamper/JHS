@@ -92,14 +92,14 @@ test('contact sheet source removal and failure retry release the preview owner',
 
 test('list screenshot uses contact-sheet zoom for the real sub-2 dimensions',async({page,context})=>{
  await routes(context);await page.goto('https://javdb.com/');await page.locator('.tags').evaluateAll(nodes=>nodes.forEach(n=>n.style.removeProperty('display')));await injectUserscriptRuntime(page,{...config('dark'),settingOverrides:{...config('dark').settingOverrides,enableScreenSvg:'yes'}});
- await page.evaluate(()=>{window.unsafeWindow.pluginManager.getBean('CoverButtonPlugin').screenshot.resolve=async()=>({url:'https://images.example.test/sheet.svg'});});
+ await page.evaluate(()=>{window.__jhsBrowserDiagnostics.features["detail.cover-state-actions"].screenshot.resolve=async()=>({url:'https://images.example.test/sheet.svg'});});
  const trigger=page.locator('.screenSvg').first();await trigger.click();await expectSheet(page);await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
 });
 
 for(const source of ['fc2','123av'])test(`${source} photographs and contact sheet have separate sequences`,async({page,context})=>{
  await routes(context);await page.goto('https://javdb.com/search_advanced?type=3');await injectUserscriptRuntime(page,config('dark'));
  await page.evaluate(source=>{
-  const fc2=window.unsafeWindow.pluginManager.getBean('Fc2Plugin'),get=fc2.getRuntimeService.bind(fc2);
+  const fc2=window.__jhsBrowserDiagnostics.features["detail.fc2-owned"],get=fc2.getRuntimeService.bind(fc2);
   const movie=get('movie');movie.detail=async()=>({title:'Gallery fixture',carNum:'FC2-4959150',imageUrls:['https://images.example.test/full-0.svg','https://images.example.test/1.svg']});movie.images=async()=>[{url:'https://images.example.test/full-0.svg'},{url:'https://images.example.test/1.svg'}];movie.people=async()=>({actors:[]});movie.resolve=async()=>({movieId:'fixture-id'});
   fc2.fetchAndRenderNativeMagnets=async()=>{};fc2.configureJavDbWantButton=async()=>{};
   fc2.getRuntimeService=name=>name==='screenshot'?{isEnabled:()=>true,getScreenshotSettings:()=>({mode:'auto'}),getEnabledProviders:()=>[{id:'javstore'}],resolve:async()=>[{url:'https://images.example.test/sheet.svg'}]}:get(name);
@@ -114,7 +114,7 @@ for(const source of ['fc2','123av'])test(`${source} photographs and contact shee
 for(const frame of [false,true])test(`detail screenshot retry stays at the current position ${frame?'iframe':'direct'}`,async({page,context})=>{
  const detail=await boot(page,context,{frame});
  await detail.evaluate(async()=>{
-  const screenshot=window.unsafeWindow.pluginManager.getBean('Fc2Plugin').getRuntimeService('screenshot');
+  const screenshot=window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].getRuntimeService('screenshot');
   window.__sheetAttempts=0;
   screenshot.resolve=()=>{window.__sheetAttempts++;return window.__sheetAttempts===1?Promise.resolve(null):new Promise((resolve,reject)=>{window.__finishSheet=resolve;window.__failSheet=reject;});};
   const gallery=document.querySelector('.columns.preview'),space=document.createElement('div');space.style.height='1800px';gallery.before(space);const after=space.cloneNode();after.style.height='1400px';gallery.after(after);

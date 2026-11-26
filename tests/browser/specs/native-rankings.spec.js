@@ -133,7 +133,6 @@ test.describe("JavDB native rankings", () => {
     await injectUserscriptRuntime(page, { disabledPlugins: ["TOP250Plugin"] });
     await expect(page.locator(".movie-list .item")).toHaveCount(3);
     await expect(page.locator(".jhs-top250-subtitle")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("TOP250Plugin"))).toBe(false);
   });
 
   test("a disabled Playback contribution does not disable shared list actions", async ({ page }, testInfo) => {
@@ -144,7 +143,6 @@ test.describe("JavDB native rankings", () => {
     await expect(page.locator("#jhs-quick-filter")).toBeVisible();
     await expect(page.locator("#waitCheckBtn")).toBeVisible();
     await expect(page.locator(".movie-list")).not.toHaveAttribute("data-jhs-ranking", "playback");
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("HitShowPlugin"))).toBe(false);
   });
 
   test("123AV catalog mounts on the FC2 category route with its own source label", async ({ page }, testInfo) => {
@@ -171,7 +169,7 @@ test.describe("JavDB native rankings", () => {
     });
     await injectUserscriptRuntime(page);
     await expect(page.locator(".jhs-123av-list")).toHaveCount(1);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("Fc2By123AvPlugin").dispose());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.fc2-lookup"].dispose());
     await expect(page.locator(".jhs-123av-list, .page-box, #search-123av-keyword")).toHaveCount(0);
     await expect(page.locator('.movie-list .item[data-jhs-fc2-source="fc2"]')).toBeVisible();
     expect(await page.locator("section .container").evaluate((container) => {
@@ -190,7 +188,6 @@ test.describe("JavDB native rankings", () => {
     await injectUserscriptRuntime(page, { disabledPlugins: ["Fc2By123AvPlugin"] });
     await expect(page.locator(".movie-list .item")).toHaveCount(1);
     await expect(page.locator(".jhs-123av-list, #jhs-123av-nav, #search-123av-keyword")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("Fc2By123AvPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("Fc2By123AvPlugin"))).toBeUndefined();
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.fc2-lookup"])).toBeUndefined();
   });
 });

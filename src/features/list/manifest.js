@@ -64,8 +64,8 @@ export default defineFeature({
                 },
                 refreshHistory: () => runtime.isCommandAvailable("library.history.refresh") ? runtime.executeCommand("library.history.refresh") : Promise.resolve(),
             });
-            const release = runtime.registerCompatibilityBean?.("ListPagePlugin", listCompatibilityService);
-            if (release) runtime.scope.addCleanup(release);
+            runtime.provideCapability?.("list.core", listCompatibilityService);
+            runtime.inspect?.("list.core", listCompatibilityService);
         }
         const sortController = new ListSortController({ hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings] });
         if (runtime.enabledContributions.includes("detail.cover-state-actions") && listCompatibilityService) {
@@ -89,8 +89,8 @@ export default defineFeature({
                 await coverButtons.start();
                 const releaseCapability = runtime.provideCapability?.("detail.cover-state-actions", coverButtons);
                 if (releaseCapability) coverScope.addCleanup(releaseCapability);
-                const releaseCompatibility = runtime.registerCompatibilityBean?.("CoverButtonPlugin", coverButtons);
-                if (typeof releaseCompatibility === "function") coverScope.addCleanup(releaseCompatibility);
+                const releaseInspection = runtime.inspect?.("detail.cover-state-actions", coverButtons);
+                if (releaseInspection) coverScope.addCleanup(releaseInspection);
                 activeContributions.push("detail.cover-state-actions");
             } catch (error) {
                 coverScope.dispose();
@@ -210,8 +210,10 @@ export default defineFeature({
             });
             try {
                 if (await listActionsController.start()) {
-                    const releaseCompatibility = runtime.registerCompatibilityBean?.("ListPageButtonPlugin", listActionsController);
-                    if (typeof releaseCompatibility === "function") listActionsController.setCompatibilityRelease(scope.addCleanup(releaseCompatibility));
+                    const releaseCapability = runtime.provideCapability?.("list.actions", listActionsController);
+                    if (releaseCapability) scope.addCleanup(releaseCapability);
+                    const releaseInspection = runtime.inspect?.("list.actions", listActionsController);
+                    if (releaseInspection) scope.addCleanup(releaseInspection);
                     activeContributions.push("list.actions");
                 }
             } catch (error) {

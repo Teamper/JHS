@@ -11,8 +11,8 @@ async function boot(page, context, { mode = "page", disabled = false, sourcesDis
   await injectUserscriptRuntime(page, { disabledPlugins: disabled ? ["MagnetHubPlugin"] : [], settingOverrides: { themeMode: theme, enableLoadReview: "no", enableLoadRelated: "no", enableLoadScreenShot: "no", enableLoadOtherSite: "no" } });
   if (mode === "page") await expect(page.locator('.jhs-fc2-workspace[data-jhs-fc2-mode="page"]')).toBeVisible();
   await page.evaluate(async ({ mode, sourcesDisabled }) => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
-    const hub = fc2.featureMagnetHubAdapter;
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
+    const hub = fc2.readMagnetHub();
     window.__magnetProbe = { requests: [], fail: {}, pending: false, releases: [], completed: 0, copies: 0 };
     fc2.getRuntimeService("magnet").listNative = async () => [];
     if (hub) {
@@ -54,7 +54,7 @@ for (const mode of ["page", "dialog"]) {
     await shortcut.focus(); await shortcut.press("Enter");
     await expect(root.locator(".magnet-result")).toHaveCount(2);
     await expect(root.locator('.magnet-tab[aria-selected="true"]')).toHaveText("全部");
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin").storage.getLocal("jhs_magnetHub_selectedEngine"))).toBe("native-javdb");
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.external-magnets"].storage.getLocal("jhs_magnetHub_selectedEngine"))).toBe("native-javdb");
     await shortcut.click(); await shortcut.click();
     await expect(root.locator(".magnet-container")).toHaveCount(1);
     expect(await page.evaluate(() => window.__magnetProbe.requests)).toEqual([{ id: "sukebei", keyword: "1234567" }, { id: "u9a9", keyword: "1234567" }]);
@@ -72,7 +72,7 @@ test("FC2 missing JavDB association still offers external search", async ({ page
   const root = await boot(page, context);
   await page.evaluate(async () => {
     const owned = window.jQuery(".jhs-fc2-workspace").data("jhsFc2Context");
-    await window.unsafeWindow.pluginManager.getBean("Fc2Plugin").fetchAndRenderNativeMagnets(owned, null);
+    await window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].fetchAndRenderNativeMagnets(owned, null);
   });
   await expect(root.locator('[data-jhs-role="native-magnets"]')).toContainText("JavDB 暂无对应影片");
   await root.getByRole("button", { name: "搜索第三方磁力", exact: true }).click();
@@ -124,7 +124,7 @@ test("FC2 closed dialog ignores late results and another dialog remains independ
     window.__closedMagnetHtml = window.__closedMagnetHub.innerHTML;
     window.layer.close(workspace.data("jhsFc2Context").layerIndex);
     window.__magnetProbe.pending = false;
-    window.unsafeWindow.pluginManager.getBean("Fc2Plugin").openFc2Dialog("fixture-id", "FC2-7654321", "https://javdb.com/v/fixture-id", { source: "fc2" });
+    window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].openFc2Dialog("fixture-id", "FC2-7654321", "https://javdb.com/v/fixture-id", { source: "fc2" });
   });
   const second = page.locator('.jhs-fc2-workspace[data-jhs-fc2-mode="dialog"]').last();
   await second.getByRole("button", { name: "搜索第三方磁力", exact: true }).click();
@@ -139,7 +139,7 @@ test("FC2 closed dialog ignores late results and another dialog remains independ
 for (const theme of ["light", "dark"]) test(`FC2 magnet results appear progressively and preserve focused actions and filters ${theme}`, async ({ page, context }, info) => {
   const root = await boot(page, context, { theme });
   await page.evaluate(() => {
-    const hub = window.unsafeWindow.pluginManager.getBean("Fc2Plugin").featureMagnetHubAdapter;
+    const hub = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].readMagnetHub();
     const search = hub.magnet.searchSource;
     hub.magnet.searchSource = async (id, keyword) => {
       if (id === "u9a9") await new Promise(resolve => window.__magnetProbe.releases.push(resolve));

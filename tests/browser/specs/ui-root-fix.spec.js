@@ -16,7 +16,7 @@ async function contained(locator){
 for(const theme of ["light","dark"]){
   test(`rich settings and portal geometry ${theme}`,async({page,context},info)=>{
     await boot(page,context,theme);
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("car-number-import-panel"));
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("car-number-import-panel"));
     const dialog=page.locator('.layui-layer').last(); await expect(dialog.locator('#saveBtn')).toHaveAttribute('data-jhs-settings-ready','true');
     await clickSettingsCategory(dialog.locator('[data-panel="data-panel"]'));
     const textarea=dialog.locator('textarea').filter({visible:true}).last(); await textarea.scrollIntoViewIfNeeded();

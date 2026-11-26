@@ -98,7 +98,7 @@ export function buildEditRecordForm(flags) {
 }
 
 export class HistoryDialogController {
-    /** @param {{document: Document, window: Window & typeof globalThis, jquery: (value: any) => any, domUi: any, dialog: any, notifications: any, logger: any, clipboard: any, movie: any, settings: any, storage: any, state: any, repository?: HistoryRepository, selectionModel?: HistorySelectionModel, site: string, resolveLegacy?: (name: string) => any, fc2WorkspaceAvailable?: boolean, getFc2Workspace?: () => Promise<any>, isAvailable?: (command: string) => boolean, onRate?: (movies: any[]) => any, onLists?: (movies: any[]) => any}} options */
+    /** @param {{document: Document, window: Window & typeof globalThis, jquery: (value: any) => any, domUi: any, dialog: any, notifications: any, logger: any, clipboard: any, movie: any, settings: any, storage: any, state: any, repository?: HistoryRepository, selectionModel?: HistorySelectionModel, site: string, readOffline?: () => any, readList?: () => any, fc2WorkspaceAvailable?: boolean, getFc2Workspace?: () => Promise<any>, isAvailable?: (command: string) => boolean, onRate?: (movies: any[]) => any, onLists?: (movies: any[]) => any}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -116,7 +116,8 @@ export class HistoryDialogController {
         this.onRate = options.onRate;
         this.onLists = options.onLists;
         this.site = options.site;
-        this.resolveLegacy = options.resolveLegacy ?? (() => null);
+        this.readOffline = options.readOffline ?? (() => null);
+        this.readList = options.readList ?? (() => null);
         this.fc2WorkspaceAvailable = options.fc2WorkspaceAvailable ?? false;
         this.getFc2Workspace = options.getFc2Workspace ?? null;
         /** @type {TableHandle | null} */ this.tableObj = null;
@@ -242,12 +243,12 @@ export class HistoryDialogController {
                     await this.clipboard.copyText("离线资源", this.jquery(event.currentTarget).data("resource"));
                 })).on("click.jhsHistory", ".jhs-retry-offline", (async (/** @type {any} */ event) => {
                     const viewGeneration = this.historyViewGeneration;
-                    const id = this.jquery(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), offline = this.resolveLegacy("UnifiedOfflinePlugin");
+                    const id = this.jquery(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), offline = this.readOffline();
                     if (!this.isCurrentHistoryView(root, viewGeneration)) return;
                     item && offline && await offline.submitResource(event, item.resource, this.jquery(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId, previousOutcome: item.submissionOutcome });
                     if (this.isCurrentHistoryView(root, viewGeneration)) await this.renderOfflineHistory();
                 })).on("click.jhsHistory", ".jhs-open-offline", (async (/** @type {any} */ event) => {
-                    const id = this.jquery(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), provider = this.resolveLegacy("UnifiedOfflinePlugin")?.registry?.providers?.get(item?.providerId), url = provider?.openUrl?.();
+                    const id = this.jquery(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), provider = this.readOffline()?.registry?.providers?.get(item?.providerId), url = provider?.openUrl?.();
                     url && this.window.open(url, "_blank", "noopener,noreferrer");
                 })).on("click.jhsHistory", ".jhs-delete-offline", (async (/** @type {any} */ event) => {
                     const viewGeneration = this.historyViewGeneration;
@@ -311,7 +312,7 @@ export class HistoryDialogController {
         const host = root.find("#table-container").empty().addClass("jhs-record-list jhs-scrollbar");
         if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
         history.slice().reverse().forEach((/** @type {HistoryRecord} */ item) => {
-            const offline = this.resolveLegacy("UnifiedOfflinePlugin"), provider = offline?.registry?.providers?.get?.(item.providerId);
+            const offline = this.readOffline(), provider = offline?.registry?.providers?.get?.(item.providerId);
             const unknown = item.status === "pending" || item.submissionOutcome === "unknown" || !item.submissionOutcome && item.status === "failed" && ["TIMEOUT", "NETWORK_ERROR", "ABORTED"].includes(item.errorCode);
             const actions = this.jquery("<div class=\"jhs-toolbar\"></div>").append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary jhs-copy-offline\">复制资源</button>").attr("data-resource", item.resource));
             if (offline && provider) actions.append(this.jquery("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary jhs-retry-offline\"></button>").text(unknown ? "核实后重试" : "重试").attr("data-id", item.id));
@@ -771,7 +772,7 @@ export class HistoryDialogController {
         const refresh = this.captureHistoryRefresh();
         this.domUi.confirm(e, `移除「${escapeHtml(t)}」的记录？`, (async () => {
             try {
-                await this.historyRepository.remove(t), this.resolveLegacy("ListPagePlugin")?.showCarNumBox?.(t),
+                await this.historyRepository.remove(t), this.readList()?.showCarNumBox?.(t),
                 await refresh();
             } catch (error) {
                 this.logger.error("移除历史记录失败:", error), this.notifications.error("记录移除失败，请重试");
@@ -783,7 +784,7 @@ export class HistoryDialogController {
         if (t.carNum.includes("FC2-")) {
             const plugin = this.fc2WorkspaceAvailable && this.getFc2Workspace
                 ? await this.getFc2Workspace()
-                : this.resolveLegacy("Fc2Plugin");
+                : null;
             if (!plugin) return t.url ? void this.domUi.openPage(t.url, t.carNum, !1, e) : void this.notifications.info(`${PRODUCT_NAMES.fc2} 详情功能已关闭`);
             const source = await plugin.resolveFc2Source(t), movieId = await plugin.resolveMovieIdForRecord(t.carNum, t.url);
             if (this.site === "javdb") plugin.openFc2Dialog(movieId, t.carNum, t.url, { source });

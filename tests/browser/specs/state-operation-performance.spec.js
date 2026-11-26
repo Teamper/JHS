@@ -16,7 +16,7 @@ for (const count of process.env.JHS_PERF_STRESS === "1" ? [50000] : [3000, 10000
     }, count);
   } });
   const measurements = await page.evaluate(async ({ sync, sampleCount }) => {
-    const service = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdavSync");
+    const service = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdavSync");
     service.cancel(); service.schedule = () => {}; service.reschedule = async () => {};
     service.deps.shared.migrate = async () => {};
     service.deps.shared.snapshot = async () => ({ revision: "fixture", profile: { url: "https://fixture.invalid/dav", username: "synthetic", password: "synthetic" } });

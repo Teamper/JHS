@@ -41,7 +41,7 @@ for (const theme of ["light", "dark"]) {
     test(`card actions restore their anchor before confirmation ${theme}`, async ({ page, context }, info) => {
         test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop and compact card action focus");
         await boot(page, context, theme);
-        await page.evaluate(() => { window.unsafeWindow.pluginManager.getBean("CoverButtonPlugin").clipboard.copyText = async () => true; });
+        await page.evaluate(() => { window.__jhsBrowserDiagnostics.features["detail.cover-state-actions"].clipboard.copyText = async () => true; });
         const copy = page.locator(".copySvg .jhs-card-menu-trigger").first();
         await copy.click(); await page.locator(".jhs-owned-popover .carNumSvg").press("Enter");
         await expect(copy).toBeFocused();
@@ -59,7 +59,7 @@ test("late mobile sort preserves a newly opened filter", async ({ page, context 
     test.skip(info.project.name !== "mobile", "compact sorting lifecycle");
     await boot(page, context);
     await page.evaluate(() => {
-        const buttons = window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin"), original = buttons.selectSortMethod.bind(buttons);
+        const buttons = window.__jhsBrowserDiagnostics.features["list.actions"], original = buttons.selectSortMethod.bind(buttons);
         buttons.selectSortMethod = value => new Promise((resolve, reject) => { window.__finishMenuSort = () => original(value).then(resolve, reject); });
     });
     const fab = page.locator("#jhs-fab");
@@ -76,7 +76,7 @@ test("cover disablement cancels a pending actor action before state submission",
     test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "cover contribution cancellation");
     await boot(page, context);
     await page.evaluate(() => {
-        const manager = window.unsafeWindow.pluginManager, list = manager.getBean("ListPagePlugin"), cover = manager.getBean("CoverButtonPlugin");
+        const manager = window.__jhsBrowserDiagnostics, list = manager.features["list.core"], cover = manager.features["detail.cover-state-actions"];
         window.__coverPatchCount = 0;
         const patch = cover.state.patch.bind(cover.state);
         cover.state.patch = (...args) => { window.__coverPatchCount++; return patch(...args); };
@@ -86,7 +86,7 @@ test("cover disablement cancels a pending actor action before state submission",
     await page.locator(".jhs-owned-popover .favoriteBtn").click();
     await page.waitForFunction(() => typeof window.__finishCoverActor === "function");
     expect(await page.evaluate(() => {
-        const cover = window.unsafeWindow.pluginManager.getBean("CoverButtonPlugin");
+        const cover = window.__jhsBrowserDiagnostics.features["detail.cover-state-actions"];
         const owned = window.__coverActorScope === cover.scope;
         cover.scope.dispose(); window.__finishCoverActor(); return owned;
     })).toBe(true);

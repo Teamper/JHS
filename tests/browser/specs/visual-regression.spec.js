@@ -64,7 +64,7 @@ for (const [label, url, selector] of pages) {
       await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no" }, ...(fc2 ? { beforeUserscriptInjection: addWebAccountLink } : {}) });
       await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
       await page.evaluate((mode) => {
-        const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+        const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
         return settings.set("themeMode", mode);
       }, theme);
       await expect(page.locator("html")).toHaveAttribute("data-jhs-theme", theme);
@@ -81,7 +81,7 @@ test("Settings dialog visual baseline", async ({ context, page }, testInfo) => {
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   for (const id of ["containerColumns", "containerWidth"]) {
     const geometry = await page.locator(`.layui-layer #${id}`).evaluate(input => {
@@ -104,7 +104,7 @@ test("Settings cloud panel visual baseline", async ({ context, page }, testInfo)
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   const dialog = page.locator(".layui-layer");
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
@@ -141,8 +141,8 @@ for (const theme of ["light", "dark"]) {
     });
     await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
     await page.evaluate((mode) => {
-      const manager = window.unsafeWindow.pluginManager;
-      const fc2 = manager.getBean("Fc2Plugin");
+      const manager = window.__jhsBrowserDiagnostics;
+      const fc2 = manager.features["detail.fc2-owned"];
       const originalGetRuntimeService = fc2.getRuntimeService.bind(fc2);
       fc2.resolveMovieIdForRecord = async () => "fixture-movie-id";
       fc2.resolveFc2Source = async () => "fc2";
@@ -172,7 +172,7 @@ for (const theme of ["light", "dark"]) {
         ] };
         return originalGetRuntimeService(name);
       };
-      const settings = manager.getBean("SettingPlugin").getRuntimeService("settings");
+      const settings = manager.features["settings.core"].getRuntimeService("settings");
       return settings.set("themeMode", mode);
     }, theme);
     await expect(page.locator("html")).toHaveAttribute("data-jhs-theme", theme);

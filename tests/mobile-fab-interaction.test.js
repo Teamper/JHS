@@ -19,7 +19,7 @@ function mount() {
     }) };
     const labels = { all: "全部", favorite: "收藏" };
     const list = { activeQuickFilter: "all", getQuickFilterCatalog: () => ({ primary: ["all", "favorite"], secondary: [], labels, normalize: () => "all" }), syncQuickFilterUi() {} };
-    controller = new ResponsiveShellController({ jquery: $, window, document, profile: {}, settings: { snapshot: () => ({ sortMethod: committed }) }, host: {}, state: {}, logger: { error: vi.fn() }, notifications: { error: vi.fn() }, capabilities: { ListPagePlugin: list, ListPageButtonPlugin: buttons } });
+    controller = new ResponsiveShellController({ jquery: $, window, document, profile: {}, settings: { snapshot: () => ({ sortMethod: committed }) }, host: {}, state: {}, logger: { error: vi.fn() }, notifications: { error: vi.fn() }, readList: () => list, readListActions: () => buttons });
     controller.mountBottomBar();
     const select = value => {
         $("#jhs-fab").trigger("click");

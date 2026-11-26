@@ -30,13 +30,13 @@ test("review keyword confirmation treats external text as text with the real Lay
 test("resource source and rule deletion confirmations render external names as text", async ({page,context}) => {
     await fulfillHostFixtures(context);
     await boot(page, {}, undefined, { beforeUserscriptInjection: injectRealLayer });
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     const settings=page.locator(".layui-layer").filter({has:page.locator("#resource-sources-panel")});
     await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
     await clickSettingsCategory(settings.locator('.side-menu-item[data-panel="resources-panel"]'));
     const name='<img src="data:," onerror="document.documentElement.dataset.auditExecuted=String(1)"> & <b>fixture</b>';
     await page.evaluate(name=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+        const plugin=window.__jhsBrowserDiagnostics.features["settings.core"];
         plugin.resourceState.custom=[{id:"fixture-source",name,enabled:true,priority:1,type:"magnet",searchUrlTemplate:"https://example.test/search?q={keyword}"}];
         plugin.resourceState.tags=[{id:"fixture-rule",name,type:"contains",pattern:"fixture",weight:1}];
         plugin.renderResourceSettings(window.jQuery(document.querySelector(".layui-layer:has(#resource-sources-panel)")));
@@ -57,7 +57,7 @@ test("resource source and rule deletion confirmations render external names as t
 test("setting keyword removal confirmation renders the saved text literally", async ({page,context}) => {
     await fulfillHostFixtures(context);
     await boot(page, {}, undefined, { beforeUserscriptInjection: injectRealLayer });
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     const settings=page.locator(".layui-layer").filter({has:page.locator("#filter-panel")});
     await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
     await clickSettingsCategory(settings.locator('.side-menu-item[data-panel="filtering-panel"]'));
@@ -78,21 +78,21 @@ test("setting keyword removal confirmation renders the saved text literally", as
 });
 test("cloud OFF controls persist booleans and exclude both providers", async ({page,context}) => {
     await fulfillHostFixtures(context);await boot(page,{enable123Offline:true,enable115Offline:true});
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
     await clickSettingsCategory(page.locator('.side-menu-item[data-panel="cloud-panel"]'));
     await page.locator("#enable123Offline").uncheck();await page.locator("#enable115Offline").uncheck();
-    expect(await page.evaluate(() => { const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings"); return [settings.snapshot().enable123Offline, settings.snapshot().enable115Offline]; })).toEqual([true,true]);
+    expect(await page.evaluate(() => { const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings"); return [settings.snapshot().enable123Offline, settings.snapshot().enable115Offline]; })).toEqual([true,true]);
     await page.locator("#saveBtn").click();
     const result=await page.evaluate(async()=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"),settings=plugin.getRuntimeService("settings");await settings.waitForIdle();
+        const plugin=window.__jhsBrowserDiagnostics.features["external-bridge.offline"],settings=plugin.getRuntimeService("settings");await settings.waitForIdle();
         plugin.registry.providers.get("123").getAvailability=async()=>({available:true,authState:"ready"});
         return {values:[settings.snapshot().enable123Offline,settings.snapshot().enable115Offline],ids:(await plugin.registry.getCandidates("magnet:?xt=urn:btih:fixture",{force:true})).map(c=>c.provider.id)};
     });
     expect(result).toEqual({values:[false,false],ids:[]});
     await page.keyboard.press("Escape");
     await expect(page.locator("#enable123Offline")).toHaveCount(0);
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
     await clickSettingsCategory(page.locator('.side-menu-item[data-panel="cloud-panel"]'));
     await expect(page.locator("#enable123Offline")).not.toBeChecked();
@@ -120,14 +120,14 @@ test("related expansion synchronizes across tabs like reviews", async ({page,con
 
 test("115 matching cancels late detail results and restarts once", async ({page,context}) => {
     await fulfillHostFixtures(context);await boot(page,{enable115Match:false});
-    await page.waitForFunction(()=>Boolean(window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin")));
+    await page.waitForFunction(()=>Boolean(window.__jhsBrowserDiagnostics.features["external-bridge.115-match"]));
     await page.evaluate(()=>{
         const evidence=document.createElement("div");
         evidence.className="panel-block";
         evidence.innerHTML='<strong>番号:</strong><span class="value">ABC-123</span>';
         document.querySelector(".column-video-info").append(evidence);
         window.matchRequests=[];
-        const plugin=window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin");
+        const plugin=window.__jhsBrowserDiagnostics.features["external-bridge.115-match"];
         const offline=plugin.getRuntimeService("offline");
         offline.getAccountIdentity=async()=>({accountId:"1"});
         offline.searchFilePage=(_id,_query,{scope})=>new Promise(resolve=>window.matchRequests.push({scope,resolve:items=>resolve({items,hasMore:false,nextOffset:items.length})}));
@@ -149,9 +149,9 @@ test("115 matching cancels late detail results and restarts once", async ({page,
 
 for(const count of [0,1,2]) test(`115 ${count} matches isolate their card action`, async ({page,context})=>{
     await fulfillHostFixtures(context);await boot(page,{enable115Match:false},"https://javdb.com/");
-    await page.waitForFunction(()=>Boolean(window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin")));
+    await page.waitForFunction(()=>Boolean(window.__jhsBrowserDiagnostics.features["external-bridge.115-match"]));
     await page.evaluate(async count=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin"),offline=plugin.getRuntimeService("offline");
+        const plugin=window.__jhsBrowserDiagnostics.features["external-bridge.115-match"],offline=plugin.getRuntimeService("offline");
         window.matchCalls=0;window.playLinks=[];
         window.open=url=>window.playLinks.push(url);
         offline.getAccountIdentity=async()=>({accountId:"1"});
@@ -193,7 +193,7 @@ test("related collapse invalidates pending load and pagination can retry", async
 test("provider disabled while choosing cannot submit", async ({page,context})=>{
     await fulfillHostFixtures(context);await boot(page,{enable115Offline:true});
     const result=await page.evaluate(async()=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"),provider=plugin.registry.providers.get("115");let submissions=0;
+        const plugin=window.__jhsBrowserDiagnostics.features["external-bridge.offline"],provider=plugin.registry.providers.get("115");let submissions=0;
         provider.submit=async()=>{submissions++;};
         plugin.chooseCandidate=async(_event,candidates)=>{await plugin.getRuntimeService("settings").set("enable115Offline",false);return candidates.find(c=>c.provider.id==="115");};
         const button=$("<button>离线</button>").appendTo("body");
@@ -206,7 +206,7 @@ test("provider disabled while choosing cannot submit", async ({page,context})=>{
 test("123 disabled during token decryption never dispatches a cloud request", async ({page,context})=>{
     await fulfillHostFixtures(context);await boot(page,{enable123Offline:true});
     await page.evaluate(()=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+        const plugin=window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
         const bridge=plugin.getRuntimeService("pan123Credential");
         window.tokenBoundaryCalls=0;
         bridge.getStoredToken=()=>new Promise(resolve=>window.releaseBoundaryToken=resolve);
@@ -218,7 +218,7 @@ test("123 disabled during token decryption never dispatches a cloud request", as
     });
     await expect.poll(()=>page.evaluate(()=>typeof window.releaseBoundaryToken)).toBe("function");
     await page.evaluate(async()=>{
-        await window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin").getRuntimeService("settings").set("enable123Offline",false);
+        await window.__jhsBrowserDiagnostics.features["external-bridge.offline"].getRuntimeService("settings").set("enable123Offline",false);
         window.releaseBoundaryToken("mock-token");await window.tokenBoundaryTask;
     });
     expect(await page.evaluate(()=>window.tokenBoundaryCalls)).toBe(0);

@@ -19,10 +19,8 @@ vi.mock("../src/core/css-injection.js", () => ({ injectCoreCss() {} }));
 vi.mock("../src/core/logger.js", () => ({ initializeLoggerRuntime: () => ({ clog: {}, show: { info() {} } }) }));
 vi.mock("../src/core/theme.js", () => ({ initializeThemeRuntime() {}, applyThemeMode() {} }));
 vi.mock("../src/core/ui-primitives.js", () => ({ initializeUiAccessibility() {} }));
-vi.mock("../src/app/compatibility-facade.js", () => ({ attachCompatibilityFacade() {} }));
 vi.mock("../src/features/catalog.js", () => ({ featureManifests: [] }));
 vi.mock("../src/app/integration-catalog.js", () => ({ integrationManifests: [] }));
-vi.mock("../src/features/compatibility/contribution-catalog.js", () => ({ registerSiteCompatibility() {} }));
 import { bootstrapJhs } from "../src/app/bootstrap.js";
 
 function fixture(version = CURRENT_DATA_VERSION) {
@@ -39,6 +37,7 @@ function fixture(version = CURRENT_DATA_VERSION) {
         keys: async () => [...data.keys()],
     };
     vi.stubGlobal("crypto", webcrypto);
+    vi.stubGlobal("unsafeWindow", globalThis.jsdom.window);
     vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => forage });
     vi.stubGlobal("utils", undefined);
     vi.stubGlobal("storageManager", undefined);

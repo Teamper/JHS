@@ -9,7 +9,7 @@ async function boot(page,context,theme,mobileMode='off'){
  await injectUserscriptRuntime(page,{hostStyles:true,realFeedback:true,settingOverrides:{themeMode:theme,mobileMode,autoPage:'no',enableLoadPreviewVideo:'no',enableLoadOtherSite:'no',enableLoadReview:'no',defaultQuickFilterTab:'all'},beforeUserscriptInjection:async page=>{
   await injectRealLayer(page);await page.evaluate(()=>{const nav=document.querySelector('#navbar-menu-user');nav.style.cssText='display:flex;justify-content:flex-end';nav.className='main-nav';const search=document.createElement('div');search.className='navbar-search';search.style.display='none';document.body.append(search);});
  }});
- const compact=await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean('SettingPlugin').getRuntimeService('profile').current()==='compact');
+ const compact=await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService('profile').current()==='compact');
  await expect(page.locator(compact?'#jhs-fab':'#sort-toggle-btn')).toBeVisible();return compact;
 }
 async function capture(page,info,name){
@@ -64,7 +64,7 @@ for(const theme of ['light','dark']){
   await page.waitForTimeout(220);await expect(panel).toBeVisible();
   await page.mouse.wheel(0,300);await expect(panel).toBeVisible();await panel.locator('.simple-setting__scroll').evaluate(node=>node.scrollTop=0);
   // Exercise a real JhsSelect child without adding a product setting to the quick form.
-  await panel.evaluate(node=>{const source=document.createElement('select');source.className='jhs-select-source';source.setAttribute('aria-label','浮层交互测试');for(const label of ['默认','其他选项'])source.add(new Option(label,label));node.querySelector('.simple-setting__scroll').prepend(source);window.unsafeWindow.pluginManager.getBean('SettingPlugin').domUi.enhanceSelect(source);});
+  await panel.evaluate(node=>{const source=document.createElement('select');source.className='jhs-select-source';source.setAttribute('aria-label','浮层交互测试');for(const label of ['默认','其他选项'])source.add(new Option(label,label));node.querySelector('.simple-setting__scroll').prepend(source);window.__jhsBrowserDiagnostics.features["settings.core"].domUi.enhanceSelect(source);});
   const select=panel.locator('.jhs-select-trigger').first();await select.click();await expect(page.locator('.jhs-owned-popover')).toHaveCount(1);await page.locator('.jhs-owned-popover').hover();await page.waitForTimeout(230);await expect(panel).toBeVisible();await page.keyboard.press('Escape');await expect(select).toBeFocused();await expect(panel).toBeVisible();await panel.locator('.simple-setting__scroll').evaluate(node=>node.scrollTop=0);await expect.poll(()=>panel.locator('.simple-setting__scroll').evaluate(node=>node.scrollTop)).toBe(0);await select.click();await capture(page,info,'quick-select-'+theme);await page.keyboard.press('Escape');await page.keyboard.press('Escape');await expect(panel).toBeHidden();await expect(button).toBeFocused();
   await button.hover();await expect(panel).toBeVisible();await panel.locator('input').first().focus();await page.mouse.move(4,200);await page.waitForTimeout(230);await expect(panel).toBeVisible();
   await page.locator('.jhs-quick-filter__toggle').click();await expect(panel).toBeHidden();await page.keyboard.press('Escape');await button.hover();await expect(panel).toBeVisible();expect(await panel.evaluate(node=>window.$(node).data('jhsQuickSettingBinding')===window.__quickBinding)).toBe(true);
@@ -72,7 +72,7 @@ for(const theme of ['light','dark']){
  });
  test(`toolbar unmount closes its portal before returning controls ${theme}`,async({page,context},info)=>{
   test.skip(info.project.name!=='desktop-wide','one project covers lifecycle');await boot(page,context,theme);await page.locator('[aria-controls="jhs-commandbar-batch-menu"]').click();
-  await page.evaluate(async()=>{await window.unsafeWindow.pluginManager.getBean('SettingPlugin').getRuntimeService('settings').set('mobileMode','on');});await expect(page.locator('.jhs-owned-popover')).toHaveCount(0);await expect(page.locator('#jhs-page-commandbar')).toHaveCount(0);
-  await page.evaluate(async()=>{await window.unsafeWindow.pluginManager.getBean('SettingPlugin').getRuntimeService('settings').set('mobileMode','off');});await expect(page.locator('#jhs-page-commandbar')).toHaveCount(1);await expect(page.locator('#favoriteAllVideo')).toHaveCount(1);
+  await page.evaluate(async()=>{await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService('settings').set('mobileMode','on');});await expect(page.locator('.jhs-owned-popover')).toHaveCount(0);await expect(page.locator('#jhs-page-commandbar')).toHaveCount(0);
+  await page.evaluate(async()=>{await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService('settings').set('mobileMode','off');});await expect(page.locator('#jhs-page-commandbar')).toHaveCount(1);await expect(page.locator('#favoriteAllVideo')).toHaveCount(1);
  });
 }

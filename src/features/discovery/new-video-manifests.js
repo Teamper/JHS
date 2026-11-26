@@ -107,8 +107,6 @@ export const newVideoFeature = defineFeature({
         if (!controller.start()) return { activeContributions: [] };
         runtime.provideCapability?.("discovery.new-video", plugin);
         runtime.inspect?.("newVideo", plugin);
-        const release = runtime.registerCompatibilityBean?.("NewVideoPlugin", plugin);
-        if (release) runtime.scope.addCleanup(release);
         return { activeContributions: [id], commands: { "new-video.open": () => plugin.openDialog() } };
     },
 });
@@ -143,8 +141,6 @@ export const schedulerFeature = defineFeature({
         });
         runtime.provideCapability?.(id, taskService);
         runtime.inspect?.("scheduler", taskService);
-        const release = runtime.registerCompatibilityBean?.("TaskPlugin", taskService);
-        if (release) runtime.scope.addCleanup(release);
         runtime.scope.addCleanup(() => taskService.dispose());
         const controller = new TaskSchedulerController({
             backgroundWork: deps[SERVICE.backgroundWork],

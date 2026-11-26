@@ -15,9 +15,8 @@ export default defineFeature({
         if (!runtime.enabledContributions.includes(id)) return { activeContributions: [], commands: { "fc2-catalog.ensure": () => null } };
         const unavailable = { "fc2-catalog.ensure": () => null };
         /** @type {Fc2CatalogController | null} */ let controller = null;
-        let unregisterCompatibilityBean = () => {};
         try {
-            const listPage = runtime.resolveCompatibilityBean?.("ListPagePlugin");
+            const listPage = runtime.getCapability?.("list.core");
             controller = new Fc2CatalogController({
                 document, window, site: runtime.site, route: runtime.route, hostAdapter: deps[PORT.host],
                 movie: deps[SERVICE.movie], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications],
@@ -25,19 +24,11 @@ export default defineFeature({
                 processAddedItems: typeof listPage?.processAddedItems === "function" ? (items) => listPage.processAddedItems(items) : undefined,
             });
             if (!(await controller.start())) return { activeContributions: [], commands: unavailable };
-            const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("Fc2By123AvPlugin", controller);
-            let beanReleased = false;
-            unregisterCompatibilityBean = () => {
-                if (beanReleased) return;
-                beanReleased = true;
-                if (typeof releaseCompatibilityBean === "function") releaseCompatibilityBean();
-            };
-            runtime.scope.addCleanup(unregisterCompatibilityBean);
+            runtime.inspect?.(id, controller);
             runtime.provideCapability?.(id, controller);
             return { activeContributions: [id], commands: { "fc2-catalog.ensure": () => controller } };
         } catch (error) {
             controller?.dispose();
-            unregisterCompatibilityBean();
             runtime.diagnostics.recordError({ source: "fc2-catalog-feature", featureId: "fc2-catalog", contributionId: id, message: error instanceof Error ? error.message : String(error) });
             return { activeContributions: [], commands: unavailable };
         }

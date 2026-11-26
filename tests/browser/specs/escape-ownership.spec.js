@@ -13,7 +13,7 @@ test("settings dropdown consumes first Escape and restores focus before parent c
     };
     await injectUserscriptRuntime(page);
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
     await clickSettingsCategory(page.locator('[data-panel="appearance-panel"]'));
     const trigger=page.locator("#base-panel .jhs-select-trigger").first();
@@ -47,7 +47,7 @@ test("real Layer runtimes close only the iframe's top subtitle layer per Escape"
     const frame = await navigation; await frame.waitForLoadState("domcontentloaded");
     await injectUserscriptRuntime(frame, { beforeUserscriptInjection: () => injectRealLayer(frame), settingOverrides: { enableLoadPreviewVideo: "no" } });
     await frame.evaluate(async () => {
-        const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+        const owner = window.__jhsBrowserDiagnostics.features["detail.page-state-actions"];
         owner.subtitle.search = async () => [{ name: "fixture", extension: "srt", url: "https://subtitle.example/test.srt" }];
         owner.subtitle.download = async () => "subtitle";
         await owner.searchXunLeiSubtitle("ABC-123");

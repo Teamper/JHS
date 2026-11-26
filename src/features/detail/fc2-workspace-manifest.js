@@ -56,8 +56,7 @@ export default defineFeature({
         runtime.scope.listen(deps[SERVICE.credential], "credentials.changed", (/** @type {any} */ event) => { if (event.detail?.key === "jhs_appAuthorization") service.refreshWantAccounts(); });
         runtime.scope.addCleanup(() => service.disposeWantContexts());
         runtime.scope.addCleanup(deps[PORT.style].register("jhs-fc2-workspace-feature", FC2_WORKSPACE_STYLES));
-        const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("Fc2Plugin", service);
-        if (typeof releaseCompatibilityBean === "function") runtime.scope.addCleanup(releaseCompatibilityBean);
+        runtime.inspect?.(contributionId, service);
 
         /** @type {Fc2OwnedPageController | null} */ let pageController = null;
         if (runtime.route === "owned-detail") {

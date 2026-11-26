@@ -66,7 +66,7 @@ for (const theme of ["light", "dark"]) {
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page, { hostStyles: true, settingOverrides: { themeMode: theme, enableLoadOtherSite: "no", enableClog: "no" } });
-    await page.evaluate(() => window.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#saveBtn") });
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     const reports = [];

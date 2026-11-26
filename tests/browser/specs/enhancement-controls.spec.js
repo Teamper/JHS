@@ -54,7 +54,7 @@ for (const theme of ["light", "dark"]) test(`independent switches close current 
 test("new capabilities are manageable and configuration is reachable while disabled", async ({page,context}) => {
     await boot(page,context,false,{enhancementsEnabled:false,disabledPlugins:"[]"});
     await expect(page.locator(".jhs-movie-selection,.jhs-movie-choice")).toHaveCount(0);
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("advanced-panel"));
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("advanced-panel"));
     for (const id of ["privacy","movie-selection","personal-ratings","subtitle-workspace","translation-tools","movie-lists","media-library","subtitle115-upload"]) await expect(page.locator(`.pm-toggle[data-plugin="${id}"]`)).toHaveCount(1);
     const privacySwitch = page.locator('.pm-toggle[data-plugin="privacy"]');
     await privacySwitch.focus();
@@ -67,7 +67,7 @@ test("new capabilities are manageable and configuration is reachable while disab
     await page.keyboard.press("Escape");
     await expect(page.locator("#saveBtn")).toHaveCount(0);
     await page.evaluate(()=>document.dispatchEvent(new CustomEvent("click",{bubbles:true})));
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("resources-panel"));
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("resources-panel"));
     await expect(page.locator(".jhs-translation-settings")).toBeVisible();
     await expect(page.locator(".jhs-translation-settings")).not.toContainText("预算");
     await expect(page.getByRole("button",{name:"打开预算协调页",exact:true})).toHaveCount(0);
@@ -96,8 +96,8 @@ test("saved switches synchronize across tabs and rapid changes settle at the lat
 test("full settings keep switch changes in the draft and a failed save leaves runtime enabled", async ({page, context}) => {
     await boot(page, context, true);
     await expect(page.locator(".jhs-translation-entry")).toHaveCount(1);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("advanced-panel"));
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("advanced-panel"));
     const master = page.locator('.pm-toggle[data-plugin="translation-tools"]');
     await expect(page.locator("#saveBtn")).toBeEnabled();
     await expect(master).toBeVisible();
@@ -150,7 +150,7 @@ test("legacy contributions can be disabled and remounted without duplicated cont
 test("imported false strings disable page capabilities while leaving settings available", async ({page,context}) => {
     await boot(page,context,true,{enhancementsEnabled:"no",enableSubtitle115Upload:"no"});
     await expect(page.locator(".jhs-translation-entry,.jhs-personal-rating-entry")).toHaveCount(2);
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("advanced-panel"));
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("advanced-panel"));
     await expect(page.locator('.pm-toggle[data-plugin="subtitle115-upload"]')).not.toBeChecked();
     await expect(page.locator("#saveBtn")).toBeEnabled();
 });
@@ -174,7 +174,7 @@ test("optional legacy actions follow their owner switches and selection depends 
 
 for (const theme of ["light", "dark"]) test(`independent upload preference scrolls with its settings panel ${theme}`, async ({page,context}) => {
     await boot(page,context,false,{themeMode:theme});
-    await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("cloud-panel"));
+    await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("cloud-panel"));
     const dialog=page.locator(".jhs-setting-layout");
     await expect(dialog.locator('[data-jhs-setting="enhancementsEnabled"]')).toBeHidden();
     const upload=dialog.locator('[data-jhs-setting="enableSubtitle115Upload"] input');

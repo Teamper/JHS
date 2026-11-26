@@ -12,7 +12,7 @@ async function boot(page, context, theme = "light", detail = false) {
   } });
 }
 async function openSettings(page, panel) {
-  await page.evaluate(panel => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog(panel), panel);
+  await page.evaluate(panel => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog(panel), panel);
   const dialog = page.locator(".layui-layer").last();
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   return dialog;
@@ -44,7 +44,7 @@ test("eight settings categories retain drafts, enhance all selects and save acro
   await expect(dialog.locator("#highlightedTagNumber")).toHaveValue("3");
   await dialog.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(() => {
-    const values = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot();
+    const values = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot();
     return [values.highlightedTagNumber, values.httpTimeout];
   })).toEqual(["3", 7000]);
 });

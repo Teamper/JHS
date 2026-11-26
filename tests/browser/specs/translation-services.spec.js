@@ -57,7 +57,7 @@ test("obsolete budget records never block translation",async({page,context},info
 
 test("full settings opens the registered translation configuration command",async({page,context},info)=>{
   test.skip(info.project.name!=="desktop-wide","one project owns the stable full settings entry");await boot(page,context,"light","list");
-  await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready","true");
   await clickSettingsCategory(page.locator('.side-menu-item[data-panel="resources-panel"]'));
   await expect(page.locator(".jhs-translation-settings")).toBeVisible();

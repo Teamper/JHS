@@ -7,7 +7,7 @@ async function openFc2DialogFixture(context, page, settingOverrides = {}) {
   await page.goto("https://javdb.com/search_advanced?type=3", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { settingOverrides });
   await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     fc2.resolveMovieIdForRecord = async () => "fixture-movie-id";
     fc2.resolveFc2Source = async () => "fc2";
   });
@@ -23,7 +23,7 @@ test("FC2 list dialog gets the Feature-managed shared magnet hub", async ({ cont
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the list-owned FC2 magnet surface");
   const dialog = await openFc2DialogFixture(context, page);
   const magnetHub = await page.evaluate(() => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["detail.external-magnets"];
     return { available: typeof plugin?.createMagnetHub === "function", managedByFeature: plugin?.managedByFeature };
   });
   expect(magnetHub).toEqual({ available: true, managedByFeature: true });
@@ -44,7 +44,7 @@ test("FC2 dialog offline marking keeps movie identity across surfaces", async ({
   });
   await page.evaluate(async () => {
     await window.stateService.patch("ABC-001", { downloaded: false }, { type: "fixture-seed", record: { carNum: "ABC-001", url: "/v/abc-001", names: "" } });
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     fc2.resolveMovieIdForRecord = async () => null;
     fc2.resolveFc2Source = async () => "fc2";
     const card = document.querySelector(".movie-list .item");
@@ -67,7 +67,7 @@ test("FC2 dialog offline marking keeps movie identity across surfaces", async ({
     root.append(button);
   });
   await page.evaluate(() => {
-    const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+    const offline = window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
     offline.registry = {
       getCandidates: async () => [{ provider: { id: "fixture", name: "Fixture", isEnabled: async () => true, submit: async (_resource, info) => { window.__offlineContext = info; } }, availability: { authState: "ready" } }],
       updateAvailability() {},
@@ -86,7 +86,7 @@ test("FC2 magnet result offline action preserves the dialog movie identity", asy
   const dialog = await openFc2DialogFixture(context, page, { enableLoadReview: "no", enableLoadOtherSite: "no", enableLoadScreenShot: "no" });
   await page.evaluate(async () => {
     await window.stateService.patch("ABC-001", { downloaded: false }, { type: "fixture-seed", record: { carNum: "ABC-001", url: "/v/abc-001", names: "" } });
-    const hub = window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin");
+    const hub = window.__jhsBrowserDiagnostics.features["detail.external-magnets"];
     hub.initializeSources = async () => {
       hub.searchEngines = [{
         id: "fixture", name: "Fixture", targetPage: "#", targetUrl: () => "#",
@@ -94,7 +94,7 @@ test("FC2 magnet result offline action preserves the dialog movie identity", asy
       }];
     };
     hub.applyRuntimeRules = async (results) => results;
-    const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+    const offline = window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
     offline.registry = {
       getCandidates: async () => [{ provider: { id: "fixture", name: "Fixture", isEnabled: async () => true, submit: async (_resource, info) => { window.__hubOfflineContext = info; } }, availability: { authState: "ready" } }],
       updateAvailability() {},
@@ -118,7 +118,7 @@ test("FC2 aggregate magnet search excludes magnets from the underlying page", as
     link.href = "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     link.textContent = "Underlying movie magnet";
     document.body.append(link);
-    const hub = window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin");
+    const hub = window.__jhsBrowserDiagnostics.features["detail.external-magnets"];
     hub.magnet.getBuiltInSources = () => [];
     hub.resourceSettings.getBuiltInSources = async () => [];
     hub.resourceSettings.getMagnetSources = async () => [];
@@ -232,7 +232,7 @@ test("cloud settings dependency status belongs only to the 115 sibling section",
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     const root = page.locator(".layui-layer");
     await expect(root.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     await clickSettingsCategory(root.locator('.side-menu-item[data-panel="cloud-panel"]'));
@@ -252,7 +252,7 @@ test("cloud settings save and reopen retains the canonical provider value", asyn
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   const openCloud = async () => {
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     const root = page.locator(".layui-layer");
     await expect(root.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     await clickSettingsCategory(root.locator('.side-menu-item[data-panel="cloud-panel"]'));
@@ -262,7 +262,7 @@ test("cloud settings save and reopen retains the canonical provider value", asyn
   let dialog = await openCloud();
   await dialog.locator("#offlineProviderMode").selectOption("115", { force: true });
   await dialog.locator("#saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().offlineProviderMode)).toBe("115");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().offlineProviderMode)).toBe("115");
   await page.evaluate(() => window.layer.closeAll());
   dialog = await openCloud();
   await expect(dialog.locator("#offlineProviderMode")).toHaveValue("115");
@@ -273,7 +273,7 @@ test("cloud settings reject invalid numeric input by persisting the normalized f
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { settingOverrides: { oneOneFiveCacheMinutes: 30 } });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   const dialog = page.locator(".layui-layer");
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
@@ -283,7 +283,7 @@ test("cloud settings reject invalid numeric input by persisting the normalized f
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await dialog.locator("#saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(60);
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(60);
   await expect(dialog.locator("#oneOneFiveCacheMinutes")).toHaveValue("60");
 });
 
@@ -292,14 +292,14 @@ test("cloud settings retain the draft and committed value when saving fails", as
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { settingOverrides: { oneOneFiveConcurrency: 4 } });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   const dialog = page.locator(".layui-layer");
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
   const input = dialog.locator("#oneOneFiveConcurrency");
   await expect(input).toHaveValue("4");
   await page.evaluate(() => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     settings.update = () => Promise.reject(new Error("synthetic storage failure"));
   });
   await input.fill("8");
@@ -307,9 +307,9 @@ test("cloud settings retain the draft and committed value when saving fails", as
   await dialog.locator("#saveBtn").click();
   await expect(input).toHaveValue("8");
   await expect(dialog.locator("#settings-draft-status")).toContainText("未保存");
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(4);
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(4);
   await page.evaluate(() => window.layer.closeAll());
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="cloud-panel"]'));
   await expect(dialog.locator("#oneOneFiveConcurrency")).toHaveValue("4");

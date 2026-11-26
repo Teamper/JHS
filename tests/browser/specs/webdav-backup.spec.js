@@ -12,7 +12,7 @@ for (const broken of [false, true]) {
     const snapshot = await page.evaluate(() => window.storageManager.exportData());
     const encrypted = await encryptPortableBackup(JSON.stringify(snapshot));
     await page.evaluate(async ({ encrypted, broken }) => {
-      const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), webdav = plugin.getRuntimeService("webdav");
+      const plugin = window.__jhsBrowserDiagnostics.features["settings.core"], webdav = plugin.getRuntimeService("webdav");
       await webdav.settings.update(draft => { draft.webDavUrl = "https://dav.example.test/dav"; draft.webDavUsername = "fixture-user"; draft.trustedLocalOrigins = ["https://dav.example.test"]; });
       await webdav.saveProfile({ password: "fixture-password" });
       window.__previewProbe = { imports: 0, errors: [], diagnostics: [], downloads: [] };
@@ -68,7 +68,7 @@ test("Chrome settings backup keeps WebDAV's 10-second deadline and records safe 
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { settingOverrides: { httpTimeout: 5_000 } });
   await page.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["settings.core"];
     const webdav = plugin.getRuntimeService("webdav");
     await webdav.settings.update((draft) => {
       draft.webDavUrl = "https://dav.example.test/dav";
@@ -119,7 +119,7 @@ test("WebDAV delete confirmation renders an external filename as text on desktop
   await injectUserscriptRuntime(page);
   const fileName = '<img src="data:," onerror="document.documentElement.dataset.webdavExecuted=String(1)"> <b>backup</b> &.json';
   await page.evaluate((name) => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["settings.core"];
     const webdav = plugin.getRuntimeService("webdav");
     webdav.getProfile = async () => ({ url: "https://dav.example.test/dav", username: "fixture-user", password: "fixture-password" });
     webdav.createClient = () => ({ getBackupList: async () => [{ name, size: 12, createTime: "2026-09-28", fileId: "synthetic-file" }] });

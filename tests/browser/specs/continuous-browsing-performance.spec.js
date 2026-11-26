@@ -38,7 +38,7 @@ for (const [cards, records] of sizes) test(`JavDB continuous browsing ${cards} c
     await expect.poll(() => page.locator('.item[data-jhs-processed="true"]').count()).toBe(cards);
     const before = await raw.send("Performance.getMetrics");
     const measurements = await page.evaluate(async sampleCount => {
-        const manager = window.unsafeWindow.pluginManager, diagnostics = manager.diagnostics;
+        const manager = window.__jhsBrowserDiagnostics, diagnostics = manager.diagnostics;
         diagnostics.startPerformanceCapture?.();
         const times = [], processed = [];
         for (let index = 0; index < sampleCount; index++) {
@@ -66,7 +66,7 @@ test("JavDB no-change sync spans two foreground poll intervals", async ({ contex
     test.setTimeout(180000);
     await fulfillHostFixtures(context); await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page);
     await page.evaluate(async () => {
-        const service = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdavSync");
+        const service = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdavSync");
         service.cancel(); service.schedule = () => {}; service.reschedule = async () => {};
         service.deps.shared.migrate = async () => {};
         service.deps.shared.snapshot = async () => ({ revision: "performance-fixture", profile: { url: "https://fixture.invalid/dav", username: "synthetic", password: "synthetic" } });
@@ -124,7 +124,7 @@ test("JavDB trusted filter clicks report paint latency on a long list", async ({
         window.clickPaintSamples = [];
         window.filterCompleteSamples = [];
         window.filterClickStarted = null;
-        const events = window.unsafeWindow.pluginManager.getBean("ListPagePlugin").getRuntimeService("events");
+        const events = window.__jhsBrowserDiagnostics.features["list.core"].getRuntimeService("events");
         window.releaseFilterMeasurement = events.on("list-visibility-changed", snapshot => {
             const started = window.filterClickStarted;
             if (started === null || !snapshot) return;

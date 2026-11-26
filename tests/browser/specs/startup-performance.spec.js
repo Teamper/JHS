@@ -28,7 +28,7 @@ for (const [label, url] of [
     test.skip(testInfo.project.name !== "desktop-wide", "one deterministic desktop project owns startup timing");
     const cold = process.env.JHS_STARTUP_MODE !== "warm";
     if (!cold) await fulfillHostFixtures(context);
-    const samples = [], phaseSamples = [], featureSamples = [], pluginSamples = [];
+    const samples = [], phaseSamples = [], featureSamples = [];
     // Warm runs seed/migrate once, then keep the persisted state across measured pages.
     for (let index = cold ? 0 : -1; index < SAMPLE_COUNT; index += 1) {
       const sampleContext = cold ? await browser.newContext({ viewport: testInfo.project.use.viewport, hasTouch: testInfo.project.use.hasTouch, isMobile: testInfo.project.use.isMobile, serviceWorkers: "block" }) : context;
@@ -45,12 +45,7 @@ for (const [label, url] of [
       if (index < 0) { await page.close(); continue; }
       samples.push(elapsed);
       phaseSamples.push(await page.evaluate(() => window.__jhsBrowserDiagnostics.bootstrapPhases));
-      featureSamples.push(await page.evaluate(() => window.unsafeWindow.pluginManager?.diagnostics?.exportSnapshot?.().startupTimings ?? {}));
-      pluginSamples.push(await page.evaluate(() => ({
-        ...(window.unsafeWindow.pluginManager?.getStartupReport?.() ?? {}),
-        timings: window.unsafeWindow.pluginManager?.getTimings?.() ?? [],
-        cssTimings: window.unsafeWindow.pluginManager?.getCssTimings?.() ?? [],
-      })));
+      featureSamples.push(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics?.exportSnapshot?.().startupTimings ?? {}));
       for (const phase of REQUIRED_BOOTSTRAP_PHASES) expect(typeof phaseSamples.at(-1)?.[phase], `${label} bootstrap phase ${phase} must be recorded`).toBe("number");
       await page.close();
       if (cold) await sampleContext.close();
@@ -67,19 +62,8 @@ for (const [label, url] of [
     const harnessPhases = Object.keys(phaseSamples[0]?.harness || {}).map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample.harness?.[phase] || 0)).toFixed(1)}ms`).join(", ");
     const bootstrapPhases = Object.keys(phaseSamples[0] || {}).filter((phase) => phase !== "harness").map((phase) => `${phase}=${median(phaseSamples.map((sample) => sample[phase] || 0)).toFixed(1)}ms`).join(", ");
     const featurePhases = Object.keys(featureSamples[0] || {}).map((feature) => `${feature}=${median(featureSamples.map((sample) => sample[feature] || 0)).toFixed(1)}ms`).join(", ");
-    const pluginPhases = ["registrationMs", "cssMs", "immediateMs", "readyMs"].map((phase) => `${phase}=${median(pluginSamples.map((sample) => sample[phase] || 0)).toFixed(1)}ms`).join(", ");
-    const cssPlugins = [...new Set(pluginSamples.flatMap((sample) => sample.cssTimings.map((timing) => timing.name)))].map((name) => {
-      const values = pluginSamples.map((sample) => sample.cssTimings.find((timing) => timing.name === name)?.elapsed || 0);
-      return `${name}=${median(values).toFixed(2)}ms`;
-    }).join(", ");
-    const plugins = [...new Set(pluginSamples.flatMap((sample) => sample.timings.map((timing) => timing.name)))].map((name) => {
-      const timing = pluginSamples.map((sample) => sample.timings.find((item) => item.name === name));
-      const elapsed = median(timing.map((item) => item?.elapsed || 0));
-      const status = timing.find((item) => item?.status)?.status || "missing";
-      return `${name}=${elapsed.toFixed(2)}ms/${status}`;
-    }).join(", ");
     testInfo.annotations.push({ type: "startup-median", description: report });
-    console.log(`${report}; harness phases ${harnessPhases}; bootstrap phases ${bootstrapPhases}; feature phases ${featurePhases}; plugin phases ${pluginPhases}; CSS by plugin ${cssPlugins}; plugin timings ${plugins}`);
+    console.log(`${report}; harness phases ${harnessPhases}; bootstrap phases ${bootstrapPhases}; feature phases ${featurePhases}`);
     expect(baseline, `${label} startup baseline must be positive`).toBeGreaterThan(0);
     expect(actualMedian, `${report}; reviewed maximum ${maximum.toFixed(1)}ms`).toBeLessThanOrEqual(maximum);
   });

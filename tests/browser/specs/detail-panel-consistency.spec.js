@@ -28,23 +28,20 @@ test("list iframe panels share inset, surface and typography without losing cont
   await expect(frame.locator(".jhs-review-item")).toHaveCount(1);
   await expect(frame.locator(".jhs-related-item")).toHaveCount(1);
   const featureOwnership = await frame.evaluate(() => {
-    const manager = window.unsafeWindow.pluginManager;
-    const descriptors = manager.getPluginDescriptors();
+    const manager = window.__jhsBrowserDiagnostics;
+    const descriptors = manager.diagnostics.exportSnapshot().contributionDescriptors;
     return {
-      reviewDescriptors: ["ReviewPlugin", "RelatedPlugin"].every(name => descriptors.some(item => item.name === name)),
-      externalFeatureBeans: ["OtherSitePlugin", "UnifiedOfflinePlugin"].every(name => manager.getBean(name)?.managedByFeature === true),
-      externalSitesController: typeof manager.getBean("OtherSitePlugin")?.loadOtherSite === "function" && typeof manager.getBean("OtherSitePlugin")?.handle === "undefined",
-      externalFeatureTimings: !manager.getTimings().some(item => item.name === "UnifiedOfflinePlugin" || item.name === "OtherSitePlugin"),
-      magnetBeanMissing: manager.getBean("HighlightMagnetPlugin") === undefined,
-      magnetDescriptorPresent: descriptors.some(item => item.name === "HighlightMagnetPlugin"),
-      pluginNames: manager.getPluginNames().filter(name => ["ReviewPlugin", "RelatedPlugin", "HighlightMagnetPlugin", "OtherSitePlugin"].includes(name)),
+      reviewDescriptors: ["detail.reviews", "detail.related"].every(name => descriptors.some(item => item.id === name)),
+      externalFeatureBeans: ["detail.external-sites", "external-bridge.offline"].every(id => manager.features[id]?.managedByFeature === true),
+      externalSitesController: typeof manager.features["detail.external-sites"]?.loadOtherSite === "function" && typeof manager.features["detail.external-sites"]?.handle === "undefined",
+      magnetBeanMissing: manager.features["detail.native-magnets"] === undefined,
+      magnetDescriptorPresent: descriptors.some(item => item.id === "detail.native-magnets"),
     };
   });
-  expect(featureOwnership).toMatchObject({ reviewDescriptors: true, externalFeatureBeans: true, externalSitesController: true, externalFeatureTimings: true, magnetBeanMissing: true, magnetDescriptorPresent: true });
-  expect(featureOwnership.pluginNames).toEqual([]);
+  expect(featureOwnership).toMatchObject({ reviewDescriptors: true, externalFeatureBeans: true, externalSitesController: true, magnetBeanMissing: true, magnetDescriptorPresent: true });
   for(const width of [360,390,768,992,1248,1408]) for(const theme of ["light","dark"]) {
     await page.setViewportSize({width,height:900});
-    await frame.evaluate(theme=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("themeMode",theme),theme);
+    await frame.evaluate(theme=>window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("themeMode",theme),theme);
     const geometry=await frame.evaluate(()=>{
       const selectors=[".message.video-panel","[data-jhs-slot=reviews]","[data-jhs-slot=related]"];
       return selectors.map(selector=>{
@@ -75,7 +72,7 @@ test("list iframe panels share inset, surface and typography without losing cont
   await expect(frame.locator(".jhs-related-title")).toHaveAttribute("href","/lists/fixture");
   expect(await frame.evaluate(()=>window.originalMagnetNodes.every(n=>n.isConnected && n.querySelector(".copy-to-clipboard")))).toBe(true);
   await frame.locator(".jhs-detail-post-resource").screenshot({path:fileURLToPath(new URL("../../../output/playwright/detail-panels-after.png", import.meta.url))});
-  const setSetting = value => frame.evaluate(v => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadOtherSite", v), value);
+  const setSetting = value => frame.evaluate(v => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableLoadOtherSite", v), value);
   await setSetting("yes");
   await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(1);
   expect(await frame.evaluate(() => {
@@ -86,6 +83,6 @@ test("list iframe panels share inset, surface and typography without losing cont
   await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(0);
   await setSetting("yes");
   await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(1);
-  await frame.evaluate(() => window.unsafeWindow.pluginManager.getBean("OtherSitePlugin").stop());
+  await frame.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.external-sites"].stop());
   await expect(frame.locator("[data-jhs-other-site-box]")).toHaveCount(0);
 });

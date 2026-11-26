@@ -8,31 +8,31 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import jqueryFactory from "jquery";
 
 describe("external bridge Feature ownership", () => {
-    it("provides one scoped magnet capability to existing consumers and keeps the old bean alias", async () => {
+    it("provides one scoped magnet capability to existing consumers", async () => {
         const feature = externalBridge;
         const scope = new LifecycleScope("feature:external-bridge");
         const releaseStyle = vi.fn(), releaseBean = vi.fn();
         const capabilities = new Map();
         const style = { register: vi.fn(() => releaseStyle) };
         const diagnostics = { recordError: vi.fn() };
-        let compatibilityBean;
+        let inspectedController;
         const result = await feature.activate({
             [PORT.style]: style, [SERVICE.storage]: {}, [SERVICE.http]: {}, [SERVICE.magnet]: {},
             [SERVICE.resourceSettings]: {}, [SERVICE.clipboard]: {}, [SERVICE.domUi]: { jquery: vi.fn() }, [SERVICE.diagnostics]: diagnostics,
         }, {
             enabledContributions: ["detail.external-magnets"], scope, diagnostics,
             site: "javdb", provideCapability: (id, value) => { capabilities.set(id, value); scope.addCleanup(() => capabilities.delete(id)); },
-            registerCompatibilityBean: vi.fn((name, bean) => {
-                expect(name).toBe("MagnetHubPlugin");
-                compatibilityBean = bean;
-                return releaseBean;
+            inspect: vi.fn((name, bean) => {
+                expect(name).toBe("detail.external-magnets");
+                inspectedController = bean;
+                return scope.addCleanup(releaseBean);
             }),
         });
 
         expect(result.activeContributions).toEqual(["detail.external-magnets"]);
         expect(style.register).toHaveBeenCalledWith("jhs-detail-external-magnets-feature", expect.stringContaining(".magnet-container"));
-        expect(compatibilityBean).toMatchObject({ managedByFeature: true, runtimeStatus: "managed-feature" });
-        expect(capabilities.get("detail.external-magnets")).toBe(compatibilityBean);
+        expect(inspectedController).toMatchObject({ managedByFeature: true, runtimeStatus: "managed-feature" });
+        expect(capabilities.get("detail.external-magnets")).toBe(inspectedController);
         expect(diagnostics.recordError).not.toHaveBeenCalled();
         scope.dispose();
         expect(releaseStyle).toHaveBeenCalledOnce();
@@ -72,7 +72,7 @@ describe("external bridge Feature ownership", () => {
         expect(externalBridge.requires).not.toContain(SERVICE.movie);
     });
 
-    it("owns 123AV catalog and FC2 detail capability while preserving the compatibility alias", async () => {
+    it("owns 123AV catalog and FC2 detail capability while preserving the inspection handle", async () => {
         document.body.innerHTML = '<nav id="navbar-menu-hero"><a href="/tags/fc2">FC2</a></nav><section><div class="container"><h2 class="section-title">FC2</h2><div class="movie-list"><div class="item">host</div></div><nav class="pagination"></nav></div></section>';
         window.history.replaceState({}, "", "/tags/fc2?c10=1&jhs_source=123av");
         const scope = new LifecycleScope("feature:external-bridge");
@@ -84,10 +84,10 @@ describe("external bridge Feature ownership", () => {
             mountExternalFc2Catalog(root) { const container = document.querySelector(".container"); container.querySelector(":scope > .movie-list")?.remove(); container.querySelector(":scope > nav.pagination")?.remove(); container.append(root); },
         };
         const diagnostics = { recordError: vi.fn() };
-        const registerCompatibilityBean = vi.fn((name, controller) => {
-            expect(name).toBe("Fc2By123AvPlugin");
+        const inspect = vi.fn((name, controller) => {
+            expect(name).toBe("detail.fc2-lookup");
             expect(controller).toMatchObject({ managedByFeature: true, runtimeStatus: "managed-feature" });
-            return releaseBean;
+            return scope.addCleanup(releaseBean);
         });
         const result = await fc2Catalog.activate({
             [PORT.host]: host, [PORT.style]: { register: vi.fn() }, [SERVICE.movie]: { catalog: vi.fn(async () => ({ items: [], maxPage: 1 })) },
@@ -95,8 +95,8 @@ describe("external bridge Feature ownership", () => {
             [SERVICE.notifications]: { error: vi.fn() }, [SERVICE.diagnostics]: diagnostics,
         }, {
             enabledContributions: ["detail.fc2-lookup"], scope, diagnostics, site: "javdb", route: "list",
-            provideCapability, resolveCompatibilityBean: (name) => name === "ListPagePlugin" ? listPage : null,
-            registerCompatibilityBean,
+            provideCapability, getCapability: (id) => id === "list.core" ? listPage : null,
+            inspect,
         });
 
         expect(result.activeContributions).toEqual(["detail.fc2-lookup"]);
@@ -117,13 +117,13 @@ describe("external bridge Feature ownership", () => {
         expect(result.commands["fc2-catalog.ensure"]()).toBeNull();
     });
 
-    it("starts the native offline controller and releases its compatibility facade and styles", async () => {
+    it("starts the native offline controller and releases its inspection handle and styles", async () => {
         const feature = externalBridge;
         const scope = new LifecycleScope("feature:external-bridge");
         const releaseStyle = vi.fn(), releaseBean = vi.fn();
         const style = { register: vi.fn(() => releaseStyle) }, diagnostics = { recordError: vi.fn() };
         const settings = { snapshot: () => ({ enable123Offline: true, enable115Offline: false }) };
-        let compatibilityBean;
+        let inspectedController;
         const result = await feature.activate({
             [PORT.style]: style, [PORT.host]: { site: "javdb", locateListItems: () => [] },
             [SERVICE.offline]: { getIntegrationHomeUrl: () => "https://pan.example/", submitWithIntegration: vi.fn() },
@@ -135,11 +135,11 @@ describe("external bridge Feature ownership", () => {
         }, {
             enabledContributions: ["external-bridge.offline"], scope, diagnostics,
             site: "javdb", route: "list",
-            registerCompatibilityBean: vi.fn((name, bean) => { expect(name).toBe("UnifiedOfflinePlugin"); compatibilityBean = bean; return releaseBean; }),
+            inspect: vi.fn((name, bean) => { expect(name).toBe("external-bridge.offline"); inspectedController = bean; return scope.addCleanup(releaseBean); }),
         });
 
         expect(result.activeContributions, JSON.stringify(diagnostics.recordError.mock.calls)).toEqual(["external-bridge.offline"]);
-        expect(compatibilityBean).toMatchObject({ managedByFeature: true, getName: expect.any(Function) });
+        expect(inspectedController).toMatchObject({ managedByFeature: true, getName: expect.any(Function) });
         expect(style.register).toHaveBeenCalledWith("jhs-external-bridge-offline-feature", expect.stringContaining(".jhs-offline-btn"));
         expect(diagnostics.recordError).not.toHaveBeenCalled();
         scope.dispose();

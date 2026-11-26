@@ -11,7 +11,7 @@ for(const phase of ['before','after']) for(const theme of ['light','dark']) test
  const folder=resolve('../../output/ui-root-fix/comparison',info.project.name);await mkdir(folder,{recursive:true});
  const capture=async name=>{await page.screenshot({path:resolve(folder,`${phase}-${name}-${theme}.png`)});};
  await capture('toolbar');
- await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean('SettingPlugin').openSettingDialog('data-panel'));
+ await page.evaluate(()=>window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog('data-panel'));
  const dialog=page.locator('.layui-layer').last();await expect(dialog.locator('#saveBtn')).toHaveAttribute('data-jhs-settings-ready','true');
  for(const [panel,anchor] of [['data','#webdav-panel'],['resources','.jhs-resource-card'],['tasks','#task-panel']]){
   await clickSettingsCategory(dialog.locator(`[data-panel="${panel}-panel"]`));

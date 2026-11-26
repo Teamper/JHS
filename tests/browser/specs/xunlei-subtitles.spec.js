@@ -53,7 +53,7 @@ async function boot(page, context, { theme = "light", mode = "results" } = {}) {
   } finally { page.addScriptTag = addScript; }
   await expect(page.locator("#xunLeiSubtitleBtn")).toBeVisible();
   await page.evaluate(() => {
-    const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+    const owner = window.__jhsBrowserDiagnostics.features["detail.page-state-actions"];
     const service = owner.subtitle || owner.getRuntimeService("subtitle");
     const search = service.search.bind(service);
     service.search = async (...args) => {
@@ -73,7 +73,7 @@ async function boot(page, context, { theme = "light", mode = "results" } = {}) {
 // The normal entry now opens the aggregate workspace. Keep the public legacy method covered.
 async function openLegacySubtitles(page) {
   await page.locator("#xunLeiSubtitleBtn").focus();
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle("ABC-123"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.page-state-actions"].searchXunLeiSubtitle("ABC-123"));
 }
 
 async function expectDownload(page, trigger, extension) {
@@ -142,7 +142,7 @@ for (const action of ["preview", "download"]) test(`closing the subtitle table c
   await openLegacySubtitles(page);
   await expect(page.locator("#xunlei-table-container .subtitle-preview-btn").first()).toBeVisible();
   await page.evaluate(() => {
-    const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+    const owner = window.__jhsBrowserDiagnostics.features["detail.page-state-actions"];
     window.__subtitleDownloads = 0; window.__subtitleTableDestroyed = 0;
     // DomUiService is frozen; replace this controller's port, not its readonly member.
     owner.ui = { ...owner.ui, download: () => { window.__subtitleDownloads++; } };
@@ -167,7 +167,7 @@ test("a direct subtitle download failure reports feedback without an unhandled r
   const errors = await boot(page, context);
   await openLegacySubtitles(page);
   await page.evaluate(() => {
-    window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").subtitle.download = async () => { throw new Error("Fixture direct download failure"); };
+    window.__jhsBrowserDiagnostics.features["detail.page-state-actions"].subtitle.download = async () => { throw new Error("Fixture direct download failure"); };
   });
   await page.locator(".subtitle-download-btn").first().click();
   await expect.poll(() => page.evaluate(() => window.__subtitleMessages)).toContain("字幕下载失败，请重试");
@@ -182,7 +182,7 @@ for (const action of ["preview", "download"]) test(`subtitle ${action} gives foc
   const button = page.locator(`.subtitle-${action}-btn`).first();
   await expect(button).toBeVisible();
   await page.evaluate(() => {
-    const owner = window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin");
+    const owner = window.__jhsBrowserDiagnostics.features["detail.page-state-actions"];
     window.__actionRequests = 0; window.__actionDownloads = 0;
     owner.ui = { ...owner.ui, download: () => { window.__actionDownloads++; } };
     owner.subtitle.download = () => {

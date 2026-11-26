@@ -91,14 +91,14 @@ it("refreshes optional capability consumers and their adapter dependents when co
     runtime.register({...base,id:"list",configurationDependencies:["library.blacklist"],activate:(_deps,{scope})=>{parent();scope.addCleanup(cleanup);return {};}});
     runtime.register({...base,id:"dependent",requiresFeaturesByRoute:{list:["list"]},activate:()=>{child();return {};}});
     await runtime.start();
-    expect(runtime.isCompatibilityBeanAvailable("BlacklistPlugin")).toBe(true);
+    expect(runtime.isContributionEnabled("library", "library.blacklist")).toBe(true);
     await runtime.reconcileConfiguration({disabledPlugins:'["library.blacklist"]'});
-    expect(runtime.isCompatibilityBeanAvailable("BlacklistPlugin")).toBe(false);
+    expect(runtime.isContributionEnabled("library", "library.blacklist")).toBe(false);
     expect(parent).toHaveBeenCalledTimes(2);
     expect(child).toHaveBeenCalledTimes(2);
     expect(cleanup).toHaveBeenCalledOnce();
     await runtime.reconcileConfiguration({disabledPlugins:"[]"});
-    expect(runtime.isCompatibilityBeanAvailable("BlacklistPlugin")).toBe(true);
+    expect(runtime.isContributionEnabled("library", "library.blacklist")).toBe(true);
     expect(parent).toHaveBeenCalledTimes(3);
     expect(child).toHaveBeenCalledTimes(3);
     await runtime.reconcileConfiguration({disabledPlugins:'["list","library","dependent"]'});

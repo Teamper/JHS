@@ -13,7 +13,7 @@ async function openFc2(page, context, theme) {
         settingOverrides: { themeMode: theme, defaultQuickFilterTab: "all", enableLoadReview: "no", enableLoadRelated: "no", enableLoadScreenShot: "no", enableLoadOtherSite: "no" },
     });
     await page.evaluate(() => {
-        const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin"), get = fc2.getRuntimeService.bind(fc2);
+        const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"], get = fc2.getRuntimeService.bind(fc2);
         fc2.resolveMovieIdForRecord = async () => "fixture-id";
         fc2.resolveFc2Source = async () => "fc2";
         fc2.fetchAndRenderNativeMagnets = async () => {};
@@ -100,7 +100,7 @@ for (const theme of ["light", "dark"]) {
         await page.evaluate(() => document.body.style.minHeight = '3000px');
         if (await page.locator('#jhs-fab').isVisible()) {
             await page.locator('#jhs-fab').tap(); await page.locator('#jhs-fab-menu [data-action="setting"]').tap();
-        } else await page.evaluate(() => window.unsafeWindow.pluginManager.getBean('SettingPlugin').openQuickSetting());
+        } else await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openQuickSetting());
         const sheet = page.locator('#jhs-quick-setting-sheet'), scroller = sheet.locator('.simple-setting__scroll');
         await expect(sheet).toHaveAttribute('role', 'dialog'); await expect(sheet.getByRole('button', { name: '关闭快捷设置' })).toBeFocused();
         const background = await page.evaluate(() => document.scrollingElement.scrollTop);
@@ -108,7 +108,7 @@ for (const theme of ["light", "dark"]) {
         await scroller.hover(); await page.mouse.wheel(0, 150);
         await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
         expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBe(background);
-        await page.evaluate(() => window.unsafeWindow.pluginManager.getBean('SettingPlugin').openQuickSetting());
+        await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openQuickSetting());
         await expect(sheet).toHaveCount(1); await expect(page.locator('#jhs-quick-setting-backdrop')).toHaveCount(1);
         await sheet.locator('#moreBtn').focus(); await page.keyboard.press('Tab');
         await expect(sheet.getByRole('button', { name: '关闭快捷设置' })).toBeFocused();
@@ -116,7 +116,7 @@ for (const theme of ["light", "dark"]) {
         await page.keyboard.press('Escape'); await expect(sheet).toHaveCount(0); await expect(page.locator('#jhs-quick-setting-backdrop')).toHaveCount(0);
         await page.mouse.move(10, 300); await page.mouse.wheel(0, 200);
         await expect.poll(() => page.evaluate(() => document.scrollingElement.scrollTop)).toBeGreaterThan(background);
-        await page.evaluate(async () => { const setting = window.unsafeWindow.pluginManager.getBean('SettingPlugin'); await setting.openQuickSetting(); setting.disposeQuickSettings(); });
+        await page.evaluate(async () => { const setting = window.__jhsBrowserDiagnostics.features["settings.core"]; await setting.openQuickSetting(); setting.disposeQuickSettings(); });
         await expect(sheet).toHaveCount(0); await expect(page.locator('#jhs-quick-setting-backdrop')).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.style.overflow)).not.toBe('hidden');
     });

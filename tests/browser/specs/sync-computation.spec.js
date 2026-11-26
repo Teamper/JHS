@@ -6,7 +6,7 @@ for (const blocked of [false, true]) test(`sync computation worker and lifecycle
     await fulfillHostFixtures(context); await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page, { settingOverrides: { autoPage: "no", enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
     const result = await page.evaluate(async blocked => {
-        const runner = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdavSync").deps.computation;
+        const runner = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdavSync").deps.computation;
         const original = window.Worker;
         let created = 0, terminated = 0;
         window.Worker = class extends original {

@@ -266,7 +266,6 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2By123AvSource).toContain('setAttribute("data-jhs-fc2-source", "123av")');
         expect(fc2NavigationSource).toContain("fc2Source || (await this.fc2.resolveFc2Source");
         expect(fc2NavigationSource).toContain("resolveMovieIdForRecord(carNum, aHref)");
-        expect(historySource).toContain('this.resolveLegacy("Fc2Plugin")');
         expect(historySource).toContain("this.getFc2Workspace()");
         expect(stateServiceSource).toContain('"fc2Source"');
         expect(fc2Source).toContain('target.searchParams.set("source", source)');

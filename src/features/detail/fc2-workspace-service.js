@@ -94,8 +94,6 @@ export class Fc2WorkspaceService {
         if (service === undefined) throw new Error(`FC2 workspace service is unavailable: ${name}`);
         return service;
     }
-    get featureMagnetHubAdapter() { return this.readMagnetHub(); }
-    get featureExternalSitesAdapter() { return this.readExternalSites(); }
     /** Refresh existing empty states when the optional search Feature changes. */
     refreshMagnetHubAvailability() {
         if (typeof $ !== "function") return;

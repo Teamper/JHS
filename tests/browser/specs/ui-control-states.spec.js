@@ -11,7 +11,7 @@ async function probe(page) {
         root.style.cssText = "position:fixed;inset:16px;bottom:auto;max-height:calc(100vh - 32px);overflow:auto;padding:16px;background:var(--jhs-surface);z-index:9999999;display:grid;gap:8px";
         root.innerHTML = '<button class="jhs-btn jhs-btn--primary" id="primary">操作</button><button class="jhs-btn jhs-btn--primary" disabled id="disabled">禁用</button><a href="#probe" class="jhs-btn" aria-disabled="true" id="aria-disabled">禁用链接按钮</a><input aria-label="文字" class="jhs-field" id="text"><input type="number" aria-label="数字"><input type="color" aria-label="颜色"><label>复选框<input type="checkbox" id="checkbox"></label><label>单选<input type="radio" id="radio"></label><label>即时设置<input type="checkbox" class="mini-switch" role="switch" id="switch"></label><input type="range" aria-label="范围" min="0" max="100" value="30" id="range"><a href="#probe" id="link">文字链接</a><div role="tablist"><button class="jhs-btn jhs-btn--secondary jhs-tab" role="tab" aria-selected="true" id="selected-tab">来源一</button><button class="jhs-btn jhs-btn--secondary jhs-tab" role="tab" aria-selected="false">来源二</button></div><label id="select-label" for="source">来源选择</label><span id="select-help">选择后提交</span><select class="jhs-select-source" id="source" required aria-describedby="select-help"><option value="a">Alpha</option><option disabled>Beta</option><optgroup disabled label="不可用"><option>Charlie</option></optgroup><option value="d">Delta</option><option value="e">Echo</option></select><button class="jhs-btn" id="after-select">后续操作</button><div class="jhs-code-viewer" id="scroll-probe" style="max-height:20px;overflow:auto"><div style="height:60px">内容</div></div><div class="jhs-skeleton">装饰骨架</div>';
         document.body.append(root);
-        const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+        const plugin = window.__jhsBrowserDiagnostics.features["settings.core"];
         plugin.domUi.enhanceSelect(root);
         window.__controlChanges = 0; window.__disabledActions = 0;
         root.querySelector("#source").addEventListener("change", () => window.__controlChanges++);
@@ -153,7 +153,7 @@ async function verifyRealFeedback(page, context, theme, info, classic = false) {
         });
         if (classic) expect(original.scrollbarWidth).toBeGreaterThan(0);
         await page.evaluate(() => {
-            const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"); window.__footerCalls = 0;
+            const plugin = window.__jhsBrowserDiagnostics.features["settings.core"]; window.__footerCalls = 0;
             window.__lockDialog = plugin.getRuntimeService("dialog").open({ type: 1, scrollbar: false, anim: -1, area: ["300px", "200px"], title: "锁定弹窗", content: '<div class="jhs-code-viewer">测试内容</div>', btn: ["执行", "取消"], yes: () => { window.__footerCalls++; return false; } });
         });
         const dialog = page.locator(".jhs-dialog").last(), footer = dialog.locator(".layui-layer-btn0");
@@ -187,7 +187,7 @@ test("Windows classic scrollbars preserve page position through nested Layer and
 test("native backup file selection cleans temporary inputs and preview cancellation never writes", async ({ page, context }) => {
     await boot(page, context, "dark");
     await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), storage = plugin.getFormDependencies().legacyStorage;
+        const plugin = window.__jhsBrowserDiagnostics.features["settings.core"], storage = plugin.getFormDependencies().legacyStorage;
         window.__pickerWrites = 0;
         storage.importData = storage.createSnapshot = async () => { window.__pickerWrites++; };
         return plugin.openSettingDialog("data-tools-panel");

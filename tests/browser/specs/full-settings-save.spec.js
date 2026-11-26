@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import { boot } from "../harness/ui-root-scenes.js";
 import { clickSettingsCategory } from "../harness/settings-navigation.js";
 
-const snapshot = page => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot());
+const snapshot = page => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot());
 async function open(page, panel) {
-    await page.evaluate(panel => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog(panel), panel);
+    await page.evaluate(panel => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog(panel), panel);
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#saveBtn") });
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     return dialog;
@@ -54,7 +54,7 @@ test("saving keeps edits made during submission, including a return to the origi
     await boot(page, context, "light"); const dialog = await open(page);
     await page.evaluate(() => {
         window.$("#themeMode").val("dark").trigger("change"); window.$("#waitCheckCount").val("7").trigger("input");
-        const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings"), original = settings.update.bind(settings);
+        const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings"), original = settings.update.bind(settings);
         window.__saveCalls = 0;
         settings.update = mutator => { window.__saveCalls++; settings.update = original; return new Promise((resolve, reject) => { window.__finishSave = () => original(mutator).then(resolve, reject); }); };
     });
@@ -76,7 +76,7 @@ test("external updates merge clean fields, preserve dirty fields and resource dr
     await boot(page, context, "light"); const dialog = await open(page);
     await page.evaluate(async () => {
         window.$("#themeMode").val("dark").trigger("change"); window.$("#waitCheckCount").val("7").trigger("input");
-        await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").patch({ themeMode: "auto", waitCheckCount: "9", containerColumns: 6, httpTimeout: 8000, magnetTagRules: JSON.stringify([{ id: "external", name: "外部规则", type: "contains", pattern: "fixture", weight: 1 }]) });
+        await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").patch({ themeMode: "auto", waitCheckCount: "9", containerColumns: 6, httpTimeout: 8000, magnetTagRules: JSON.stringify([{ id: "external", name: "外部规则", type: "contains", pattern: "fixture", weight: 1 }]) });
     });
     await expect(dialog.locator("#themeMode")).toHaveValue("dark"); await expect(dialog.locator("#waitCheckCount")).toHaveValue("7");
     await expect(dialog.locator("#containerColumns")).toHaveValue("6"); await expect(dialog.locator("#httpTimeout")).toHaveValue("8000");
@@ -99,7 +99,7 @@ test("resource JSON and pending keywords save together; partial failure keeps on
     await dialog.locator("#saveBtn").click(); await expect(dialog.locator("#advanced-resource-json")).toHaveAttribute("aria-invalid", "true");
     expect((await snapshot(page)).themeMode).toBe("light");
     await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+        const plugin = window.__jhsBrowserDiagnostics.features["settings.core"];
         window.$("#advanced-resource-json").prop("readonly", false).val(JSON.stringify({ magnetTagRules: [{ id: "json", name: "JSON规则", type: "contains", pattern: "fixture", weight: 1 }] })).trigger("input");
         window.$("#reviewKeywordContainer .keyword-input").val("评论关键词").trigger("input"); window.$("#filterKeywordContainer .keyword-input").val("标题关键词").trigger("input");
         window.__keywordWrites = 0; window.__originalKeywordSave = plugin.legacyStorage.saveTitleFilterKeyword.bind(plugin.legacyStorage);
@@ -110,7 +110,7 @@ test("resource JSON and pending keywords save together; partial failure keeps on
     expect((await snapshot(page)).magnetTagRules).toContain("JSON规则");
     await expect(dialog.locator("#settings-draft-status")).toContainText("1 项未保存");
     await expect(page.locator(".toastify").filter({ hasText: "部分设置保存失败" })).toBeVisible();
-    await page.evaluate(() => { const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"); plugin.legacyStorage.saveTitleFilterKeyword = window.__originalKeywordSave; });
+    await page.evaluate(() => { const plugin = window.__jhsBrowserDiagnostics.features["settings.core"]; plugin.legacyStorage.saveTitleFilterKeyword = window.__originalKeywordSave; });
     await dialog.locator("#saveBtn").click(); await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-dirty-count", "0");
     await page.keyboard.press("Escape"); await expect(dialog).toHaveCount(0);
 });

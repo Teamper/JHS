@@ -56,7 +56,7 @@ test("injected confirmation service cancels once on Escape, close and cancel, an
 
 test("Escape ends the WebDAV authorization save without persisting the profile, password, ordinary draft or origin", async ({ page, context }) => {
   await boot(page, context);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   const settings = page.locator(".layui-layer").filter({ has: page.locator("#saveBtn") });
   await expect(settings.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(settings.locator('[data-panel="browse-panel"]'));
@@ -74,7 +74,7 @@ test("Escape ends the WebDAV authorization save without persisting the profile, 
   await expect(settings.locator("#saveBtn")).not.toHaveAttribute("aria-busy", "true");
   await expect(settings.locator("#webDavPassword")).toHaveValue("synthetic-password");
   expect(await page.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), snapshot = plugin.getRuntimeService("settings").snapshot();
+    const plugin = window.__jhsBrowserDiagnostics.features["settings.core"], snapshot = plugin.getRuntimeService("settings").snapshot();
     return { profile: await plugin.getRuntimeService("webdav").getProfile(), reviewCount: snapshot.reviewCount, origins: snapshot.trustedLocalOrigins ?? [] };
   })).toEqual({ profile: { url: "", username: "", password: "" }, reviewCount: "20", origins: [] });
 });

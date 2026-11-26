@@ -5,7 +5,7 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
 import { clickSettingsCategory } from "../harness/settings-navigation.js";
 
 async function open(page, section = "media-connections-panel") {
-    await page.evaluate(section => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog(section), section);
+    await page.evaluate(section => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog(section), section);
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#saveBtn") });
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     return dialog;
@@ -56,7 +56,7 @@ test("a failed connection group preserves drafts while ordinary preferences save
     const dialog = await open(page);
     await addMedia(dialog);
     await page.evaluate(() => {
-        const service = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("mediaLibrary");
+        const service = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("mediaLibrary");
         window.restoreMediaSave = service.saveConnections.bind(service);
         service.saveConnections = async () => { throw new Error("fixture connection failure"); };
     });
@@ -64,11 +64,11 @@ test("a failed connection group preserves drafts while ordinary preferences save
     await page.evaluate(() => window.$("#containerColumns").val("8").trigger("input").trigger("change"));
     await dialog.locator("#saveBtn").click();
     await expect(dialog.locator("#saveBtn")).not.toHaveAttribute("aria-busy", "true");
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().containerColumns)).toBe(8);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().containerColumns)).toBe(8);
     await expect(dialog.locator("#settings-draft-status")).toContainText("1 项未保存");
     await clickSettingsCategory(dialog.locator('[data-panel="resources-panel"]'));
     await expect(dialog.locator("#media-connections-panel")).toContainText("fixture connection failure");
-    await page.evaluate(() => { window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("mediaLibrary").saveConnections = window.restoreMediaSave; });
+    await page.evaluate(() => { window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("mediaLibrary").saveConnections = window.restoreMediaSave; });
     await dialog.locator("#saveBtn").click();
     await expect(dialog.locator("#saveBtn")).not.toHaveAttribute("aria-busy", "true");
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-dirty-count", "0");
@@ -80,7 +80,7 @@ test("stale revisions keep the draft until an explicit reload choice", async ({ 
     const dialog = await open(page);
     const panel = await addMedia(dialog);
     await page.evaluate(async () => {
-        const service = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("mediaLibrary");
+        const service = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("mediaLibrary");
         await service.saveConnections([{ id: "external", name: "外部配置", type: "jellyfin", address: "https://external.example/", apiKey: "external-secret", userId: "", enabled: false }], null);
     });
     await dialog.locator("#saveBtn").click();
@@ -92,7 +92,7 @@ test("stale revisions keep the draft until an explicit reload choice", async ({ 
     await dialog.locator("#saveBtn").click();
     await expect(dialog.locator("#saveBtn")).not.toHaveAttribute("aria-busy", "true");
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-dirty-count", "0");
-    expect(await page.evaluate(async () => (await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("mediaLibrary").getConfiguration()).connections[0].name)).toBe("家庭媒体库");
+    expect(await page.evaluate(async () => (await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("mediaLibrary").getConfiguration()).connections[0].name)).toBe("家庭媒体库");
 });
 
 test("unreadable connection groups stay read-only while healthy preferences save", async ({ page, context }, info) => {
@@ -158,7 +158,7 @@ test("media errors identify invalid fields and preserve request failure reasons"
     const dialog = await open(page);
     const panel = await addMedia(dialog);
     await page.evaluate(() => {
-        const service = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("mediaLibrary");
+        const service = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("mediaLibrary");
         window.mediaTestCalls = 0;
         service.testConnection = async () => {
             window.mediaTestCalls++;

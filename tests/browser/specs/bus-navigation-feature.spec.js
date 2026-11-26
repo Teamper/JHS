@@ -23,8 +23,7 @@ test.describe("JavBus navigation Feature migration", () => {
     await addJavBusNavbar(page);
     await injectUserscriptRuntime(page, { userscriptPath: devUserscriptPath });
     await expect(page.locator("#search-img-btn")).toHaveText("识图");
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("BusNavBarPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "BusNavBarPlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "identity.javbus-navigation"))).toBe(true);
     await page.evaluate(() => {
       window.imageSearchOpenCount = 0;
       const layer = window.unsafeWindow.layer;
@@ -44,7 +43,7 @@ test.describe("JavBus navigation Feature migration", () => {
     await injectUserscriptRuntime(disabledPage, { disabledPlugins: ["BusNavBarPlugin"], userscriptPath: devUserscriptPath });
     await disabledPage.waitForSelector("#jhs-quick-filter");
     await expect(disabledPage.locator("#search-img-btn")).toHaveCount(0);
-    expect(await disabledPage.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "BusNavBarPlugin"))).toBe(true);
+    expect(await disabledPage.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "identity.javbus-navigation"))).toBe(true);
     await disabledPage.close();
   });
 
@@ -56,8 +55,6 @@ test.describe("JavBus navigation Feature migration", () => {
     await injectUserscriptRuntime(page, { disabledPlugins: ["SearchByImagePlugin"], userscriptPath: devUserscriptPath });
     await page.waitForSelector("#jhs-quick-filter");
     await expect(page.locator("#search-img-btn")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("BusNavBarPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("SearchByImagePlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "SearchByImagePlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "identity.image-search"))).toBe(true);
   });
 });

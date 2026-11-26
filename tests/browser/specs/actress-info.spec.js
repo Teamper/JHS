@@ -16,10 +16,9 @@ test("actress info is feature-owned, keeps its setting behavior, and preserves t
   await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
   await expect(page.locator("#actor-heading + .actress-info")).toHaveCount(1, { timeout: 10000 });
   const enabledRuntime = await page.evaluate(() => ({
-    pluginRegistered: window.unsafeWindow.pluginManager.getPluginNames().includes("ActressInfoPlugin"),
-    descriptorPreserved: window.unsafeWindow.pluginManager.getPluginDescriptors().some(item => item.name === "ActressInfoPlugin"),
+    descriptorPreserved: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(item => item.id === "identity.actress-info"),
   }));
-  expect(enabledRuntime).toEqual({ pluginRegistered: false, descriptorPreserved: true });
+  expect(enabledRuntime).toEqual({ descriptorPreserved: true });
 
   const disabledContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {

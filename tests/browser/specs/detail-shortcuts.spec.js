@@ -15,13 +15,13 @@ async function boot(page, context, url = "https://javdb.com/v/test-id", options 
     await page.waitForFunction(() => !!window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
 }
 async function openFc2(page, carNum = "FC2-100") {
-    await page.evaluate(carNum => window.unsafeWindow.pluginManager.getBean("Fc2Plugin").openFc2Dialog("fixture-id", carNum, "/v/fixture-id", { source: "fc2" }), carNum);
+    await page.evaluate(carNum => window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].openFc2Dialog("fixture-id", carNum, "/v/fixture-id", { source: "fc2" }), carNum);
     const dialog = page.locator(".layui-layer").filter({ has: page.locator(".jhs-fc2-workspace") }).last();
     await expect(dialog.locator("#favoriteBtn")).toHaveAttribute("aria-pressed", "false");
     return page.locator(`[id="${await dialog.getAttribute("id")}"]`);
 }
 async function settings(page, panel = "shortcut-panel") {
-    await page.evaluate(panel => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog(panel), panel);
+    await page.evaluate(panel => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog(panel), panel);
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#saveBtn") });
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     return dialog;
@@ -135,7 +135,7 @@ test.describe("详情鉴定快捷键", () => {
         await boot(page, context, "https://javdb.com/");
         await context.route("https://images.example.test/**", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><rect width="640" height="420" fill="#63768c"/></svg>' }));
         await page.evaluate(() => {
-            const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin"), get = fc2.getRuntimeService.bind(fc2);
+            const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"], get = fc2.getRuntimeService.bind(fc2);
             fc2.fetchAndRenderNativeMagnets = async () => {};
             fc2.configureJavDbWantButton = async () => {};
             fc2.getRuntimeService = name => name === "movie" ? new Proxy(get(name), { get(target, key) { return key === "detail" ? async () => ({ title: "Gallery fixture", carNum: "FC2-100", imageUrls: ["https://images.example.test/1.svg"] }) : target[key]; } }) : get(name);

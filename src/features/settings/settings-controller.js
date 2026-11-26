@@ -32,10 +32,9 @@ export class SettingPlugin {
     /** @param {any} options */
     constructor(options) {
         this.runtimeServices = options.runtimeServices;
-        this.capabilities = options.capabilities;
         this.readTask = options.readTask;
         this.readBlacklist = options.readBlacklist;
-        this.resolveDependency = options.resolveDependency ?? ((name) => this.capabilities[name] ?? null);
+        this.readNewVideo = options.readNewVideo;
         this.jquery = options.jquery;
         this.utils = options.utilities;
         this.notifications = options.notifications;
@@ -104,8 +103,6 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     }
     /** @param {string} name */
     getRuntimeService(name) { return this.runtimeServices[name]; }
-    /** @param {string} name */
-    getOptionalDependency(name) { return this.resolveDependency(name); }
     /** Preserve the legacy selector API through the injected site Host. */
     getSelector() {
         const selectors = this.getRuntimeService("host")?.getListSelectors?.();
@@ -115,8 +112,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     getFormDependencies() {
         const instance = this._settingsDialog;
         return Object.freeze({
-            otherSite: this.readExternalSites?.(), listPage: this.getOptionalDependency("ListPagePlugin"),
-            newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.readBlacklist?.(),
+            otherSite: this.readExternalSites?.(),
+            newVideo: this.readNewVideo?.(), blacklist: this.readBlacklist?.(),
             imageLayout: this.getRuntimeService("busImageLayout"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
             settingsRegistry: this.getRuntimeService("settingsRegistry"),
             webdav: this.getRuntimeService("webdav"),

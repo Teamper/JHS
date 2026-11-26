@@ -157,10 +157,6 @@ export class ListPageCompatibilityService {
         /** @type {import("../../features/list/list-batch-controller.js").ListBatchController | null} */ this.listBatchController = null;
         /** @type {import("../../features/list/list-sort-controller.js").ListSortController | null} */ this.listSortController = null;
     }
-    get featureListHoverPreviewAdapter() { return this.controllers.hoverPreview; }
-    get featureListTagExpansionAdapter() { return this.controllers.tagExpansion; }
-    get featureListNavigationAdapter() { return this.controllers.navigation; }
-    get featureCoverButtonAdapter() { return this.controllers.coverButtons; }
     getName() {
         return "ListPagePlugin";
     }

@@ -35,7 +35,7 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
         profile: { current: () => "compact" }, settings, host,
         state: { getState: vi.fn(async () => null) },
         logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), openDialog: vi.fn() },
-        notifications: { error: vi.fn() }, capabilities: beans,
+        notifications: { error: vi.fn() }, readList: () => beans.ListPagePlugin, readListActions: () => beans.ListPageButtonPlugin, readSettings: () => beans.SettingPlugin, readDetailActions: () => beans.DetailPageButtonPlugin,
         blacklist: { available: () => Boolean(beans.BlacklistPlugin), open: async () => beans.BlacklistPlugin?.openBlacklistDialog?.() },
         openNewVideo, history, newVideoAvailable: () => Boolean(beans.NewVideoPlugin),
         magnetActions: { filterAvailable: () => hasMagnetFilter, hubAvailable: () => Boolean(beans.MagnetHubPlugin) },

@@ -23,7 +23,7 @@ async function openFixture(page, context) {
     await page.addStyleTag({ path: fileURLToPath(new URL("../fixtures/viewer-runtime/viewer-1.11.1.min.css", import.meta.url)) });
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
     await page.evaluate(() => {
-        const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin"), get = fc2.getRuntimeService.bind(fc2);
+        const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"], get = fc2.getRuntimeService.bind(fc2);
         fc2.resolveMovieIdForRecord = async () => "fixture-id";
         fc2.resolveFc2Source = async () => "fc2";
         fc2.fetchAndRenderNativeMagnets = async () => {};

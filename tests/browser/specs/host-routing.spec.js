@@ -4,17 +4,16 @@ import budget from "../../../performance-budget.json" with { type: "json" };
 import { assertNoHorizontalOverflow, fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { installSharedGmFixture } from "../harness/shared-gm.js";
 
-for (const [label, url, legacyPlugin, legacyExecutorExpected] of [
-  ["JavDB", "https://javdb.com/v/test-id", "DetailPagePlugin", false],
-  ["JavBus", "https://www.javbus.com/ABC-123", "BusDetailPagePlugin", false]
+for (const [label, url, nativeContribution] of [
+  ["JavDB", "https://javdb.com/v/test-id", "detail.javdb-native"],
+  ["JavBus", "https://www.javbus.com/ABC-123", "detail.javbus-native"]
 ]) {
   test(`${label} uses the real host origin with local fixtures`, async ({ context, page }) => {
     await fulfillHostFixtures(context);
     await page.goto(url, { waitUntil: "domcontentloaded" });
     // 本用例只验证宿主路由和零请求启动预算；评论默认开启的行为由专门设置/单元回归覆盖。
     await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no", enablePreviewVideo: "no", enableLoadPreviewVideo: "no" } });
-    await expect.poll(() => page.evaluate(({ name, expected }) => Boolean(window.unsafeWindow.pluginManager.getBean(name)) === expected, { name: legacyPlugin, expected: legacyExecutorExpected })).toBe(true);
-    expect(await page.evaluate((name) => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name: descriptor }) => descriptor === name), legacyPlugin)).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions)).toContain(nativeContribution);
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--jhs-accent").trim()), "Bootstrap must inject the core theme tokens").not.toBe("");
     await expect(page.locator("body")).toBeVisible();
     await assertNoHorizontalOverflow(page);
@@ -41,11 +40,9 @@ test("JavBus native page actions are Feature-owned and retain the legacy disable
   await expect.poll(() => page.evaluate(() => window.__copiedText)).toBe("ABC-123");
   await expect(page.locator(".jhs-copy-car-number")).toHaveText("已复制");
   const manager = await page.evaluate(() => ({
-    names: window.unsafeWindow.pluginManager.getPluginNames(),
-    descriptors: window.unsafeWindow.pluginManager.getPluginDescriptors(),
+    descriptors: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors,
   }));
-  expect(manager.names).not.toContain("BusDetailPagePlugin");
-  expect(manager.descriptors).toContainEqual({ name: "BusDetailPagePlugin", disableable: true });
+  expect(manager.descriptors).toContainEqual({ id: "detail.javbus-native", disableable: true });
 
   const disabledPage = await context.newPage();
   await disabledPage.goto("https://www.javbus.com/ABC-123", { waitUntil: "domcontentloaded" });
@@ -86,7 +83,7 @@ test("Detail Feature owns the unified subtitle entry and retains its disable-key
   await injectUserscriptRuntime(page);
   await page.evaluate(() => {
     window.__subtitleOpens = [];
-    window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").openSubtitles = async movie => window.__subtitleOpens.push({ carNum: movie.carNum, active: !movie.scope.disposed, trigger: movie.trigger.id });
+    window.__jhsBrowserDiagnostics.features["detail.page-state-actions"].openSubtitles = async movie => window.__subtitleOpens.push({ carNum: movie.carNum, active: !movie.scope.disposed, trigger: movie.trigger.id });
   });
   await page.locator("#xunLeiSubtitleBtn").click({ modifiers: ["Control"] });
   await expect.poll(() => page.evaluate(() => window.__subtitleOpens)).toEqual([{
@@ -97,7 +94,7 @@ test("Detail Feature owns the unified subtitle entry and retains its disable-key
   await disabledPage.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(disabledPage, { disabledPlugins: ["DetailPageButtonPlugin"] });
   await expect(disabledPage.locator("#xunLeiSubtitleBtn")).toHaveCount(0);
-  await expect.poll(() => disabledPage.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).not.toContain("detail.page-state-actions");
+  await expect.poll(() => disabledPage.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions)).not.toContain("detail.page-state-actions");
   await disabledPage.close();
 });
 
@@ -110,7 +107,7 @@ for (const [label, url] of [
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page);
     await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
-    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true)).toBe(true);
     await expect(page.locator(label === "JavDB" ? ".movie-list .item" : ".masonry .movie-box")).toHaveCount(1);
     if (testInfo.project.name.startsWith("mobile")) {
       await expect(page.locator("#jhs-fab")).toBeVisible();
@@ -126,27 +123,23 @@ test("legacy disabled plugin migrates to one contribution only", async ({ contex
   await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins: ["ReviewPlugin"] });
   const state = await page.evaluate(() => {
-    const manager = window.unsafeWindow.pluginManager;
+    const manager = window.__jhsBrowserDiagnostics;
     return {
-      pluginNames: manager.getPluginNames(),
-      descriptors: manager.getPluginDescriptors(),
+      descriptors: manager.diagnostics.exportSnapshot().contributionDescriptors,
 
 
       activeContributions: manager.diagnostics.exportSnapshot().activeContributions,
 
     };
   });
-  expect(state.pluginNames).not.toContain("ReviewPlugin");
-  expect(state.pluginNames).not.toContain("RelatedPlugin");
 
 
-  expect(state.descriptors).toContainEqual({ name: "ReviewPlugin", disableable: true });
+  expect(state.descriptors).toContainEqual({ id: "detail.reviews", disableable: true });
   expect(state.activeContributions).not.toContain("detail.reviews");
   expect(state.activeContributions).toContain("detail.related");
 
-  expect(state.pluginNames).not.toContain("DetailWorkspacePlugin");
-  const descriptors = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors());
-  expect(descriptors).toContainEqual({ name: "DetailWorkspacePlugin", disableable: true });
+  const descriptors = await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors);
+  expect(descriptors).toContainEqual({ id: "detail.workspace", disableable: true });
 });
 
 test("DetailWorkspacePlugin disable key skips only the native workspace and preserves the host fallback", async ({ context, page }, testInfo) => {
@@ -158,12 +151,10 @@ test("DetailWorkspacePlugin disable key skips only the native workspace and pres
   await expect(page.locator("main .jhs-detail-host-workspace")).toHaveCount(0);
   await expect(page.locator(".tabs + .jhs-detail-btn-row")).toBeVisible();
   const manager = await page.evaluate(() => ({
-    names: window.unsafeWindow.pluginManager.getPluginNames(),
-    descriptors: window.unsafeWindow.pluginManager.getPluginDescriptors(),
-    listCompatibilityOwner: window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true,
+    descriptors: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors,
+    listCompatibilityOwner: window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true,
   }));
-  expect(manager.names).not.toContain("DetailWorkspacePlugin");
-  expect(manager.descriptors).toContainEqual({ name: "DetailWorkspacePlugin", disableable: true });
+  expect(manager.descriptors).toContainEqual({ id: "detail.workspace", disableable: true });
 });
 
 test("the legacy FC2 navigation disable ID stays attached to List Feature", async ({ context, page }, testInfo) => {
@@ -174,13 +165,10 @@ test("the legacy FC2 navigation disable ID stays attached to List Feature", asyn
   await expect(page.locator(".movie-list .item")).toHaveCount(1);
   await expect(page.locator('.movie-list .item[data-jhs-fc2-protected="true"]')).toHaveCount(0);
   const manager = await page.evaluate(() => ({
-    names: window.unsafeWindow.pluginManager.getPluginNames(),
-    descriptors: window.unsafeWindow.pluginManager.getPluginDescriptors(),
-    listCompatibilityOwner: window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true,
+    descriptors: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors,
+    listCompatibilityOwner: window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true,
   }));
-  expect(manager.names).not.toContain("Fc2NavigationPlugin");
-  expect(manager.descriptors).toContainEqual({ name: "Fc2NavigationPlugin", disableable: true });
-  expect(manager.names).not.toContain("ListPagePlugin");
+  expect(manager.descriptors).toContainEqual({ id: "detail.fc2-navigation", disableable: true });
   expect(manager.listCompatibilityOwner).toBe(true);
 });
 
@@ -189,8 +177,7 @@ test("FC2 cards keep dialog navigation and use owned-page anchor fallback", asyn
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/search_advanced?type=3", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames())).not.toContain("Fc2NavigationPlugin");
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors())).toContainEqual({ name: "Fc2NavigationPlugin", disableable: true });
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors)).toContainEqual({ id: "detail.fc2-navigation", disableable: true });
   await expect.poll(() => page.locator(".movie-list .item").getAttribute("data-jhs-fc2-protected")).toBe("true");
   const primary = page.locator('.movie-list .item a[data-jhs-fc2-primary="true"]');
   const href = await primary.getAttribute("href");
@@ -198,7 +185,7 @@ test("FC2 cards keep dialog navigation and use owned-page anchor fallback", asyn
   expect(await primary.getAttribute("data-jhs-fc2-primary")).toBe("true");
   await expect(page.locator(".movie-list .item .tags a").first()).toHaveAttribute("href", "/actors/fixture-actor");
   await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     fc2.resolveMovieIdForRecord = async () => null;
     fc2.resolveFc2Source = async () => "fc2";
     fc2.openFc2Dialog = (...args) => { window.__jhsFc2Navigation = { mode: "dialog", args }; };
@@ -232,16 +219,16 @@ test("Settings opens when optional CoverButton and Blacklist contributions are d
   await expect(page.locator(".movie-list .item")).toHaveCount(1);
   await expect(page.locator(".movie-list .item .jhs-cover-tools")).toHaveCount(0);
   const coverCompatibility = await page.evaluate(() => ({
-    listMounted: window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true,
-    legacyDescriptor: window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "CoverButtonPlugin"),
+    listMounted: window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true,
+    legacyDescriptor: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "detail.cover-state-actions"),
   }));
   expect(coverCompatibility).toEqual({ listMounted: true, legacyDescriptor: true });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="browse-panel"]'));
   await page.locator(".layui-layer #reviewCount").selectOption("30", { force: true });
   await page.locator(".layui-layer #saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().reviewCount)).toBe("30");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().reviewCount)).toBe("30");
   await expect(page.locator(".layui-layer #saveBtn")).not.toHaveAttribute("aria-busy", "true");
 });
 
@@ -250,8 +237,8 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins: ["OtherSitePlugin", "BusImgPlugin", "UnknownLegacyPlugin"], settingOverrides: { enableMediaLibrary: true } });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.recordError({ source: "feature-runtime", featureId: "list", message: "synthetic feature failure" }));
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.recordError({ source: "feature-runtime", featureId: "list", message: "synthetic feature failure" }));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="appearance-panel"]'));
   await expect(page.locator(".layui-layer #base-panel")).toBeVisible();
@@ -272,11 +259,11 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   await expect(page.locator(".layui-layer #pm-total")).toHaveText(String(total));
   await expect(page.locator(".layui-layer #pm-enabled")).toHaveText(String(total));
   await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("0");
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).toContain("detail.external-sites");
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().disabledPlugins)).toContain("detail.external-sites");
   await page.locator(".layui-layer #saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).not.toContain("detail.external-sites");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().disabledPlugins)).not.toContain("detail.external-sites");
   await page.evaluate(() => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     window.__jhsSettingsUpdate = settings.update.bind(settings);
     settings.update = async () => { throw new Error("synthetic disabledPlugins write failure"); };
   });
@@ -286,17 +273,17 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   await expect(page.locator(".layui-layer #pm-total")).toHaveText(String(total));
   await expect(page.locator(".layui-layer #pm-enabled")).toHaveText(String(total - 1));
   await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("1");
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).not.toContain("detail.external-sites");
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().disabledPlugins)).not.toContain("detail.external-sites");
 
   await page.evaluate(() => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["settings.core"];
     plugin.getRuntimeService("settings").update = window.__jhsSettingsUpdate;
     plugin.notifications.ok = () => { throw new Error("synthetic notification failure"); };
   });
   await page.locator(".layui-layer #saveBtn").click();
   await expect(externalSitesToggle).not.toBeChecked();
   await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("1");
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().disabledPlugins)).toContain("detail.external-sites");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().disabledPlugins)).toContain("detail.external-sites");
 });
 
 test("Settings blocks saving until failed hydration is retried successfully", async ({ context, page }, testInfo) => {
@@ -305,17 +292,17 @@ test("Settings blocks saving until failed hydration is retried successfully", as
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(() => {
-    const movie = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("movie");
+    const movie = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("movie");
     window.__jhsOriginalExternalSiteOrigin = movie.externalSiteOrigin.bind(movie);
     movie.externalSiteOrigin = () => { throw new Error("fixture hydration failure"); };
   });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   const save = page.locator(".layui-layer #saveBtn");
   await expect(save).toBeDisabled();
   await expect(save).toHaveAttribute("data-jhs-settings-ready", "false");
   await expect(page.locator(".layui-layer #settings-hydration-status")).toContainText("设置加载失败");
   await page.evaluate(() => {
-    const movie = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("movie");
+    const movie = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("movie");
     movie.externalSiteOrigin = window.__jhsOriginalExternalSiteOrigin;
   });
   await page.getByRole("button", { name: "重试加载" }).click();
@@ -329,10 +316,7 @@ test("list runtime survives disabled optional list contributions", async ({ cont
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   const disabledPlugins = ["Fc2Plugin", "AutoPagePlugin", "CoverButtonPlugin", "ListPageButtonPlugin"];
   await injectUserscriptRuntime(page, { disabledPlugins });
-  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
-  expect(pluginNames).not.toContain("ListPagePlugin");
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true)).toBe(true);
-  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true)).toBe(true);
   await expect(page.locator(".movie-list .item")).toBeVisible();
 });
 
@@ -343,12 +327,10 @@ test("detail state controls survive disabled optional magnet contributions", asy
   const disabledPlugins = ["HighlightMagnetPlugin", "MagnetHubPlugin"];
   await injectUserscriptRuntime(page, { disabledPlugins });
   const runtime = await page.evaluate(() => ({
-    pluginNames: window.unsafeWindow.pluginManager.getPluginNames(),
-    pageActionsAvailable: typeof window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin")?.getPageInfo === "function",
-    magnetHubAvailable: typeof window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin")?.createMagnetHub === "function",
+    pageActionsAvailable: typeof window.__jhsBrowserDiagnostics.features["detail.page-state-actions"]?.getPageInfo === "function",
+    magnetHubAvailable: typeof window.__jhsBrowserDiagnostics.features["detail.external-magnets"]?.createMagnetHub === "function",
   }));
   expect(runtime.pageActionsAvailable).toBe(true);
-  disabledPlugins.forEach((name) => expect(runtime.pluginNames).not.toContain(name));
   expect(runtime.magnetHubAvailable).toBe(false);
   await expect(page.locator(".jhs-detail-btn-row")).toBeVisible();
   await expect(page.locator("#enable-magnets-filter")).toHaveCount(0);
@@ -361,12 +343,10 @@ test("title translation uses native fetch instead of the GM transport", async ({
   await injectUserscriptRuntime(page, { settingOverrides: { translateTitle: "yes" }, nativeTranslation: "即时译文" });
   await expect(page.locator(".translated-title")).toHaveText("即时译文");
   const runtime = await page.evaluate(() => ({
-    names: window.unsafeWindow.pluginManager.getPluginNames(),
-    descriptors: window.unsafeWindow.pluginManager.getPluginDescriptors(),
+    descriptors: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors,
     diagnostics: window.__jhsBrowserDiagnostics,
   }));
-  expect(runtime.names).not.toContain("TranslatePlugin");
-  expect(runtime.descriptors).toContainEqual({ name: "TranslatePlugin", disableable: true });
+  expect(runtime.descriptors).toContainEqual({ id: "external-bridge.translation", disableable: true });
   expect(runtime.diagnostics.nativeTranslationRequests).toBe(1);
   expect(runtime.diagnostics.requests.some((request) => request.url.includes("translate-pa.googleapis.com"))).toBe(false);
 });
@@ -379,11 +359,6 @@ test("JavDB list titles translate through the Translation Feature and roll back 
   const title = page.locator(".movie-list .item .video-title");
   await expect(page.locator(".movie-list .item")).toHaveAttribute("data-jhs-translation-key", "ABC-123");
   await expect(title).toContainText("即时译文");
-  const attached = await page.evaluate(() => {
-    const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
-    return Boolean(list?.featureListTranslationAdapter && typeof list.featureListTranslationAdapter.translateListItems === "function");
-  });
-  expect(attached).toBe(true);
 
   await page.evaluate(() => window.unsafeWindow.settingsService.set("translateTitle", "no"));
   await expect(title).toContainText("JavDB Fixture Movie");
@@ -431,12 +406,10 @@ test("the legacy TranslatePlugin disable ID suppresses native title translation"
   });
   await expect(page.locator(".translated-title")).toHaveCount(0);
   const runtime = await page.evaluate(() => ({
-    names: window.unsafeWindow.pluginManager.getPluginNames(),
-    descriptors: window.unsafeWindow.pluginManager.getPluginDescriptors(),
+    descriptors: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors,
     diagnostics: window.__jhsBrowserDiagnostics,
   }));
-  expect(runtime.names).not.toContain("TranslatePlugin");
-  expect(runtime.descriptors).toContainEqual({ name: "TranslatePlugin", disableable: true });
+  expect(runtime.descriptors).toContainEqual({ id: "external-bridge.translation", disableable: true });
   expect(runtime.diagnostics.nativeTranslationRequests).toBe(0);
 });
 
@@ -467,7 +440,7 @@ test("captured detail ownership survives detached controls, iframe isolation, an
   await injectUserscriptRuntime(detailFrame);
   await detailFrame.evaluate(() => window.settingsService.set("needClosePage", true));
   await detailFrame.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
     const button = document.createElement("button");
     button.className = "jhs-offline-btn";
     button.textContent = "离线";
@@ -490,18 +463,14 @@ test("FC2 core workspace survives disabled optional detail contributions", async
   await injectUserscriptRuntime(page, { disabledPlugins });
   await expect(page.locator(".jhs-fc2-workspace[data-jhs-fc2-mode='page']")).toBeVisible();
   const fc2Ownership = await page.evaluate(() => {
-    const manager = window.unsafeWindow.pluginManager;
-    const fc2 = manager.getBean("Fc2Plugin");
+    const manager = window.__jhsBrowserDiagnostics;
+    const fc2 = manager.features["detail.fc2-owned"];
     return {
-      registered: manager.getPluginNames().includes("Fc2Plugin"),
-      status: manager.getTimings().find(({ name }) => name === "Fc2Plugin")?.status ?? null,
       ownHandleExecutor: Object.hasOwn(Object.getPrototypeOf(fc2), "handle"),
     };
   });
-  expect(fc2Ownership).toEqual({ registered: false, status: null, ownHandleExecutor: false });
-  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
-  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("MagnetHubPlugin"))).toBeUndefined();
+  expect(fc2Ownership).toEqual({ ownHandleExecutor: false });
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.external-magnets"])).toBeUndefined();
   await expect(page.locator('[data-jhs-role="other-sites"]')).toHaveCount(0);
   await expect(page.locator('[data-jhs-role="magnet-hub"]')).toHaveCount(0);
 });

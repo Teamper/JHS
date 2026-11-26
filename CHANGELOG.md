@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+- 实站性能采样入口迁至 `window.jhsDiagnostics`，功能管理按当前站点展示可用功能。
+
 - Android 共享组件支持在弹层应用和取消排序，列表刷新后保留相邻作品位置，并统一播放器的深色控件。
 
 - Android 离线预览增加发现、追新和片库三条可连续操作的流程，并保存作品状态、队列决策与显示偏好。

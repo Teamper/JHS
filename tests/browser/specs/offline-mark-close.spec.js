@@ -31,15 +31,15 @@ for (const [cards, library, filter, suppressBroadcast] of [[40, 1000, "waitCheck
             const root = document.querySelector(".movie-list"); root.replaceChildren(...[...root.children].reverse());
             window.__offlineSubmitCount = 0; window.__markTiming = {};
         });
-        await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").getIndexedItems(["ABC-123"]).length)).toBe(2);
+        await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].getIndexedItems(["ABC-123"]).length)).toBe(2);
         const navigation = page.waitForEvent("framenavigated", { predicate: frame => frame !== page.mainFrame() && frame.url().includes("/v/") });
         await page.locator(".movie-list .item").filter({ hasText: "ABC-123" }).first().locator(".video-title").click();
         const frame = await navigation;
         await injectUserscriptRuntime(frame, { preserveStorage: true });
         await frame.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
-        await page.evaluate(filter => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter(filter), filter);
+        await page.evaluate(filter => window.__jhsBrowserDiagnostics.features["list.core"].setQuickFilter(filter), filter);
         await page.evaluate(async () => {
-            const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+            const list = window.__jhsBrowserDiagnostics.features["list.core"];
             await list.filterContextProvider.get();
             window.__markReads = { rules: 0, historyUi: 0 };
             const keywords = list.getRuntimeService("titleKeywords"), readRules = keywords.getAll.bind(keywords);
@@ -48,7 +48,7 @@ for (const [cards, library, filter, suppressBroadcast] of [[40, 1000, "waitCheck
             state.getActivityLog = (...args) => { window.__markReads.historyUi++; return readHistory(...args); };
         });
         await frame.evaluate(async suppressBroadcast => {
-            const controller = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+            const controller = window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
             controller.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { window.parent.__offlineSubmitCount++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
             const store = window.storageManager.syncState;
             await store.merge([], "fixture-joined", async () => {});

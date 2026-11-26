@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
-import { attachCompatibilityFacade } from "../src/app/compatibility-facade.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 const bootstrap = readFileSync(join(import.meta.dirname, "../src/app/bootstrap.js"), "utf8");
@@ -10,40 +9,6 @@ const logger = readFileSync(join(import.meta.dirname, "../src/core/logger.js"), 
 const appContext = readFileSync(join(import.meta.dirname, "../src/app/create-app-context.js"), "utf8");
 
 describe("bootstrap compatibility P0", () => {
-    it("compatibility facade rejects when clog is missing", () => {
-        expect(() => attachCompatibilityFacade({
-            pluginManager: {}, utils: {}, gmHttp: {}, storageManager: {}, stateService: {}, jhsEventBus: {},
-            show: () => {}, loading: () => {},
-        }, {})).toThrow(/Compatibility facade is missing clog/);
-    });
-
-    it("copies logger runtime values into the target instead of reading globalThis", () => {
-        const clog = { log() {} };
-        const show = { ok() {}, error() {}, info() {} };
-        const loading = () => ({ close() {} });
-        const target = {};
-        attachCompatibilityFacade({ pluginManager: {}, utils: {}, gmHttp: {}, storageManager: {}, stateService: {}, jhsEventBus: {}, clog, show, loading }, target);
-        expect(target.clog).toBe(clog);
-        expect(target.show).toBe(show);
-        expect(target.loading).toBe(loading);
-    });
-
-    it("bootstrap passes logger.clog/show/loading, not globalThis.*", () => {
-        expect(bootstrap).toContain("clog: logger.clog");
-        expect(bootstrap).toContain("show: logger.show");
-        expect(bootstrap).toContain("loading: logger.loading");
-        expect(bootstrap).not.toContain("clog: globalThis.clog");
-        expect(bootstrap).not.toContain("show: globalThis.show");
-        expect(bootstrap).not.toContain("loading: globalThis.loading");
-    });
-
-    it("attaches compatibility before FeatureRuntime.start", () => {
-        const attachIndex = bootstrap.indexOf("attachCompatibilityFacade({");
-        const startIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
-        expect(attachIndex).toBeGreaterThan(-1);
-        expect(startIndex).toBeGreaterThan(attachIndex);
-    });
-
     it("finishes migration and journal recovery before starting Features", () => {
         const prepareIndex = bootstrap.indexOf("await storageMutationCoordinator.runExclusive(async () =>");
         const startIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
@@ -81,7 +46,7 @@ describe("bootstrap compatibility P0", () => {
         expect(appContext).toContain("await settings.refresh()");
     });
 
-    it("exposes clog synchronously before compatibility attach", async () => {
+    it("exposes clog synchronously before feature activation", async () => {
         vi.resetModules();
         const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", { url: "https://javdb.com/" });
         const scope = new LifecycleScope("test-logger-runtime");

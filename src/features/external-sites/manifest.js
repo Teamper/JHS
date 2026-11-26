@@ -13,7 +13,6 @@ export default defineFeature({
         if (!runtime.enabledContributions.includes(contributionId)) return { activeContributions: [] };
         /** @type {import("./other-sites-controller.js").OtherSitesController | null} */ let controller = null;
         let releaseStyle = () => {};
-        let releaseCompatibilityBean = () => {};
         try {
             const { OtherSitesController } = await import("./other-sites-controller.js");
             controller = new OtherSitesController({
@@ -27,13 +26,10 @@ export default defineFeature({
             if (!controller.start()) throw new Error("External sites controller did not start");
             runtime.scope.addCleanup(releaseStyle);
             runtime.scope.addCleanup(() => controller?.dispose());
-            const release = runtime.registerCompatibilityBean?.("OtherSitePlugin", controller);
-            if (typeof release === "function") releaseCompatibilityBean = release;
-            runtime.scope.addCleanup(() => releaseCompatibilityBean());
+            runtime.inspect?.("detail.external-sites", controller);
             runtime.provideCapability?.("detail.external-sites", controller);
             return { activeContributions: [contributionId] };
         } catch (error) {
-            releaseCompatibilityBean();
             controller?.dispose();
             releaseStyle();
             runtime.diagnostics.recordError({ source: "external-sites-feature", featureId: "external-sites", contributionId, message: error instanceof Error ? error.message : String(error) });

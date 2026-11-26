@@ -9,7 +9,7 @@ async function bootOfflineTabs(context, settings = {}) {
     await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page, { beforeUserscriptInjection: injectRealLayer, settingOverrides: { enableLoadReview: "no", enable123Offline: true, enable115Offline: false, ...settings } });
     await page.evaluate(() => {
-      const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+      const offline = window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
       const candidate = { provider: { id: "123", name: "123", isEnabled: async () => true, openUrl: () => "https://yun.123pan.com", submit: async (_resource, _info, options) => {
         options.onMutationDispatch();
         try { return await window.__auditCloudSubmit(); }

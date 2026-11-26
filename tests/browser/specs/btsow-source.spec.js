@@ -32,7 +32,7 @@ async function boot(page, context, { body = results, legacy = false } = {}) {
     }, body),
   });
   await page.evaluate(async () => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     fc2.getRuntimeService("magnet").listNative = async () => [];
     await fc2.fetchAndRenderNativeMagnets(window.jQuery(".jhs-fc2-workspace").data("jhsFc2Context"), "fixture-id");
   });

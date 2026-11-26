@@ -13,7 +13,7 @@ for(const url of ["https://javdb.com/","https://www.javbus.com/"]) {
         const result=await page.evaluate(()=>{
             const card=document.querySelector(".movie-list .item, .masonry > .item, .masonry > .movie-box");
             const button=document.createElement("button"); card.append(button);
-            const info=window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin").getVideoInfo(window.jQuery(button));
+            const info=window.__jhsBrowserDiagnostics.features["external-bridge.offline"].getVideoInfo(window.jQuery(button));
             return {carNum:info.carNum,surface:info.surface};
         });
         expect(result).toMatchObject({carNum:"ABC-123",surface:"list-item"});
@@ -41,7 +41,7 @@ for (const providerId of ["123","115"]) for (const surface of ["javdb-detail","j
             await target.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
         }
         await target.evaluate(id=>{
-            const plugin=window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+            const plugin=window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
             window.offlineContextSubmits=[];
             window.offlineContextHistory=[];
             plugin.registry={getCandidates:async()=>[{provider:{id,name:id,isEnabled:async()=>true,submit:async(resource,info)=>window.offlineContextSubmits.push({resource,info})},availability:{authState:"ready"}}],updateAvailability(){}};
@@ -69,7 +69,7 @@ test("115 authentication failure offers a safe login link only while enabled", a
     } });
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
     await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+        const plugin = window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
         plugin.offline.submitWithIntegration = async () => { throw Object.assign(new Error("115 未登录"), { code: "AUTH_REQUIRED" }); };
     });
     const button = page.locator(".jhs-offline-native").first();

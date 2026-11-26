@@ -39,7 +39,7 @@ async function nativePlayer(frame) {
     HTMLMediaElement.prototype.load = function () {};
     Object.defineProperty(HTMLMediaElement.prototype, "readyState", { configurable:true, get() { return 4; } });
     Object.defineProperty(HTMLMediaElement.prototype, "paused", { configurable:true, get() { return this.dataset.auditPlaying !== "true"; } });
-    const plugin = window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["detail.javdb-preview"];
     window.auditPlugin = plugin;
     plugin.getDmmPreview = async () => ({ sources: { "720": "https://example.invalid/test.mp4" }, error: null });
     let trigger = document.querySelector(".preview-video-container");
@@ -59,11 +59,10 @@ async function nativePlayer(frame) {
 test("JavDB native preview is Feature-managed and retains its live master switch", async ({ page, context }) => {
   const frame = await boot(page, context);
   const pluginState = await frame.evaluate(() => ({
-    managedByFeature: window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")?.managedByFeature,
-    runtimeStatus: window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")?.runtimeStatus,
-    registeredLegacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("PreviewVideoPlugin"),
+    managedByFeature: window.__jhsBrowserDiagnostics.features["detail.javdb-preview"]?.managedByFeature,
+    runtimeStatus: window.__jhsBrowserDiagnostics.features["detail.javdb-preview"]?.runtimeStatus,
   }));
-  expect(pluginState).toEqual({ managedByFeature: true, runtimeStatus: "managed-feature", registeredLegacyExecutor: false });
+  expect(pluginState).toEqual({ managedByFeature: true, runtimeStatus: "managed-feature", });
   const trigger = frame.locator(".preview-video-container").first();
   await expect(trigger).not.toHaveClass(/jhs-native-preview-hidden/);
   await frame.evaluate(() => window.settingsService.set("enablePreviewVideo", "no"));
@@ -75,11 +74,10 @@ test("JavDB native preview is Feature-managed and retains its live master switch
 test("legacy PreviewVideoPlugin disable ID suppresses the native controller and compatibility bean", async ({ page, context }) => {
   const frame = await boot(page, context, { disabledPlugins: ["PreviewVideoPlugin"] });
   const state = await frame.evaluate(() => ({
-    legacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("PreviewVideoPlugin"),
-    compatibilityBean: Boolean(window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")),
+    compatibilityBean: Boolean(window.__jhsBrowserDiagnostics.features["detail.javdb-preview"]),
     dmmTriggers: document.querySelectorAll("[data-jhs-dmm-trigger]").length,
   }));
-  expect(state).toEqual({ legacyExecutor: false, compatibilityBean: false, dmmTriggers: 0 });
+  expect(state).toEqual({ compatibilityBean: false, dmmTriggers: 0 });
 });
 
 test("open detail iframe shrinks with its viewport and stays usable", async ({ page, context }) => {
@@ -136,7 +134,7 @@ test("failed DMM-only preview leaves no blocking layer shade", async ({ page, co
   };
   try { await boot(page, context); } finally { page.addScriptTag = addScript; }
   await page.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["detail.javdb-preview"];
     plugin.getDmmPreview = async () => ({ sources: { "720": "https://example.invalid/unavailable.mp4" }, error: null });
     HTMLMediaElement.prototype.load = function () {
       if (this.id === "jhs-preview-video") setTimeout(() => this.dispatchEvent(new Event("error")), 0);
@@ -200,7 +198,7 @@ test("preview favorite control must reflect the saved favorite state", async ({ 
   await page.evaluate(async () => {
     await window.auditPlugin.handleVideo();
     await window.stateService.patch("ABC-123", { favorite: true }, { type: "audit", record: { carNum: "ABC-123" } });
-    await window.unsafeWindow.pluginManager.getBean("DetailPageButtonPlugin").showStatus("ABC-123");
+    await window.__jhsBrowserDiagnostics.features["detail.page-state-actions"].showStatus("ABC-123");
   });
   await expect(page.locator("#favoriteBtn")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#video-favoriteBtn")).toHaveAttribute("aria-pressed", "true");
@@ -211,7 +209,7 @@ test("two rapid offline clicks during availability checks must submit only once"
   await page.evaluate(() => {
     document.body.insertAdjacentHTML("beforeend", '<button id="audit-offline" class="jhs-offline-btn" data-resource="magnet:?xt=urn:btih:audit">离线</button>');
     window.jQuery("#audit-offline").data("jhsMovieContext", { carNum: "ABC-123", surface: "native-detail" });
-    window.auditOffline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+    window.auditOffline = window.__jhsBrowserDiagnostics.features["external-bridge.offline"];
     window.auditPendingAvailability = []; window.auditSubmits = 0;
     window.auditCandidate = { provider: { id: "123", name: "123", isEnabled: async () => true, submit: async (_resource, _info, options) => { options.onMutationDispatch(); window.auditSubmits++; } }, availability: { authState: "ready" } };
     window.auditOffline.registry = { getCandidates: () => new Promise(resolve => window.auditPendingAvailability.push(resolve)), updateAvailability() {} };
@@ -226,7 +224,7 @@ test("two rapid offline clicks during availability checks must submit only once"
 test("offline remote success followed by history failure must not be recorded as remote failure", async ({ page, context }) => {
   await boot(page, context, { realLayer: true });
   await page.evaluate(async () => {
-    const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), button = window.jQuery('<button>离线</button>').appendTo(document.body);
+    const offline = window.__jhsBrowserDiagnostics.features["external-bridge.offline"], button = window.jQuery('<button>离线</button>').appendTo(document.body);
     let calls = 0; const history = [], errors = [], successes = [];
     window.show.error = message => errors.push(String(message));
     window.show.ok = message => successes.push(String(message));
@@ -255,7 +253,7 @@ test("offline remote success followed by history failure must not be recorded as
 test("offline remote success survives a throwing local-history warning", async ({ page, context }) => {
   await boot(page, context, { realLayer: true });
   await page.evaluate(async () => {
-    const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), button = window.jQuery('<button>离线</button>').appendTo(document.body);
+    const offline = window.__jhsBrowserDiagnostics.features["external-bridge.offline"], button = window.jQuery('<button>离线</button>').appendTo(document.body);
     let submissions = 0;
     const history = [];
     window.show.error = () => { throw new Error("toast unavailable"); };
@@ -280,7 +278,7 @@ test("offline remote success survives a throwing local-history warning", async (
 test("mark downloaded with automatic close disabled must not report a close failure", async ({ page, context }) => {
   await boot(page, context);
   const result = await page.evaluate(async () => {
-    const offline = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin"), messages = [];
+    const offline = window.__jhsBrowserDiagnostics.features["external-bridge.offline"], messages = [];
     window.show.error = message => messages.push(String(message));
     await offline.markDownloadedAndClose({ carNum: "ABC-123" }, { root: document, layerIndex: null });
     return { messages, downloaded: (await offline.getRuntimeService("state").getState("ABC-123")).stateFlags.downloaded };

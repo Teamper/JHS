@@ -6,7 +6,7 @@ test("List Feature owns JavDB card-state badges and preserves the legacy page su
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await expect.poll(() => page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.cardStatePresenter))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features["list.core"]?.cardStatePresenter))).toBe(true);
   await expect(page.locator("#jhs-list-card-state-feature")).toHaveCount(1);
   await page.evaluate(async () => {
     const item = document.querySelector(".movie-list .item");
@@ -18,7 +18,7 @@ test("List Feature owns JavDB card-state badges and preserves the legacy page su
 
   await expect(page.locator(".movie-list .item .tags .jhs-status-tags .status-tag")).toHaveText(["已收藏"]);
   await expect.poll(() => page.evaluate(() => {
-    const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+    const listPage = window.__jhsBrowserDiagnostics.features["list.core"];
     const summary = listPage.getCurrentPageSummary();
     return { nativePresenter: Boolean(listPage.cardStatePresenter), favorite: summary.favorite, total: summary.total };
   })).toEqual({ nativePresenter: true, favorite: 1, total: 1 });

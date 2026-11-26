@@ -12,7 +12,7 @@ import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("Settings system Feature UI ownership", () => {
-    it("registers the compatibility dialog through the Feature command and releases its owner", async () => {
+    it("registers the settings dialog through the Feature command and releases its owner", async () => {
         const openSettingDialog = vi.fn(async (panel) => panel || "backup-panel");
         const commands = new CommandRegistry();
         const runtime = new FeatureRuntime({
@@ -40,7 +40,7 @@ describe("Settings system Feature UI ownership", () => {
         expect(() => openSettingsUi()).toThrow("Settings UI owner is not ready");
     });
 
-    it("keeps Settings command activation usable without a site compatibility bean", async () => {
+    it("keeps Settings command activation usable without a settings entry", async () => {
         const commands = new CommandRegistry();
         const runtime = new FeatureRuntime({
             container: new DependencyContainer()
@@ -52,7 +52,6 @@ describe("Settings system Feature UI ownership", () => {
             site: "unknown",
             route: "other",
         });
-        runtime.setCompatibilityBeanResolver(() => undefined);
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings"));
         commands.setActivator((id) => runtime.activate(id));
 
@@ -96,17 +95,11 @@ describe("Settings system Feature UI ownership", () => {
         vi.spyOn(SettingPlugin.prototype, "disposeQuickSettings").mockImplementation(closeQuickSettings);
         vi.spyOn(SettingPlugin.prototype, "activateFeatureSurface").mockImplementation(activateFeatureSurface);
         vi.spyOn(SettingPlugin.prototype, "initEntryCss").mockResolvedValue("<style>.settings-test{color:red}</style>");
-        let controller;
-        runtime.setCompatibilityBeanResolver(name => name === "SettingPlugin" ? controller : undefined);
-        runtime.setCompatibilityBeanRegistrar((name, value) => {
-            expect(name).toBe("SettingPlugin");
-            controller = value;
-            return () => { controller = undefined; };
-        });
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings-entry"));
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings"));
 
         await runtime.start();
+        const controller = runtime.capabilities.get("settings.core");
         expect(controller).toBeInstanceOf(SettingPlugin);
         expect(controller.getRuntimeService("settings")).toEqual({});
         expect(controller.getRuntimeService("settingsRegistry")).toEqual({});
@@ -120,7 +113,7 @@ describe("Settings system Feature UI ownership", () => {
 
         (await runtime.activate("settings")).dispose();
         (await runtime.activate("settings-entry")).dispose();
-        expect(controller).toBeUndefined();
+        expect(runtime.capabilities.has("settings.core")).toBe(false);
         expect(releaseStyle).toHaveBeenCalledOnce();
         dom.window.close();
     });

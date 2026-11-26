@@ -7,7 +7,7 @@ test.beforeEach(({}, info) => test.skip(!["desktop-wide", "mobile"].includes(inf
 
 const fc2Url = "https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2";
 const screenshotSettings = {enableLoadScreenShot:"yes",enableLoadPreviewVideo:"no",enableLoadReview:"no",enableLoadRelatedList:"no",enableLoadOtherSite:"no",needClosePage:"no"};
-const setScreenshotSettings = (page, patch) => page.evaluate(patch => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").patch(patch), patch);
+const setScreenshotSettings = (page, patch) => page.evaluate(patch => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").patch(patch), patch);
 
 for (const theme of ["light", "dark"]) test(`FC2 image failure retries fresh HTML and retains keyboard focus ${theme}`, async ({page,context}) => {
   await fulfillHostFixtures(context);

@@ -12,7 +12,7 @@ test("External FC2 JavDB want login retries without the TOP250 contribution", as
   await expect(page.locator('[data-jhs-action="javdb-want"]')).toBeEnabled();
 
   await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     const account = fc2.getRuntimeService("account");
     const credential = fc2.getRuntimeService("credential");
     window.__fc2WantProbe = { loginCount: 0, credentialKeys: [], submitUrls: [], token: "" };
@@ -51,7 +51,6 @@ test("External FC2 JavDB want login retries without the TOP250 contribution", as
     submitUrls: ["https://jdforrepam.com/api/v1/movies/fixture-id/reviews"],
     token: "synthetic-javdb-token",
   });
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("TOP250Plugin"))).toBe(false);
 });
 
 test("FC2 JavDB want remains committed after cache and success-notice failures", async ({ context, page }, testInfo) => {
@@ -64,7 +63,7 @@ test("FC2 JavDB want remains committed after cache and success-notice failures",
 
   await page.evaluate(() => {
     window.__fc2PostCommitProbe = { submissions: 0, cacheFailures: 0 };
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     const credential = fc2.getRuntimeService("credential");
     credential.get = async () => "synthetic-javdb-token";
     credential.readEntry = async () => { const value = await credential.get(); return { exists: !!value, value, revision: value ? "fixture-saved-account" : null }; };
@@ -102,7 +101,7 @@ test("FC2 JavDB login continues after its success notice fails", async ({ contex
   await expect(button).toBeEnabled();
 
   await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     const account = fc2.getRuntimeService("account");
     const credential = fc2.getRuntimeService("credential");
     window.__fc2LoginPostCommitProbe = { credentialWrites: 0, submissions: 0, token: "" };

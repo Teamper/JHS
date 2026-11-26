@@ -32,7 +32,6 @@ export class ListActionsController {
         this.started = false;
         this.disposed = false;
         this.managedByFeature = true;
-        this.compatibilityRelease = null;
         this.sortSelectionRevision = 0;
         /** @type {Set<any>} */
         this.activeLoadings = new Set();
@@ -67,8 +66,6 @@ export class ListActionsController {
             if (!element.querySelector("#top-right-box") && !element.children.length) element.remove();
         });
         for (const handle of [...this.activeLoadings]) this.closeLoading(handle);
-        this.compatibilityRelease?.();
-        this.compatibilityRelease = null;
         this.sortController = null;
         this.started = false;
         if (!this.scope.disposed) this.scope.dispose();
@@ -81,9 +78,6 @@ export class ListActionsController {
             message: `${message}: ${error instanceof Error ? error.message : String(error)}`,
         });
     }
-
-    /** @param {() => void} release */
-    setCompatibilityRelease(release) { this.compatibilityRelease = release; }
 
     beginLoading() {
         const handle = this.ui.loading();

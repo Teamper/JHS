@@ -41,7 +41,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no", defaultQuickFilterTab: "all" } });
 
     const ownership = await page.evaluate(() => {
-      const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+      const list = window.__jhsBrowserDiagnostics.features["list.core"];
       return {
         featureRunner: typeof list?.listBatchController?.run,
         button: Boolean(document.querySelector("#filterAllVideo")),
@@ -125,8 +125,8 @@ test.describe("JavDB list actions Feature lifecycle", () => {
         remainingBreaks: card?.querySelectorAll("br").length,
         preservedItemTag: card?.querySelector(".item-tag")?.textContent,
         preservedDates: [...(card?.querySelectorAll("date") ?? [])].map((node) => node.textContent),
-        listFeatureActive: window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeFeatures.includes("list"),
-        navigationAdapterActive: Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.featureListNavigationAdapter),
+        listFeatureActive: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeFeatures.includes("list"),
+        navigationAdapterActive: Boolean(window.__jhsBrowserDiagnostics.features["list.core"]?.controllers.navigation),
       };
     });
     expect(initial).toEqual({
@@ -201,8 +201,8 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     const input = page.locator("#jumpPageInput");
     await expect(input).toHaveValue("3");
     const ownership = await page.evaluate(() => ({
-      featureController: Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin").listView),
-      legacyExecutorMethod: typeof window.unsafeWindow.pluginManager.getBean("ListPagePlugin").addJumpPageControl,
+      featureController: Boolean(window.__jhsBrowserDiagnostics.features["list.core"].listView),
+      legacyExecutorMethod: typeof window.__jhsBrowserDiagnostics.features["list.core"].addJumpPageControl,
     }));
     expect(ownership).toEqual({ featureController: true, legacyExecutorMethod: "undefined" });
     await input.fill("7");
@@ -241,7 +241,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     expect(playback).toEqual({ eventPrevented: true, plays: 1, pauses: 0 });
 
     await page.evaluate(async () => {
-      await window.unsafeWindow.pluginManager.getBean("ListPagePlugin").bindClick();
+      await window.__jhsBrowserDiagnostics.features["list.core"].bindClick();
     });
     const afterLegacyCompatibilityCall = await video.evaluate(async (element) => {
       const video = /** @type {HTMLVideoElement} */ (element);
@@ -278,11 +278,10 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     });
 
     const ownership = await page.evaluate(() => ({
-      legacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("CoverButtonPlugin"),
-      compatibility: typeof window.unsafeWindow.pluginManager.getBean("CoverButtonPlugin")?.enableSvgBtn === "function",
-      contribution: window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "CoverButtonPlugin"),
+      compatibility: typeof window.__jhsBrowserDiagnostics.features["detail.cover-state-actions"]?.enableSvgBtn === "function",
+      contribution: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "detail.cover-state-actions"),
     }));
-    expect(ownership).toEqual({ legacyExecutor: false, compatibility: true, contribution: true });
+    expect(ownership).toEqual({ compatibility: true, contribution: true });
     await expect(page.locator(".movie-list > .item .jhs-cover-tools")).toHaveCount(1);
     const handle = page.locator(".movie-list > .item .handleSvg");
     await expect(handle).toHaveCSS("display", "block");
@@ -302,12 +301,12 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     });
     await page.waitForTimeout(250);
     const dynamicEvidence = await page.evaluate(() => {
-      const plugin = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+      const plugin = window.__jhsBrowserDiagnostics.features["list.core"];
       const item = document.querySelector('.movie-list > .item a[href="/v/def-456"]')?.closest(".item");
       return {
         cardProcessed: item?.dataset.jhsProcessed === "true",
         coverTools: item?.querySelectorAll(".jhs-cover-tools").length ?? 0,
-        adapterAttached: Boolean(plugin?.featureCoverButtonAdapter),
+        adapterAttached: Boolean(plugin?.controllers.coverButtons),
         addedItemsFeatureAttached: typeof plugin?.controllers.items?.processAddedItems === "function",
       };
     });
@@ -362,15 +361,14 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     await expect(page.locator("#favoriteAllVideo")).toHaveCount(1);
     await expect(page.locator(".jhs-sort-control")).toHaveCount(1);
     const ownership = await page.evaluate(() => ({
-      legacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("ListPageButtonPlugin"),
-      compatibility: typeof window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin")?.openWaitCheck === "function",
-      managedByFeature: window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin")?.managedByFeature === true,
+      compatibility: typeof window.__jhsBrowserDiagnostics.features["list.actions"]?.openWaitCheck === "function",
+      managedByFeature: window.__jhsBrowserDiagnostics.features["list.actions"]?.managedByFeature === true,
     }));
-    expect(ownership).toEqual({ legacyExecutor: false, compatibility: true, managedByFeature: true });
+    expect(ownership).toEqual({ compatibility: true, managedByFeature: true });
 
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin").dispose());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.actions"].dispose());
     await expect(page.locator("#waitCheckBtn, #favoriteAllVideo, #sort-toggle-btn")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin"))).toBeUndefined();
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.actions"])).toBeUndefined();
   });
 
   test("preserves the old ListPageButtonPlugin disable setting while List core stays mounted", async ({ context, page }, testInfo) => {
@@ -381,10 +379,8 @@ test.describe("JavDB list actions Feature lifecycle", () => {
 
     await expect(page.locator(".movie-list .item")).toHaveCount(1);
     await expect(page.locator(".jhs-list-btn-row")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true)).toBe(true);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPagePlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPageButtonPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "ListPageButtonPlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true)).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "list.actions"))).toBe(true);
   });
 
   test("List core owns right-click blocking once even when list actions are disabled", async ({ context, page }, testInfo) => {
@@ -419,11 +415,10 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     const result = await page.evaluate(() => ({
       confirmations: window.__listBlockConfirms,
       names: window.__listBlockConfirms.length,
-      listCore: window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true,
-      listActions: window.unsafeWindow.pluginManager.getPluginNames().includes("ListPageButtonPlugin"),
+      listCore: window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true,
     }));
     expect(result).toEqual({
-      confirmations: ["屏蔽「ABC-123」？"], names: 1, listCore: true, listActions: false,
+      confirmations: ["屏蔽「ABC-123」？"], names: 1, listCore: true,
     });
     await expect(page.locator(".movie-list > .item .jhs-status-tags .status-tag")).toHaveText(["已屏蔽"]);
   });
@@ -438,7 +433,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     });
 
     await expect(page.locator(".image-hover-preview")).toHaveCount(1);
-    expect(await page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.featureListHoverPreviewAdapter))).toBe(true);
+    expect(await page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features["list.core"]?.controllers.hoverPreview))).toBe(true);
     await page.evaluate(async () => window.settingsService.set("hoverBigImg", "no"));
     await expect(page.locator(".image-hover-preview")).toHaveCount(0);
     expect(await page.evaluate(() => window.imageHoverPreviewObj ?? null)).toBeNull();
@@ -468,10 +463,10 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     await injectUserscriptRuntime(page, { userscriptPath: devUserscriptPath });
 
     await expect(page.locator(".actor-tags .content")).not.toHaveClass(/collapse/);
-    expect(await page.evaluate(() => Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.featureListTagExpansionAdapter))).toBe(true);
+    expect(await page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features["list.core"]?.controllers.tagExpansion))).toBe(true);
     await page.locator(".actor-tags .tag-expand").click();
     await expect(page.locator(".actor-tags .content")).toHaveClass(/collapse/);
-    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").getRuntimeService("settings").snapshot().tagExpanded)).toBe(false);
+    await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].getRuntimeService("settings").snapshot().tagExpanded)).toBe(false);
     expect(await page.evaluate(() => localStorage.getItem("jhs_tag_expand"))).toBe("true");
   });
 

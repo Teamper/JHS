@@ -185,7 +185,6 @@ test("new video feature owns its style and keeps the legacy disable ID",async({p
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page,{settingOverrides:{enableCheckBlacklist:"no",enableCheckFavoriteActress:"no",enableCheckNewVideo:"no"}});
     await expect(page.locator("#feature-new-video-workspace")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("NewVideoPlugin"))).toBe(false);
     await page.locator("#newVideoBtn").click();
     await expect(page.locator(".newVideoToolBox")).toBeVisible();
     await expect(page.locator("#feature-new-video-workspace")).toHaveCount(1);
@@ -201,7 +200,6 @@ test("new video feature owns its style and keeps the legacy disable ID",async({p
         await expect(disabledPage.locator("#newVideoBtn")).toHaveCount(0);
         await expect(disabledPage.locator("#feature-new-video-workspace")).toHaveCount(0);
         await expect(disabledPage.locator("#jhs-quick-filter")).toBeVisible();
-        expect(await disabledPage.evaluate(()=>window.unsafeWindow.pluginManager.getPluginNames().includes("NewVideoPlugin"))).toBe(false);
     } finally {
         await disabledContext.close();
     }
@@ -297,7 +295,7 @@ test("scheduled actor scans run and persist through the injected Discovery contr
     await injectUserscriptRuntime(page, { settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
     await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureNewVideoScanController))).toBe(true);
     const result = await page.evaluate(async () => {
-        const manager = window.unsafeWindow.pluginManager;
+        const manager = window.__jhsBrowserDiagnostics;
         const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const controller = task.featureNewVideoScanController;
         if (!controller) throw new Error("Discovery scan controller unavailable");
@@ -374,7 +372,7 @@ test("full saved-actress sync paginates and persists through the injected Discov
     await injectUserscriptRuntime(page, { settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
     await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler?.featureNewVideoScanController))).toBe(true);
     const result = await page.evaluate(async () => {
-        const manager = window.unsafeWindow.pluginManager;
+        const manager = window.__jhsBrowserDiagnostics;
         const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const controller = task.featureNewVideoScanController;
         if (!controller) throw new Error("Discovery scan controller unavailable");
@@ -417,7 +415,7 @@ test("scheduled blacklist scans use the Library Feature controller and preserve 
         return Boolean(task?.featureBlacklistScanController);
     })).toBe(true);
     const result = await page.evaluate(async () => {
-        const manager = window.unsafeWindow.pluginManager;
+        const manager = window.__jhsBrowserDiagnostics;
         const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const controller = task.featureBlacklistScanController;
         const starId = "feature-blacklist-scan-actor";

@@ -8,25 +8,25 @@ for (const defaultQuickFilterTab of ["blockedItems", "filter"]) test(`blocked de
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/");
   await injectUserscriptRuntime(page, { settingOverrides: { defaultQuickFilterTab, enableLoadReview: "no" } });
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").activeQuickFilter)).toBe("blockedItems");
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("browse-panel"));
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].activeQuickFilter)).toBe("blockedItems");
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("browse-panel"));
   const select = page.locator("#defaultQuickFilterTab");
   await expect(select).toHaveValue("blockedItems");
   await expect(select.locator("option")).toHaveCount(11);
   await expect(select.locator('option[value="blockedItems"]')).toHaveText("屏蔽项");
   await page.evaluate(async () => {
     window.jQuery("#defaultQuickFilterTab").val("undownloaded").trigger("change");
-    await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").waitForIdle();
+    await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").waitForIdle();
   });
   await expect(select).toHaveValue("undownloaded");
   await page.locator("#saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().defaultQuickFilterTab)).toBe("undownloaded");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().defaultQuickFilterTab)).toBe("undownloaded");
   await page.evaluate(async () => {
     window.jQuery("#defaultQuickFilterTab").val("blockedItems").trigger("change");
-    await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").waitForIdle();
+    await window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").waitForIdle();
   });
   await page.locator("#saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().defaultQuickFilterTab)).toBe("blockedItems");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().defaultQuickFilterTab)).toBe("blockedItems");
 });
 
 test("feature disabled leaves no dead list button", async ({ context, page }, testInfo) => {
@@ -50,7 +50,7 @@ test("third-party and copy card actions follow their live settings", async ({ co
   await expect(page.locator(".copySvg").first()).toHaveCSS("display", "block");
 
   await page.evaluate(async () => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     await settings.set("enableSiteSvg", "no");
     await settings.set("enableCopySvg", "no");
   });
@@ -58,7 +58,7 @@ test("third-party and copy card actions follow their live settings", async ({ co
   await expect(page.locator(".copySvg").first()).toHaveCSS("display", "none");
 
   await page.evaluate(async () => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     await settings.set("enableSiteSvg", "yes");
     await settings.set("enableCopySvg", "yes");
   });
@@ -75,29 +75,29 @@ test("card video entry follows master switch and retains native fallback with DM
   await expect(videoButton).toHaveCSS("display", "flex");
 
   await page.evaluate(async () => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     await settings.set("enableVideoSvg", "no");
   });
   await expect(videoButton).toHaveCSS("display", "none");
   await page.evaluate(async () => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     await settings.set("enableVideoSvg", "yes");
   });
   await expect(videoButton).toHaveCSS("display", "flex");
 
   await page.evaluate(async () => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     await settings.set("enablePreviewVideo", "no");
   });
   await expect(videoButton).toHaveCSS("display", "none");
   await page.evaluate(async () => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     await settings.set("enablePreviewVideo", "yes");
     await settings.set("enableLoadPreviewVideo", "no");
   });
   await expect(videoButton).toHaveCSS("display", "flex");
   await page.evaluate(async () => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+    const settings = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings");
     await settings.set("enableLoadPreviewVideo", "yes");
   });
   await expect(videoButton).toHaveCSS("display", "flex");
@@ -109,15 +109,13 @@ test("Library Feature owns blacklist behavior without registering the legacy plu
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   const ownership = await page.evaluate(() => {
-    const manager = window.unsafeWindow.pluginManager;
+    const manager = window.__jhsBrowserDiagnostics;
     return {
       style: document.getElementById("jhs-library-blacklist-feature")?.textContent.includes(".jhs-blacklist-layout") ?? false,
       contribution: manager.diagnostics.exportSnapshot().activeContributions.includes("library.blacklist"),
-      legacyExecutor: manager.getPluginNames().includes("BlacklistPlugin"),
-      runtimeStatus: manager.getTimings().find(({ name }) => name === "BlacklistPlugin")?.status ?? null,
     };
   });
-  expect(ownership).toEqual({ style: true, contribution: true, legacyExecutor: false, runtimeStatus: null });
+  expect(ownership).toEqual({ style: true, contribution: true,  });
 });
 
 test("Library Feature owns the blacklist workspace filter and actor deletion flow", async ({ context, page }, testInfo) => {
@@ -258,9 +256,9 @@ test("screenshot master switch OFF removes detail screenshot UI", async ({ conte
   });
   await injectUserscriptRuntime(page);
   await expect(page.locator(".screen-container")).toHaveCount(1);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ScreenShotPlugin"))).toBeUndefined();
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(item => item.name === "ScreenShotPlugin"))).toBe(true);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadScreenShot", "no"));
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.screenshot"])).toBeUndefined();
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(item => item.id === "detail.screenshot"))).toBe(true);
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableLoadScreenShot", "no"));
   await page.waitForTimeout(300);
   await expect(page.locator(".screen-container")).toHaveCount(0);
   await expect(page.locator(".jhs-screenshot-providers")).toHaveCount(0);
@@ -310,7 +308,7 @@ test("preview master switch OFF removes card preview buttons", async ({ context,
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enablePreviewVideo", "no"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enablePreviewVideo", "no"));
   await page.waitForTimeout(300);
   await expect(page.locator(".videoSvg")).toBeHidden(); // 实现为 toggle(false) 隐藏，语义：列表工具按钮隐藏而非 unmount
 });
@@ -322,23 +320,23 @@ test("all quick filter is the true full set including blocked items", async ({ c
   await injectUserscriptRuntime(page);
   if (process.env.JHS_TEST_BUNDLE_PATH) {
     await expect.poll(() => page.evaluate(() => {
-      const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+      const listPage = window.__jhsBrowserDiagnostics.features["list.core"];
       return typeof listPage?.setQuickFilter === "function" && typeof listPage?.findCarNumAndHref === "function";
     })).toBe(true);
   } else {
-    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"]?.managedByFeature === true)).toBe(true);
   }
   await page.evaluate(async () => {
-    const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+    const listPage = window.__jhsBrowserDiagnostics.features["list.core"];
     const item = document.querySelector(".movie-list .item");
     const { carNum, url } = listPage.findCarNumAndHref(window.$ ? window.$(item) : null);
     await window.stateService.patch(carNum, { blocked: true }, { type: "browser-setting-effect", record: { carNum, url, names: "", publishTime: "" } });
   });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter("all"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].setQuickFilter("all"));
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".movie-list .item")).display)).not.toBe("none");
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter("favorite"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].setQuickFilter("favorite"));
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".movie-list .item")).display)).toBe("none");
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter("blockedItems"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].setQuickFilter("blockedItems"));
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".movie-list .item")).display)).not.toBe("none");
 });
 
@@ -348,7 +346,7 @@ test("quick-filter and DOM generations reject stale filter commits", async ({ co
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(async () => {
-    const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+    const listPage = window.__jhsBrowserDiagnostics.features["list.core"];
     const originalGetFilterContext = listPage.getFilterContext.bind(listPage);
     for (let index = 0; index < 50; index += 1) {
       const context = listPage.filterContext || await originalGetFilterContext();
@@ -386,13 +384,13 @@ test("mobileMode force on/off swaps FAB and the desktop commandbar/setting surfa
   await expect(page.locator("#setting-btn")).toHaveCount(1);
   const toolbarSelectors = ["#waitCheckBtn", "#newVideoBtn", "#jhs-quick-filter", ".jhs-sort-control", "#favoriteAllVideo", "#hasDownAllVideo"];
   for (const selector of toolbarSelectors) await expect(page.locator(selector)).toHaveCount(1);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "on"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("mobileMode", "on"));
   await expect(page.locator("#jhs-fab")).toBeVisible();
   await expect(page.locator("#jhs-fab-safe-area")).toHaveCount(1);
   await expect(page.locator("html")).toHaveClass(/jhs-fab-mounted/);
   await expect(page.locator("#jhs-page-commandbar")).toHaveCount(0);
   await expect(page.locator("#setting-btn")).toHaveCount(0);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "off"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("mobileMode", "off"));
   await expect(page.locator("#jhs-fab")).toHaveCount(0);
   await expect(page.locator("#jhs-fab-safe-area")).toHaveCount(0);
   await expect(page.locator("html")).not.toHaveClass(/jhs-fab-mounted/);
@@ -402,7 +400,7 @@ test("mobileMode force on/off swaps FAB and the desktop commandbar/setting surfa
   // 真实 click 验证 handler 在切换后仍然有效。
   await page.evaluate(() => {
     window.__waitCheckClicks = 0;
-    const plugin = window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["list.actions"];
     plugin.openWaitCheck = async () => { window.__waitCheckClicks++; };
   });
   await page.locator("#waitCheckBtn").click();
@@ -425,10 +423,10 @@ test("JavBus desktop toolbar keeps settings and history beside list actions acro
   };
 
   await assertDesktopToolbar();
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "on"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("mobileMode", "on"));
   await expect(page.locator("#jhs-fab")).toBeVisible();
   await expect(page.locator("#historyBtn, #top-right-box")).toHaveCount(0);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "off"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("mobileMode", "off"));
   await expect(page.locator("#jhs-page-commandbar")).toHaveCount(1);
   await expect(page.locator("#historyBtn")).toHaveCount(1, { timeout: 5000 });
   await assertDesktopToolbar();
@@ -452,7 +450,7 @@ test("Preview master ON + DMM OFF retains the detail fallback entry", async ({ c
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await page.locator(".tags").evaluateAll(nodes=>nodes.forEach(node=>node.style.removeProperty("display")));
   await injectUserscriptRuntime(page,{settingOverrides:{defaultQuickFilterTab:"all"}});
-  const setSetting = (key, value) => page.evaluate(({ key, value }) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set(key, value), { key, value });
+  const setSetting = (key, value) => page.evaluate(({ key, value }) => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set(key, value), { key, value });
   // 使用可见宿主动作区，验证实际入口而非被祖先隐藏的按钮。
   await expect(page.locator(".videoSvg")).toHaveCount(1);
   await setSetting("enableLoadPreviewVideo", "no");
@@ -472,17 +470,15 @@ test("JavBus preview is native Feature-owned and disappears when the DMM sub swi
   await injectUserscriptRuntime(page);
   await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
   const previewOwnership = await page.evaluate(() => {
-    const manager = window.unsafeWindow.pluginManager;
+    const manager = window.__jhsBrowserDiagnostics;
     return {
-      registered: manager.getPluginNames().includes("BusPreviewVideoPlugin"),
-      managedByFeature: manager.getBean("BusPreviewVideoPlugin")?.managedByFeature === true,
-      timing: manager.getTimings().find(item => item.name === "BusPreviewVideoPlugin")?.status ?? null,
+      managedByFeature: manager.features["detail.javbus-preview"]?.managedByFeature === true,
       route: window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"] != null ? window.isDetailPage : null,
     };
   });
-  expect(previewOwnership).toEqual({ registered: false, managedByFeature: false, timing: null, route: true });
+  expect(previewOwnership).toEqual({ managedByFeature: false, route: true });
   await expect(page.locator(".preview-video-container")).toHaveCount(1);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadPreviewVideo", "no"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableLoadPreviewVideo", "no"));
   await page.waitForTimeout(300);
   await expect(page.locator(".preview-video-container")).toHaveCount(0);
 });
@@ -496,18 +492,16 @@ test("FC2 OtherSite slot survives OFF→ON toggles", async ({ context, page }, t
   const slot = page.locator('[data-jhs-role="other-sites"]');
   const group = page.locator('.jhs-fc2-resource-group:has([data-jhs-role="other-sites"])');
   const ownership = await page.evaluate(() => {
-    const manager = window.unsafeWindow.pluginManager;
-    const controller = manager.getBean("OtherSitePlugin");
-    const fc2 = manager.getBean("Fc2Plugin");
+    const manager = window.__jhsBrowserDiagnostics;
+    const controller = manager.features["detail.external-sites"];
+    const fc2 = manager.features["detail.fc2-owned"];
     return {
       controller: controller?.managedByFeature === true && typeof controller.loadOtherSite === "function" && typeof controller.handle === "undefined",
-      fc2Injected: fc2?.featureExternalSitesAdapter === controller,
-      noLegacyExecutor: !manager.getPluginNames().includes("OtherSitePlugin"),
-      noLegacyTiming: !manager.getTimings().some((item) => item.name === "OtherSitePlugin"),
+      fc2Injected: fc2?.readExternalSites() === controller,
     };
   });
-  expect(ownership).toEqual({ controller: true, fc2Injected: true, noLegacyExecutor: true, noLegacyTiming: true });
-  const setOtherSite = (value) => page.evaluate((v) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadOtherSite", v), value);
+  expect(ownership).toEqual({ controller: true, fc2Injected: true, });
+  const setOtherSite = (value) => page.evaluate((v) => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableLoadOtherSite", v), value);
   await expect(slot).toHaveCount(1);
   await expect(group).toBeVisible();
   await setOtherSite("no");
@@ -567,9 +561,9 @@ test("FC2 detail screenshot slot follows the master switch live", async ({ conte
   await injectUserscriptRuntime(page);
   await expect(page.locator(".jhs-fc2-workspace")).toBeVisible();
   await expect(page.locator('[data-jhs-role="screenshot"]')).toHaveCount(1);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadScreenShot", "no"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableLoadScreenShot", "no"));
   await expect(page.locator('[data-jhs-role="screenshot"]')).toBeEmpty();
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadScreenShot", "yes"));
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set("enableLoadScreenShot", "yes"));
   await expect(page.locator('[data-jhs-role="screenshot"]')).not.toBeEmpty();
 });
 
@@ -579,7 +573,7 @@ test("cloud settings use the canonical catalog and persist normalized numeric va
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   const openCloud = async () => {
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
     await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="cloud-panel"]'));
     await expect(page.locator(".layui-layer #cloud-settings-catalog")).toBeVisible();
@@ -589,13 +583,13 @@ test("cloud settings use the canonical catalog and persist normalized numeric va
   await page.locator(".layui-layer #oneOneFiveConcurrency").fill("99");
   await page.locator(".layui-layer #oneOneFiveConcurrency").press("Tab");
   await expect(page.locator(".layui-layer #oneOneFiveConcurrency")).toHaveValue("10");
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).not.toBe(10);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).not.toBe(10);
   await page.locator(".layui-layer #oneOneFiveCacheMinutes").fill("4.8");
   await page.locator(".layui-layer #oneOneFiveCacheMinutes").press("Tab");
   await expect(page.locator(".layui-layer #oneOneFiveCacheMinutes")).toHaveValue("5");
   await page.locator(".layui-layer #saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(10);
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(5);
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(10);
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(5);
   await page.evaluate(() => window.layer.closeAll());
   await expect(page.locator(".layui-layer")).toHaveCount(0);
   await openCloud();

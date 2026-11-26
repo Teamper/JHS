@@ -46,7 +46,7 @@ export const systemFeatureManifests = Object.freeze([
                     state: deps[SERVICE.state], translation: deps[SERVICE.translation], mediaLibrary: deps[SERVICE.mediaLibrary], busImageLayout: deps[SERVICE.busImageLayout],
                     settingsRegistry: deps[REGISTRY.settings], scope: () => runtime.scope,
                 },
-                resolveDependency: (/** @type {string} */ name) => runtime.resolveCompatibilityBean(name),
+                readNewVideo: () => runtime.getCapability?.("discovery.new-video"),
                 readTask: () => runtime.getCapability?.("discovery.scheduler"),
                 readCoverButtons: () => runtime.getCapability?.("detail.cover-state-actions"),
                 readExternalSites: () => runtime.getCapability?.("detail.external-sites"),
@@ -56,8 +56,7 @@ export const systemFeatureManifests = Object.freeze([
                 document: pageDocument, window: pageWindow, site: runtime.site, route: runtime.route,
             });
             runtime.provideCapability?.("settings.core", adapter);
-            const release = runtime.registerCompatibilityBean?.("SettingPlugin", adapter);
-            if (release) runtime.scope.addCleanup(release);
+            runtime.inspect?.("settings.core", adapter);
             try {
                 const css = await adapter.initEntryCss();
                 if (css) runtime.scope.addCleanup(deps[PORT.style].register("jhs-settings-feature", css.replace(/^\s*<style>|<\/style>\s*$/g, "")));
@@ -111,13 +110,15 @@ export const systemFeatureManifests = Object.freeze([
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const id = "responsive-shell.bottom-bar";
             if (!runtime.enabledContributions.includes(id)) return { activeContributions: [] };
-            const { RESPONSIVE_SHELL_CAPABILITIES, ResponsiveShellController } = await import("./responsive-shell-controller.js");
-            const capabilities = {};
-            for (const name of RESPONSIVE_SHELL_CAPABILITIES) Object.defineProperty(capabilities, name, { enumerable: true, get: () => runtime.isCompatibilityBeanAvailable?.(name) === false ? null : runtime.resolveCompatibilityBean(name) ?? null });
+            const { ResponsiveShellController } = await import("./responsive-shell-controller.js");
             const controller = new ResponsiveShellController({
                 jquery: deps[SERVICE.domUi].jquery, window, document,
                 profile: deps[SERVICE.profile], settings: deps[SERVICE.settings], host: deps[PORT.host],
-                state: deps[SERVICE.state], logger: deps[SERVICE.clog], notifications: deps[SERVICE.notifications], capabilities,
+                state: deps[SERVICE.state], logger: deps[SERVICE.clog], notifications: deps[SERVICE.notifications],
+                readList: () => runtime.getCapability?.("list.core"),
+                readListActions: () => runtime.getCapability?.("list.actions"),
+                readSettings: () => runtime.getCapability?.("settings.core"),
+                readDetailActions: () => runtime.getCapability?.("detail.page-state-actions"),
                 privacyActions: { available: () => runtime.isCommandAvailable("privacy.toggle"), enabled: () => deps[SERVICE.privacy].enabled, toggle: () => runtime.executeCommand("privacy.toggle"), configure: () => runtime.executeCommand("privacy.configure"), bindReveal: (/** @type {HTMLElement} */ button, /** @type {any} */ scope) => runtime.executeCommand("privacy.bind-reveal", button, scope) },
                 mediaActions: { available: () => runtime.isCommandAvailable("media.configure") && !parseDisabledPlugins(deps[SERVICE.settings].snapshot().disabledPlugins).includes("media-library"), configure: () => runtime.executeCommand("media.configure") },
                 openNewVideo: () => runtime.executeCommand("new-video.open"),

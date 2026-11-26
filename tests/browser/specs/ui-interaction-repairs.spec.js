@@ -24,7 +24,7 @@ async function boot(page, context, { detail = false, actor = false, keywords = f
     }, settingOverrides: { defaultQuickFilterTab: "all", needClosePage: "no", enableLoadReview: "no", enableLoadPreviewVideo: "no", enableClog: "yes" } });
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
 }
-const settings = (page, key, value) => page.evaluate(({ key, value }) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set(key, value), { key, value });
+const settings = (page, key, value) => page.evaluate(({ key, value }) => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").set(key, value), { key, value });
 
 for (const theme of ["light", "dark"]) test(`state selection stays clear without decorative checks ${theme}`, async ({ page, context }) => {
     await boot(page, context, { detail: true }); await settings(page, "themeMode", theme); await page.waitForTimeout(180);
@@ -57,7 +57,7 @@ test("compact actions and long progress keep the FAB and submenu reachable", asy
     await expect(page.locator('.jhs-mobile-batch-menu [data-page-action="batch-block"]')).toBeVisible();
     await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
     await page.evaluate(() => {
-        const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+        const list = window.__jhsBrowserDiagnostics.features["list.core"];
         const p = list.listBatchController.ui.beginProgress({ cancelRequested: false });
         list.listBatchController.ui.setProgress(p, "正在处理较长的批量进度：匹配 200 项，已更新 100 项，已跳过番号不可靠的影片");
     });
@@ -69,7 +69,7 @@ test("compact actions and long progress keep the FAB and submenu reachable", asy
         const menu = await page.locator(".jhs-fab-menu").boundingBox(); expect(menu.y + menu.height).toBeLessThanOrEqual(b.y);
         await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
     }
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").listBatchController.ui.dispose());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["list.core"].listBatchController.ui.dispose());
     expect(await page.locator("html").evaluate(node => node.style.getPropertyValue("--jhs-batch-clearance"))).toBe("");
     await page.locator("#jhs-fab").click(); await page.locator('[data-action="logger"]').click(); await expect(page.locator(".console-logger-window")).toBeVisible();
 });
@@ -85,7 +85,7 @@ test("rule reasons are a touch and keyboard action outside the host link", async
 });
 
 test("manual settings revert and close confirmation preserve drafts", async ({ page, context }) => {
-    await boot(page, context); await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("browse-panel"));
+    await boot(page, context); await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog("browse-panel"));
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#saveBtn") }); await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
     const field = dialog.locator("#waitCheckCount"); await field.scrollIntoViewIfNeeded(); const original = await field.inputValue();
     await field.fill(String(Number(original) + 1)); await expect(dialog.locator("#settings-draft-status")).toContainText("1 项未保存");

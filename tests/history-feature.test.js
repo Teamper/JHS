@@ -35,7 +35,6 @@ describe("Library Feature history ownership", () => {
                 .register(SERVICE.clog, { error: vi.fn(), warn: vi.fn() }),
             commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), disabled, site: "javdb", route: "list",
         });
-        runtime.setCompatibilityBeanResolver(() => undefined);
         runtime.register(library);
         return { runtime, storage, state, styleRegistration, styleRelease, dialog };
     }

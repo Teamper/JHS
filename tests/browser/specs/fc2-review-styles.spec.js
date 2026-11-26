@@ -13,7 +13,7 @@ async function boot(page, context, themeMode) {
   });
   await injectUserscriptRuntime(page, { settingOverrides: { themeMode, enableLoadReview: "yes", reviewCount: 2, enableLoadRelated: "no", enableLoadScreenShot: "no", enableLoadOtherSite: "no" } });
   await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     fc2.resolveMovieIdForRecord = async () => "fixture-id";
     fc2.resolveFc2Source = async () => "fc2";
     fc2.configureJavDbWantButton = async () => {};
@@ -63,11 +63,11 @@ for (const theme of ["light", "dark"]) {
     await page.evaluate(() => window.layer.closeAll());
     await page.locator('.movie-list a[data-jhs-fc2-primary="true"]').click();
     await expect(page.locator(".jhs-review-item")).toHaveCount(2);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("Fc2Plugin").openFc2Dialog("second-id", "FC2-7654321", "https://javdb.com/v/second-id", { source: "fc2" }));
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].openFc2Dialog("second-id", "FC2-7654321", "https://javdb.com/v/second-id", { source: "fc2" }));
     await expect(page.locator(".jhs-fc2-workspace")).toHaveCount(2);
     await expect(page.locator(".jhs-review-item")).toHaveCount(4);
     await expect(page.locator("style#jhs-detail-panels")).toHaveCount(1);
-    await page.evaluate(async () => (await window.unsafeWindow.pluginManager.getBean("Fc2Plugin").getRuntimeService("scope")()).dispose());
+    await page.evaluate(async () => (await window.__jhsBrowserDiagnostics.features["detail.fc2-owned"].getRuntimeService("scope")()).dispose());
     await expect(page.locator(".jhs-review-panel")).toHaveCount(0);
     await expect(page.locator("style#jhs-detail-panels")).toHaveCount(1);
     await page.evaluate(() => window.layer.closeAll());
@@ -79,7 +79,7 @@ for (const theme of ["light", "dark"]) {
 test("FC2 review failures retain retry and empty-state styling", async ({ page, context }) => {
   const root = await boot(page, context, "light");
   await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    const fc2 = window.__jhsBrowserDiagnostics.features["detail.fc2-owned"];
     let failed = false;
     fc2.getRuntimeService("review").list = async () => { if (!failed) { failed = true; throw new Error("synthetic review failure"); } return []; };
     window.layer.closeAll();

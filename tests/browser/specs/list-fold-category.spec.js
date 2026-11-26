@@ -37,7 +37,6 @@ test.describe("JavDB category fold migration", () => {
     await expect(page.locator(".jhs-fold-category-btn")).toHaveCount(2);
     await expect(page.locator("#jhs-check-tag")).toHaveText("剧情");
     await expect(page.locator(".tag-category > div")).not.toHaveClass(/collapse/);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("FoldCategoryPlugin"))).toBe(false);
 
     const tag = page.locator("#tags a.tag");
     await tag.hover();
@@ -50,7 +49,7 @@ test.describe("JavDB category fold migration", () => {
 
     await page.locator(".jhs-fold-category-btn").first().click();
     await expect(page.locator("#category-box")).toBeHidden();
-    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().foldCategoryCollapsed)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("settings").snapshot().foldCategoryCollapsed)).toBe(true);
   });
 
   test("the saved FoldCategoryPlugin disable ID still disables the Feature-owned contribution", async ({ context, page }, testInfo) => {
@@ -62,7 +61,6 @@ test.describe("JavDB category fold migration", () => {
 
     await expect(page.locator(".jhs-fold-category-btn")).toHaveCount(0);
     await expect(page.locator("#tags a.tag .highlight-btn")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("FoldCategoryPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "FoldCategoryPlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().contributionDescriptors.some(({ id }) => id === "list.fold-category"))).toBe(true);
   });
 });

@@ -30,8 +30,8 @@ export default defineFeature({
                     ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: deps[SERVICE.diagnostics], scope: runtime.scope,
                 });
                 if (controller.start()) {
-                    const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("UnifiedOfflinePlugin", controller);
-                    if (typeof releaseCompatibilityBean === "function") runtime.scope.addCleanup(releaseCompatibilityBean);
+                    runtime.provideCapability?.("external-bridge.offline", controller);
+                    runtime.inspect?.("external-bridge.offline", controller);
                     activeContributions.push("external-bridge.offline");
                 }
             } catch (error) {
@@ -41,7 +41,6 @@ export default defineFeature({
         }
         if (runtime.enabledContributions.includes("detail.external-magnets")) {
             let releaseStyle = () => {};
-            let unregisterCompatibilityBean = () => {};
             try {
                 const { MAGNET_HUB_STYLES, MagnetHubController } = await import("./magnet-hub-controller.js");
                 const controller = new MagnetHubController({
@@ -53,19 +52,11 @@ export default defineFeature({
                 let styleRemoved = false;
                 releaseStyle = () => { if (styleRemoved) return; styleRemoved = true; removeStyle(); };
                 runtime.scope.addCleanup(releaseStyle);
-                const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("MagnetHubPlugin", controller);
-                let compatibilityBeanReleased = false;
-                unregisterCompatibilityBean = () => {
-                    if (compatibilityBeanReleased) return;
-                    compatibilityBeanReleased = true;
-                    if (typeof releaseCompatibilityBean === "function") releaseCompatibilityBean();
-                };
-                runtime.scope.addCleanup(unregisterCompatibilityBean);
+                runtime.inspect?.("detail.external-magnets", controller);
                 runtime.provideCapability?.("detail.external-magnets", controller);
                 activeContributions.push("detail.external-magnets");
             } catch (error) {
                 releaseStyle();
-                unregisterCompatibilityBean();
                 runtime.diagnostics.recordError({ source: "external-bridge-feature", featureId: "external-bridge", contributionId: "detail.external-magnets", message: error instanceof Error ? error.message : String(error) });
             }
         }

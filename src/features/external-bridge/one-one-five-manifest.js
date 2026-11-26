@@ -14,7 +14,6 @@ export default defineFeature({
         if (!runtime.enabledContributions.includes(id)) return { activeContributions: [] };
         const { OneOneFiveMatchController } = await import("./one-one-five-match-controller.js");
         /** @type {InstanceType<typeof OneOneFiveMatchController> | null} */ let controller = null;
-        let releaseCompatibilityBean = () => {};
         try {
             runtime.scope.addCleanup(deps[PORT.style].register("jhs-115-rename-preview", ONE115_RENAME_STYLES));
             controller = new OneOneFiveMatchController({
@@ -25,12 +24,9 @@ export default defineFeature({
             });
             if (!controller.start()) throw new Error("115 matching controller did not start");
             runtime.scope.addCleanup(() => controller?.dispose());
-            const release = runtime.registerCompatibilityBean?.("OneOneFiveMatchPlugin", controller);
-            if (typeof release === "function") releaseCompatibilityBean = release;
-            runtime.scope.addCleanup(() => releaseCompatibilityBean());
+            runtime.inspect?.("external-bridge.115-match", controller);
             return { activeContributions: [id] };
         } catch (error) {
-            releaseCompatibilityBean();
             controller?.dispose();
             runtime.diagnostics.recordError({ source: "one-one-five-feature", featureId: "one-one-five", contributionId: id, message: error instanceof Error ? error.message : String(error) });
             return { activeContributions: [] };

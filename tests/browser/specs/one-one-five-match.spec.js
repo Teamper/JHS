@@ -27,9 +27,9 @@ async function boot(page, context, route, names = candidates, realLayer = false)
     }, route);
     await injectUserscriptRuntime(page, { beforeUserscriptInjection: realLayer ? host => host.addScriptTag({ path: fileURLToPath(new URL("../fixtures/layer-runtime/layer-1.0.9.min.js", import.meta.url)) }) : undefined, settingOverrides: { enable115Match: false, enableLoadReview: "no", enableLoadRelated: "no", enableLoadPreviewVideo: "no", defaultQuickFilterTab: "all" } });
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
-    await page.waitForFunction(() => Boolean(window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin")));
+    await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.features["external-bridge.115-match"]));
     await page.evaluate(async names => {
-        const controller = window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin");
+        const controller = window.__jhsBrowserDiagnostics.features["external-bridge.115-match"];
         window.matchCalls = 0;
         const offline = controller.getRuntimeService("offline");
         offline.getAccountIdentity = async () => ({ accountId: "fixture-account" });
@@ -42,7 +42,7 @@ async function boot(page, context, route, names = candidates, realLayer = false)
 for (const theme of ["light", "dark"]) {
     test(`115 exact detail matching excludes neighbours (${theme})`, async ({ page, context }, info) => {
         await boot(page, context, "detail");
-        await page.evaluate(theme => window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin").getRuntimeService("settings").set("themeMode", theme), theme);
+        await page.evaluate(theme => window.__jhsBrowserDiagnostics.features["external-bridge.115-match"].getRuntimeService("settings").set("themeMode", theme), theme);
         const block = page.locator(".jhs-115-match");
         await expect(block.locator(".jhs-115-match-row")).toHaveCount(2);
         await expect(block.locator("a")).toHaveText(["start_657-C.mp4（0 B）", "START657-CD2.mkv（0 B）"]);
@@ -75,11 +75,11 @@ test("115 empty filtered list retries without navigating", async ({ page, contex
 
 for (const theme of ["light", "dark"]) test(`115 batch rename requires preview and an explicit selection, retaining disc and quality suffixes ${theme}`, async ({ page, context }, info) => {
     await boot(page, context, "detail", [{ name: "start00657-3-4K-C.mp4", fileId: "rename-one" }, { name: "START657-CD2.mkv", fileId: "rename-two" }], true);
-    await page.evaluate(theme => window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin").getRuntimeService("settings").set("themeMode", theme), theme);
+    await page.evaluate(theme => window.__jhsBrowserDiagnostics.features["external-bridge.115-match"].getRuntimeService("settings").set("themeMode", theme), theme);
     await expect(page.locator(".jhs-115-match-row")).toHaveCount(2);
     await page.evaluate(() => {
         window.renameCalls = [];
-        const owner = window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin");
+        const owner = window.__jhsBrowserDiagnostics.features["external-bridge.115-match"];
         owner.offline.renameFile = async (provider, fileId, name, options) => { window.renameCalls.push({ provider, fileId, name, accountId: options.expectedAccountId }); return { success: true }; };
     });
     const trigger = page.getByRole("button", { name: "预览与批量重命名" });
@@ -102,7 +102,7 @@ for (const theme of ["light", "dark"]) test(`115 batch rename requires preview a
 test("115 incomplete matching exposes continuation and retains earlier matches", async ({ page, context }) => {
     await boot(page, context, "detail");
     await page.evaluate(async () => {
-        const owner = window.unsafeWindow.pluginManager.getBean("OneOneFiveMatchPlugin");
+        const owner = window.__jhsBrowserDiagnostics.features["external-bridge.115-match"];
         const first = { name: "START-657-C.mp4", fileId: "one", videoId: "pick-one", size: 1024, accountId: "1" };
         const second = { ...first, name: "START-657-CD2.mkv", fileId: "two", videoId: "pick-two" };
         owner.match.matchMovie = async (_movie, options) => ({ matches: options.continuation ? [first, second] : [first], complete: Boolean(options.continuation), continuation: options.continuation ? null : { offset: 1000 } });

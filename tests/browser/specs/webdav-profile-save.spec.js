@@ -9,7 +9,7 @@ test("saving the WebDAV password keeps it available after reopening settings and
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["settings.core"];
     const webdav = plugin.getRuntimeService("webdav");
     await webdav.settings.update(draft => {
       draft.webDavUrl = "https://dav.example.test/dav";
@@ -26,12 +26,12 @@ test("saving the WebDAV password keeps it available after reopening settings and
   await dialog.locator("#webDavPassword").fill("synthetic-webdav-password");
   await dialog.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(async () => {
-    const webdav = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav");
+    const webdav = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdav");
     return Boolean((await webdav.getProfile()).password);
   })).toBe(true);
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
@@ -40,7 +40,7 @@ test("saving the WebDAV password keeps it available after reopening settings and
   await expect.poll(() => page.evaluate(() => window.__webdavListCalls)).toBe(1);
   await page.reload({ waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { preserveStorage: true });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.features["settings.core"].openSettingDialog());
   dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavBackupListBtn") });
   await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await clickSettingsCategory(dialog.locator('.side-menu-item[data-panel="data-panel"]'));
@@ -52,7 +52,7 @@ test("an autofilled WebDAV password is saved even without a change event", async
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin");
+    const plugin = window.__jhsBrowserDiagnostics.features["settings.core"];
     const webdav = plugin.getRuntimeService("webdav");
     await webdav.settings.update(draft => {
       draft.webDavUrl = "https://dav.example.test/dav";
@@ -72,7 +72,7 @@ test("an autofilled WebDAV password is saved even without a change event", async
   })).toBe(0);
   await dialog.locator("#saveBtn").click();
   await expect.poll(() => page.evaluate(async () => {
-    const webdav = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav");
+    const webdav = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdav");
     return Boolean((await webdav.getProfile()).password);
   })).toBe(true);
 });
@@ -82,7 +82,7 @@ test("a damaged site credential remains protected until an explicit password rep
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), webdav = plugin.getRuntimeService("webdav");
+    const plugin = window.__jhsBrowserDiagnostics.features["settings.core"], webdav = plugin.getRuntimeService("webdav");
     await webdav.settings.patch({ webDavUrl: "https://dav.example.test/dav", webDavUsername: "fixture-user", trustedLocalOrigins: ["https://dav.example.test"] });
     window.GM_setValue(webdav.passwordKey, { schema: 2, id: "fixture-damaged", ciphertext: "invalid" });
     await webdav.credential.set("jhs_webdav_password", "fixture-legacy-password");
@@ -93,14 +93,14 @@ test("a damaged site credential remains protected until an explicit password rep
   await expect(dialog.locator("#jhs-webdav-credential-error")).toContainText("重新输入密码并保存");
   await expect(dialog.locator("#webDavPassword")).toHaveValue("");
   expect(await page.evaluate(() => {
-    const webdav = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav");
+    const webdav = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdav");
     return window.GM_getValue(webdav.passwordKey).id;
   })).toBe("fixture-damaged");
   await dialog.locator("#webDavPassword").fill("fixture-recovered-password");
   await dialog.locator("#saveBtn").click();
   await expect(dialog.locator("#jhs-webdav-credential-error")).toHaveCount(0);
   expect(await page.evaluate(async () => {
-    const webdav = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav");
+    const webdav = window.__jhsBrowserDiagnostics.features["settings.core"].getRuntimeService("webdav");
     return { repaired: (await webdav.getProfile()).password === "fixture-recovered-password", legacyRetained: (await webdav.credential.readEntry("jhs_webdav_password")).value === "fixture-legacy-password", keyIsSiteLocal: webdav.passwordKey === `jhs_webdav_password:origin:${encodeURIComponent(location.origin)}` };
   })).toEqual({ repaired: true, legacyRetained: true, keyIsSiteLocal: true });
 });
