@@ -1,18 +1,18 @@
 // @ts-check
+import { formatUiDateTime } from "../../core/ui-date-time.js";
 
 import { escapeHtml } from "../../core/constants.js";
 import { createLatestSettingWriter } from "../settings/setting-binding-controller.js";
-import { readReviewKeywords } from "../../core/review-keywords.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { getIcon } from "../../core/icons.js";
 import { createPanelLoading } from "./primitives.js";
 
 export class ReviewPanel {
-    /** @param {{review: any, settings: any, storage: any, scope: () => Promise<any>, jquery?: (value: any) => any, document?: Document, window?: Window, ui?: any, clipboard?: any, notifications?: any, diagnostics?: any}} dependencies */
+    /** @param {{review: any, settings: any, keywordRules: Pick<import("../../services/keyword-rules-service.js").KeywordRulesService, "getReviewKeywords"|"addReviewKeyword">, scope: () => Promise<any>, jquery?: (value: any) => any, document?: Document, window?: Window, ui?: any, clipboard?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error">}} dependencies */
     constructor(dependencies) {
         this.review = dependencies.review;
         this.settings = dependencies.settings;
-        this.storage = dependencies.storage;
+        this.keywordRules = dependencies.keywordRules;
         this.scope = dependencies.scope;
         this.jquery = dependencies.jquery ?? ((/** @type {any} */ value) => /** @type {any} */ (globalThis).$(value));
         this.document = dependencies.document ?? /** @type {any} */ (globalThis).document;
@@ -20,7 +20,8 @@ export class ReviewPanel {
         this.ui = dependencies.ui ?? null;
         this.clipboard = dependencies.clipboard ?? null;
         this.notifications = dependencies.notifications ?? null;
-        this.diagnostics = dependencies.diagnostics ?? null;
+        this.diagnostics = dependencies.diagnostics;
+        this.logger = dependencies.logger ?? console;
     }
 
     /** @param {string} movieId @param {any} target @param {{ownedSection?: any, isActive?: () => boolean, ownCleanup?: (cleanup: () => void) => unknown, awaitInitialLoad?: boolean}} [options] */
@@ -106,9 +107,9 @@ export class ReviewPanel {
         } finally { release(); if (generation === state.generation) { state.loading = false; state.panel.attr("aria-busy", "false"); } if (state.requestScope === scope) state.requestScope = null; }
     }
 
-    async getKeywords() { return readReviewKeywords(this.storage); }
+    async getKeywords() { return this.keywordRules.getReviewKeywords(); }
     /** @param {string} text */
-    async saveKeyword(text) { await readReviewKeywords(this.storage, text); }
+    async saveKeyword(text) { await this.keywordRules.addReviewKeyword(text); }
 
     /** @param {any} container @param {string} message @param {() => void} retry */
     renderRetry(container, message, retry) {
@@ -146,7 +147,7 @@ export class ReviewPanel {
             meta.append(jq("<span></span>").addClass("jhs-review-author").text(review.author || "匿名用户"));
             const stars = jq('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
             for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
-            const formatted = this.ui?.formatDate?.(review.createdAt) ?? /** @type {any} */ (globalThis).utils.formatDate(review.createdAt);
+            const formatted = this.ui?.formatDate?.(review.createdAt) ?? formatUiDateTime(review.createdAt);
             meta.append(stars, jq("<time></time>").text(formatted), jq("<span></span>").text(`点赞：${Number(review.likes) || 0}`), jq("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`));
             this.appendContent(body, content); item.append(meta, body); container.append(item);
         }
@@ -164,7 +165,7 @@ export class ReviewPanel {
     appendLink(container, value) {
         const jq = this.jquery, isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接", isResource = isEd2k || isMagnet;
         const wrapper = jq(isResource ? '<span class="jhs-review-link-wrap"></span>' : '<span class="jhs-review-inline-controls"></span>'), main = jq('<span class="jhs-review-link-main"></span>');
-        const copyResource = () => this.clipboard?.copyText?.(label, value) ?? /** @type {any} */ (globalThis).utils.copyToClipboard(label, value);
+        const copyResource = () => this.clipboard.copyText(label, value);
         const open = isEd2k ? jq('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", copyResource) : jq("<a></a>").addClass("jhs-review-link jhs-link").attr({ href: value, target: "_blank", rel: "noopener noreferrer" }).text(label);
         const copy = jq('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", copyResource);
         main.append(open, copy); wrapper.append(main);
@@ -178,20 +179,18 @@ export class ReviewPanel {
             if ((this.settings.snapshot().enableTitleSelectFilter ?? "yes") !== "yes") return;
             const text = String(this.window.getSelection()?.toString() || ""); if (!text) return;
             event.preventDefault();
-            const confirm = this.ui?.confirm ?? ((/** @type {any} */ position, /** @type {string} */ message, /** @type {() => unknown} */ callback, /** @type {any} */ options) => /** @type {any} */ (globalThis).utils.q(position, message, callback, undefined, options));
-            await confirm(event, `屏蔽评论关键词「${escapeHtml(text)}」？<br>刷新页面后生效`, async () => { await this.saveKeyword(text); this.notify("ok", "已屏蔽，刷新页面后生效"); }, { confirmText: "屏蔽", tone: "danger" });
+            await this.ui.confirm(event, `屏蔽评论关键词「${escapeHtml(text)}」？<br>刷新页面后生效`, async () => { await this.saveKeyword(text); this.notify("ok", "已屏蔽，刷新页面后生效"); }, { confirmText: "屏蔽", tone: "danger" });
         });
     }
 
     /** @param {"error" | "ok"} kind @param {string} message */
     notify(kind, message) {
-        if (typeof this.notifications?.[kind] === "function") this.notifications[kind](message);
-        else /** @type {any} */ (globalThis).show?.[kind]?.(message);
+        this.notifications?.[kind](message);
     }
 
     /** @param {string} message @param {unknown} error */
     reportError(message, error) {
         this.diagnostics?.recordError?.({ source: "detail-review-panel", message, cause: error instanceof Error ? error.message : String(error) });
-        if (!this.diagnostics) /** @type {any} */ (globalThis).clog?.error(message, error);
+        if (!this.diagnostics) this.logger.error(message, error);
     }
 }

@@ -42,12 +42,14 @@ export interface SyncCheckOptions {
 
 /** Feature and settings surfaces depend on this API, not storage or transport internals. */
 export interface WebDavSync extends EventTarget {
+    initializeStoreWithoutLock?(): Promise<void>;
     initialize(): Promise<void>;
     start(scope: LifecycleScope, document: Document, canRun?: () => boolean): void;
     getStatus(): Promise<SyncStatus>;
     check(options?: SyncCheckOptions): Promise<void>;
     retry(): Promise<void>;
     pause(paused: boolean): Promise<void>;
+    schedule?(delay: number, force?: boolean, manual?: boolean): void;
     cancel(): void;
     listRecoveryFiles(scope?: LifecycleScope | null): Promise<SyncRecoveryFile[]>;
     restore(name: string, layout?: boolean, scope?: LifecycleScope | null, selection?: SyncRestoreSelection): Promise<void>;

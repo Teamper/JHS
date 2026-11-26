@@ -14,14 +14,11 @@ function installWantHarness({ cacheFailure = null, successNoticeFailure = null }
         ok: vi.fn(() => { if (successNoticeFailure) throw successNoticeFailure; }),
         error: vi.fn(),
     };
-    vi.stubGlobal("credentialService", { get: vi.fn(async () => "synthetic-token"), readEntry: vi.fn(async () => ({ value: "synthetic-token", revision: "synthetic-revision" })) });
-    vi.stubGlobal("gmHttp", { gmRequest });
-    vi.stubGlobal("storageManager", { deleteCachedRequest });
-    vi.stubGlobal("md5", vi.fn(() => "synthetic-signature"));
-    vi.stubGlobal("show", show);
-    vi.stubGlobal("clog", { warn: vi.fn(), error: vi.fn() });
-    bindJavDbWantService(new JavDbWantService({ credential: globalThis.credentialService, http: { request: async options => ({data: await gmRequest(options)}) }, invalidate: id => deleteCachedRequest(`movie-detail:${id}`) }));
-    return { gmRequest, deleteCachedRequest, show };
+    const credential = { get: vi.fn(async () => "synthetic-token"), readEntry: vi.fn(async () => ({ value: "synthetic-token", revision: "synthetic-revision" })) };
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const want = new JavDbWantService({ credential, logger, sign: () => "synthetic-signature", http: { request: async options => ({data: await gmRequest(options)}) }, invalidate: id => deleteCachedRequest("movie-detail:" + id) });
+    bindJavDbWantService(want);
+    return { gmRequest, deleteCachedRequest, show, runtimeServices: { credential, want, logger, notifications: show } };
 }
 
 describe("JavDB want-watch post-commit boundary", () => {
@@ -37,9 +34,9 @@ describe("JavDB want-watch post-commit boundary", () => {
     });
 
     it("keeps the button committed when the success notice fails and prevents another remote write", async () => {
-        const { gmRequest, show } = installWantHarness({ successNoticeFailure: new Error("toast unavailable") });
+        const { gmRequest, show, runtimeServices } = installWantHarness({ successNoticeFailure: new Error("toast unavailable") });
         const button = jquery('<button type="button" aria-pressed="false">JavDB 想看</button>');
-        const service = new Fc2WorkspaceService();
+        const service = new Fc2WorkspaceService({ runtimeServices });
         const context = { isAlive: () => true };
 
         await service.submitJavDbWant(context, "postcommit-toast-1", button);
@@ -51,10 +48,10 @@ describe("JavDB want-watch post-commit boundary", () => {
     });
 
     it("submits the same movie once across concurrent workspace buttons", async () => {
-        const { gmRequest } = installWantHarness();
+        const { gmRequest, runtimeServices } = installWantHarness();
         let finishRequest;
         gmRequest.mockImplementationOnce(() => new Promise((resolve) => { finishRequest = resolve; }));
-        const service = new Fc2WorkspaceService(), context = { isAlive: () => true };
+        const service = new Fc2WorkspaceService({ runtimeServices }), context = { isAlive: () => true };
         const firstButton = jquery('<button type="button" aria-pressed="false">JavDB 想看</button>');
         const secondButton = jquery('<button type="button" aria-pressed="false">JavDB 想看</button>');
 
@@ -71,10 +68,10 @@ describe("JavDB want-watch post-commit boundary", () => {
     });
 
     it("allows a retry only when the remote request actually fails", async () => {
-        const { gmRequest, show } = installWantHarness();
+        const { gmRequest, show, runtimeServices } = installWantHarness();
         gmRequest.mockRejectedValueOnce(new Error("network unavailable"));
         const button = jquery('<button type="button" aria-pressed="false">JavDB 想看</button>');
-        const service = new Fc2WorkspaceService(), context = { isAlive: () => true };
+        const service = new Fc2WorkspaceService({ runtimeServices }), context = { isAlive: () => true };
 
         await service.submitJavDbWant(context, "postcommit-retry-1", button);
         expect(button.attr("aria-pressed")).toBe("false");
@@ -85,10 +82,10 @@ describe("JavDB want-watch post-commit boundary", () => {
     });
 
     it("keeps manual want action available when state lookup and warning output both fail", async () => {
-        const { gmRequest } = installWantHarness();
+        const { gmRequest, runtimeServices } = installWantHarness();
         gmRequest.mockRejectedValueOnce(new Error("state lookup unavailable"));
         const logger = { warn: vi.fn(() => { throw new Error("logger unavailable"); }), error: vi.fn() };
-        const service = new Fc2WorkspaceService({ runtimeServices: { logger } });
+        const service = new Fc2WorkspaceService({ runtimeServices: { ...runtimeServices, logger } });
         const root = jquery('<div><button type="button" data-jhs-action="javdb-want">JavDB 想看</button></div>');
         const context = { root, isAlive: () => true, namespace: ".postcommit", carNum: "FC2-789" };
 

@@ -1,10 +1,9 @@
 import { AppState } from 'react-native';
 import { DOMParser } from '@xmldom/xmldom';
-import { registerDefaultSettings, SettingsRegistry, LifecycleScope, WebDavSyncStore, CredentialService, ExternalUrlPolicy, HttpService, WebDavService, WebDavSharedProfile, WebDavSyncService } from '@jhs/core';
+import { LifecycleScope, CredentialService, ExternalUrlPolicy, HttpService, WebDavService, WebDavSharedProfile, WebDavSyncService } from '@jhs/core';
 import { mobileHttp } from '../../platform/http/mobileHttp.ts';
 import { secure } from '../../platform/device/nativeBridge.ts';
 import type { Workspace } from './createWorkspace.ts';
-import { publishStorageEvent } from './DomainEventEmitter.ts';
 
 const origin = 'https://localhost';
 
@@ -16,7 +15,8 @@ export function davXml(text: string): Document {
 }
 
 export async function installSync(workspace: Workspace) {
-  const { coordinator, storage, settings, database, events } = workspace;
+  const { storage, settings, state, events, backupService, syncStore: store, validateSetting } = workspace;
+  if (!store) throw new Error('当前片库未启用同步存储。');
   const scope = new LifecycleScope('mobile-sync');
   const appEvents = Object.assign(new EventTarget(), { setTimeout, clearTimeout });
   const visibility = Object.assign(new EventTarget(), { hidden: AppState.currentState !== 'active' });
@@ -27,11 +27,6 @@ export async function installSync(workspace: Workspace) {
   const shared = new WebDavSharedProfile({ credential, storage: secure, origin,
     readLegacy: () => settings.runExclusive(() => webdav.readProfileWithoutLock()) });
   webdav.sharedProfile = shared;
-  const registry = new SettingsRegistry();
-  registerDefaultSettings(registry);
-  const validateSetting = (key: string, value: unknown) => registry.validateSync(key, value);
-  const syncEvents = { emit: (type: string, notice: Parameters<typeof publishStorageEvent>[2]) => publishStorageEvent(events, type, notice) };
-  const store = new WebDavSyncStore({ coordinator, forage: database, settings, storage, events: syncEvents, validateSetting });
   const locks = {
     held: false,
     async request<T>(_id: string, _options: { ifAvailable: true }, operation: (lock: object | null) => Promise<T>) {
@@ -42,12 +37,10 @@ export async function installSync(workspace: Workspace) {
     },
   };
 
-  Object.assign(storage, { syncState: store });
-  coordinator.observer = store;
-  coordinator.beforeMutation = store.recoverBeforeMutation;
-  const sync = new WebDavSyncService({ store, settings, storage, webdav, shared, locks, urlPolicy: policy,
+  const sync = new WebDavSyncService({ store, settings, storage, backup: backupService, webdav, shared, locks, urlPolicy: policy,
     window: appEvents, validateSetting });
   await sync.initialize();
+  state.sync = store;
   scope.listen(sync, 'status', () => events.emit({ domain: 'sync' }));
   const subscription = AppState.addEventListener('change', state => {
     const hidden = state !== 'active';
@@ -55,7 +48,7 @@ export async function installSync(workspace: Workspace) {
     visibility.hidden = hidden;
     appEvents.dispatchEvent(new Event(hidden ? 'pagehide' : 'pageshow'));
   });
-  scope.addCleanup(() => { subscription.remove(); credential.dispose(); store.dispose(); });
+  scope.addCleanup(() => { subscription.remove(); credential.dispose(); store.dispose(); state.sync = undefined; });
 
   return {
     start: () => sync.start(scope, visibility, () => !visibility.hidden),

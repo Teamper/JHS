@@ -110,11 +110,11 @@ export function buildQuickSettingsHtml(registry, options = {}) {
  *
  * @param {any} root
  * @param {Array<Record<string, any>>} descriptors
- * @param {{ settings: any, onChanged?: ((key: string, value: unknown) => void) | null }} options
+ * @param {{ settings: any, onWriteError?: (error: unknown) => void, onChanged?: ((key: string, value: unknown) => void) | null }} options
  */
-export function bindSettingRows(root, descriptors, { settings, onChanged = null }) {
+export function bindSettingRows(root, descriptors, { settings, onWriteError, onChanged = null }) {
     const hub = getSettingBindingHub(settings);
-    const binding = new RowBinding(root, descriptors, { settings, hub, onChanged });
+    const binding = new RowBinding(root, descriptors, { settings, hub, onWriteError, onChanged });
     return {
         sync: (/** @type {Record<string, unknown>} */ snapshot) => binding.sync(snapshot),
         flush: (/** @type {any} */ options) => hub.flush(options),
@@ -147,13 +147,14 @@ class RowBinding {
     /**
      * @param {any} root
      * @param {Array<Record<string, any>>} descriptors
-     * @param {{ settings: any, hub: any, onChanged?: ((key: string, value: unknown) => void) | null }} options
+     * @param {{ settings: any, hub: any, onWriteError?: (error: unknown) => void, onChanged?: ((key: string, value: unknown) => void) | null }} options
      */
-    constructor(root, descriptors, { settings, hub, onChanged = null }) {
+    constructor(root, descriptors, { settings, hub, onWriteError, onChanged = null }) {
         this.root = root;
         this.settings = settings;
         this.hub = hub;
         this.onChanged = onChanged;
+        this.onWriteError = onWriteError;
         /** @type {Record<string, (value: unknown) => void>} */
         this.setters = {};
         /** @type {Map<string, { element: any, setValue: (value: unknown) => void }>} */
@@ -186,7 +187,7 @@ class RowBinding {
             setValue(value);
             this.onChanged?.(key, value);
             if ((descriptor.effect || "live") === "live") {
-                this.hub.userChanged(key, value, fallback, descriptor.label || key);
+                this.hub.userChanged(key, value, fallback, this.onWriteError);
             }
         });
         this.controls.set(key, { element, setValue });

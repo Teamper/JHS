@@ -37,7 +37,7 @@ describe("mapped IPv6 URL policy", () => {
     });
 
     it.each(privateMapped.slice(0, 3))("blocks imported configuration %s along the real source search chain", async (host) => {
-        const values = new Map(), settings = new ResourceSettingsService({ getSetting: async (key, fallback) => values.get(key) ?? fallback, saveSettingItem: async (key, value) => values.set(key, value) });
+        const values = new Map(), settings = new ResourceSettingsService({ snapshot: () => Object.fromEntries(values), set: async (key, value) => values.set(key, value) });
         await settings.importConfig(JSON.stringify({ magnetBuiltInSources: [{ id: "u9a9", baseUrl: `https://[${host}]`, enabled: true, priority: 20 }] }));
         const source = (await settings.getBuiltInSources())[0], request = vi.fn(() => { throw new Error("No network is permitted"); });
         const http = new HttpService({ request }, new ExternalUrlPolicy());

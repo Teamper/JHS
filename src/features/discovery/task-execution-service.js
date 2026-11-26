@@ -1,10 +1,13 @@
 // @ts-check
+import { sleep } from "../../core/timing.js";
+import { getNowStr, getHourDifference } from "../../core/ui-date-time.js";
+import { genericSort } from "../../core/collection-sort.js";
 
 import { ActorSourceHealth, isMissingActorSource } from "./actor-source-health.js";
 import { I, T, _, escapeHtml, l, normalizeCarNum } from "../../core/constants.js";
 import { isAbortError } from "../../core/jhs-error.js";
 import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
-import { readListItem } from "../../core/list-item-reader.js";
+import { parseHostListPage, readListItem } from "../../core/list-item-reader.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
 import { detectSite } from "../../core/site-context.js";
 import { StorageQueue } from "../../core/storage-queue.js";
@@ -21,18 +24,19 @@ function assertCompleteMovieIdentities(items) {
 
 /** Runs due background scans behind the Scheduler Feature and preserves the 6.5.1 task metadata contract. */
 export class TaskExecutionService {
-    /** @param {{runtimeServices: Record<string, any>, blacklist?: {available: () => boolean, parseAndSave: (page: any, name: string, starId: string, site: string) => Promise<any>, resetStatus?: () => Promise<unknown>}, legacyStorage: any, utilities: any, logger: any, jquery: (selector: any) => any, window: Window & typeof globalThis, notifications: any, storageQueue?: StorageQueue, getNewVideoScanner?: () => any, getBlacklistScanner?: () => any}} options */
+    /** @param {{runtimeServices: Record<string, any> & {settings: Pick<import("../../services/settings-service.js").SettingsService, "readStoredSnapshot" | "snapshot">, keywordRules: Pick<import("../../services/keyword-rules-service.js").KeywordRulesService, "getTitleKeywords">}, blacklist?: {available: () => boolean, parseAndSave: (page: any, name: string, starId: string, site: string) => Promise<any>, resetStatus?: () => Promise<unknown>}, sleep?: (ms: number) => Promise<unknown>, logger: any, jquery: (selector: any) => any, window: Window & typeof globalThis, notifications: any, storageQueue?: StorageQueue, getNewVideoScanner?: () => any, getBlacklistScanner?: () => any}} options */
     constructor(options) {
         this.runtimeServices = Object.freeze({ ...options.runtimeServices });
+        this.settings = options.runtimeServices.settings;
         this.sourceHealth = new ActorSourceHealth(options.runtimeServices.storage, () => Date.now());
         this.blacklist = options.blacklist;
-        this.legacyStorage = options.legacyStorage;
-        this.utils = options.utilities;
+        this.keywordRules = options.runtimeServices.keywordRules;
+        this.sleep = options.sleep ?? sleep;
         this.logger = options.logger;
         this.jquery = options.jquery;
         this.window = options.window;
         this.notifications = options.notifications;
-        this.storageQueue = options.storageQueue ?? new StorageQueue();
+        this.storageQueue = options.storageQueue ?? new StorageQueue(options.logger);
         this.singleTaskKey = "checkNewActressActorFilterCar";
         this.profileBackfillLockKey = "jhsBackfillActressProfiles";
         /** @type {any} */ this.taskConfig = null;
@@ -86,7 +90,7 @@ export class TaskExecutionService {
                     throw e;
                 }
                 const o = e.length - i;
-                o > 0 && (this.logger.htmlDebug(`剩余任务数: <span class="jhs-task-emphasis">${o}</span>`), await this.utils.sleep(n));
+                o > 0 && (this.logger.htmlDebug(`剩余任务数: <span class="jhs-task-emphasis">${o}</span>`), await this.sleep(n));
             }
         }));
         const l = await Promise.allSettled(r), c = l.find((/** @type {PromiseSettledResult<void>} */ e) => "rejected" === e.status);
@@ -133,7 +137,7 @@ export class TaskExecutionService {
     isUnnecessaryCheck(e, t) {
         if (!t) throw new Error("未传入checkIntervalTime");
         t = parseInt(String(t));
-        return this.utils.getHourDifference(new Date(e), new Date) < t;
+        return getHourDifference(new Date(e), new Date) < t;
     }
     /** @param {TaskName} name */
     getTaskSchedule(name) {
@@ -196,8 +200,8 @@ export class TaskExecutionService {
     /** @param {TaskName} name */
     async getLatestTaskInterval(name) {
         const schedule = this.getTaskSchedule(name);
-        this.legacyStorage._invalidateCache?.(this.legacyStorage.setting_key);
-        return parseTaskInterval(name, await this.legacyStorage.getSetting(schedule.intervalSetting, schedule.defaultInterval));
+        const settings = await this.settings.readStoredSnapshot();
+        return parseTaskInterval(name, settings[schedule.intervalSetting]);
     }
     /** @param {TaskName} name @param {boolean} [force] */
     async shouldStartTask(name, force = !1) {
@@ -224,7 +228,7 @@ export class TaskExecutionService {
         const storage = this.getRuntimeService("storage"), schedule = this.getTaskSchedule(name);
         if (!completed) return storage.setLocal(schedule.nextKey, String(Date.now() + 3e5));
         const attempt = parseTaskTimestamp(storage.getLocal(schedule.attemptKey)) || 0, completedAt = Math.max(Math.floor(Date.now() / 1e3) * 1e3, attempt), interval = await this.getLatestTaskInterval(name);
-        storage.setLocal(schedule.completedKey, this.utils.getNowStr("-", ":", completedAt)), storage.setLocal(schedule.nextKey, String(completedAt + 36e5 * interval));
+        storage.setLocal(schedule.completedKey, getNowStr("-", ":", completedAt)), storage.setLocal(schedule.nextKey, String(completedAt + 36e5 * interval));
     }
     async recalculateSchedules() {
         await this.loadConfig();
@@ -248,7 +252,7 @@ export class TaskExecutionService {
     }
     async doTask() {
         if (!this.getHostListPageFlag()) return;
-        await this.loadConfig(), this.javDbUrl = await this.getConfiguredSiteOrigin("javDbBtn");
+        await this.loadConfig(), this.javDbUrl = this.getConfiguredSiteOrigin("javDbBtn");
         let allowProfileBackfill = !1;
         await this.window.navigator.locks.request(this.singleTaskKey, {
             ifAvailable: !0
@@ -285,7 +289,7 @@ export class TaskExecutionService {
         return this.configLoadPromise = (async () => {
             do {
                 this.configLoadQueued = !1;
-                const e = await this.legacyStorage.getSetting(), nextConfig = {
+                const e = await this.settings.readStoredSnapshot(), nextConfig = {
                     checkConcurrencyCount: parseNumberSetting(e.checkConcurrencyCount, 2, { min: 2, max: 5 }),
                     checkRequestSleep: parseNumberSetting(e.checkRequestSleep, 100, { min: 0, max: 3e3 }),
                     enableCheckBlacklist: e.enableCheckBlacklist || _,
@@ -310,17 +314,17 @@ export class TaskExecutionService {
     }
     /** 确保所有任务入口均已具备配置和站点地址。 */
     async ensureReady() {
-        (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getConfiguredSiteOrigin("javDbBtn"));
+        (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = this.getConfiguredSiteOrigin("javDbBtn"));
         if (!this.javDbUrl) throw new Error("JavDB 地址未配置");
     }
     /** @param {string} siteId */
-    async getConfiguredSiteOrigin(siteId) {
-        return this.getRuntimeService("movie").externalSiteOrigin(siteId, await this.legacyStorage.getSetting());
+    getConfiguredSiteOrigin(siteId) {
+        return this.getRuntimeService("movie").externalSiteOrigin(siteId, this.settings.snapshot());
     }
     /** @param {string} url */
     async resolveBlacklistSite(url) {
         try {
-            const target = new URL(url), [ javDbUrl, javBusUrl ] = await Promise.all([ this.getConfiguredSiteOrigin("javDbBtn"), this.getConfiguredSiteOrigin("javBusBtn") ]);
+            const target = new URL(url), javDbUrl = this.getConfiguredSiteOrigin("javDbBtn"), javBusUrl = this.getConfiguredSiteOrigin("javBusBtn");
             for (const [ configuredUrl, site ] of [ [ javDbUrl, T ], [ javBusUrl, I ] ]) {
                 try {
                     if (configuredUrl && target.hostname === new URL(configuredUrl).hostname) return site;
@@ -351,7 +355,7 @@ export class TaskExecutionService {
                     concurrency, sleepMs: sleep, intervalHours: interval, ruleHours: rule, force,
                     isUnnecessaryCheck: (/** @type {string} */ date, /** @type {number} */ hours) => this.isUnnecessaryCheck(date, hours),
                     isNetworkBlocked: (/** @type {unknown} */ error) => this.isNetworkBlocked(error),
-                    sleep: (/** @type {number} */ ms) => this.utils.sleep(ms), getTimestamp: () => this.utils.getNowStr(), requestConfig: this.taskConfig,
+                    sleep: (/** @type {number} */ ms) => this.sleep(ms), getTimestamp: () => getNowStr(), requestConfig: this.taskConfig,
                     onActorStart: (/** @type {TaskRecord} */ item) => {
                         this.logger.log("正在检屏黑名单演员:", item.name, item.url);
                         this.jquery("#checkBlacklistMsg").text(`正在检测：${item.name}`);
@@ -366,7 +370,7 @@ export class TaskExecutionService {
                 });
                 blockedError = scan.blockedError;
             } else {
-                let items = await this.legacyStorage.getBlacklist();
+                let items = await this.getRuntimeService("state").getBlacklist();
                 items = items.sort(((/** @type {TaskRecord} */ left, /** @type {TaskRecord} */ right) => left.createTime < right.createTime ? 1 : left.createTime > right.createTime ? -1 : 0));
                 const eligible = [], currentHostname = new URL(this.window.location.href).hostname;
                 for (const item of items) {
@@ -402,8 +406,8 @@ export class TaskExecutionService {
                             return void this.logger.error("检测屏蔽演员网络错误:", url, error);
                         }
                         try {
-                            const page = this.utils.htmlTo$dom(responseText);
-                            const selector = this.getSelector(site), pageState = this.getRuntimeService("hostListParser").parseDetailPage(page, {
+                            const page = this.jquery(new this.window.DOMParser().parseFromString(responseText, "text/html"));
+                            const selector = this.getSelector(site), pageState = parseHostListPage(page, {
                                 boxSelector: site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector,
                                 requestDomItemSelector: selector.requestDomItemSelector,
                             });
@@ -412,7 +416,7 @@ export class TaskExecutionService {
                             this.readCompletePageMovies(sourceItems);
                             await this.storageQueue.addTask((async () => {
                                 const parsed = await blacklist.parseAndSave(page, name, starId, site);
-                                await this.legacyStorage.updateBlacklistItem({ starId, name, checkTime: this.utils.getNowStr(), lastPublishTime: parsed.lastPublishTime });
+                                await this.getRuntimeService("state").updateBlacklistItem({ starId, name, checkTime: getNowStr(), lastPublishTime: parsed.lastPublishTime });
                             })), result.success++;
                         } catch (error) {
                             result.parseFailed++, this.logger.error("解析或保存黑名单演员失败:", url, error);
@@ -465,7 +469,7 @@ export class TaskExecutionService {
                 } else {
                     actors = [];
                     const sync = await this.scrapeActorInfo(`${this.javDbUrl}/users/collection_actors`, actors);
-                    actors.length > 0 && await this.legacyStorage.addFavoriteActressList(actors);
+                    actors.length > 0 && await this.getRuntimeService("state").addFavoriteActressList(actors);
                     pages = sync.pages;
                 }
                 result.success = actors.length, result.actorCount = actors.length, result.pages = pages;
@@ -523,7 +527,7 @@ export class TaskExecutionService {
             let blockedError = null, finalized = !1;
             try {
             const usesFeatureScanner = !!this.featureNewVideoScanController?.scanActresses;
-            const actresses = usesFeatureScanner ? null : await this.legacyStorage.getFavoriteActressList();
+            const actresses = usesFeatureScanner ? null : await this.getRuntimeService("state").getFavoriteActressList();
             let actressCount = 0;
             const concurrency = this.taskConfig.checkConcurrencyCount, sleep = this.taskConfig.checkRequestSleep, interval = this.taskConfig.checkNewVideo_intervalTime, rule = this.taskConfig.checkNewVideo_ruleTime;
             if (this.featureNewVideoScanController?.scanActresses) {
@@ -531,7 +535,7 @@ export class TaskExecutionService {
                     baseUrl: this.javDbUrl, concurrency, sleepMs: sleep, intervalHours: interval, ruleHours: rule, force,
                     isUnnecessaryCheck: (/** @type {string} */ date, /** @type {number} */ hours) => this.isUnnecessaryCheck(date, hours),
                     isNetworkBlocked: (/** @type {unknown} */ error) => this.isNetworkBlocked(error),
-                    sleep: (/** @type {number} */ ms) => this.utils.sleep(ms),
+                    sleep: (/** @type {number} */ ms) => this.sleep(ms),
                     onActorStart: (/** @type {TaskRecord} */ actress, /** @type {string} */ url) => {
                         this.logger.log("正在检测最新作品, 演员:", actress.name, url);
                         this.jquery("#checkNewVideoMsg").text(`正在检测：${actress.name}`);
@@ -546,7 +550,7 @@ export class TaskExecutionService {
                 blockedError = scan.blockedError;
             } else {
                 actressCount = actresses.length;
-                const sorted = this.utils.genericSort(actresses, [ {
+                const sorted = genericSort(actresses, [ {
                     key: (/** @type {TaskRecord} */ actress) => actress.newVideoList?.length ?? 0,
                     order: "desc"
                 }, { key: "lastPublishTime", order: "desc" } ]), eligible = [];
@@ -558,7 +562,7 @@ export class TaskExecutionService {
                 }
                 this.logger.html(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
                 if (eligible.length > 0) {
-                    const titleKeywords = await this.legacyStorage.getTitleFilterKeyword(), blacklistCars = await this.legacyStorage.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((/** @type {TaskRecord} */ item) => item.carNum));
+                    const titleKeywords = await this.keywordRules.getTitleKeywords(), blacklistCars = await this.getRuntimeService("state").getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((/** @type {TaskRecord} */ item) => item.carNum));
                     try {
                         await this.limitConcurrency(eligible, concurrency, sleep, (async (/** @type {TaskRecord} */ actress) => {
                             const {name, starId} = actress, url = `${this.javDbUrl}/actors/${starId}?t=d`;
@@ -620,16 +624,16 @@ export class TaskExecutionService {
     async parsePage(e, site, t, n, a, i) {
         const selector = this.getSelector(site);
         site === I && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove();
-        const pageState = this.getRuntimeService("hostListParser").parseDetailPage(e, {
+        const pageState = parseHostListPage(e, {
             boxSelector: site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector,
             requestDomItemSelector: selector.requestDomItemSelector
         });
         if ("valid" !== pageState.state) throw this.logger.error("新作品检测-解析列表失败"), new Error("新作品检测-解析列表失败");
         const s = pageState.items, o = e.find(selector.nextPageSelector).attr("href");
         if (0 === s.length && o) throw new Error("新作品检测-空列表包含下一页");
-        if (0 === s.length) return await this.legacyStorage.updateFavoriteActress({
+        if (0 === s.length) return await this.getRuntimeService("state").updateFavoriteActress({
             starId: t,
-            lastCheckTime: this.utils.getNowStr(),
+            lastCheckTime: getNowStr(),
             newVideoList: []
         }, { scan: true }), 0;
         const movies = this.readCompletePageMovies([...s]);
@@ -661,11 +665,11 @@ export class TaskExecutionService {
                 c.push({ carNum: s, coverUrl: coverUrl, title: r || "", publishTime: l || "", score: score, voteCount: voteCount, url: url });
             })());
         }
-        const d = selectLatestPublishTime(publishTimes), h = await this.legacyStorage.getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, p = c.filter((/** @type {TaskRecord} */ e) => !h.has(e.carNum)), fresh = p.filter((/** @type {TaskRecord} */ e) => decisions[e.carNum]?.action !== "dismissed");
+        const d = selectLatestPublishTime(publishTimes), h = await this.getRuntimeService("state").getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, p = c.filter((/** @type {TaskRecord} */ e) => !h.has(e.carNum)), fresh = p.filter((/** @type {TaskRecord} */ e) => decisions[e.carNum]?.action !== "dismissed");
         fresh.length > 0 && this.logger.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(n)}, 共${fresh.length}部</span>`),
-        await this.legacyStorage.updateFavoriteActress({
+        await this.getRuntimeService("state").updateFavoriteActress({
             starId: t,
-            lastCheckTime: this.utils.getNowStr(),
+            lastCheckTime: getNowStr(),
             newVideoList: p,
             lastPublishTime: d
         }, { scan: true });
@@ -676,7 +680,7 @@ export class TaskExecutionService {
         if (this.featureNewVideoScanController) return this.featureNewVideoScanController.parseActorMovies(items, starId, name, titleKeywords, blacklistSet);
         assertCompleteMovieIdentities(items);
         if (!items.length) {
-            const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: [] }, { scan: true });
+            const saved = await this.getRuntimeService("state").updateFavoriteActress({ starId, lastCheckTime: getNowStr(), newVideoList: [] }, { scan: true });
             if (saved === false) throw new Error("演员记录已不存在");
             return 0;
         }
@@ -687,8 +691,8 @@ export class TaskExecutionService {
             carNum: item.carNum, coverUrl: item.coverUrl || "", title: item.title || "", publishTime: item.publishTime || "",
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
-        const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await this.legacyStorage.getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, freshItems = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum)), fresh = freshItems.filter((/** @type {TaskRecord} */ item) => decisions[item.carNum]?.action !== "dismissed");
-        const saved = await this.legacyStorage.updateFavoriteActress({ starId, lastCheckTime: this.utils.getNowStr(), newVideoList: freshItems, lastPublishTime: latestPublishTime }, { scan: true });
+        const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await this.getRuntimeService("state").getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, freshItems = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum)), fresh = freshItems.filter((/** @type {TaskRecord} */ item) => decisions[item.carNum]?.action !== "dismissed");
+        const saved = await this.getRuntimeService("state").updateFavoriteActress({ starId, lastCheckTime: getNowStr(), newVideoList: freshItems, lastPublishTime: latestPublishTime }, { scan: true });
         if (saved === false) throw new Error("演员记录已不存在");
         if (fresh.length > 0) {
             try { this.logger.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${fresh.length}部</span>`); }
@@ -712,7 +716,7 @@ export class TaskExecutionService {
                     onActorStart: (/** @type {TaskRecord} */ actress) => l.text(`正在检测：${actress.name}`),
                 });
             } else {
-                const titleKeywords = await this.legacyStorage.getTitleFilterKeyword(), blacklistCars = await this.legacyStorage.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((/** @type {TaskRecord} */ item) => item.carNum));
+                const titleKeywords = await this.keywordRules.getTitleKeywords(), blacklistCars = await this.getRuntimeService("state").getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((/** @type {TaskRecord} */ item) => item.carNum));
                 const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
                 await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
             }

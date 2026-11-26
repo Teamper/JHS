@@ -36,12 +36,12 @@ export function getSettingBindingHub(settings) {
  *   getValue: () => unknown,
  *   setValue: (value: unknown) => void,
  *   fallback?: unknown,
- *   label?: string,
  *   settings: any,
+ *   onWriteError?: (error: unknown) => void,
  *   onChange?: ((key: string, value: unknown) => void) | null
  * }} options
  */
-export function bindSettingControl({ root, selector, key, getValue, setValue, fallback = undefined, label = key, settings, onChange = null }) {
+export function bindSettingControl({ root, selector, key, getValue, setValue, fallback = undefined, settings, onWriteError, onChange = null }) {
     const hub = getSettingBindingHub(settings);
     const element = root.find(selector);
     if (!element.length) return null;
@@ -59,7 +59,7 @@ export function bindSettingControl({ root, selector, key, getValue, setValue, fa
     element.off(".jhsSettingBinding").on("change.jhsSettingBinding", () => {
         const value = getValue();
         onChange?.(key, value);
-        hub.userChanged(key, value, fallback, label);
+        hub.userChanged(key, value, fallback, onWriteError);
     });
     binding.setValue(key, hub.desiredValue(key, settings.snapshot()[key] ?? fallback));
     return {
@@ -130,8 +130,8 @@ class SettingBindingHub {
         return pending ? pending.value : fallback;
     }
 
-    /** @param {string} key @param {unknown} value @param {unknown} fallback @param {string} [label] */
-    userChanged(key, value, fallback, label) {
+    /** @param {string} key @param {unknown} value @param {unknown} fallback @param {(error: unknown) => void} [onWriteError] */
+    userChanged(key, value, fallback, onWriteError) {
         // Optimistically update every mounted surface.
         this.syncAll(key, value);
         const token = ++this.revision;
@@ -151,11 +151,7 @@ class SettingBindingHub {
                     const committed = this.settings.snapshot()[key] ?? fallback;
                     this.syncAll(key, committed);
                     this._maybeDispose();
-                    if (typeof /** @type {any} */ (globalThis).show?.error === "function") {
-                        /** @type {any} */ (globalThis).show.error("设置保存失败，已恢复原设置");
-                    } else if (typeof /** @type {any} */ (globalThis).clog?.error === "function") {
-                        /** @type {any} */ (globalThis).clog.error(`${label || key}保存失败，已恢复原设置`, error);
-                    }
+                    onWriteError?.(error);
                 }
             }
         );

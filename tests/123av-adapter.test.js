@@ -1,52 +1,49 @@
-import { readTestFile } from "./helpers/read-test-file.js";
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { create123AvAdapter } from "../src/integrations/av123/manifest.js";
+import { isCloudflareChallenge } from "../src/services/http-service.js";
 
-const readSource = (path) => readTestFile(join(import.meta.dirname, "..", path), "utf8");
-const fc2Source = readSource("src/features/external-bridge/fc2-catalog-controller.js");
-const integrationSource = readSource("src/integrations/av123/manifest.js");
-const otherSiteSource = readSource("src/features/external-sites/other-sites-controller.js");
-const httpSource = readSource("src/core/http.js");
+const cards = readFileSync(join(import.meta.dirname, "fixtures/123av-cards.html"), "utf8");
 
 describe("123AV Chinese adapter contract", () => {
-    it("uses the confirmed Chinese list and encoded search routes", () => {
-        expect(integrationSource).toContain("/cn/makers/fc2?page=${sourcePage}");
-        expect(integrationSource).toContain("/cn/search?keyword=${encodeURIComponent(keyword)}&page=${sourcePage}");
-        expect(integrationSource).toContain("keyword ? [page]");
-        expect(fc2Source).not.toContain('this.keyword && $(".page-box").hide()');
-        expect(fc2Source).toContain("const href = normalizeHttpUrl(item.url)");
-        expect(otherSiteSource).toContain('providerId: "av123"');
-        expect(otherSiteSource).toContain("this.movie.searchUrl");
+    it("combines two Chinese catalog pages and searches one encoded page at a time", async () => {
+        const request = vi.fn(async ({ url }) => ({ data: cards, finalUrl: url }));
+        const adapter = create123AvAdapter({ request });
+        const catalog = await adapter.listCatalog({ page: 2 });
+        expect(catalog.maxPage).toBe(1378);
+        expect(catalog.items).toHaveLength(12);
+        expect(request.mock.calls.map(([input]) => input.url)).toEqual([
+            "https://123av.com/cn/makers/fc2?page=3",
+            "https://123av.com/cn/makers/fc2?page=4",
+        ]);
+        request.mockClear();
+        const search = await adapter.listCatalog({ page: 3, keyword: "FC2 番号 &" });
+        expect(search.maxPage).toBe(2756);
+        expect(request).toHaveBeenCalledOnce();
+        const url = new URL(request.mock.calls[0][0].url);
+        expect(url.pathname).toBe("/cn/search");
+        expect([...url.searchParams]).toEqual([["keyword", "FC2 番号 &"], ["page", "3"]]);
     });
 
-    it("removes obsolete 123AV selectors, routes and sorting controls", () => {
-        for (const obsolete of ["/ja", "/dm4/tags/fc2", ".box-item", ".detail a", "img[data-src]", "img[title]", ".page-item", ".page-link", "リリース日:", "#player", "Movie({id", "conditionBox", "released_start=2099-09", "type=100"]) {
-            expect(fc2Source).not.toContain(obsolete);
-        }
-        expect(fc2Source).toContain("/tags/fc2?c10=1&jhs_source=123av");
-        expect(otherSiteSource).not.toContain('getAv123Url() + "/ja"');
-    });
-
-    it("classifies Cloudflare failures by normalized code and preserves request context", () => {
-        expect(otherSiteSource).toContain('const code = /** @type {{ code?: string }} */ (a)?.code');
-        expect(otherSiteSource).toContain('"CF_BLOCKED" === code');
-        expect(otherSiteSource).not.toContain("a?._cfBlocked");
-        expect(otherSiteSource).not.toContain('includes("Just a moment")');
-        expect(httpSource).toContain("Cloudflare challenge blocked: ${t}");
-        expect(httpSource).toContain("n.requestUrl = t");
-        expect(httpSource).toContain("n.finalUrl = e.finalUrl");
-        expect(httpSource).toContain("n.cfDiagnostics =");
-        expect(integrationSource).toContain("cookiePartition: { topLevelSite: origin }");
-        expect(integrationSource).toContain('trustClass: "custom-public"');
-        expect(otherSiteSource).not.toContain("cookiePartitionTopLevelSite");
+    it("partitions requests by the configured HTTPS origin and keeps default origins on the allowlist", async () => {
+        const request = vi.fn(async ({ url }) => ({ data: cards, finalUrl: url }));
+        const adapter = create123AvAdapter({ request }, { snapshot: () => ({ av123Url: "https://catalog.example/custom" }) });
+        await adapter.listCatalog({ keyword: "FC2-123" });
+        expect(request).toHaveBeenCalledWith(expect.objectContaining({
+            requestOptions: { cookiePartition: { topLevelSite: "https://catalog.example" } },
+            urlPolicy: { trustClass: "custom-public", expectedOrigin: "https://catalog.example" },
+        }), undefined);
+        request.mockClear();
+        await create123AvAdapter({ request }).listCatalog({ keyword: "FC2-123" });
+        expect(request).toHaveBeenCalledWith(expect.objectContaining({
+            requestOptions: { cookiePartition: { topLevelSite: "https://123av.com" } },
+            urlPolicy: { trustClass: "builtin-public", hosts: ["123av.com"], expectedOrigin: "https://123av.com" },
+        }), undefined);
     });
 
     it("does not classify ordinary 404 markup as a Cloudflare challenge", () => {
-        const isCloudflareChallenge = (html) => {
-            const normalized = html.toLowerCase();
-            return normalized.includes("just a moment") || normalized.includes("cf-chl-") || normalized.includes("challenge-platform");
-        };
-        expect(isCloudflareChallenge("<html><title>404 Page Not Found</title></html>")).toBe(false);
+        expect(isCloudflareChallenge("<html><title>404 Page Not Found</title></html>", 404)).toBe(false);
     });
 });

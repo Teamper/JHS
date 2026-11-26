@@ -1,13 +1,9 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
+import { DetailStateController } from "../src/core/detail-state-controller.js";
+import { getOwningLayerIndex } from "../src/core/dialog-shell.js";
+import { createPageDialogs } from "../src/platform/browser/page-dialogs.js";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
-import { assertMovieStateEligible, getMovieStateEligibility } from "../src/core/movie-identity.js";
-
-const repoRoot = join(import.meta.dirname, "..");
 
 function loadController() {
     const dom = new JSDOM('<div id="detail"><button id="filterBtn"><span></span></button><button id="favoriteBtn"><span></span></button><button id="hasDownBtn"><span></span></button><button id="hasWatchBtn"><span></span></button></div>', { url: "https://javdb.example/v/a" });
@@ -15,17 +11,7 @@ function loadController() {
     const closePage = vi.fn().mockResolvedValue(true), confirm = vi.fn((event, message, callback) => callback()), toggle = vi.fn(async (carNum, flag) => {
         records.get(carNum).stateFlags[flag] = !records.get(carNum).stateFlags[flag];
     });
-    const context = vm.createContext({
-        document: dom.window.document, $, assertMovieStateEligible, getMovieStateEligibility, m: "屏蔽", u: "取消屏蔽", v: "收藏", b: "取消收藏", y: "标记下载", k: "标记观看",
-        normalizeCarNum: value => String(value).trim().toUpperCase(),
-        escapeHtml: value => String(value).replaceAll("<", "&lt;"),
-        normalizeStateFlags: flags => ({ blocked: false, favorite: false, downloaded: false, watched: false, ...flags }),
-        storageManager: { getCar: async carNum => records.get(carNum) },
-        utils: { q: confirm, closePage }, show: { error: vi.fn() }, clog: { error: vi.fn() }
-    });
-    const source = readTestFile(join(repoRoot, "src/core/detail-state-controller.js"), "utf8");
-    vm.runInContext(`${source};globalThis.Controller=DetailStateController`, context);
-    return { controller: new context.Controller({ toggle }), dom, $, records, toggle, confirm, closePage };
+    return { controller: new DetailStateController({ toggle, getState: async carNum => records.get(carNum) }, { jquery: $, confirm, closePage, reportError: vi.fn(), logError: vi.fn() }), dom, $, records, toggle, confirm, closePage };
 }
 
 describe("DetailStateController", () => {
@@ -54,50 +40,35 @@ describe("DetailStateController", () => {
     });
 });
 
-describe("Utils.closePage", () => {
+describe("page dialog ownership", () => {
+    const createActions = (window, close = vi.fn()) => createPageDialogs({ window, dialog: { close }, settings: { snapshot: () => ({ needClosePage: "yes" }) } });
+
     it("attempts to close a userscript-opened detail tab even without window.opener", async () => {
-        const dom = new JSDOM('<div id="detail"></div>', { url: "https://javdb.example/v/a" }), $ = jqueryFactory(dom.window), closeWindow = vi.fn();
-        dom.window.close = closeWindow;
-        const context = vm.createContext({
-            console, URL, window: dom.window, document: dom.window.document, $, layer: { close: vi.fn(), open: vi.fn() },
-            storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, GM_openInTab: vi.fn(), normalizeCarNum: value => value,
-            i: (target, key, value) => (target[key] = value)
-        });
-        vm.runInContext(`${readTestFile(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
-        await expect(new context.TestUtils().closePage({ root: dom.window.document.querySelector("#detail") })).resolves.toBe(true);
+        const { window } = new JSDOM('<div id="detail"></div>', { url: "https://javdb.example/v/a" }), closeWindow = vi.fn();
+        window.close = closeWindow;
+        await expect(createActions(window).closePage({ root: window.document.querySelector("#detail") })).resolves.toBe(true);
         expect(closeWindow).toHaveBeenCalledOnce();
     });
 
     it("prefers the owning iframe detail layer over a nested resource layer", async () => {
-        const parentDom = new JSDOM('<div class="layui-layer" id="layui-layer7"><iframe id="detail-frame"></iframe></div>', { url: "https://javdb.example/" });
-        const frame = parentDom.window.document.querySelector("#detail-frame"), childWindow = frame.contentWindow;
-        childWindow.document.body.innerHTML = '<div class="layui-layer" id="layui-layer8"><button id="offline">离线</button></div>';
-        const $ = jqueryFactory(childWindow), parentClosePage = vi.fn().mockResolvedValue(true), childClose = vi.fn();
-        parentDom.window.utils = { closePage: parentClosePage };
-        const context = vm.createContext({
-            console, URL, window: childWindow, document: childWindow.document, unsafeWindow: childWindow, $, layer: { close: childClose, open: vi.fn() },
-            storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, GM_openInTab: vi.fn(), normalizeCarNum: value => value,
-            i: (target, key, value) => (target[key] = value)
-        });
-        vm.runInContext(`${readTestFile(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
-        await new context.TestUtils().closePage({ root: childWindow.document.querySelector("#offline") });
-        expect(parentClosePage).toHaveBeenCalledWith({ layerIndex: 7 });
+        const { window } = new JSDOM('<div class="layui-layer" id="layui-layer7"><iframe id="detail-frame"></iframe></div>', { url: "https://javdb.example/" });
+        const child = window.document.querySelector("#detail-frame").contentWindow;
+        child.document.body.innerHTML = '<div class="layui-layer" id="layui-layer8"><button id="offline">离线</button></div>';
+        const closePage = vi.fn().mockResolvedValue(true), childClose = vi.fn();
+        window.utils = { closePage };
+        await createActions(child, childClose).closePage({ root: child.document.querySelector("#offline") });
+        expect(closePage).toHaveBeenCalledWith({ layerIndex: 7 });
         expect(childClose).not.toHaveBeenCalled();
+        window.close();
     });
 
     it("closes the layer owning root instead of the last layer", async () => {
-        const dom = new JSDOM('<div class="layui-layer" id="layui-layer7"><div id="detail"></div></div><div class="layui-layer" id="layui-layer8"><div id="confirm"></div></div>', { url: "https://javdb.example/v/a" });
-        const $ = jqueryFactory(dom.window), close = vi.fn(), context = vm.createContext({
-            console, URL, window: dom.window, document: dom.window.document, $, layer: { close, open: vi.fn() },
-            storageManager: { getSetting: vi.fn().mockResolvedValue(true) }, GM_openInTab: vi.fn(), normalizeCarNum: value => value,
-            i: (target, key, value) => (target[key] = value)
-        });
-        dom.window.layer = context.layer;
-        vm.runInContext(`${readTestFile(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
-        const utils = new context.TestUtils(), detail = dom.window.document.querySelector("#detail"), layerIndex = utils.getOwningLayerIndex({ root: detail });
+        const { window } = new JSDOM('<div class="layui-layer" id="layui-layer7"><div id="detail"></div></div><div class="layui-layer" id="layui-layer8"><div id="confirm"></div></div>', { url: "https://javdb.example/v/a" });
+        const close = vi.fn(), detail = window.document.querySelector("#detail");
+        const layerIndex = getOwningLayerIndex({ root: detail }, window);
         detail.remove();
-        await utils.closePage({ root: detail, layerIndex });
-        expect(close).toHaveBeenCalledOnce();
-        expect(close).toHaveBeenCalledWith(7);
+        await createActions(window, close).closePage({ root: detail, layerIndex });
+        expect(close).toHaveBeenCalledExactlyOnceWith(7);
+        window.close();
     });
 });

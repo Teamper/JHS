@@ -5,7 +5,7 @@ import { ReviewPanel } from "../../ui/detail/review-panel.js";
 
 /** Owns review-panel mounting and movie identity lookup for detail pages. */
 export class ReviewController {
-    /** @param {{document: Document, window: Window, hostAdapter: any, route: string, review: any, movie: any, settings: any, storage: any, ui: any, clipboard: any, notifications: any, diagnostics: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope}} options */
+    /** @param {{document: Document, window: Window, hostAdapter: any, route: string, review: any, movie: any, settings: any, keywordRules: any, ui: any, clipboard: any, notifications: any, diagnostics: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -14,7 +14,7 @@ export class ReviewController {
         this.review = options.review;
         this.movie = options.movie;
         this.settings = options.settings;
-        this.storage = options.storage;
+        this.keywordRules = options.keywordRules;
         this.ui = options.ui;
         this.clipboard = options.clipboard;
         this.notifications = options.notifications;
@@ -97,7 +97,7 @@ export class ReviewController {
     async mount(movieId) {
         if (!this.target || this.scope.disposed) return null;
         const panel = new ReviewPanel({
-            review: this.review, settings: this.settings, storage: this.storage, scope: async () => this.scope,
+            review: this.review, settings: this.settings, keywordRules: this.keywordRules, scope: async () => this.scope,
             jquery: this.ui.jquery, document: this.document, window: this.window,
             ui: this.ui, clipboard: this.clipboard, notifications: this.notifications, diagnostics: this.diagnostics,
         });
@@ -124,6 +124,5 @@ export class ReviewController {
     /** @param {string} message @param {unknown} error */
     reportError(message, error) {
         this.diagnostics?.recordError?.({ source: "detail-review", message, cause: error instanceof Error ? error.message : String(error) });
-        if (!this.diagnostics) /** @type {any} */ (globalThis).clog?.error(message, error);
     }
 }

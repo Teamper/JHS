@@ -1,9 +1,10 @@
-import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
+import { memoryAtomicStorage, storageFromForage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StorageManager } from "../src/core/storage.js";
+import { PortableBackupService } from "../src/services/portable-backup-service.js";
 import { runDataMigrations } from "../src/core/migration.js";
 import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 import { SettingsService } from "../src/services/settings-service.js";
+import { WebDavSyncStore } from "../src/core/webdav-sync-store.js";
 
 function createCoordinator() {
     let tail = Promise.resolve(), depth = 0, entries = 0;
@@ -49,47 +50,32 @@ function createStorage(options = {}) {
         removeItem: vi.fn(async (key) => data.delete(key)),
         keys: vi.fn(async () => [...data.keys()]),
     };
-    const storage = Object.create(StorageManager.prototype);
-    Object.assign(storage, {
-        car_list_key: "car_list",
-        favorite_actresses_key: "favorite_actresses",
-        setting_key: "setting",
-        blacklist_key: "blacklist",
-        blacklist_car_list_key: "blacklist_car_list",
-        filter_keyword_title_key: "filter_keyword_title",
-        filter_keyword_review_key: "filter_keyword_review",
-        third_party_cache_key: "third_party_ttl_cache",
-        mutationCoordinator: coordinator,
-        stateService: { recoverPendingTransactionWithoutLock: vi.fn(async () => false) },
-        forage,
-        getCarList: async () => data.get("car_list") || [],
-        getBlacklist: async () => data.get("blacklist") || [],
-        getBlacklistCarList: async () => data.get("blacklist_car_list") || [],
-        getFavoriteActressList: async () => data.get("favorite_actresses") || [],
-        _invalidateCache: vi.fn(),
-        _setItemAndInvalidate: async (key, value) => {
-            await forage.setItem(key, value);
-            storage._invalidateCache(key);
-        },
-    });
-    storage.atomicStorage = memoryAtomicStorage(data, { beforeWrite: async key => {
+    const atomic = memoryAtomicStorage(data, { beforeWrite: async key => {
         writes.push({ key, depth: coordinator.depth });
         if (options.failKey === key || options.failEveryWriteTo === key || options.failOnWrite?.key === key) throw new Error(`injected ${key} failure`);
     } });
-    return { storage, data, coordinator, writes };
+    const storage = storageFromForage(forage, atomic);
+    const state = { recoverPendingTransactionWithoutLock: vi.fn(async () => false) };
+    const backup = new PortableBackupService({ storage, coordinator, state });
+    return { storage, forage, state, backup, data, coordinator, writes };
 }
 
 describe("portable import atomicity", () => {
     afterEach(() => vi.unstubAllGlobals());
 
-    it("keeps a completed import successful when cache notification fails", async () => {
+    it("keeps a completed import successful when refreshing synchronization fails", async () => {
         vi.stubGlobal("utils", { getNowStr: () => "2026-10-26 00:00:00" });
         vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
-        const { storage, data } = createStorage();
-        storage._invalidateCache.mockImplementation(() => { if (data.get("car_list")[0]?.carNum === "NEW-123") throw new Error("cache notification failed"); });
-        await expect(storage.importData({ data_version: 3, car_list: [{ carNum: "NEW-123", url: "/v/new" }] })).resolves.toBeUndefined();
+        const { backup, data, storage, coordinator } = createStorage();
+        const sync = backup.sync = new WebDavSyncStore({ storage, coordinator });
+        const read = vi.spyOn(sync, "read").mockRejectedValue(new Error("sync refresh failed"));
+        const release = vi.spyOn(sync, "releaseSnapshots");
+        await expect(backup.importData({ data_version: 3, car_list: [{ carNum: "NEW-123", url: "/v/new" }] })).resolves.toBeUndefined();
         expect(data.get("car_list")).toEqual([expect.objectContaining({ carNum: "NEW-123" })]);
         expect(data.get("snapshots").filter(snapshot => snapshot.source === "auto-import")).toHaveLength(1);
+        expect(release).toHaveBeenCalledOnce();
+        expect(read).toHaveBeenCalledOnce();
+        sync.dispose();
     });
 
     it.each(["data_version", "car_list", "setting", "favorite_actresses"])("keeps the pre-import data when persisting %s fails", async (failKey) => {
@@ -97,9 +83,9 @@ describe("portable import atomicity", () => {
         vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
         vi.stubGlobal("navigator", {});
         const version = failKey === "data_version" ? 2 : 3;
-        const { storage, data, coordinator, writes } = createStorage({ failKey, initial: { data_version: version } });
+        const { backup, data, coordinator, writes } = createStorage({ failKey, initial: { data_version: version } });
 
-        await expect(storage.importData({
+        await expect(backup.importData({
             data_version: 3,
             car_list: [{ carNum: "NEW-1", url: "/v/new" }],
             setting: { themeMode: "dark" },
@@ -121,9 +107,9 @@ describe("portable import atomicity", () => {
         vi.stubGlobal("navigator", {});
         const oldCar = { carNum: "OLD-1", url: "", names: "", status: "", stateFlags: { favorite: false, downloaded: false, watched: false, blocked: false } };
         const activity = { entries: [{ id: "remove-old", type: "new-video-remove", commitState: "committed", createdAt: "2026-09-26T00:00:00.000Z", changes: [{ carNum: "OLD-1", undoState: "pending" }] }] };
-        const { storage, data } = createStorage({ initial: { data_version: 2, car_list: [oldCar], activity_log: activity }, failOnWrite: { key: "car_list", occurrence: 1 } });
+        const { backup, data } = createStorage({ initial: { data_version: 2, car_list: [oldCar], activity_log: activity }, failOnWrite: { key: "car_list", occurrence: 1 } });
 
-        await expect(storage.importData({ data_version: 2 })).rejects.toThrow("injected car_list failure");
+        await expect(backup.importData({ data_version: 2 })).rejects.toThrow("injected car_list failure");
 
         expect(data.get("data_version")).toBe(2);
         expect(data.get("car_list")).toEqual([oldCar]);
@@ -136,9 +122,9 @@ describe("portable import atomicity", () => {
         vi.stubGlobal("utils", { getNowStr: () => "2026-09-26 00:00:00" });
         vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
         vi.stubGlobal("navigator", {});
-        const { storage, data } = createStorage({ failEveryWriteTo: "car_list" });
+        const { backup, data } = createStorage({ failEveryWriteTo: "car_list" });
 
-        await expect(storage.importData({ data_version: 3, car_list: [{ carNum: "NEW-1", url: "/v/new" }] }))
+        await expect(backup.importData({ data_version: 3, car_list: [{ carNum: "NEW-1", url: "/v/new" }] }))
             .rejects.toThrow("injected car_list failure");
         expect(data.has("snapshots")).toBe(false);
         expect(data.get("car_list")).toEqual([{ carNum: "OLD-1", url: "/v/old" }]);
@@ -154,23 +140,23 @@ describe("portable migration and consistent exports", () => {
     afterEach(() => vi.unstubAllGlobals());
 
     it.each([undefined, 0, 1])("imports legacy status from source version %s without downgrading the destination", async (version) => {
-        const { storage, data } = createStorage();
+        const { backup, forage, data } = createStorage();
         const input = { car_list: [{ carNum: "abc-123", status: "favorite", url: "/old" }] };
         if (version !== undefined) input.data_version = version;
         const original = structuredClone(input), untouched = structuredClone(data.get("favorite_actresses"));
         vi.stubGlobal("settingsService", { updateWithoutLock: vi.fn(() => { throw new Error("input migration reached live settings"); }) });
-        await storage.importData(input);
+        await backup.importData(input);
         expect(data.get("car_list")[0]).toMatchObject({ carNum: "ABC-123", stateFlags: { favorite: true } });
         expect(data.get("favorite_actresses")).toEqual(untouched);
         expect(data.get("data_version")).toBe(CURRENT_DATA_VERSION);
         expect(input).toEqual(original);
         expect(globalThis.settingsService.updateWithoutLock).not.toHaveBeenCalled();
-        expect(storage.forage.setItem.mock.calls.filter(([key]) => key === "data_version")).toEqual([]);
+        expect(forage.setItem.mock.calls.filter(([key]) => key === "data_version")).toEqual([]);
     });
 
     it("treats explicit null as an empty domain while retaining destination local settings", async () => {
-        const { storage, data } = createStorage();
-        await storage.importData({ car_list: null, setting: null, favorite_actresses: null });
+        const { backup, data } = createStorage();
+        await backup.importData({ car_list: null, setting: null, favorite_actresses: null });
         expect(data.get("car_list")).toEqual([]);
         expect(data.get("favorite_actresses")).toEqual([]);
         expect(data.get("setting")).toEqual({ webDavPassword: "AES:local" });
@@ -178,22 +164,22 @@ describe("portable migration and consistent exports", () => {
 
     it("upgrades destination data independently and rolls it back if the later import fails", async () => {
         const old = [{ carNum: "old-1", status: "favorite" }];
-        const { storage, data } = createStorage({ initial: { data_version: 1, car_list: old }, failKey: "setting" });
-        await expect(storage.importData({ data_version: 3, setting: {} })).rejects.toThrow("injected setting failure");
+        const { backup, data } = createStorage({ initial: { data_version: 1, car_list: old }, failKey: "setting" });
+        await expect(backup.importData({ data_version: 3, setting: {} })).rejects.toThrow("injected setting failure");
         expect(data.get("data_version")).toBe(1);
         expect(data.get("car_list")).toEqual(old);
         expect(data.has("snapshots")).toBe(false);
     });
 
     it("reuses the legacy database wrappers without migrating imported settings through live services", async () => {
-        const { storage, data, coordinator } = createStorage({ initial: {
+        const { backup, data, coordinator } = createStorage({ initial: {
             data_version: 0, car_list: [{ carNum: "abc123", status: "favorite", actress: "A" }],
             filter_actor_actress_info_list: [{ name: "A", isActor: true, url: "https://example.test/actors/a" }],
             car_list_filter_actor_actress: [{ carNum: "ABC-9", actress: "A", type: "old" }],
             favorite_actresses: [{ dbId: "a", name: "A" }],
             setting: { enableCheckFilterActorActress: "yes", webDavPassword: "AES:local" },
         } });
-        await storage.importData({ data_version: 3, setting: { themeMode: "dark" } });
+        await backup.importData({ data_version: 3, setting: { themeMode: "dark" } });
         expect(data.get("car_list")[0]).toMatchObject({ carNum: "ABC-123", names: "A", stateFlags: { favorite: true } });
         expect(data.get("blacklist")[0]).toMatchObject({ starId: "a", role: "actor" });
         expect(data.get("blacklist_car_list")[0]).toMatchObject({ starId: "a", names: "A" });
@@ -205,13 +191,13 @@ describe("portable migration and consistent exports", () => {
 
     it("never exposes draft settings or emits migration events when an atomic import aborts", async () => {
         const original = { enableCheckFilterActorActress: "yes", webDavPassword: "AES:local" };
-        const { storage, data, coordinator } = createStorage({ initial: { data_version: 0, setting: original }, failKey: "favorite_actresses" });
-        const settings = new SettingsService({ get: key => storage.forage.getItem(key), set: (key, value) => storage.forage.setItem(key, value) }, { mutationCoordinator: coordinator });
+        const { backup, forage, data, coordinator } = createStorage({ initial: { data_version: 0, setting: original }, failKey: "favorite_actresses" });
+        const settings = new SettingsService({ get: key => forage.getItem(key), set: (key, value) => forage.setItem(key, value) }, { mutationCoordinator: coordinator });
         await settings.load();
         const changed = [];
         settings.addEventListener("settings.changed", event => changed.push(event.detail.snapshot));
-        vi.stubGlobal("settingsService", settings);
-        await expect(storage.importData({ setting: { themeMode: "dark" } })).rejects.toThrow("injected favorite_actresses failure");
+        backup.settings = settings;
+        await expect(backup.importData({ setting: { themeMode: "dark" } })).rejects.toThrow("injected favorite_actresses failure");
         expect(changed).toEqual([]);
         expect(data.get("setting")).toEqual(original);
         expect(settings.snapshot()).toEqual(original);
@@ -219,68 +205,68 @@ describe("portable migration and consistent exports", () => {
     });
 
     it("preserves alias-only v0 data in raw snapshots while keeping current exports canonical", async () => {
-        const { storage, data } = createStorage({ initial: {
+        const { backup, data } = createStorage({ initial: {
             data_version: 0, car_list: null, setting: null, favorite_actresses: null,
             favorite_actresses_info_list: [{ dbId: "old-star", name: "Old" }],
         } });
-        const snapshot = await storage.createSnapshot("alias-only");
+        const snapshot = await backup.createSnapshot("alias-only");
         expect(snapshot.data).toEqual({ data_version: 0, favorite_actresses_info_list: [{ dbId: "old-star", name: "Old" }] });
         data.set("data_version", 3);
-        await storage.restoreSnapshot(snapshot.id);
+        await backup.restoreSnapshot(snapshot.id);
         expect(data.get("favorite_actresses")).toEqual([{ starId: "old-star", name: "Old" }]);
-        expect(await storage.exportData()).not.toHaveProperty("favorite_actresses_info_list");
+        expect(await backup.exportData()).not.toHaveProperty("favorite_actresses_info_list");
     });
 
     it("retains source versions in manual and migration snapshots and restores both legacy forms", async () => {
-        const { storage, data, coordinator } = createStorage({ initial: { data_version: 1, car_list: [{ carNum: "abc-123", status: "favorite" }] } });
-        const manual = await storage.createSnapshot("before");
+        const { storage, backup, data, coordinator } = createStorage({ initial: { data_version: 1, car_list: [{ carNum: "abc-123", status: "favorite" }] } });
+        const manual = await backup.createSnapshot("before");
         expect(manual.data.data_version).toBe(1);
-        await runDataMigrations(storage, coordinator);
+        await coordinator.runExclusive(() => runDataMigrations(storage));
         const migrated = data.get("snapshots").find((item) => item.kind === "migration-snapshot");
         expect(migrated.data.data_version).toBe(1);
         for (const snapshot of [manual, migrated, { id: "old-snapshot", data: { car_list: [{ carNum: "abc-123", status: "favorite" }] } }]) {
             if (snapshot.id === "old-snapshot") data.get("snapshots").push(snapshot);
             data.set("car_list", []);
-            await storage.restoreSnapshot(snapshot.id);
+            await backup.restoreSnapshot(snapshot.id);
             expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
             expect(data.get("data_version")).toBe(CURRENT_DATA_VERSION);
         }
     });
 
     it("rejects future source and destination versions before snapshot, recovery or writes", async () => {
-        const { storage, data, writes } = createStorage();
-        await expect(storage.importData({ data_version: CURRENT_DATA_VERSION + 1, setting: {} })).rejects.toThrow("数据来自更新版本");
+        const { backup, state, data, writes } = createStorage();
+        await expect(backup.importData({ data_version: CURRENT_DATA_VERSION + 1, setting: {} })).rejects.toThrow("数据来自更新版本");
         data.set("data_version", CURRENT_DATA_VERSION + 1);
-        await expect(storage.importData({ setting: {} })).rejects.toThrow("数据来自更新版本");
-        await expect(storage.exportData()).rejects.toThrow("数据来自更新版本");
+        await expect(backup.importData({ setting: {} })).rejects.toThrow("数据来自更新版本");
+        await expect(backup.exportData()).rejects.toThrow("数据来自更新版本");
         expect(writes).toEqual([]);
-        expect(storage.stateService.recoverPendingTransactionWithoutLock).not.toHaveBeenCalled();
+        expect(state.recoverPendingTransactionWithoutLock).not.toHaveBeenCalled();
     });
 
     it("does not borrow destination activity as evidence for source tombstones", async () => {
         const tombstone = { carNum: "ABC-1", status: "", url: "", names: "" };
         const activity = { entries: [{ type: "new-video-remove", commitState: "committed", changes: [{ carNum: "ABC-1" }] }] };
-        const { storage, data } = createStorage({ initial: { activity_log: activity, new_video_decisions: { "KEEP-1": { action: "snoozed" } } } });
-        await storage.importData({ data_version: 2, car_list: [tombstone], new_video_decisions: {} });
+        const { backup, data } = createStorage({ initial: { activity_log: activity, new_video_decisions: { "KEEP-1": { action: "snoozed" } } } });
+        await backup.importData({ data_version: 2, car_list: [tombstone], new_video_decisions: {} });
         expect(data.get("car_list")).toEqual([tombstone]);
         expect(data.get("new_video_decisions")).toEqual({});
-        await storage.importData({ data_version: 2, car_list: [tombstone], activity_log: activity });
+        await backup.importData({ data_version: 2, car_list: [tombstone], activity_log: activity });
         expect(data.get("car_list")).toEqual([tombstone]);
         expect(data.get("new_video_decisions")).toEqual({});
     });
 
     it.each(["exportPortableData", "exportData"])("%s holds one lock across every domain read", async (method) => {
-        const { storage, data, coordinator } = createStorage();
+        const { backup, forage, data, coordinator } = createStorage();
         let releaseRead, notifyRead;
         const readReached = new Promise((resolve) => { notifyRead = resolve; });
         const readGate = new Promise((resolve) => { releaseRead = resolve; });
-        const read = storage.forage.getItem.getMockImplementation();
-        storage.forage.getItem.mockImplementation(async (key) => {
+        const read = forage.getItem.getMockImplementation();
+        forage.getItem.mockImplementation(async (key) => {
             const value = await read(key);
             if (key === "car_list") { notifyRead(); await readGate; }
             return value;
         });
-        const exported = storage[method]();
+        const exported = backup[method]();
         await readReached;
         let writerEntered = false;
         const mutation = coordinator.runExclusive(async () => {
@@ -291,21 +277,21 @@ describe("portable migration and consistent exports", () => {
         await Promise.resolve();
         expect(writerEntered).toBe(false);
         releaseRead();
-        const backup = await exported;
+        const exportedData = await exported;
         await mutation;
-        expect(backup.car_list).toEqual([{ carNum: "OLD-1", url: "/v/old" }]);
-        expect(backup.favorite_actresses).toEqual([{ starId: "old-star", name: "Old" }]);
+        expect(exportedData.car_list).toEqual([{ carNum: "OLD-1", url: "/v/old" }]);
+        expect(exportedData.favorite_actresses).toEqual([{ starId: "old-star", name: "Old" }]);
         expect(coordinator.entries).toBe(2);
     });
 
     it("recovers before exporting and refuses a backup when recovery fails", async () => {
-        const { storage, data, coordinator } = createStorage();
-        storage.stateService.recoverPendingTransactionWithoutLock.mockImplementationOnce(async () => {
+        const { backup, state, data, coordinator } = createStorage();
+        state.recoverPendingTransactionWithoutLock.mockImplementationOnce(async () => {
             expect(coordinator.depth).toBe(1);
             data.set("car_list", [{ carNum: "RECOVERED-1" }]);
         });
-        expect((await storage.exportData()).car_list).toEqual([{ carNum: "RECOVERED-1" }]);
-        storage.stateService.recoverPendingTransactionWithoutLock.mockRejectedValueOnce(new Error("recovery unavailable"));
-        await expect(storage.exportData()).rejects.toThrow("recovery unavailable");
+        expect((await backup.exportData()).car_list).toEqual([{ carNum: "RECOVERED-1" }]);
+        state.recoverPendingTransactionWithoutLock.mockRejectedValueOnce(new Error("recovery unavailable"));
+        await expect(backup.exportData()).rejects.toThrow("recovery unavailable");
     });
 });

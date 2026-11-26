@@ -1,7 +1,8 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
+import { getNowStr, formatDate, getHourDifference } from "../src/core/ui-date-time.js";
+import { isUrl, getUrlParam } from "../src/core/url-parameters.js";
+import { genericSort } from "../src/core/collection-sort.js";
+import { waitForDom } from "../src/core/dom-actions.js";
+import { debounce } from "../src/core/timing.js";
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
 function loadUtilsWithObserver() {
@@ -12,96 +13,15 @@ function loadUtilsWithObserver() {
         disconnect() { this.disconnected = true; }
         emit() { this.callback([]); }
     }
-    const context = vm.createContext({
-        console, URL, document: { documentElement: {} }, MutationObserver: FakeMutationObserver,
-        setTimeout, clearTimeout, setInterval, clearInterval, clog: { error: vi.fn() },
-        i: (target, key, value) => (target[key] = value)
-    });
-    vm.runInContext(`${readTestFile(join(process.cwd(), "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils;`, context);
+    vi.stubGlobal("document", { documentElement: {} });
     const scope = {
         observe(target, callback, options) { const value = new FakeMutationObserver(callback); value.observe(target, options); return value; },
         releaseObserver(value) { value.disconnect(); },
     };
-    return { utils: new context.TestUtils(), getObserver: () => observer, scope };
+    return { getObserver: () => observer, scope };
 }
 
-afterEach(() => vi.useRealTimers());
-
-// --- Functions under test (extracted from src/core/utils.js class Utils) ---
-
-function getNowStr(e = "-", t = ":", n = null) {
-    let a;
-    a = n ? new Date(n) : new Date;
-    const i = a.getFullYear(), s = String(a.getMonth() + 1).padStart(2, "0"), o = String(a.getDate()).padStart(2, "0"), r = String(a.getHours()).padStart(2, "0"), l = String(a.getMinutes()).padStart(2, "0"), c = String(a.getSeconds()).padStart(2, "0");
-    return `${[ i, s, o ].join(e)} ${[ r, l, c ].join(t)}`;
-}
-
-function formatDate(e, t = "-", n = ":") {
-    let a;
-    if (e instanceof Date) a = e; else {
-        if ("string" != typeof e) throw new Error("Invalid date input: must be Date object or date string");
-        if (a = new Date(e), isNaN(a.getTime())) throw new Error("Invalid date string");
-    }
-    const i = a.getFullYear(), s = String(a.getMonth() + 1).padStart(2, "0"), o = String(a.getDate()).padStart(2, "0"), r = String(a.getHours()).padStart(2, "0"), l = String(a.getMinutes()).padStart(2, "0"), c = String(a.getSeconds()).padStart(2, "0");
-    return `${[ i, s, o ].join(t)} ${[ r, l, c ].join(n)}`;
-}
-
-function getHourDifference(e, t) {
-    const n = e.getTime(), a = t.getTime(), i = Math.abs(a - n) / 36e5;
-    return Math.floor(i);
-}
-
-function isUrl(e) {
-    try {
-        return new URL(e), !0;
-    } catch (t) {
-        return !1;
-    }
-}
-
-function getUrlParam(e, t) {
-    const n = e.split("?")[1];
-    if (!n) return null;
-    const a = new RegExp(`(?:^|&)${t}=([^&]*)`), i = n.match(a);
-    let s = "";
-    return i && i[1] && (s = decodeURIComponent(i[1].replace(/\+/g, " "))), s ? "true" === s || "false" === s ? "true" === s.toLowerCase() : "string" != typeof s || "" === s.trim() || isNaN(Number(s)) ? s : Number(s) : s;
-}
-
-function genericSort(e, t, n = !0) {
-    if (!Array.isArray(e) || 0 === e.length) return [];
-    if (!Array.isArray(t) || 0 === t.length) return [ ...e ];
-    const i = e => {
-        if (e instanceof Date) return e;
-        if ("string" == typeof e) {
-            const t = new Date(e);
-            if (!isNaN(t.getTime())) return t;
-        }
-        return e;
-    };
-    const getVal = (e, t) => null != t ? "function" == typeof t ? t(e) : e && "object" == typeof e ? e[t] : void 0 : e;
-    const nulls = [], nonNulls = [];
-    for (const item of e) {
-        let hasNull = !1;
-        for (const s of t) {
-            const val = getVal(item, s.key);
-            if (null == val || void 0 === val) { hasNull = !0; break; }
-        }
-        hasNull ? nulls.push(item) : nonNulls.push(item);
-    }
-    return nonNulls.sort(((e, a) => {
-        for (const s of t) {
-            const {key: t, order: o = "asc"} = s;
-            let r = getVal(e, t), l = getVal(a, t);
-            const c = i(r), d = i(l);
-            let h = c instanceof Date && d instanceof Date ? c.getTime() - d.getTime() : "number" == typeof r && "number" == typeof l ? r - l : "string" == typeof r && "string" == typeof l ? r.localeCompare(l) : String(r).localeCompare(String(l));
-            "desc" === o && (h *= -1);
-            if (0 !== h) return h;
-        }
-        return 0;
-    })), n ? [ ...nonNulls, ...nulls ] : [ ...nulls, ...nonNulls ];
-}
-
-// --- Tests ---
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('getNowStr', () => {
     it('should format a given date with default separators', () => {
@@ -286,8 +206,8 @@ describe('genericSort', () => {
 
 describe("loopDetector", () => {
     it("resolves immediately without creating a polling interval", () => {
-        const intervalSpy = vi.spyOn(globalThis, "setInterval"), callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver();
-        utils.loopDetector(() => true, callback, 1, 1e4, false);
+        const intervalSpy = vi.spyOn(globalThis, "setInterval"), callback = vi.fn(), { getObserver } = loadUtilsWithObserver();
+        waitForDom(() => true, callback, 1, 1e4, false);
         expect(callback).toHaveBeenCalledTimes(1);
         expect(getObserver()).toBeNull();
         expect(intervalSpy).not.toHaveBeenCalled();
@@ -297,38 +217,38 @@ describe("loopDetector", () => {
     it("reacts to DOM mutation and cleans up its observer", () => {
         vi.useFakeTimers();
         let ready = false;
-        const callback = vi.fn(), { utils, getObserver, scope } = loadUtilsWithObserver();
-        utils.loopDetector(() => ready, callback, 20, 1e4, false, scope);
+        const callback = vi.fn(), { getObserver, scope } = loadUtilsWithObserver();
+        waitForDom(() => ready, callback, 20, 1e4, false, scope);
         ready = true, getObserver().emit(), vi.advanceTimersByTime(20);
         expect(callback).toHaveBeenCalledTimes(1);
         expect(getObserver().disconnected).toBe(true);
-        expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
+        expect(vi.getTimerCount()).toBe(0);
     });
 
     it("honors a timeout without invoking a disabled timeout callback", () => {
         vi.useFakeTimers();
-        const callback = vi.fn(), { utils, getObserver, scope } = loadUtilsWithObserver();
-        utils.loopDetector(() => false, callback, 1, 50, false, scope), vi.advanceTimersByTime(50);
+        const callback = vi.fn(), { getObserver, scope } = loadUtilsWithObserver();
+        waitForDom(() => false, callback, 1, 50, false, scope), vi.advanceTimersByTime(50);
         expect(callback).not.toHaveBeenCalled();
         expect(getObserver().disconnected).toBe(true);
-        expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
+        expect(vi.getTimerCount()).toBe(0);
     });
 
     it("supports lifecycle cancellation before the condition becomes ready", () => {
         vi.useFakeTimers();
         let ready = false;
-        const callback = vi.fn(), { utils, getObserver, scope } = loadUtilsWithObserver(), cancel = utils.loopDetector(() => ready, callback, 20, 1e4, false, scope);
+        const callback = vi.fn(), { getObserver, scope } = loadUtilsWithObserver(), cancel = waitForDom(() => ready, callback, 20, 1e4, false, scope);
         cancel(), ready = true, getObserver().emit(), vi.advanceTimersByTime(20);
         expect(callback).not.toHaveBeenCalled();
         expect(getObserver().disconnected).toBe(true);
-        expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
+        expect(vi.getTimerCount()).toBe(0);
     });
 });
 
 describe("debounce", () => {
     it("coalesces rapid calls and supports lifecycle cancellation", () => {
         vi.useFakeTimers();
-        const { utils } = loadUtilsWithObserver(), callback = vi.fn(), debounced = utils.debounce(callback, 200);
+        const callback = vi.fn(), debounced = debounce(callback, 200);
         debounced("first"), debounced("last"), vi.advanceTimersByTime(199);
         expect(callback).not.toHaveBeenCalled();
         vi.advanceTimersByTime(1);

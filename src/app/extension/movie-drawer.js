@@ -157,7 +157,7 @@ export class ExtensionMovieDrawer {
                 img.alt = carNum;
                 img.loading = "lazy";
                 scope.listen(img, "click", () => {
-                    try { /** @type {any} */ (globalThis).showImageViewer?.(model.coverUrl, carNum); } catch { /* The optional viewer can fail while the cover remains visible. */ }
+                    try { this.context.feedback?.showImageViewer?.(model.coverUrl, carNum); } catch { /* The optional viewer can fail while the cover remains visible. */ }
                 });
                 coverBox.append(img);
             } else {
@@ -586,7 +586,7 @@ export class ExtensionMovieDrawer {
                 img.loading = "lazy";
                 thumbBtn.append(img);
                 scope.listen(thumbBtn, "click", () => {
-                    try { /** @type {any} */ (globalThis).showImageViewer?.(model.imageUrls, carNum); } catch { /* The optional viewer can fail while the gallery remains usable. */ }
+                    try { this.context.feedback?.showImageViewer?.(model.imageUrls, carNum); } catch { /* The optional viewer can fail while the gallery remains usable. */ }
                 });
                 galleryGrid.append(thumbBtn);
             }

@@ -1,3 +1,4 @@
+import { storageFromForage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { StateService } from "../src/core/state-service.js";
 
@@ -8,11 +9,12 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 function fixture(initial = {}) {
   const data = new Map(Object.entries(initial)), notices = [], journals = [];
-  const storage = { car_list_key: "car_list", favorite_actresses_key: "favorite_actresses", _invalidateCache() {}, forage: {
+  const forage = {
     getItem: async key => data.get(key) ?? null,
     setItem: async (key, value) => { if (key === "mutation_journal") journals.push(structuredClone(value)); data.set(key, structuredClone(value)); },
     removeItem: async key => data.delete(key),
-  } };
+  };
+  const storage = storageFromForage(forage);
   return { data, notices, journals, service: new StateService(storage, { emit: async (type, payload) => notices.push({ type, payload }) }) };
 }
 
@@ -78,12 +80,10 @@ it("reads recent list activity without consulting undo authorization", async () 
 });
 
 it("rejects a local commit snapshot after storage invalidation or a newer commit", async () => {
-  const { service } = fixture(); let generation = 0;
-  service.storage._invalidateCache = () => generation++;
-  service.storage._getCacheGeneration = () => generation;
+  const { service, data } = fixture();
   const first = await service.patch("TEST-1", { favorite: true });
   expect(service.getCommittedListSnapshot(first.transactionId).records.get("TEST-1").stateFlags.favorite).toBe(true);
-  service.storage._invalidateCache();
+  await service.storage.set("car_list", data.get("car_list"));
   expect(service.getCommittedListSnapshot(first.transactionId)).toBeNull();
   const second = await service.patch("TEST-2", { downloaded: true });
   expect(service.getCommittedListSnapshot(first.transactionId)).toBeNull();
@@ -91,9 +91,8 @@ it("rejects a local commit snapshot after storage invalidation or a newer commit
   expect(service.getCommittedListSnapshot(second.transactionId, ["TEST-1", "TEST-2"])).toBeNull();
 });
 
-it("does not turn a saved mutation into failure when optional cache proof is unavailable", async () => {
+it("returns saved state and rejects readback for an unrelated transaction", async () => {
   const { service, data } = fixture();
-  service.storage._getCacheGeneration = () => { throw new Error("cache not initialized"); };
   await expect(service.patch("TEST-1", { downloaded: true })).resolves.toMatchObject({ changed: ["TEST-1"] });
   expect(data.get("car_list")[0].stateFlags.downloaded).toBe(true);
   expect(service.getCommittedListSnapshot("unknown")).toBeNull();

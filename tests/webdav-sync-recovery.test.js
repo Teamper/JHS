@@ -7,9 +7,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe("selected WebDAV recovery", () => {
     it("preserves a new local operation committed after the import releases its lock", async () => {
         const dav = memoryDav(), a = await syncReplica(dav); await a.service.check();
-        const file = [...dav.files.keys()][0], importData = a.storage.importDataWithGuard.bind(a.storage);
+        const file = [...dav.files.keys()][0], importData = a.backup.importDataWithGuard.bind(a.backup);
         let fresh;
-        vi.spyOn(a.storage, "importDataWithGuard").mockImplementationOnce(async (...args) => {
+        vi.spyOn(a.backup, "importDataWithGuard").mockImplementationOnce(async (...args) => {
             await importData(...args);
             fresh = await a.state.patch("AFTER-201", { downloaded: true });
         });
@@ -26,12 +26,12 @@ describe("selected WebDAV recovery", () => {
         await a.service.check();
         const file = [...dav.files.keys()][0];
         await a.settings.patch({ themeMode: "light", containerColumns: 2 });
-        const original = a.storage.importDataWithGuard.bind(a.storage);
-        vi.spyOn(a.storage, "importDataWithGuard").mockImplementationOnce(async (...args) => {
+        const original = a.backup.importDataWithGuard.bind(a.backup);
+        vi.spyOn(a.backup, "importDataWithGuard").mockImplementationOnce(async (...args) => {
             // Another writer commits after restore starts, before it acquires the lock.
             await a.state.patch(["CONCURRENT-1"], { favorite: true });
             await a.settings.patch({ themeMode: "system", containerColumns: 4 });
-            await a.coordinator.runExclusive(() => a.storage._setItemAndInvalidate("filter_keyword_title", ["before", "concurrent-new"]));
+            await a.coordinator.runExclusive(() => a.storage.set("filter_keyword_title", ["before", "concurrent-new"]));
             return original(...args);
         });
         await a.service.restore(file, layout, undefined, selection);
@@ -61,8 +61,8 @@ describe("selected WebDAV recovery", () => {
         const dav = memoryDav(), a = await syncReplica(dav, { data: { setting: { themeMode: "dark" } } });
         await a.service.check(); const file = [...dav.files.keys()][0];
         await a.settings.set("themeMode", "light"); await a.service.pause(true);
-        const scope = new LifecycleScope("recovery"), original = a.storage.importDataWithGuard.bind(a.storage);
-        vi.spyOn(a.storage, "importDataWithGuard").mockImplementationOnce(async (...args) => {
+        const scope = new LifecycleScope("recovery"), original = a.backup.importDataWithGuard.bind(a.backup);
+        vi.spyOn(a.backup, "importDataWithGuard").mockImplementationOnce(async (...args) => {
             if (cause === "connection") a.shared.revision = "new-connection";
             else scope.dispose();
             return original(...args);

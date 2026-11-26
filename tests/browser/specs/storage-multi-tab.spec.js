@@ -16,8 +16,8 @@ test("coordinates concurrent state writes across tabs sharing IndexedDB", async 
 
     const lockSupport = await pages[0].evaluate(() => typeof navigator.locks?.request === "function");
     expect(lockSupport, "Edge must provide the cross-tab Web Locks API used by StorageMutationCoordinator").toBe(true);
-    await expect.poll(() => pages[0].evaluate(() => window.storageManager.getDataVersion())).toBe(CURRENT_DATA_VERSION);
-    await expect.poll(() => pages[1].evaluate(() => window.storageManager.getDataVersion())).toBe(CURRENT_DATA_VERSION);
+    await expect.poll(() => pages[0].evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("data_version"))).toBe(CURRENT_DATA_VERSION);
+    await expect.poll(() => pages[1].evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("data_version"))).toBe(CURRENT_DATA_VERSION);
 
     const results = await Promise.all(pages.map((page, index) => page.evaluate(async (record) => window.stateService.patch(
       record.carNum,
@@ -31,9 +31,9 @@ test("coordinates concurrent state writes across tabs sharing IndexedDB", async 
     expect(results.map((result) => result.changed)).toEqual([["TAB-1"], ["TAB-2"]]);
 
     const persisted = await pages[1].evaluate(async () => ({
-      cars: await window.storageManager.forage.getItem("car_list"),
-      journal: await window.storageManager.forage.getItem("mutation_journal"),
-      conflicts: await window.storageManager.forage.getItem("mutation_journal_conflicts"),
+      cars: await window.__jhsBrowserDiagnostics.detailServices.storage.get("car_list"),
+      journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
+      conflicts: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal_conflicts"),
     }));
     expect(persisted.cars).toEqual(expect.arrayContaining([
       expect.objectContaining({ carNum: "TAB-1", stateFlags: expect.objectContaining({ favorite: true }) }),

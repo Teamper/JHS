@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { ComputationBudget, jsonCloneSteps } from "../src/core/cooperative-work.js";
 import * as model from "../src/core/webdav-sync-model.js";
 const golden = JSON.parse(readFileSync(new URL("./fixtures/sync-computation-golden.json", import.meta.url), "utf8"));
+const clone = input => new ComputationBudget().run("sync.clone", jsonCloneSteps(input));
 
 describe("cooperative synchronization computations", () => {
   it("bounds traversal overhead for many small objects while preserving canonical bytes", async () => {
@@ -69,9 +71,9 @@ describe("cooperative synchronization computations", () => {
   it("matches nested toJSON omission, shared references and cyclic-input rejection", async () => {
     const shared = { n: 1 };
     const input = { omitted: { toJSON: () => undefined }, array: [{ toJSON: () => undefined }], a: shared, b: shared };
-    expect(await model.syncCloneAsync(input)).toEqual(model.syncClone(input));
+    expect(await clone(input)).toEqual(model.syncClone(input));
     const cyclic = {}; cyclic.self = cyclic;
-    await expect(model.syncCloneAsync(cyclic)).rejects.toBeInstanceOf(TypeError);
+    await expect(clone(cyclic)).rejects.toBeInstanceOf(TypeError);
   });
   it("serializes portable snapshots with native JSON bytes and omission rules", async () => {
     const input = { z: [undefined, NaN, new Date(0)], a: { x: undefined, n: 1 }, omitted: { toJSON: () => undefined } };
@@ -79,7 +81,7 @@ describe("cooperative synchronization computations", () => {
   });
   it("clones JSON-compatible values incrementally with native JSON omission semantics", async () => {
     const input = { array: [undefined, NaN, new Date(0)], missing: undefined, value: { n: 1 } };
-    const copy = await model.syncCloneAsync(input);
+    const copy = await clone(input);
     expect(copy).toEqual(model.syncClone(input));
     copy.value.n = 2;
     expect(input.value.n).toBe(1);

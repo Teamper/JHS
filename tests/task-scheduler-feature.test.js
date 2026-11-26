@@ -25,14 +25,12 @@ function createScheduler({ hidden = false, isListPage = true, runTask = vi.fn(as
         },
         handlers,
     };
-    const storage = { invalidateSettingCache: vi.fn() };
     const refreshConfiguration = vi.fn(async () => {}), onError = vi.fn();
     const scope = new LifecycleScope("feature:scheduler");
     const controller = new TaskSchedulerController({
         window: dom.window,
         document: dom.window.document,
         events,
-        storage,
         scope,
         isListPage: () => isListPage,
         runTask,
@@ -40,7 +38,7 @@ function createScheduler({ hidden = false, isListPage = true, runTask = vi.fn(as
         onError,
     });
     return {
-        controller, dom, events, storage, refreshConfiguration, runTask, onError, scope,
+        controller, dom, events, refreshConfiguration, runTask, onError, scope,
         setHidden(value) { isHidden = value; },
     };
 }
@@ -83,12 +81,11 @@ describe("Feature-owned task scheduler lifecycle", () => {
         hidden.dom.window.close();
     });
 
-    it("invalidates and refreshes schedule configuration on one settings event", async () => {
+    it("refreshes schedule configuration and promptly runs on one settings event", async () => {
         const harness = createScheduler();
         harness.controller.start();
         await vi.advanceTimersByTimeAsync(0);
         await harness.events.emit("settings-changed", {});
-        expect(harness.storage.invalidateSettingCache).toHaveBeenCalledOnce();
         expect(harness.refreshConfiguration).toHaveBeenCalledOnce();
         await vi.advanceTimersByTimeAsync(0);
         expect(harness.runTask).toHaveBeenCalledTimes(2);

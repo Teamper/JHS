@@ -10,9 +10,9 @@ function fixture(settings, enabled = true) {
     document.body.innerHTML = '<button id="checkFavoriteActress"></button><button id="checkNewVideo"></button>';
     const task = enabled ? { lastCheckFavoriteActressTimeKey: "favorite", lastCheckNewVideoTimeKey: "newVideo" } : null;
     const service = new NewVideoWorkspaceService({
-        runtimeServices: { storage: { getLocal: () => null } },
+        runtimeServices: { settings: { snapshot: () => settings }, storage: { getLocal: () => null } },
         task: { available: () => Boolean(task), current: () => task, activate: async () => task },
-        jquery, legacyStorage: { getSetting: vi.fn(async () => settings) },
+        jquery,
         utilities: {}, notifications: {}, logger: {}, events: {}, createImageHoverPreview: () => null, document, window,
     });
     return service;

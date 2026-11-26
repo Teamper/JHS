@@ -25,10 +25,11 @@ describe("FC2 workspace Feature ownership", () => {
             .register(SERVICE.settings, {})
             .register(SERVICE.storage, {})
             .register(SERVICE.screenshot, {})
-            .register(SERVICE.review, {})
-            .register(SERVICE.related, {})
+            .register(SERVICE.detailContent, { review: {}, related: {} })
+            .register(SERVICE.keywordRules, {})
             .register(SERVICE.state, {})
             .register(SERVICE.domUi, {})
+            .register(SERVICE.clipboard, {})
             .register(SERVICE.notifications, {})
             .register(SERVICE.clog, logger);
         const commands = new CommandRegistry();

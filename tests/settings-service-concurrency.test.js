@@ -1,6 +1,3 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { join } from "node:path";
-import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsService } from "../src/services/settings-service.js";
 import { StorageMutationCoordinator, STORAGE_MUTATION_LOCK } from "../src/core/storage-mutation-coordinator.js";
@@ -62,6 +59,20 @@ describe("SettingsService single write entry", () => {
         ]);
         // A's change must survive B's concurrent write — the old snapshot-overwrite lost it.
         expect(storage.read()).toMatchObject({ sortMethod: "date", videoMuted: "yes" });
+    });
+
+    it("lets a post-commit task read the durable interval while the settings lock is held", async () => {
+        const locks = createFakeLocks(), coordinator = new StorageMutationCoordinator({ lockManager: locks });
+        const storage = createSharedStorage({ checkNewVideo_intervalTime: 12 });
+        const observed = [];
+        const service = new SettingsService(storage, {
+            mutationCoordinator: coordinator,
+            afterPersist: async () => { observed.push((await service.readStoredSnapshot()).checkNewVideo_intervalTime); },
+        });
+
+        await service.set("checkNewVideo_intervalTime", 3);
+        expect(observed).toEqual([3]);
+        expect(locks.names).toEqual([STORAGE_MUTATION_LOCK]);
     });
 
     it("uses the shared storage mutation lock for settings read-modify-write", async () => {
@@ -192,44 +203,5 @@ describe("SettingsService single write entry", () => {
         expect(value.setting.themeMode).toBe("dark");
         await expect(service.set("videoMuted", "yes")).resolves.toMatchObject({ themeMode: "dark", videoMuted: "yes" });
         expect(afterPersist).toHaveBeenCalledTimes(2);
-    });
-});
-
-describe("legacy StorageManager delegation", () => {
-    function createStorageManager(settingsService) {
-        const source = readTestFile(join(process.cwd(), "src/core/storage.js"), "utf8");
-        const show = { error: vi.fn() };
-        const context = vm.createContext({
-            WeakSet, WeakMap, Map, Set, Promise, Date, JSON, Object, Array, Math,
-            a: (message) => { throw new TypeError(message); },
-            i: (target, key, value) => (target[key] = value),
-            localforage: { INDEXEDDB: "indexeddb", createInstance: () => ({}) },
-            show, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch",
-            normalizeCarNum: (value) => String(value || "").trim().toUpperCase(),
-            legacyActionToFlag: (value) => ({ filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" })[value] || null,
-            normalizeStateFlags: (flags) => ({ favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched, blocked: !!flags?.blocked }),
-            stateService: { patch: vi.fn(async () => ({ changed: [], transactionId: "tx" })) },
-            window: { location: { origin: "https://javdb.example" } }, navigator: {}, utils: {}, clog: {}, escapeHtml: (value) => value,
-            settingsService: settingsService ?? null,
-            CURRENT_DATA_VERSION: 2, PORTABLE_DATA_KEYS: [], hasPortableUserData: async () => false, validatePortableData() {}, runDataMigrations() {},
-        });
-        vm.runInContext(`${source}; globalThis.Adapter = StorageManager;`, context);
-        return { adapter: new context.Adapter, context };
-    }
-
-    it("routes saveSettingItem through SettingsService.set when available", async () => {
-        const set = vi.fn(async () => {});
-        const { adapter } = createStorageManager({ set });
-        await adapter.saveSettingItem("themeMode", "dark");
-        expect(set).toHaveBeenCalledWith("themeMode", "dark");
-    });
-
-    it("falls back to the legacy locked path without SettingsService", async () => {
-        const { adapter } = createStorageManager(null);
-        adapter.forage.getItem = vi.fn(async () => ({ a: 1 }));
-        const saveSetting = vi.fn(async () => {});
-        adapter._saveSettingWithoutLock = saveSetting;
-        await adapter.saveSettingItem("a", 2);
-        expect(saveSetting).toHaveBeenCalledWith({ a: 2 });
     });
 });

@@ -1,4 +1,4 @@
-import { CURRENT_DATA_VERSION, decryptPortableBackup, normalizePortableData, assertSupportedDataVersion, runDataMigrations, StateService, StorageManager, StorageMutationCoordinator, aggregateNewVideoRecords, SettingsService, findMatchedTitleKeyword, normalizeMovieCarNum } from '@jhs/core';
+import { CURRENT_DATA_VERSION, decryptPortableBackup, normalizePortableData, assertSupportedDataVersion, runDataMigrations, StateService, StorageService, StorageMutationCoordinator, aggregateNewVideoRecords, SettingsService, KeywordRulesService, PortableBackupService, findMatchedTitleKeyword, normalizeMovieCarNum, WebDavSyncStore, SettingsRegistry, registerDefaultSettings } from '@jhs/core';
 import { MobileDatabase } from '../sqlite/MobileDatabase.ts';
 import { actorKey, movieRecord, savedActorRef, type ActorRef, type ActorProfile, type Movie, type MovieFlag } from '../models/movie.ts';
 import { sampleActors, sampleLibrary, sampleMovies } from '../models/samples.ts';
@@ -21,29 +21,61 @@ export function visibleWork(rules: Rules, movie: Movie) {
 
 export async function createWorkspace(database: MobileDatabase, sample: boolean) {
   await database.initialize();
-  const version = await database.getItem('data_version');
-  if (version === null) {
-    const seed = sample ? { car_list: sampleLibrary(), favorite_actresses: sampleActors } : {};
-    await database.commitLockedBatch({ puts: { ...seed, data_version: CURRENT_DATA_VERSION } });
-  }
-
   const events = new DomainEventEmitter();
   const coordinator = new StorageMutationCoordinator();
-  const now = () => new Date().toISOString();
-  const storage = Object.assign(new StorageManager({ forage: database, incrementalCarStore: database, now }), { mutationCoordinator: coordinator, atomicStorage: database });
+  const local = new Map<string, string>();
+  const storage = new StorageService({
+    get: key => database.getItem(key),
+    set: async (key, value) => { await database.setItem(key, value); },
+    remove: key => database.removeItem(key),
+    keys: () => database.keys(),
+    commitLockedBatch: batch => database.commitLockedBatch(batch),
+    readAtomicSnapshot: keys => database.readAtomicSnapshot(keys),
+    commitAtomicBatch: batch => database.commitAtomicBatch(batch),
+    getLocal: key => local.get(key) ?? null,
+    setLocal: (key, value) => { local.set(key, value); },
+    removeLocal: key => { local.delete(key); },
+    getValue: async (key, fallback) => await database.getItem(`jhs_mobile_value:${key}`) ?? fallback,
+    setValue: (key, value) => database.setItem(`jhs_mobile_value:${key}`, value),
+    removeValue: key => database.removeItem(`jhs_mobile_value:${key}`),
+  });
+  const settings = new SettingsService(storage, { mutationCoordinator: coordinator });
   const state = new StateService(storage, { publishCommitted: (notices: { type: string; payload: { carNums?: string[] } }[]) => {
     for (const { type, payload } of notices) publishStorageEvent(events, type, payload);
   } }, coordinator, {
-    now,
+    now: () => new Date().toISOString(),
     currentUrl: () => 'https://javdb.com/',
+    origin: () => 'https://javdb.com',
+    incrementalCarStore: database,
   });
-  storage.stateService = state;
-  await assertSupportedDataVersion(storage);
-  await state.recoverPendingTransaction();
-  await runDataMigrations(storage, coordinator);
-  const settings = new SettingsService({ get: key => database.getItem(key), set: async (key, value) => {
-    await database.setItem(key, value);
-  } }, { mutationCoordinator: coordinator, afterPersist: () => storage.invalidateSettingCache() });
+  const keywordRules = new KeywordRulesService({ storage, coordinator, state });
+  const registry = new SettingsRegistry();
+  registerDefaultSettings(registry);
+  const validateSetting = (key: string, value: unknown) => registry.validateSync(key, value);
+  const syncStore = sample ? undefined : new WebDavSyncStore({
+    coordinator, storage, settings, validateSetting,
+    events: { emit: (type: string, notice: Parameters<typeof publishStorageEvent>[2]) => publishStorageEvent(events, type, notice) },
+    recoverState: () => state.recoverPendingTransactionWithoutLock(),
+  });
+  const backupService = new PortableBackupService({ storage, coordinator, state, sync: syncStore, settings });
+  if (syncStore) {
+    coordinator.observer = syncStore;
+    coordinator.beforeMutation = syncStore.recoverBeforeMutation;
+    storage.beforeWrite = key => syncStore.capture(key);
+  }
+  await coordinator.runExclusive(async () => {
+    await assertSupportedDataVersion(storage);
+    if (!(await storage.keys()).length) {
+      const seed = sample ? { car_list: sampleLibrary(), favorite_actresses: sampleActors } : {};
+      await storage.commitLockedBatch({ puts: { ...seed, data_version: CURRENT_DATA_VERSION } });
+    }
+    await runDataMigrations(storage, {
+      updateSettings: mutator => settings.updateWithoutLock(mutator),
+      recoverBeforeV4: () => state.recoverPendingTransactionWithoutLock(),
+    });
+    await keywordRules.getReviewKeywordsWithoutLock();
+    await state.recoverPendingTransactionWithoutLock();
+  });
   await settings.load();
   settings.addEventListener('settings.changed', event => events.emit({ domain: 'settings', keys: (event as CustomEvent<{ names: string[] }>).detail.names }));
   async function recent() {
@@ -51,7 +83,7 @@ export async function createWorkspace(database: MobileDatabase, sample: boolean)
   }
 
   return {
-    database, storage, settings, state, coordinator, sample, events,
+    database, storage, settings, state, coordinator, sample, events, keywordRules, backupService, syncStore, validateSetting,
     async toggle(movie: Movie, flag: MovieFlag) {
       if (!movie.carNum) throw new Error('作品番号尚未确认。');
       return state.toggle(movie.carNum, flag, { preserveNewVideo: true, record: movieRecord(movie) });
@@ -90,10 +122,11 @@ export async function createWorkspace(database: MobileDatabase, sample: boolean)
     },
     async visibility(): Promise<Rules> {
       const [blocked, actorWorks, blacklist, keywords] = await Promise.all([
-        database.blockedNumbers(), state.getBlacklistCarList(), state.getBlacklist(), storage.getTitleFilterKeyword(),
+        database.blockedNumbers(), state.getBlacklistCarList(), state.getBlacklist(), keywordRules.getTitleKeywords(),
       ]);
       const blockedActors = blacklist as { starId?: string; name?: string; allName?: string[] }[];
-      return { numbers: new Set([...blocked, ...actorWorks].map(item => normalizeMovieCarNum(item.number ?? item.carNum)).filter(Boolean)),
+      const numbers = [...blocked.map(item => item.number), ...actorWorks.map(item => item.number ?? item.carNum)];
+      return { numbers: new Set(numbers.map(normalizeMovieCarNum).filter(Boolean)),
         ids: new Set(blockedActors.flatMap(item => item.starId ? [String(item.starId)] : [])),
         names: new Set(blockedActors.flatMap(item => [item.name, ...(Array.isArray(item.allName) ? item.allName : [])]).filter((name): name is string => !!name)),
         keywords };
@@ -109,8 +142,8 @@ export async function createWorkspace(database: MobileDatabase, sample: boolean)
     },
     async queue() {
       const [actors, decisions] = await Promise.all([state.getFavoriteActressList(), state.getNewVideoDecisions()]);
-      const numbers = actors.flatMap((actor: { newVideoList?: Array<string | { carNum: string }> }) =>
-        Array.isArray(actor.newVideoList) ? actor.newVideoList.map(item => typeof item === 'string' ? item : item.carNum) : []);
+      const numbers = actors.flatMap(actor => Array.isArray(actor.newVideoList)
+        ? actor.newVideoList.map((item: string | { carNum: string }) => typeof item === 'string' ? item : item.carNum) : []);
       const movies = await state.getCarMap(numbers);
       return aggregateNewVideoRecords(actors, movies, decisions).map(row => ({
         movie: (sample ? sampleMovies.find(movie => movie.carNum === row.carNum) : undefined) ?? {
@@ -127,7 +160,7 @@ export async function createWorkspace(database: MobileDatabase, sample: boolean)
       return state.setNewVideoDecision(movie.carNum, decision, until);
     },
     async backup() {
-      return JSON.stringify(await storage.exportPortableData(), null, 2);
+      return JSON.stringify(await backupService.exportPortableData(), null, 2);
     },
     async previewBackup(text: string) {
       const content = text.trim().replace(/^\uFEFF/, '');
@@ -136,8 +169,7 @@ export async function createWorkspace(database: MobileDatabase, sample: boolean)
       return { incoming, movies: Array.isArray(data.car_list) ? data.car_list.length : undefined };
     },
     async restoreBackup(incoming: unknown) {
-      await storage.importData(incoming);
-      await settings.refresh();
+      await backupService.importData(incoming);
       events.emit({ domain: 'reset' });
     },
   };

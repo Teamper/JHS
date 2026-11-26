@@ -2,6 +2,15 @@
 
 import { getMovieStateEligibility, normalizeMovieCarNum } from "./movie-identity.js";
 
+/** 区分正常列表、合法空列表和第三方拦截页。
+ * @param {any} page @param {{boxSelector: string, requestDomItemSelector: string}} selectors */
+export function parseHostListPage(page, selectors) {
+    const isChallenge = /Just a moment|cf-chl-|Cloudflare/i.test(page.find("title, body").text());
+    const hasContainer = page.find(selectors.boxSelector).length > 0;
+    const items = hasContainer ? page.find(selectors.requestDomItemSelector) : null;
+    return { state: isChallenge ? "challenge" : hasContainer ? "valid" : "invalid", items, isEmpty: items?.length === 0 };
+}
+
 /** 从列表卡片尽力读取演员名（无演员信息的卡片返回空串，绝不用搜索关键词填充）。 @param {any} item */
 export function readCardNames(item) {
     const root = item?.jquery ? item[0] : item;

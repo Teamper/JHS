@@ -13,14 +13,14 @@ for (const scenario of [
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.features.newVideo?.featureNewVideoWorkspaceController);
     await page.evaluate(async count => {
             await window.__jhsBrowserDiagnostics.activateFeature("new-video");
-        const storage = window.storageManager;
-        await storage.forage.setItem(storage.favorite_actresses_key, [{ starId: "fixture", name: "Fixture", actressType: "censored",
+        const storage = window.__jhsBrowserDiagnostics.detailServices.storage;
+        await storage.set("favorite_actresses", [{ starId: "fixture", name: "Fixture", actressType: "censored",
             newVideoList: Array.from({ length: count }, (_, index) => ({
                 carNum: `ABC-${String(index + 1).padStart(3, "0")}`, publishTime: "2026-09-09", title: "Fixture",
                 coverUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
             })),
         }]);
-        storage._invalidateCache(storage.favorite_actresses_key);
+
         window.__jhsBrowserDiagnostics.detailServices.storage.setLocal("jhs_newVideoViewMode", "list");
         const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.nvPageSize = 3;
@@ -49,7 +49,7 @@ for (const scenario of [
             document.querySelector(`#nv-pagination-bar [data-nvpage="${target}"]`).click();
             await pending;
             if (back) document.querySelector('#nv-pagination-bar [data-nvpage="1"]').click();
-            const actresses = await window.storageManager.getFavoriteActressList();
+            const actresses = await window.stateService.getFavoriteActressList();
             return { animationWasActive, page: plugin.nvCurrentPage, selected: [...plugin.nvSelected],
                 visible: [...document.querySelectorAll("#nv-grid .nv-card")].map(card => card.dataset.car),
                 cached: plugin.nvFlatListCache.map(item => item.carNum),
@@ -82,8 +82,8 @@ test("browsing new video fades only that card and fills the page without losing 
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.features.newVideo?.featureNewVideoWorkspaceController);
     await page.evaluate(async()=>{
-        const storage=window.storageManager;
-        await storage.forage.setItem(storage.favorite_actresses_key,[{
+        const storage=window.__jhsBrowserDiagnostics.detailServices.storage;
+        await storage.set("favorite_actresses",[{
             starId:"fixture",name:"Fixture",actressType:"censored",
             newVideoList:Array.from({length:150},(_,index)=>({
                 carNum:`ABC-${String(index+1).padStart(3,"0")}`,publishTime:"2026-09-09",title:"Fixture title",
@@ -91,7 +91,7 @@ test("browsing new video fades only that card and fills the page without losing 
                 coverUrl:"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
             }))
         }]);
-        storage._invalidateCache(storage.favorite_actresses_key);
+
         window.__jhsBrowserDiagnostics.detailServices.storage.setLocal("jhs_newVideoViewMode","list");
         await window.__jhsBrowserDiagnostics.executeCommand("new-video.open");
     });
@@ -248,7 +248,7 @@ test("new-video workspace snapshot uses its injected Discovery services", async 
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page, { settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
     await page.evaluate(async () => {
-        const storage = window.unsafeWindow.storageManager;
+        const storage = window.stateService;
         await storage.addFavoriteActressList([{
             starId: "feature-workspace-actor", name: "Synthetic Workspace Actor", allName: ["Synthetic Workspace Actor"], actressType: "censored",
         }]);
@@ -300,7 +300,7 @@ test("scheduled actor scans run and persist through the injected Discovery contr
         const controller = task.featureNewVideoScanController;
         if (!controller) throw new Error("Discovery scan controller unavailable");
         const actor = { starId: "feature-scan-actor", name: "Synthetic Actor", allName: ["Synthetic Actor"], avatar: "", newVideoList: [] };
-        await window.unsafeWindow.storageManager.addFavoriteActressList([actor]);
+        await window.stateService.addFavoriteActressList([actor]);
         const delegated = [];
         const parse = controller.parseActorMovies.bind(controller);
         controller.parseActorMovies = async (...args) => { delegated.push(args[1]); return parse(...args); };
@@ -320,7 +320,7 @@ test("scheduled actor scans run and persist through the injected Discovery contr
         task.renderCheckResult = () => {};
         const result = await task.checkNewVideo(true);
         await task.checkOneNewVideo({ starId: actor.starId, name: actor.name });
-        const saved = (await window.unsafeWindow.storageManager.getFavoriteActressList()).find((entry) => entry.starId === actor.starId);
+        const saved = (await window.stateService.getFavoriteActressList()).find((entry) => entry.starId === actor.starId);
         return { delegated, result, saved };
     });
     expect(result.delegated).toEqual(["feature-scan-actor", "feature-scan-actor"]);
@@ -342,7 +342,7 @@ test("scheduler does not report a saved scan after another tab removes its actor
     await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.features.scheduler))).toBe(true);
     const result = await page.evaluate(async () => {
         const task = window.__jhsBrowserDiagnostics.features.scheduler;
-        const storage = window.unsafeWindow.storageManager;
+        const storage = window.stateService;
         const actor = { starId: "removed-during-scan", name: "Synthetic Actor", allName: ["Synthetic Actor"], avatar: "", newVideoList: [] };
         await storage.addFavoriteActressList([actor]);
         task.getRuntimeService("actressInfo").movies = async () => {
@@ -394,7 +394,7 @@ test("full saved-actress sync paginates and persists through the injected Discov
         task.finalizeTask = async () => {};
         task.emitNewVideoChanged = async () => { throw new Error("synthetic UI notification failure"); };
         const sync = await task.checkFavoriteActress(true);
-        const saved = await window.unsafeWindow.storageManager.getFavoriteActressList();
+        const saved = await window.stateService.getFavoriteActressList();
         return { pages, sync, saved: saved.filter((entry) => entry.starId.startsWith("sync-actor-")) };
     });
     expect(result.pages).toEqual([
@@ -419,7 +419,7 @@ test("scheduled blacklist scans use the Library Feature controller and preserve 
         const task = window.__jhsBrowserDiagnostics.features.scheduler;
         const controller = task.featureBlacklistScanController;
         const starId = "feature-blacklist-scan-actor";
-        await window.unsafeWindow.storageManager.addBlacklistItem({
+        await window.stateService.addBlacklistItem({
             starId, name: "Synthetic Blacklist Actor", allName: ["Synthetic Blacklist Actor"], role: "actor", movieType: "",
             url: `https://javdb.com/actors/${starId}?t=d`,
         });
@@ -439,8 +439,8 @@ test("scheduled blacklist scans use the Library Feature controller and preserve 
         task.finalizeTask = async () => {};
         task.renderBlacklistResult = () => {};
         const result = await task.checkBlacklist(true);
-        const actors = await window.unsafeWindow.storageManager.getBlacklist();
-        const cars = await window.unsafeWindow.storageManager.getBlacklistCarList();
+        const actors = await window.stateService.getBlacklist();
+        const cars = await window.stateService.getBlacklistCarList();
         return { delegated, result, actor: actors.find((entry) => entry.starId === starId), cars: cars.filter((entry) => entry.carNum === "NV-BLACKLIST-001") };
     });
     expect(result.delegated).toEqual(["javdb.com"]);

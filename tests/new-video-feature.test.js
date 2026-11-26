@@ -5,7 +5,7 @@ import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { newVideoFeature, schedulerFeature } from "../src/features/discovery/new-video-manifests.js";
 import { TaskExecutionService } from "../src/features/discovery/task-execution-service.js";
 import { NEW_VIDEO_STYLES } from "../src/features/discovery/new-video-styles.js";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 import { SupplementaryCardsController } from "../src/features/list/supplementary-cards-controller.js";
 import { NewVideoWorkspaceService } from "../src/features/discovery/new-video-workspace-service.js";
 
@@ -20,7 +20,6 @@ function createRuntime(id, plugin, events = { on: vi.fn(() => vi.fn()) }) {
         enabledContributions: [id],
         scope: new LifecycleScope(`feature:${id}`),
         diagnostics: { recordError: vi.fn() },
-        resolveCompatibilityBean: vi.fn(() => null),
         provideCapability: vi.fn(),
         events,
     };
@@ -63,7 +62,7 @@ describe("new video and scheduler feature lifecycle", () => {
         };
         const settings = { snapshot: vi.fn(() => ({ checkNewVideo_ruleTime: 8760 })) };
         const movie = { externalSiteOrigin: vi.fn(() => "https://javdb.com") };
-        const legacyStorage = { getTitleFilterKeyword: vi.fn(async () => []) }, actressInfo = { movies: vi.fn(async () => []) }, logger = { html: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const keywordRules = { getTitleKeywords: vi.fn(async () => []) }, actressInfo = { movies: vi.fn(async () => []) }, logger = { html: vi.fn(), warn: vi.fn(), error: vi.fn() };
         const styles = { register: vi.fn(() => releaseStyle) }, runtime = createRuntime("discovery.new-video", plugin, events);
 
         for (const [method, mock] of Object.entries(plugin)) {
@@ -75,7 +74,7 @@ describe("new video and scheduler feature lifecycle", () => {
         const dependencies = {
             [PORT.style]: styles, [SERVICE.events]: events, [SERVICE.state]: state, [SERVICE.settings]: settings,
             [SERVICE.movie]: movie, [SERVICE.actressInfo]: actressInfo,
-            [SERVICE.legacyUtils]: { getNowStr: () => "2026-08-01 00:00:00" }, [SERVICE.legacyStorage]: legacyStorage,
+            [SERVICE.keywordRules]: keywordRules,
             [SERVICE.domUi]: { jquery: vi.fn(), createImageHoverPreview: vi.fn() },
             [SERVICE.notifications]: { error: vi.fn() }, [SERVICE.clog]: logger,
         };
@@ -134,7 +133,6 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(await newVideoFeature.activate({ [PORT.style]: styles }, runtime)).toMatchObject({
             activeContributions: [], commands: { "new-video.open": expect.any(Function) },
         });
-        expect(runtime.resolveCompatibilityBean).not.toHaveBeenCalled();
         expect(styles.register).not.toHaveBeenCalled();
         expect(plugin.initializeLocalState).toBeUndefined();
     });
@@ -166,28 +164,28 @@ describe("new video and scheduler feature lifecycle", () => {
                 return () => eventHandlers.delete(name);
             }),
         };
-        const storage = { invalidateSettingCache: vi.fn(), getLocal: vi.fn(() => null), setLocal: vi.fn() };
-        const legacyStorage = { getSetting: vi.fn(async () => ({})) };
-        const legacyUtils = { getNowStr: vi.fn(() => "2026-08-01 00:00:00"), sleep: vi.fn(async () => {}), getHourDifference: vi.fn(() => 100) };
+        const storage = { getLocal: vi.fn(() => null), setLocal: vi.fn() };
+        const keywordRules = {}, settings = { readStoredSnapshot: async () => ({ checkNewVideo_intervalTime: 3 }), snapshot: () => ({}) };
         const logger = { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() };
         const runtime = createRuntime("discovery.scheduler");
 
         const dependencies = {
             [PORT.javdbHost]: { getListSelectors: vi.fn(() => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item" })) },
             [PORT.javbusHost]: { getListSelectors: vi.fn(() => ({ boxSelector: ".masonry", requestDomItemSelector: "#waterfall .item" })) },
-            [SERVICE.events]: events, [SERVICE.storage]: storage, [SERVICE.settings]: { snapshot: () => ({}) },
-            [SERVICE.legacyStorage]: legacyStorage, [SERVICE.legacyUtils]: legacyUtils,
+            [SERVICE.events]: events, [SERVICE.storage]: storage, [SERVICE.settings]: settings,
+            [SERVICE.keywordRules]: keywordRules,
             [SERVICE.http]: { request: vi.fn() }, [SERVICE.actressInfo]: { movies: vi.fn(), collection: vi.fn() },
-            [SERVICE.movie]: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") }, [SERVICE.state]: {},
+            [SERVICE.movie]: { externalSiteOrigin: vi.fn(() => "https://javdb.com") }, [SERVICE.state]: {},
             [SERVICE.domUi]: { jquery: vi.fn(() => ({ text: vi.fn(), length: 0 })) }, [SERVICE.clog]: logger,
-            [SERVICE.hostListParser]: { parseDetailPage: vi.fn() }, [SERVICE.notifications]: { error: vi.fn() },
+            [SERVICE.notifications]: { error: vi.fn() },
         };
         const result = await schedulerFeature.activate(dependencies, runtime);
         expect(result.activeContributions).toEqual(["discovery.scheduler"]);
         const taskService = result.commands["scheduler.service"]();
         expect(taskService).toBeInstanceOf(TaskExecutionService);
-        expect(taskService.legacyStorage).toBe(legacyStorage);
+        expect(taskService.keywordRules).toBe(keywordRules);
         expect(taskService.getRuntimeService("storage")).toBe(storage);
+        await expect(taskService.loadConfig()).resolves.toMatchObject({ checkNewVideo_intervalTime: 3 });
         expect(events.on).toHaveBeenCalledWith("settings-changed", expect.any(Function));
         runtime.scope.dispose();
         expect(taskService.disposed).toBe(true);
@@ -208,7 +206,7 @@ describe("new video and scheduler feature lifecycle", () => {
             emit: vi.fn(async () => {}),
         };
         const scope = new LifecycleScope("test:list-ignore-backfill");
-        const service = new ListPageCompatibilityService({
+        const service = new ListPageService({
             runtimeServices: {
                 scope: () => scope,
                 settings: Object.assign(new dom.window.EventTarget(), { snapshot: () => ({ hoverBigImg: "no" }) }),
@@ -263,11 +261,12 @@ describe("new video and scheduler feature lifecycle", () => {
         const taskService = new TaskExecutionService({
             runtimeServices: {
                 storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
-                movie: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") },
+                settings: { snapshot: () => settingValues, readStoredSnapshot: async () => settingValues },
+                movie: { externalSiteOrigin: vi.fn(() => "https://javdb.com") },
+                keywordRules: { getTitleKeywords: async () => [] },
                 events,
             },
             resolveDependency: () => null,
-            legacyStorage: { getSetting: vi.fn(async () => settingValues) },
             utilities: { getNowStr: () => "2026-11-18" },
             logger: { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() },
             jquery: vi.fn((selector) => selector === "#checkNewVideoMsg" ? msgEl : { length: loggedIn && selector === 'a[href*="/users/profile"]' ? 1 : 0 }),
@@ -315,11 +314,12 @@ describe("new video and scheduler feature lifecycle", () => {
         const scheduledService = new TaskExecutionService({
             runtimeServices: {
                 storage: scheduledStorage,
-                movie: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") },
+                settings: { snapshot: () => settingValues, readStoredSnapshot: async () => ({ enableCheckBlacklist: "no", enableCheckFavoriteActress: "yes", enableCheckNewVideo: "yes" }) },
+                movie: { externalSiteOrigin: vi.fn(() => "https://javdb.com") },
+                keywordRules: { getTitleKeywords: async () => [] },
                 events,
             },
             resolveDependency: () => null,
-            legacyStorage: { getSetting: vi.fn(async () => ({ enableCheckBlacklist: "no", enableCheckFavoriteActress: "yes", enableCheckNewVideo: "yes" })) },
             utilities: { getNowStr: () => "2026-11-18" },
             logger: { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() },
             jquery: vi.fn((selector) => ({ text: vi.fn(), length: selector === 'a[href*="/users/profile"]' ? 1 : 0 })),

@@ -439,17 +439,11 @@ export function applyThemeMode(mode = "light") {
     document.documentElement.setAttribute("data-jhs-theme", resolved);
 }
 
-/** @deprecated Prefer applyThemeMode(snapshot.themeMode) to avoid legacy cache reads. */
-export async function applyTheme() {
-    const mode = await storageManager.getSetting("themeMode", "light");
-    applyThemeMode(mode);
-}
-
-/** @param {import("./lifecycle-scope.js").LifecycleScope} scope */
-export function initializeThemeRuntime(scope) {
+/** @param {import("./lifecycle-scope.js").LifecycleScope} scope @param {{snapshot: () => Readonly<Record<string, unknown>>}} settings */
+export function initializeThemeRuntime(scope, settings) {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     scope.listen(media, "change", () => {
-        const mode = /** @type {any} */ (globalThis).settingsService?.snapshot?.().themeMode ?? storageManager.getSettingSync("themeMode", "light");
+        const mode = settings.snapshot().themeMode;
         if ("auto" === mode) applyThemeMode(mode);
     });
 }

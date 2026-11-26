@@ -4,7 +4,7 @@ import { escapeHtml } from "../../core/constants.js";
 
 /** Owns title-selection filtering, including title nodes inserted by owned-detail dialogs. */
 export class TitleKeywordController {
-    /** @param {{document: Document, window: Window, site: string, route: string, settings: any, saveKeyword: (keyword: string) => Promise<unknown>, events: any, ui: any, scope: any, diagnostics?: any}} options */
+    /** @param {{document: Document, window: Window, site: string, route: string, settings: any, saveKeyword: (keyword: string) => Promise<unknown>, events: any, ui: any, notifications: {error: (message: string) => unknown}, scope: any, diagnostics?: any}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -14,6 +14,7 @@ export class TitleKeywordController {
         this.saveKeyword = options.saveKeyword;
         this.events = options.events;
         this.ui = options.ui;
+        this.notifications = options.notifications;
         this.scope = options.scope;
         this.diagnostics = options.diagnostics;
         this.removeTitleListener = null;
@@ -63,6 +64,7 @@ export class TitleKeywordController {
             await this.ui.closePage({ root: this.ui.jquery(title) });
         } catch (error) {
             this.report(error);
+            if (error instanceof Error && "code" in error && error.code === "DUPLICATE_TITLE_KEYWORD") this.notifications.error(error.message);
         }
     }
 

@@ -35,9 +35,9 @@ describe("automatic bidirectional WebDAV sync", () => {
     it("keeps local sync identity, progress and credentials out of portable imports", async () => {
         const dav = memoryDav(), a = await syncReplica(dav); await a.service.check(); const before = await a.store.read();
         await a.settings.patch({ containerColumns: 2, webDavPassword: "local-only" });
-        const backup = await a.storage.exportData();
+        const backup = await a.backup.exportData();
         expect(backup).not.toHaveProperty(SYNC_STATE_KEY); expect(backup.setting).not.toHaveProperty("webDavPassword");
-        await a.storage.importData({ ...backup, [SYNC_STATE_KEY]: { schema: 999 }, [SYNC_JOURNAL_KEY]: { schema: 999 }, setting: { themeMode: "dark", webDavPassword: "foreign" } });
+        await a.backup.importData({ ...backup, [SYNC_STATE_KEY]: { schema: 999 }, [SYNC_JOURNAL_KEY]: { schema: 999 }, setting: { themeMode: "dark", webDavPassword: "foreign" } });
         expect((await a.store.read()).replicaId).toBe(before.replicaId); expect((await a.store.read()).seq).toBe(before.seq);
         expect(a.values.get("setting").webDavPassword).toBe("local-only"); expect(a.values.get(SYNC_JOURNAL_KEY)).toBeUndefined();
     });

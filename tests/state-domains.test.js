@@ -4,12 +4,8 @@ import { createStateDomainRegistry, STATE_DOMAIN_NAMES } from "../src/core/state
 describe("legacy-compatible state domains", () => {
     it("maps service domains to the 6.5.1 IndexedDB keys", async () => {
         const data = new Map(), storage = {
-            car_list_key: "car_list",
-            favorite_actresses_key: "favorite_actresses",
-            forage: {
-                async getItem(key) { return data.get(key); },
-                async setItem(key, value) { data.set(key, value); },
-            },
+            async get(key) { return data.get(key); },
+            async set(key, value) { data.set(key, value); },
         };
         const domains = createStateDomainRegistry(storage);
         await domains.carList.write([ { carNum: "ABC-1" } ]);

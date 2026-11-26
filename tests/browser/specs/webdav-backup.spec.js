@@ -9,7 +9,7 @@ for (const broken of [false, true]) {
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page);
-    const snapshot = await page.evaluate(() => window.storageManager.exportData());
+    const snapshot = await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("backup").exportData());
     const encrypted = await encryptPortableBackup(JSON.stringify(snapshot));
     await page.evaluate(async ({ encrypted, broken }) => {
       const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), webdav = plugin.getRuntimeService("webdav");
@@ -18,7 +18,7 @@ for (const broken of [false, true]) {
       window.__previewProbe = { imports: 0, errors: [], diagnostics: [], downloads: [] };
       const logError = plugin.logger.error.bind(plugin.logger);
       plugin.logger.error = (...args) => { window.__previewProbe.diagnostics.push(args.map(value => value instanceof Error ? value.message : String(value)).join(" ")); logError(...args); };
-      window.storageManager.importData = async () => { window.__previewProbe.imports++; throw new Error("Preview must not import"); };
+      plugin.getRuntimeService("backup").importData = async () => { window.__previewProbe.imports++; throw new Error("Preview must not import"); };
       window.show.error = message => window.__previewProbe.errors.push(message);
       const original = webdav.http.port.requestImplementation;
       webdav.http.port.requestImplementation = options => {

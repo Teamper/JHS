@@ -18,7 +18,7 @@ describe("external bridge Feature ownership", () => {
         let compatibilityBean;
         const result = await feature.activate({
             [PORT.style]: style, [SERVICE.storage]: {}, [SERVICE.http]: {}, [SERVICE.magnet]: {},
-            [SERVICE.resourceSettings]: {}, [SERVICE.clipboard]: {}, [SERVICE.domUi]: { jquery: vi.fn() }, [SERVICE.diagnostics]: diagnostics,
+            [SERVICE.settings]: { snapshot: () => ({}) }, [SERVICE.clipboard]: {}, [SERVICE.domUi]: { jquery: vi.fn() },
         }, {
             enabledContributions: ["detail.external-magnets"], scope, diagnostics,
             site: "javdb", provideCapability: (id, value) => { capabilities.set(id, value); scope.addCleanup(() => capabilities.delete(id)); },
@@ -55,7 +55,7 @@ describe("external bridge Feature ownership", () => {
         const scope = new LifecycleScope("feature:external-bridge");
         const stop = vi.fn(), credential = { startTokenSync: vi.fn(scope => scope.addCleanup(stop)) };
         const diagnostics = { recordError: vi.fn() };
-        const result = await feature.activate({ [PORT.style]: { register: vi.fn() }, [SERVICE.pan123Credential]: credential }, {
+        const result = await feature.activate({ [PORT.style]: { register: vi.fn() }, [SERVICE.offline]: { pan123Credential: credential } }, {
             enabledContributions: ["external-bridge.123pan"], scope, diagnostics,
         });
 
@@ -92,10 +92,10 @@ describe("external bridge Feature ownership", () => {
         const result = await fc2Catalog.activate({
             [PORT.host]: host, [PORT.style]: { register: vi.fn() }, [SERVICE.movie]: { catalog: vi.fn(async () => ({ items: [], maxPage: 1 })) },
             [SERVICE.domUi]: { jquery: jqueryFactory(window), loading: () => ({ close() {} }), smoothScrollToTop: async () => {} },
-            [SERVICE.notifications]: { error: vi.fn() }, [SERVICE.diagnostics]: diagnostics,
+            [SERVICE.notifications]: { error: vi.fn() },
         }, {
             enabledContributions: ["detail.fc2-lookup"], scope, diagnostics, site: "javdb", route: "list",
-            provideCapability, resolveCompatibilityBean: (name) => name === "ListPagePlugin" ? listPage : null,
+            provideCapability, getCapability: (id) => id === "list.core" ? listPage : null,
             registerCompatibilityBean,
         });
 
@@ -126,12 +126,14 @@ describe("external bridge Feature ownership", () => {
         let compatibilityBean;
         const result = await feature.activate({
             [PORT.style]: style, [PORT.host]: { site: "javdb", locateListItems: () => [] },
-            [SERVICE.offline]: { getIntegrationHomeUrl: () => "https://pan.example/", submitWithIntegration: vi.fn() },
+            [SERVICE.offline]: {
+                api: { getIntegrationHomeUrl: () => "https://pan.example/", submitWithIntegration: vi.fn() },
+                pan123Credential: { getStoredToken: async () => "token" },
+            },
             [SERVICE.dialog]: { open: vi.fn(), close: vi.fn() }, [SERVICE.state]: { appendOfflineHistory: vi.fn(), patch: vi.fn() },
             [SERVICE.settings]: settings, [SERVICE.events]: { on: vi.fn(() => () => {}) },
-            [SERVICE.pan123Credential]: { getStoredToken: async () => "token" },
             [SERVICE.domUi]: { jquery: jqueryFactory, confirm: vi.fn(), closePage: vi.fn(), getDialogArea: () => [] },
-            [SERVICE.notifications]: { ok: vi.fn(), error: vi.fn() }, [SERVICE.diagnostics]: diagnostics,
+            [SERVICE.notifications]: { ok: vi.fn(), error: vi.fn() },
         }, {
             enabledContributions: ["external-bridge.offline"], scope, diagnostics,
             site: "javdb", route: "list",

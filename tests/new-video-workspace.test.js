@@ -1,23 +1,12 @@
-import { OwnedPopover } from "../src/core/owned-popover.js";
-import { CUP_FILTER_OPTIONS, cleanActressName, createBodyFilterMatcher, formatBodyMeasurements, hasActiveBodyFilter, normalizeBodyFilter, readStoredActressMeasurements } from "../src/core/actress-measurements.js";
-import { renderTaskStatus, taskStatusView } from "../src/core/task-status-view.js";
-import { formatUiDateTime } from "../src/core/ui-date-time.js";
-import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { dismissActiveTooltip } from "../src/core/tooltip-controller.js";
-import { PRODUCT_NAMES } from "../src/core/product-names.js";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import vm from "node:vm";
+import { NewVideoWorkspaceService } from "../src/features/discovery/new-video-workspace-service.js";
+import { CUP_FILTER_OPTIONS } from "../src/core/actress-measurements.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { join } from "node:path";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NewVideoWorkspaceController } from "../src/features/discovery/new-video-workspace-controller.js";
-import { isMissingActorSource } from "../src/features/discovery/actor-source-health.js";
-import { FEATURE_ICONS } from "../src/core/feature-icons.js";
-import { getIcon } from "../src/core/icons.js";
-
-const repoRoot = join(import.meta.dirname, "..");
 
 function normalizeCarNum(value) {
     const normalized = String(value || "").trim().toUpperCase().replace(/[_\s]+/g, "-");
@@ -36,6 +25,7 @@ function createHarness() {
         getNewVideoDecisions: vi.fn(async () => ({})),
         getFavoriteActressList: vi.fn(() => storageManager.getFavoriteActressList()),
         getCarMap: vi.fn(() => storageManager.getCarMap()),
+        updateFavoriteActress: (...args) => storageManager.updateFavoriteActress(...args),
         rebindFavoriteActress: vi.fn(async () => ({ ok: true, merged: false, actress: { ...actresses[0], starId: "rebound" } })),
         removeFavoriteActress: vi.fn(starId => storageManager.removeFavoriteActress?.(starId) ?? true),
     };
@@ -50,34 +40,19 @@ function createHarness() {
         state: stateService,
         movie: { externalSiteOrigin: vi.fn(() => "https://javdb.com") },
     };
-    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return runtimeServices[name]; } }
     class ImageHoverPreview { constructor() {} bindEvents() {} destroy() {} }
     dom.window.ImageHoverPreview = ImageHoverPreview;
-    const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
-    const context = vm.createContext({
-        OwnedPopover, CUP_FILTER_OPTIONS, cleanActressName, createBodyFilterMatcher, formatBodyMeasurements, hasActiveBodyFilter, normalizeBodyFilter, readStoredActressMeasurements, renderTaskStatus, taskStatusView, formatUiDateTime, LifecycleScope, dismissActiveTooltip, PRODUCT_NAMES, isMissingActorSource, console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math, FEATURE_ICONS, getIcon,
-        window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
-        $, BasePlugin, ImageHoverPreview, storageManager, stateService, renderStateView,
-        JHS_Z_INDEX: { dialogHoverPreview: 999999992 },
-        i: (target, key, value) => target[key] = value,
-        normalizeCarNum,
-        normalizeHttpUrl: (value, base = dom.window.location.href) => { try { const url = new URL(String(value), base); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } },
-        normalizeStateFlags: flags => ({ favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched, blocked: !!flags?.blocked }),
-        hasAnyState: flags => Object.values(flags).some(Boolean),
-        parseNumberSetting: (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-        mapLimit: async (items, limit, worker) => Promise.all(items.map(worker)),
-        escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]),
-        utils: { genericSort: items => [...items], htmlTo$dom: html => $(new JSDOM(html).window.document), q: vi.fn() },
-        gmHttp: { get: vi.fn() }, JhsSelect: { setValue: vi.fn(), setVisible: vi.fn(), enhance: vi.fn() },
-        show: { info: vi.fn(), ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() },
-        jhsEventBus: { on: vi.fn() }, setTimeout, clearTimeout, fetch: vi.fn(), indexedDB: {}, loading: vi.fn(),
-        shouldSkipStopped: () => false,
-        T: "javdb", I: "javbus", D: "filter", A: "uncensored", _: "yes", l: false
-    });
-    context.globalThis = context;
-    const source = readTestFile(join(repoRoot, "src/features/discovery/new-video-workspace-service.js"), "utf8"), start = source.indexOf("class NewVideoWorkspaceService");
-    vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoWorkspaceService`, context);
-    const plugin = new context.TestPlugin({ runtimeServices: { ...runtimeServices, settings:{snapshot:()=>({})}, state: stateService, scope: () => Promise.resolve({ assertActive() {}, disposed: false }) }, resolveDependency: name => beans[name], task: { available: () => Boolean(beans.TaskPlugin), current: () => beans.TaskPlugin, activate: async () => beans.TaskPlugin }, requestProfileBackfill: options => beans.TaskPlugin?.triggerProfileBackfill?.(options), jquery: $, legacyStorage: storageManager, utilities: context.utils, notifications: context.show, logger: context.clog, events: context.jhsEventBus, createImageHoverPreview: config => new dom.window.ImageHoverPreview(config), document: dom.window.document, window: dom.window });
+    const context = {
+        utils: { q: vi.fn(), setupEscClose: vi.fn(), releaseEscClose: vi.fn() },
+        show: { info: vi.fn(), ok: vi.fn(), error: vi.fn() },
+        clog: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() },
+        jhsEventBus: { on: vi.fn() }, loading: vi.fn(),
+    };
+    for (const name of ["window", "document", "Element", "HTMLElement", "MutationObserver", "Node"]) {
+        vi.stubGlobal(name, name === "window" ? dom.window : dom.window[name]);
+    }
+    vi.stubGlobal("$", $);
+    const plugin = new NewVideoWorkspaceService({ runtimeServices: { ...runtimeServices, settings:{snapshot:()=>({})}, state: stateService, scope: () => Promise.resolve({ assertActive() {}, disposed: false }) }, resolveDependency: name => beans[name], task: { available: () => Boolean(beans.TaskPlugin), current: () => beans.TaskPlugin, activate: async () => beans.TaskPlugin }, requestProfileBackfill: options => beans.TaskPlugin?.triggerProfileBackfill?.(options), jquery: $, utilities: context.utils, notifications: context.show, logger: context.clog, events: context.jhsEventBus, startLoading: context.loading, createImageHoverPreview: config => new dom.window.ImageHoverPreview(config), document: dom.window.document, window: dom.window });
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";
     plugin.featureNewVideoWorkspaceController = new NewVideoWorkspaceController({
         state: stateService,
@@ -87,7 +62,7 @@ function createHarness() {
     return { plugin, $, actresses, storageManager, stateService, beans, runtimeServices, dom, context };
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("new video workspace snapshot", () => {
     it("accepts the initial snapshot after a filter changes while it is loading", async () => {
@@ -179,7 +154,8 @@ describe("new video workspace snapshot", () => {
         plugin.featureNewVideoWorkspaceController.loadWorkspace = vi.fn(() => new Promise((_resolve, fail) => reject = fail));
         const pending = plugin.reloadNewVideoWorkspaceData();
         plugin.setViewMode("actress"); reject(new Error("fixture failure")); await pending;
-        expect($("#actress-card-container").text()).toBe("加载失败");
+        expect($("#actress-card-container [role=alert] .jhs-state__title").text()).toBe("加载失败");
+        expect($("#actress-card-container [role=alert] button").text()).toBe("重试");
         expect(plugin.nvWorkspaceLoading).toBe(false);
         plugin._viewMode = "list"; $("#nvSearch").val(snapshot.items[0].carNum);
         plugin.featureNewVideoWorkspaceController.loadWorkspace.mockResolvedValueOnce(snapshot); plugin.hydrateVisibleCovers = vi.fn();
@@ -324,12 +300,6 @@ describe("new video workspace snapshot", () => {
         expect(await plugin.getPendingNewVideoTotal()).toBe(pending.length);
         records.get("ABC-002").stateFlags.favorite=false;
         expect(await plugin.getPendingNewVideoTotal()).toBe(2);
-    });
-    it("routes workspace, editor, CDN and avatar dialogs through DialogService", () => {
-        const source = readTestFile(join(repoRoot, "src/features/discovery/new-video-workspace-service.js"), "utf8");
-        expect(source).toContain('getRuntimeService("dialog")');
-        expect(source).not.toContain("layer.open");
-        expect(source).not.toContain("layer.close");
     });
 
     it("reads each source once and keeps view-only filtering in memory", async () => {
@@ -489,7 +459,6 @@ describe("new video workspace snapshot", () => {
     });
 });
 
-
 function installOwnedDialogs(harness) {
     const { plugin, $ } = harness, dialogs = new Map(); let nextId = 0;
     const dialog = {
@@ -621,7 +590,10 @@ describe("new video interaction ownership", () => {
         runtimeServices.actressInfo.searchAvatars = vi.fn(async () => ["https://img.example/chosen.jpg"]);
         await plugin.editActress(actresses[0]); const editor = plugin.editor; await plugin.searchAvatar();
         const candidate = $(dom.window.document.querySelector(".gfriends-image-item-wrapper")), image = candidate.find("img");
+        expect(candidate[0].tagName).toBe("BUTTON");
+        expect(candidate.attr("aria-pressed")).toBe("false");
         candidate.trigger("click"); expect(editor.root.find("#edit-actress-avatar").val()).toBe("https://img.example/chosen.jpg");
+        expect(candidate.attr("aria-pressed")).toBe("true");
         expect(vi.getTimerCount()).toBe(1);
         dialog.close(editor.id);
         expect(dialogs.size).toBe(0); expect(vi.getTimerCount()).toBe(0);
@@ -800,9 +772,8 @@ describe("new video interaction ownership", () => {
         });
         plugin.hydrateVisibleCovers = vi.fn();
         plugin.nvWorkspaceRoot = $(".newVideoToolBox");
-        const cancelSpy = vi.fn();
-        plugin.utils.debounce = (fn) => Object.assign(fn, { cancel: cancelSpy });
         plugin.bindClick();
+        const cancelSpy = vi.spyOn(plugin.nvBodyFilterDebounced, "cancel");
         await plugin.reloadNewVideoWorkspaceData();
 
         // List view: height >= 160 matches Alice's 2 works

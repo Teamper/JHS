@@ -1,12 +1,12 @@
 import { transform } from "esbuild";
 import ts from "typescript";
 import { buildThemeCss } from "../src/core/theme.js";
-import { buildUiPrimitivesCss } from "../src/core/ui-primitives.js";
+import { buildUiPrimitivesCss } from "../src/core/ui-primitives-styles.js";
 import { buildDetailPanelCss } from "../src/ui/detail/panel-styles.js";
 
 const builders = new Map([
     ["src/core/theme.js", ["buildThemeCss", buildThemeCss]],
-    ["src/core/ui-primitives.js", ["buildUiPrimitivesCss", buildUiPrimitivesCss]],
+    ["src/core/ui-primitives-styles.js", ["buildUiPrimitivesCss", buildUiPrimitivesCss]],
     ["src/ui/detail/panel-styles.js", ["buildDetailPanelCss", buildDetailPanelCss]],
 ]);
 const staticStyleFiles = new Set([
@@ -19,7 +19,7 @@ const staticStyleFiles = new Set([
     "src/features/detail/native-detail-media-controller.js", "src/features/identity/image-search-controller.js",
     "src/features/external-bridge/magnet-hub-controller.js", "src/features/list/auto-page-controller.js",
     "src/features/list/list-batch-ui.js", "src/features/translation/translation-controller.js",
-    "src/core/logger.js", "src/core/css-injection.js",
+    "src/core/image-hover-preview.js", "src/core/css-injection.js",
 ]);
 
 /** Keep the existing style envelope while compacting CSS with the build's CSS parser. */
@@ -45,7 +45,7 @@ export async function prebuildStyles(path, source) {
             if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) &&
                 (/(?:_STYLES|_CSS)$/.test(node.name.text) || path === "src/core/css-injection.js" && node.name.text === "F")) {
                 value = node.initializer;
-            } else if (path === "src/core/logger.js" && ts.isBinaryExpression(node) &&
+            } else if (path === "src/core/image-hover-preview.js" && ts.isBinaryExpression(node) &&
                 node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText(file) === "style.textContent") {
                 value = node.right;
             }

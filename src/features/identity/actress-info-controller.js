@@ -24,7 +24,7 @@ export const ACTRESS_INFO_CSS = `
 
 /** Manage optional actress information and cancel lookups when the setting or feature turns off. */
 export class ActressInfoController {
-    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, service: any, settings: any, state?: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any}} options */
+    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, service: any, settings: any, state?: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, logger?: Pick<Console, "error">}} options */
     constructor(options) {
         this.document = options.document;
         this.location = options.location;
@@ -34,6 +34,7 @@ export class ActressInfoController {
         this.state = options.state ?? null;
         this.scope = options.scope;
         this.diagnostics = options.diagnostics;
+        this.logger = options.logger ?? console;
         this.generation = 0;
         /** @type {import("../../core/lifecycle-scope.js").LifecycleScope | null} */
         this.mountScope = null;
@@ -283,7 +284,7 @@ export class ActressInfoController {
     /** @param {string} name @param {unknown} error */
     logLookupError(name, error) {
         if (isAbortError(error) || isNotFoundError(error)) return;
-        try { /** @type {any} */ (globalThis).clog?.error?.("演员资料查询失败", name, error); }
+        try { this.logger.error("演员资料查询失败", name, error); }
         catch { /* A logging issue cannot block actress info rendering. */ }
     }
 

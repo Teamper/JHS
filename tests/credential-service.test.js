@@ -136,9 +136,9 @@ describe("CredentialService", () => {
 
     it("migrates legacy values only after destination reads succeed", async () => {
         const legacy = new Map([[CREDENTIAL_KEYS.installationSecret, "legacy-secret"], [CREDENTIAL_KEYS.javdbToken, "legacy-token"]]);
-        const storage = createStorage(), legacyStorage = { getItem: (key) => legacy.get(key) || null, removeItem: (key) => legacy.delete(key) };
+        const storage = createStorage(), legacyPageStorage = { getItem: (key) => legacy.get(key) || null, removeItem: (key) => legacy.delete(key) };
         const settings = { snapshot: () => ({ webDavPassword: "legacy-password" }), unset: vi.fn(async () => {}) };
-        const service = new CredentialService(storage, legacyStorage);
+        const service = new CredentialService(storage, legacyPageStorage);
         await service.migrateLegacy(settings);
         expect(storage.data.has(CREDENTIAL_KEYS.installationSecret)).toBe(false);
         expect(await service.get(CREDENTIAL_KEYS.javdbToken)).toBe("legacy-token");
@@ -148,21 +148,21 @@ describe("CredentialService", () => {
 
     it("supports deferred cleanup for the bootstrap single-settings transaction", async () => {
         const legacy = new Map([[CREDENTIAL_KEYS.installationSecret, "legacy-secret"], [CREDENTIAL_KEYS.javdbToken, "legacy-token"]]);
-        const storage = createStorage(), legacyStorage = { getItem: (key) => legacy.get(key) || null, removeItem: vi.fn((key) => legacy.delete(key)) };
+        const storage = createStorage(), legacyPageStorage = { getItem: (key) => legacy.get(key) || null, removeItem: vi.fn((key) => legacy.delete(key)) };
         const settings = { snapshot: () => ({ webDavPassword: "legacy-password" }), unset: vi.fn(async () => {}) };
-        const service = new CredentialService(storage, legacyStorage), result = await service.migrateLegacy(settings, { deferCleanup: true });
+        const service = new CredentialService(storage, legacyPageStorage), result = await service.migrateLegacy(settings, { deferCleanup: true });
         expect(settings.unset).not.toHaveBeenCalled();
         expect(legacy.has(CREDENTIAL_KEYS.javdbToken)).toBe(true);
         await service.cleanupLegacyPageStorage(result.cleanup.pageKeys);
         expect(legacy.has(CREDENTIAL_KEYS.javdbToken)).toBe(true);
-        expect(legacyStorage.removeItem).not.toHaveBeenCalled();
+        expect(legacyPageStorage.removeItem).not.toHaveBeenCalled();
     });
 
     it("decrypts the unprefixed 6.4.1 AES-GCM token before re-encrypting it", async () => {
         const legacyCiphertext = await encryptData("header.payload.signature", "x7k9p3");
         const legacy = new Map([[CREDENTIAL_KEYS.javdbToken, legacyCiphertext]]);
-        const storage = createStorage(), legacyStorage = { getItem: key => legacy.get(key) || null, removeItem: key => legacy.delete(key) };
-        const service = new CredentialService(storage, legacyStorage);
+        const storage = createStorage(), legacyPageStorage = { getItem: key => legacy.get(key) || null, removeItem: key => legacy.delete(key) };
+        const service = new CredentialService(storage, legacyPageStorage);
         await service.migrateLegacy({ snapshot: () => ({}) });
         await expect(service.get(CREDENTIAL_KEYS.javdbToken)).resolves.toBe("header.payload.signature");
         expect(storage.data.get(CREDENTIAL_KEYS.javdbToken)).toMatchObject({ schema: 2 });

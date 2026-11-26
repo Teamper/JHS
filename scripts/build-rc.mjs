@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildUserscript, repoRoot } from "./build.mjs";
 import { readReleaseNotes } from "./release-notes.mjs";
-import { createRcTransforms, rcFiles, rcNumber, sha256 } from "./rc-contract.mjs";
+import { createRcTransforms, rcFiles, rcNumber } from "./rc-contract.mjs";
+import { readFileHash, writeFrozenFiles } from "./delivery-artifact.mjs";
 
 export function cleanRcSource(cwd = repoRoot) {
     const git = args => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -16,10 +16,7 @@ export function assertRcInputsTracked(modules, cwd = repoRoot) {
 }
 export async function protectedHashes() {
     const paths = ["JHS.user.js", "dist/JHS.user.js", "JHS-7.0.dev.user.js", "dist/dev/JHS-7.0.dev.user.js"];
-    return Promise.all(paths.map(async name => {
-        try { return [name, sha256(await readFile(join(repoRoot, name)))]; }
-        catch (error) { if (error.code === "ENOENT") return [name, null]; throw error; }
-    }));
+    return Promise.all(paths.map(async name => [name, await readFileHash(join(repoRoot, name))]));
 }
 export async function buildRc(version) {
     rcNumber(version);
@@ -30,12 +27,7 @@ export async function buildRc(version) {
     assertRcInputsTracked(result.analysis.modules);
     if (cleanRcSource() !== sourceSha) throw new Error("Source changed during RC build");
     const { files, manifest } = rcFiles(result.output), folder = join(repoRoot, "dist/rc", version);
-    await mkdir(folder, { recursive: true });
-    for (const [name, bytes] of Object.entries(files)) {
-        const path = join(folder, name);
-        try { await writeFile(path, bytes, { flag: "wx" }); }
-        catch (error) { if (error.code !== "EEXIST" || !(await readFile(path)).equals(Buffer.from(bytes))) throw error; }
-    }
+    await writeFrozenFiles(folder, files);
     if (JSON.stringify(before) !== JSON.stringify(await protectedHashes())) throw new Error("RC build modified another delivery artifact");
     return { folder, ...manifest };
 }

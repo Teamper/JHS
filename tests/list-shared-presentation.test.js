@@ -3,7 +3,7 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { ListCoverImageController } from "../src/features/list/list-cover-image-controller.js";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 import { ListView } from "../src/features/list/list-view.js";
 
 function harness(site = "javdb") {
@@ -11,7 +11,7 @@ function harness(site = "javdb") {
     const $ = jqueryFactory(dom.window);
     vi.stubGlobal("window", dom.window); vi.stubGlobal("document", dom.window.document); vi.stubGlobal("$", $);
     initializeRuntimeConstants(dom.window.location);
-    return { dom, $, legacy: new ListPageCompatibilityService() };
+    return { dom, $, legacy: new ListPageService() };
 }
 
 describe("equivalent list presentation paths", () => {

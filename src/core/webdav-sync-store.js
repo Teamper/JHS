@@ -3,10 +3,12 @@
 import { runSyncJob } from "./sync-computation-jobs.js";
 import { ComputationBudget } from "./cooperative-work.js";
 import { changedSyncKeysAsync, equalSyncValuesAsync, syncRecordMapAsync, needsHistoryPruneAsync } from "./webdav-sync-model.js";
+import { createPortableSnapshot } from "./portable-snapshots.js";
 import { assertSupportedDataVersion } from "./migration.js";
 import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
 import { SyncPendingLedger, SYNC_PENDING_KEY } from "./sync-pending-ledger.js";
-import { SYNC_DOMAINS, SYNC_LEGACY_DEFAULTS, emptySyncModel, historyRank, maximumClockAsync, pruneSyncHistoryAsync, syncCloneAsync, syncLayout, validateSyncStateAsync, versionSyncDiffAsync, visibleSyncRecordsAsync, withSyncRetentionDefaults } from "./webdav-sync-model.js";
+import { WebDavSyncSnapshots, sameSidecarRevision, sameSyncRevision } from "./webdav-sync-snapshots.js";
+import { SYNC_DOMAINS, SYNC_LEGACY_DEFAULTS, emptySyncModel, historyRank, maximumClockAsync, pruneSyncHistoryAsync, syncLayout, validateSyncStateAsync, versionSyncDiffAsync, visibleSyncRecordsAsync, withSyncRetentionDefaults } from "./webdav-sync-model.js";
 
 /** @typedef {Record<string, any>} Dict */
 export const SYNC_STATE_KEY = "jhs_webdav_sync_state_v1";
@@ -18,9 +20,6 @@ function compactSyncMetadata(state) {
     if (state.pending) delete state.pending.model;
     return state;
 }
-/** @param {Dict} a @param {Dict} b */
-function sameSyncRevision(a, b) { return ["generation", "metadataRevision", "epoch", "replicaId"].every(key => a[key] === b[key]); }
-
 /** A poll receipt applies only to the sidecar revision it successfully checked.
  * @param {Dict} state @param {Dict} pending */
 function applyCheckWindow(state, pending) {
@@ -36,14 +35,14 @@ export class WebDavSyncStore extends EventTarget {
     constructor(dependencies) {
         super();
         this.deps = dependencies;
-        this.forage = dependencies.forage;
+        this.storage = dependencies.storage;
         this.coordinator = dependencies.coordinator;
         this.recoverBeforeMutation = async () => {
             let pending = /** @type {Dict | null} */ (null);
             await this.recoverWithoutLock(value => { pending = value; });
             return { owner: this, pending };
         };
-        this.ledger = new SyncPendingLedger(this.forage, dependencies.clock);
+        this.ledger = new SyncPendingLedger(this.storage, dependencies.clock);
         this.undoEpoch = "";
         /** @type {Set<string>} */ this.baseEligible = new Set();
         this.hasDeferred = false;
@@ -56,41 +55,36 @@ export class WebDavSyncStore extends EventTarget {
         this.replicaId = "";
         /** @type {Set<string>} */ this.eligible = new Set();
         /** @type {{touched: Set<string>, pruned: Dict} | null} */ this.current = null;
-        /** Detached, process-owned snapshots; later rounds still perform a complete missed-write repair.
-         * @type {{model: Dict, data: Dict, eligibility: string[], binding: string, maintenanceAt: number} | null} */ this.verifiedMerge = null;
+        this.snapshots = new WebDavSyncSnapshots();
         this.notificationPending = false;
         this.notificationError = "";
         this.notificationRetryAt = 0;
         /** @type {Promise<void> | null} */ this.notificationDrain = null;
-        /** @type {{revision: Dict, value: Dict} | null} */ this.metadata = null;
-        /** Private, database-owned record graphs. Round readers copy writable containers.
-         * @type {{revision: Dict, state: Dict} | null} */ this.roundState = null;
         /** @type {Dict | null} */ this.initializedRevision = null;
-        this.snapshotGeneration = 0;
         this.coordinator.afterRelease = () => { this.scheduleNotifications(); this.scheduleReconciliation(); };
     }
     /** Public reads never seed reusable graphs outside the mutation lock.
-     * @param {number} [generation] @param {boolean} [cache] @returns {Promise<Dict>} */
-    async read(generation = this.snapshotGeneration, cache = false) {
+     * @param {number} [generation] @param {boolean} [cache] @param {boolean} [ownGraph] @returns {Promise<Dict>} */
+    async read(generation = this.snapshots.generation, cache = false, ownGraph = false) {
         for (;;) {
         const before = await this.ledger.read();
-        const state = await this.forage.getItem(SYNC_STATE_KEY);
+        const state = await this.storage.get(SYNC_STATE_KEY);
         const pending = await this.ledger.read();
         if (before.epoch !== pending.epoch) continue;
-        return this.readStateSnapshot(state, pending, cache && generation === this.snapshotGeneration);
+        return this.readStateSnapshot(state, pending, cache && generation === this.snapshots.generation, ownGraph);
         }
     }
     /** Status and scheduling use a small revision-verified projection. */
     async readMetadata() {
         const revision = await this.ledger.read();
-        if (!this.metadata || !sameSyncRevision(revision, this.metadata.revision)) {
-            const generation = this.snapshotGeneration;
+        const value = this.snapshots.metadata(revision);
+        if (!value) {
+            const generation = this.snapshots.generation;
             return this.coordinator.runExclusive(async () => {
                 const { model, shadow, ...value } = await this.read(generation, true);
                 return value;
             });
         }
-        const value = structuredClone(this.metadata?.value ?? {});
         if (Object.keys(revision.domains).length) {
             value.dirty = true;
             value.dirtySinceAt = Math.min(value.dirtySinceAt || Infinity, revision.firstPendingAt || this.deps.clock?.() || Date.now());
@@ -101,32 +95,18 @@ export class WebDavSyncStore extends EventTarget {
     /** Internal computation snapshots share immutable records, never caller-owned writes.
      * Business domains are still freshly read for every full missed-write check.
      * @param {boolean} [locked] @param {number} [generation] @returns {Promise<Dict>} */
-    async readForRound(locked = false, generation = this.snapshotGeneration) {
-        let revision = await this.ledger.read();
-        if (generation !== this.snapshotGeneration) return this.read(generation);
-        const cached = this.roundState;
-        if (!cached || !["metadataRevision", "epoch", "replicaId"].every(key => cached.revision[key] === revision[key])) {
-            // Ledger advancement precedes the sidecar write. A stable ledger
-            // alone cannot prove the corresponding graph has finished writing.
-            if (!locked) return this.coordinator.runExclusive(() => this.readForRound(true, generation));
-            const state = await this.read(generation, true);
-            const after = await this.ledger.read();
-            if (generation !== this.snapshotGeneration || this.backgroundAbort.signal.aborted) return state;
-            this.roundState = { revision: after, state: { ...state, ...this.metadata?.value, model: state.model, shadow: state.shadow, pending: state.pending } };
-            revision = after;
-        }
-        const snapshot = /** @type {{revision: Dict, state: Dict}} */ (this.roundState);
-        const { model, shadow, ...metadata } = snapshot.state;
-        const state = { ...structuredClone(metadata), model: { records: { ...model.records }, frontiers: { ...model.frontiers } }, shadow: { ...shadow } };
-        return this.readStateSnapshot(state, revision, generation === this.snapshotGeneration);
+    async readForRound(locked = false, generation = this.snapshots.generation) {
+        const revision = await this.ledger.read();
+        if (generation !== this.snapshots.generation) return this.read(generation);
+        const cached = this.snapshots.round(revision);
+        if (cached) return this.readStateSnapshot(cached, revision, false);
+        // Ledger advancement precedes the sidecar write. Seed a graph under
+        // the same lock as the corresponding commit.
+        return locked ? this.read(generation, true, true) : this.coordinator.runExclusive(() => this.readForRound(true, generation));
     }
-    /** @param {Dict} state @param {Dict} revision */
-    rememberMetadata(state, revision) {
-        const { model, shadow, pending, ...value } = state;
-        this.metadata = { revision: { ...revision }, value: structuredClone({ ...value, pending: pending ? { name: pending.name, seq: pending.seq, createdAt: pending.createdAt, coveredRevision: pending.coveredRevision } : null }) };
-    }
-    /** Interpret an epoch-verified read, or a snapshot owned by the shared lock. @param {Dict | null} state @param {Dict} pending @param {boolean} [cache] @returns {Dict} */
-    readStateSnapshot(state, pending, cache = true) {
+    /** Interpret an epoch-verified read, or a snapshot owned by the shared lock.
+     * @param {Dict | null} state @param {Dict} pending @param {boolean} [cache] @param {boolean} [ownGraph] @returns {Dict} */
+    readStateSnapshot(state, pending, cache = true, ownGraph = false) {
         if (state && (state.schema !== 1 || !state.model?.records || !state.shadow || !Array.isArray(state.undoEligible))) throw new Error("同步状态损坏或版本不受支持，请保留数据并使用恢复入口");
         // A crashed reset may leave a new ledger epoch beside an old sidecar.
         // Fail closed until initialization repairs it; never spin on storage.
@@ -134,7 +114,7 @@ export class WebDavSyncStore extends EventTarget {
         if (state) {
             this.replicaId = state.replicaId; this.installUndo(state.undoEligible, pending);
             compactSyncMetadata(state);
-            if (cache && !this.backgroundAbort.signal.aborted) this.rememberMetadata(state, pending);
+            if (cache && !this.backgroundAbort.signal.aborted) this.snapshots.remember(state, pending, ownGraph);
             if (Object.keys(pending.domains).length) {
                 state.dirty = true;
                 state.dirtySinceAt = Math.min(state.dirtySinceAt || Infinity, pending.firstPendingAt || this.deps.clock?.() || Date.now());
@@ -145,31 +125,30 @@ export class WebDavSyncStore extends EventTarget {
         }
         return { schema: 1, replicaId: "", counter: 0, seq: 0, localRevision: 0, publishedRevision: 0, joined: false, binding: "", model: emptySyncModel(), shadow: {}, layout: {}, dirty: false, dirtySinceAt: 0, lastLocalChangeAt: 0, pending: null, confirmed: {}, known: {}, deleting: [], lastSuccessAt: 0, retryAt: 0, failures: 0, error: "", cleanupError: "", paused: false, undoEligible: [] };
     }
-    async initialize() {
-        return this.coordinator.runExclusive(async (/** @type {any} */ recovery) => {
-            // The registered hook already completed recovery inside this same lock.
-            if (recovery?.owner !== this) await this.recoverWithoutLock();
-            const [pending, stored] = await Promise.all([recovery?.owner === this && recovery.pending ? recovery.pending : this.ledger.read(), this.forage.getItem(SYNC_STATE_KEY)]);
-            const state = this.readStateSnapshot(stored, pending);
-            const needsReplica = !state.replicaId;
-            if (needsReplica) {
-                state.replicaId = crypto.randomUUID();
-                const activity = await this.forage.getItem("activity_log");
-                state.undoEligible = (activity?.entries || []).filter((/** @type {any} */ entry) => entry.commitState === "committed").map((/** @type {any} */ entry) => entry.id);
-            }
-            // First creation, legacy adoption and interrupted resets persist ledger before sidecar.
-            // All reads here remain under this same shared lock; public read() still verifies epochs.
-            if (needsReplica || state.undoEpoch !== pending.epoch) await this.writeWithoutLock(state, pending);
-            this.initializedRevision = { ...pending };
-            return state;
-        });
+    initialize() { return this.coordinator.runExclusive(/** @param {any} recovery */ recovery => this.initializeWithoutLock(recovery)); }
+    /** Caller holds the mutation lock. @param {any} [recovery] */
+    async initializeWithoutLock(recovery) {
+        // Recovery evidence is reusable only when supplied by the current lock invocation.
+        if (recovery?.owner !== this) await this.recoverWithoutLock();
+        const [pending, stored] = await Promise.all([recovery?.owner === this && recovery.pending ? recovery.pending : this.ledger.read(), this.storage.get(SYNC_STATE_KEY)]);
+        const state = this.readStateSnapshot(stored, pending);
+        const needsReplica = !state.replicaId;
+        if (needsReplica) {
+            state.replicaId = crypto.randomUUID();
+            const activity = await this.storage.get("activity_log");
+            state.undoEligible = (activity?.entries || []).filter((/** @type {any} */ entry) => entry.commitState === "committed").map((/** @type {any} */ entry) => entry.id);
+        }
+        // First creation, legacy adoption and interrupted resets persist ledger before sidecar.
+        if (needsReplica || state.undoEpoch !== pending.epoch) await this.writeWithoutLock(state, pending);
+        this.initializedRevision = { ...pending };
+        return state;
     }
     /** Revalidate recovery and metadata without rereading an unchanged large sidecar. */
     async ensureInitialized() {
         const ready = await this.coordinator.runExclusive(async () => {
-            if (this.deps.storage) await assertSupportedDataVersion(this.deps.storage);
+            await assertSupportedDataVersion(this.storage);
             const pending = await this.ledger.read();
-            if (!this.initializedRevision || !["metadataRevision", "epoch", "replicaId"].every(key => pending[key] === this.initializedRevision?.[key])) return false;
+            if (!this.initializedRevision || !sameSidecarRevision(pending, this.initializedRevision)) return false;
             this.installUndo(null, pending);
             return true;
         });
@@ -184,10 +163,9 @@ export class WebDavSyncStore extends EventTarget {
         state.undoEpoch = current.epoch;
         await this.ledger.write(current);
         this.deps.diagnostics?.recordWork("sync.metadataWrites");
-        await this.forage.setItem(SYNC_STATE_KEY, compactSyncMetadata(state));
+        await this.storage.set(SYNC_STATE_KEY, compactSyncMetadata(state));
         this.initializedRevision = state.schema === 1 && state.model?.records && state.undoEpoch === current.epoch ? { ...current } : null;
-        this.roundState = null;
-        this.rememberMetadata(state, current);
+        this.snapshots.remember(state, current);
         this.replicaId = state.replicaId; this.installUndo(state.undoEligible, current);
     }
     /** @param {(state: Dict) => void | Promise<void>} change */
@@ -264,7 +242,7 @@ export class WebDavSyncStore extends EventTarget {
         const pending = await this.ledger.read();
         let base = null;
         if (this.undoEpoch && this.undoEpoch !== pending.epoch) {
-            const current = await this.forage.getItem(SYNC_STATE_KEY);
+            const current = await this.storage.get(SYNC_STATE_KEY);
             const latest = await this.ledger.read();
             if (latest.epoch !== pending.epoch) continue;
             base = current?.undoEpoch === pending.epoch ? current.undoEligible : [];
@@ -278,7 +256,7 @@ export class WebDavSyncStore extends EventTarget {
         if (!this.enabled || !activity.originReplicaId || activity.originReplicaId !== this.replicaId || activity.commitState !== "committed") return;
         const pending = await this.ledger.read();
         if (pending.replicaId !== this.replicaId) return;
-        const present = new Set((entries || (await this.forage.getItem("activity_log"))?.entries || []).filter((/** @type {Dict} */ entry) => entry.commitState === "committed").map((/** @type {Dict} */ entry) => entry.id));
+        const present = new Set((entries || (await this.storage.get("activity_log"))?.entries || []).filter((/** @type {Dict} */ entry) => entry.commitState === "committed").map((/** @type {Dict} */ entry) => entry.id));
         pending.localUndoIds = [...new Set([...pending.localUndoIds, activity.id])].filter(id => present.has(id));
         await this.ledger.write(pending);
         await this.refreshUndo();
@@ -302,7 +280,7 @@ export class WebDavSyncStore extends EventTarget {
             })().catch(error => { if (error?.name !== "AbortError") this.error = "业务数据已保存，同步进度待修复；稍后将重新核对完整数据"; });
         }, 250);
     }
-    releaseSnapshots() { this.snapshotGeneration++; this.roundState = null; this.verifiedMerge = null; this.metadata = null; this.initializedRevision = null; }
+    releaseSnapshots() { this.snapshots.release(); this.initializedRevision = null; }
     dispose() { this.backgroundAbort.abort(); if (this.reconciliationTimer) clearTimeout(this.reconciliationTimer); this.reconciliationTimer = null; this.releaseSnapshots(); }
     /** Wait outside the lock after each time slice, so a user save in another frame/tab can finish first. @param {ComputationBudget} work */
     idleBudget(work) {
@@ -313,15 +291,15 @@ export class WebDavSyncStore extends EventTarget {
     }
     /** @param {readonly string[]} [domains] @returns {Promise<Dict>} */
     async readData(domains = SYNC_DOMAINS) {
-        const values = await Promise.all(domains.map(async key => [key, await this.forage.getItem(key)]));
+        const values = await Promise.all(domains.map(async key => [key, await this.storage.get(key)]));
         return Object.fromEntries(values.map(([key, value]) => [key, value ?? (["setting", "new_video_decisions", "personal_ratings"].includes(key) ? {} : key === "activity_log" ? { entries: [] } : [])]));
     }
     /** Must run before every subsequent writer, even after a page crash. @param {(pending: Dict) => void} [onCleanLedger] @returns {Promise<{notificationId: string, carNums: string[], domains?: string[], changedNames?: string[]} | null>} */
     async recoverWithoutLock(onCleanLedger) {
         // Independent reads start under the caller's lock; intent validation still precedes every write.
-        let [pending, journal] = await Promise.all([this.ledger.read(), this.forage.getItem(SYNC_JOURNAL_KEY)]);
+        let [pending, journal] = await Promise.all([this.ledger.read(), this.storage.get(SYNC_JOURNAL_KEY)]);
         if (!journal) { onCleanLedger?.(pending); return null; }
-        await assertSupportedDataVersion(this.deps.storage);
+        await assertSupportedDataVersion(this.storage);
         const dataVersion = journal.dataVersion ?? 3;
         if (!Number.isInteger(dataVersion) || dataVersion < 0 || dataVersion > CURRENT_DATA_VERSION) throw new Error("同步恢复日志来自不支持的数据版本，请更新 JHS");
         const domains = dataVersion < 4 ? SYNC_DOMAINS.filter(key => key !== "personal_ratings") : SYNC_DOMAINS;
@@ -329,17 +307,15 @@ export class WebDavSyncStore extends EventTarget {
         // Old v1 journals have no notification marker. Upgrade it before replay
         // so a crash cannot erase the outstanding refresh or change its identity.
         if (!journal.notificationId || !Array.isArray(journal.carNums)) {
-            const previous = await this.forage.getItem("car_list") || [];
+            const previous = await this.storage.get("car_list") || [];
             const modeled = Object.keys(journal.afterState.model?.records || {}).filter(key => key.startsWith("car_list/")).map(key => decodeURIComponent(key.slice(9)));
             journal = { ...journal, notificationId: journal.notificationId || crypto.randomUUID(), carNums: [...new Set([...previous, ...journal.after.car_list].map((/** @type {any} */ car) => car.carNum).concat(modeled))] };
-            await this.forage.setItem(SYNC_JOURNAL_KEY, journal);
+            await this.storage.set(SYNC_JOURNAL_KEY, journal);
         }
         if (journal.state !== "committed") {
-            for (const key of domains) await this.forage.setItem(key, journal.after[key]);
+            for (const key of domains) await this.storage.setRecovered(key, journal.after[key]);
             await this.writeWithoutLock(journal.afterState);
-            await this.forage.setItem(SYNC_JOURNAL_KEY, { ...journal, state: "committed" });
-            this.deps.storage?._invalidateCache?.();
-            this.deps.storage?.invalidateSettingCache?.();
+            await this.storage.set(SYNC_JOURNAL_KEY, { ...journal, state: "committed" });
         }
         this.notificationPending = true;
         return { notificationId: journal.notificationId, carNums: journal.carNums, domains: journal.domains, changedNames: journal.changedNames };
@@ -370,9 +346,9 @@ export class WebDavSyncStore extends EventTarget {
             if (!notice) { this.notificationError = ""; return; }
             await this.notifyApplied(notice.carNums, notice);
             await this.coordinator.runExclusive(async () => {
-                const current = await this.forage.getItem(SYNC_JOURNAL_KEY);
+                const current = await this.storage.get(SYNC_JOURNAL_KEY);
                 if (current?.state === "committed" && current.notificationId === notice.notificationId) {
-                    await this.forage.removeItem(SYNC_JOURNAL_KEY);
+                    await this.storage.remove(SYNC_JOURNAL_KEY);
                     this.notificationPending = false;
                 } else this.notificationPending = !!current;
             });
@@ -386,8 +362,8 @@ export class WebDavSyncStore extends EventTarget {
     }
     /** Full checks repair missed writes; successful mutations reconcile only their captured domains. @param {Dict} [pruned] @param {Set<string> | null} [touched] @param {ComputationBudget} [work] */
     async reconcileWithoutLock(pruned = {}, touched = null, work = new ComputationBudget({ diagnostics: this.deps.diagnostics })) {
-        await assertSupportedDataVersion(this.deps.storage);
-        await this.deps.storage?.stateService?.recoverPendingTransactionWithoutLock?.();
+        await assertSupportedDataVersion(this.storage);
+        await this.deps.recoverState?.();
         const snapshot = await this.captureReconciliation(touched);
         const result = await this.computeReconciliation(snapshot.state, snapshot.data, { ...snapshot.pruned, ...pruned }, snapshot.domains, work, snapshot.pending.lastPendingAt, snapshot.pending);
         if (result.changed || snapshot.eligibilityChanged) await this.writeWithoutLock(result.state);
@@ -451,10 +427,10 @@ export class WebDavSyncStore extends EventTarget {
     async reuseRound(round, consume = false) {
         const proof = round?.proof;
         if (!proof || proof.owner !== this || round?.active === false || round?.signal?.aborted || proof.binding !== round?.binding) return null;
-        await assertSupportedDataVersion(this.deps.storage);
+        await assertSupportedDataVersion(this.storage);
         const pending = await this.ledger.read();
         if (!sameSyncRevision(pending, proof.pending) || Object.keys(pending.domains).length || this.notificationPending
-            || await this.forage.getItem("mutation_journal") || await this.forage.getItem(SYNC_JOURNAL_KEY)) { round.proof = null; return null; }
+            || await this.storage.get("mutation_journal") || await this.storage.get(SYNC_JOURNAL_KEY)) { round.proof = null; return null; }
         if (consume) round.proof = null;
         return { pending, state: proof.state, local: proof.local, recovered: null };
     }
@@ -472,8 +448,8 @@ export class WebDavSyncStore extends EventTarget {
             for (;;) {
                 work.assertActive();
                 const snapshot = await this.coordinator.runExclusive(async () => {
-                    await assertSupportedDataVersion(this.deps.storage);
-                    await this.deps.storage?.stateService?.recoverPendingTransactionWithoutLock?.();
+                    await assertSupportedDataVersion(this.storage);
+                    await this.deps.recoverState?.();
                     const pending = await this.ledger.read();
                     if (!full && !Object.keys(pending.domains).length) { this.hasDeferred = false; return null; }
                     return this.captureReconciliation(full ? null : new Set(Object.keys(pending.domains)));
@@ -483,7 +459,7 @@ export class WebDavSyncStore extends EventTarget {
                 work.assertActive();
                 const committed = await this.coordinator.runExclusive(async () => {
                     const current = await this.ledger.read(), before = snapshot.pending;
-                    if (current.generation !== before.generation || current.metadataRevision !== before.metadataRevision || current.epoch !== before.epoch || current.replicaId !== before.replicaId) return false;
+                    if (!sameSyncRevision(current, before)) return false;
                     work.assertActive();
                     if (result.changed || snapshot.eligibilityChanged) await this.writeWithoutLock(result.state);
                     await this.acknowledgeReconciliation(before, result.state, snapshot.domains);
@@ -516,18 +492,18 @@ export class WebDavSyncStore extends EventTarget {
                 return { recovered, pending, state: await this.readForRound(true), local: await this.readData() };
             });
             if (!snapshot) { await this.flushPending({ full: true, work, round }); continue; }
-            const { local, recovered } = snapshot;
+            const { local, recovered } = snapshot, snapshotGeneration = this.snapshots.generation;
             let state = snapshot.state;
             const previousState = { ...state, confirmed: { ...state.confirmed }, model: { ...state.model, frontiers: { ...state.model.frontiers } } };
             await assertCurrent();
             const first = !state.joined || state.binding !== binding;
-            const verified = this.verifiedMerge, now = this.deps.clock?.() ?? Date.now();
+            const verified = this.snapshots.verified, now = this.deps.clock?.() ?? Date.now();
             // A process-local proof only: every check still repairs missed local writes.
             // Any model/data change, restart, recovery or maintenance boundary falls back.
             if (!first && !remote.length && !recovered && !this.notificationPending && !state.pending && state.retentionPolicyInitialized
                 && verified?.binding === binding && now < verified.maintenanceAt) {
                 const proofKey = JSON.stringify([snapshot.pending.generation, snapshot.pending.metadataRevision, snapshot.pending.epoch, snapshot.pending.replicaId, binding]);
-                if (await this.computeJob("verified", { proofKey, model: state.model, verifiedModel: verified.model, data: local, verifiedData: verified.data, eligible: state.undoEligible, verifiedEligible: verified.eligibility }, work)) {
+                if (await this.computeJob("verified", { proofKey, model: state.model, data: local, eligible: state.undoEligible, verified }, work)) {
                     await this.coordinator.runExclusive(() => this.rememberRound(round, state, local, snapshot.pending));
                     return;
                 }
@@ -539,11 +515,13 @@ export class WebDavSyncStore extends EventTarget {
             for (const model of remote) cloud = await this.computeJob("join", { left: cloud, right: model }, work);
             if (first) {
                 const localProjection = await this.computeJob("project", { data: local, frontiers: cloud.frontiers }, work);
-                const before = (await visibleSyncRecordsAsync(cloud, work)), combined = (await syncCloneAsync(before, work));
+                const before = await visibleSyncRecordsAsync(cloud, work), combined = { ...before };
                 for (const [key, fields] of Object.entries(localProjection)) {
                     if (!Object.hasOwn(cloud.records, key)) combined[key] = fields;
-                    else if (before[key]) for (const [name, value] of Object.entries(/** @type {Dict} */ (fields))) {
-                        if ((name.startsWith("f:") || name.startsWith("video:")) && !Object.hasOwn(cloud.records[key].fields, name)) combined[key][name] = value;
+                    else if (before[key]) {
+                        const added = Object.entries(/** @type {Dict} */ (fields)).filter(([name]) =>
+                            (name.startsWith("f:") || name.startsWith("video:")) && !Object.hasOwn(cloud.records[key].fields, name));
+                        if (added.length) combined[key] = { ...before[key], ...Object.fromEntries(added) };
                     }
                 }
                 // A snapshot with no business records still identifies an old
@@ -559,7 +537,7 @@ export class WebDavSyncStore extends EventTarget {
             } else if (remote.length) state.model = await this.computeJob("join", { left: state.model, right: cloud }, work);
             else state.model = { ...state.model, frontiers: { ...state.model.frontiers, activity_log: state.model.frontiers.activity_log || "", offline_history: state.model.frontiers.offline_history || "" } };
             if (!first && !state.retentionPolicyInitialized) {
-                const before = (await visibleSyncRecordsAsync(state.model, work)), after = (await syncCloneAsync(before, work));
+                const before = await visibleSyncRecordsAsync(state.model, work), after = { ...before };
                 for (const [key, value] of Object.entries(SYNC_LEGACY_DEFAULTS)) if (!Object.hasOwn(state.model.records, `setting/${key}`)) after[`setting/${key}`] = { value };
                 const clock = Math.max(state.counter, (await maximumClockAsync(state.model, work))) + 1;
                 const difference = (await versionSyncDiffAsync(state.model, before, after, [clock, state.replicaId], work));
@@ -603,16 +581,16 @@ export class WebDavSyncStore extends EventTarget {
             const metadataChanged = !(await equalSyncValuesAsync(previousState, state, work));
             const committed = await this.coordinator.runExclusive(async () => {
                 const current = await this.ledger.read(), before = snapshot.pending;
-                if (current.generation !== before.generation || current.metadataRevision !== before.metadataRevision || current.epoch !== before.epoch || current.replicaId !== before.replicaId) return false;
+                if (!sameSyncRevision(current, before)) return false;
                 await assertCurrent();
-                if (first) await this.deps.storage?._createSnapshotWithoutMutation?.("多端同步接入前", "sync-join");
+                if (first) await createPortableSnapshot(this.storage, "多端同步接入前", "sync-join");
                 if (changed) {
-                    if (!first && new Set(local.blacklist_car_list.map((/** @type {any} */ item) => normalizeCarNum(item.carNum))).size < local.blacklist_car_list.length) await this.deps.storage?._createSnapshotWithoutMutation?.("同步屏蔽影片整理前", "sync-repair");
-                    const pending = await this.forage.getItem(SYNC_JOURNAL_KEY);
+                    if (!first && new Set(local.blacklist_car_list.map((/** @type {any} */ item) => normalizeCarNum(item.carNum))).size < local.blacklist_car_list.length) await createPortableSnapshot(this.storage, "同步屏蔽影片整理前", "sync-repair");
+                    const pending = await this.storage.get(SYNC_JOURNAL_KEY);
                     const journal = { schema: 1, dataVersion: CURRENT_DATA_VERSION, state: "prepared", after, afterState: state, binding, notificationId: crypto.randomUUID(), carNums: [...new Set([...(pending?.carNums || []), ...carNums])],
                         ...(pending && !Array.isArray(pending.domains) ? {} : { domains: [...new Set([...(pending?.domains || []), ...domains])], changedNames: [...new Set([...(pending?.changedNames || []), ...changedNames])] }) };
                     await assertCurrent();
-                    await this.forage.setItem(SYNC_JOURNAL_KEY, journal);
+                    await this.storage.set(SYNC_JOURNAL_KEY, journal);
                     await this.recoverWithoutLock();
                 } else if (metadataChanged) {
                     await assertCurrent();
@@ -627,14 +605,15 @@ export class WebDavSyncStore extends EventTarget {
                 const due = Date.parse(entry.createdAt) + 30 * 86400000 + 1;
                 if (due > now) maintenanceAt = Math.min(maintenanceAt, due);
             }
-            this.verifiedMerge = { model: state.model, data: after, eligibility: state.undoEligible, binding, maintenanceAt };
+            if (snapshotGeneration === this.snapshots.generation) {
+                this.snapshots.verified = { model: state.model, data: after, eligibility: state.undoEligible, binding, maintenanceAt };
+            }
             break;
         }
         await this.flushAppliedNotifications();
     }
     /** @param {string[]} carNums @param {{notificationId?: string, domains?: string[], changedNames?: string[]}} [notice] */
     async notifyApplied(carNums, notice = {}) {
-        this.deps.storage?._invalidateCache?.(); this.deps.storage?.invalidateSettingCache?.();
         let failed = false;
         if (!notice.domains || notice.domains.includes("setting")) try { await this.deps.settings?.refresh(); } catch { failed = true; }
         for (const type of ["car-state-changed", "personal-rating-changed", "actress-changed", "new-video-changed", "blacklist-rules-changed", "filter-rules-changed", "offline-history-changed", "activity-log-changed", "settings-changed"]) {

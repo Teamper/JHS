@@ -129,7 +129,10 @@ for (const theme of ["light", "dark"]) for (const scene of ["settings", "tasks",
   test(`representative ${scene} ${theme} with host styles and real feedback`, async ({ page, context }, info) => {
     test.skip(!visualEnabled || !["desktop-wide", "mobile"].includes(info.project.name), "representative visual regression is opt-in and platform specific");
     await boot(page, context, theme, scene === "detail");
-    if (scene === "settings" || scene === "tasks") await openSettings(page, scene === "tasks" ? "task-panel" : undefined);
+    if (scene === "settings" || scene === "tasks") {
+      const dialog = await openSettings(page, scene === "tasks" ? "task-panel" : undefined);
+      if (scene === "tasks") await expect(dialog.locator(".jhs-task-setting-status")).toHaveCount(3);
+    }
     if (scene === "history") await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
     if (scene === "new-video") await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));
     if (scene === "feedback") await page.evaluate(() => {

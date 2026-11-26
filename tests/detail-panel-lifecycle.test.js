@@ -13,9 +13,9 @@ function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "
     const reviewFetch = vi.fn(async movieRef => [{ author: movieRef.movieId, score: 1, createdAt: "2026-08-22", likes: 0, content: "ok" }]);
     const relatedFetch = vi.fn(async movieRef => [{ id: movieRef.movieId, name: movieRef.movieId, movieCount: 1, collectionCount: 0, viewCount: 0, createdAt: "today" }]);
     const reviewKeywords = [];
-    const runtimeServices = { review: { list: reviewFetch }, related: { list: relatedFetch }, settings: { snapshot: () => settings, set: vi.fn(async (name, value) => settings[name] = value) }, storage: { get: vi.fn(async () => reviewKeywords), set: vi.fn(async (_key, value) => { reviewKeywords.splice(0, reviewKeywords.length, ...value); }) }, scope: async () => null };
+    const runtimeServices = { review: { list: reviewFetch }, related: { list: relatedFetch }, settings: { snapshot: () => settings, set: vi.fn(async (name, value) => settings[name] = value) }, keywordRules: { getReviewKeywords: vi.fn(async () => reviewKeywords), addReviewKeyword: vi.fn(async value => { reviewKeywords.push(value); }) }, scope: async () => null };
     const Review = new ReviewPanel({
-        review: runtimeServices.review, settings: runtimeServices.settings, storage: runtimeServices.storage,
+        review: runtimeServices.review, settings: runtimeServices.settings, keywordRules: runtimeServices.keywordRules,
         scope: runtimeServices.scope, jquery: $, document: dom.window.document, window: dom.window,
         ui: { formatDate: value => value, confirm: (_event, _message, callback) => callback() },
     });
@@ -23,7 +23,7 @@ function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "
         related: runtimeServices.related, settings: runtimeServices.settings, scope: runtimeServices.scope,
         jquery: $, formatDate: value => value, document: dom.window.document,
     });
-    return { $, Review, Related, reviewFetch, relatedFetch, storage: runtimeServices.storage, window: dom.window };
+    return { $, Review, Related, reviewFetch, relatedFetch, keywordRules: runtimeServices.keywordRules, window: dom.window };
 }
 
 describe("detail panel instance lifecycle", () => {
@@ -63,11 +63,11 @@ describe("detail panel instance lifecycle", () => {
     });
 
     it("binds the review context-menu handler exactly once across multiple panels", async () => {
-        const { $, Review: plugin, storage, window } = loadPanels();
+        const { $, Review: plugin, keywordRules, window } = loadPanels();
         await plugin.show("A", $("#review-a")), await plugin.show("B", $("#review-b"));
         window.getSelection = () => ({ toString: () => "keyword" });
         $("#review-a .review-content").trigger("contextmenu");
-        await vi.waitFor((() => expect(storage.set).toHaveBeenCalledOnce()));
+        await vi.waitFor((() => expect(keywordRules.addReviewKeyword).toHaveBeenCalledOnce()));
     });
 
     it("adopts owned workspace headers and does not prefetch the second review page", async () => {

@@ -1,7 +1,8 @@
 // @ts-check
-import { createLegacyRuntime } from "../../core/legacy-runtime.js";
+import { EXTENSION_STATE_METHODS } from "../../contracts/extension-protocol.js";
 import { JhsEventBus } from "../../core/event-bus.js";
 import { RemoteSettings } from "../../services/extension-settings-service.js";
+import { diffPortableData } from "../../services/portable-backup-service.js";
 import { ExtensionHttpAdapter } from "../../platform/extension/http-adapter.js";
 import { UserscriptHttpAdapter } from "../../platform/userscript/userscript-http-adapter.js";
 
@@ -41,30 +42,25 @@ export async function createRemoteRuntime(client) {
         },
     };
     Object.assign(globalThis, gm, { unsafeWindow: window });
-    const forage = Object.fromEntries(["getItem", "setItem", "removeItem", "keys"].map(name => [name, /** @param {...any} args */ (...args) => client.call(`forage.${name}`, args)]));
-    const local = createLegacyRuntime(eventBus, { forage });
-    const localMethods = new Set(["_invalidateCache", "invalidateSettingCache", "getCacheHitStats", "diffData", "_diffArrays", "_diffObjects", "_stableStringify", "_getArrayKey", "_groupDuplicateItems", "_dedupeByKey"]);
-    const storageManager = new Proxy(local.storageManager, { get(target, key) {
-        if (typeof key !== "string") return Reflect.get(target, key);
-        const value = target[key];
-        if (typeof value !== "function") return value;
-        if (key === "importDataWithGuard") return async (/** @type {any} */ data, /** @type {any} */ options = {}) => {
-            await options.assertActive?.();
-            const prepared = options.prepareData ? await options.prepareData() : data;
-            await options.assertActive?.();
-            return client.call("legacy.importData", [prepared]);
-        };
-        return localMethods.has(key) ? value.bind(target) : /** @param {...any} args */ (...args) => client.call(`legacy.${key}`, args);
-    } });
-    const stateService = new Proxy(local.stateService, { get(target, key) {
-        const value = target[key];
-        if (key === "getCommittedListSnapshot") return () => null;
-        if (typeof value !== "function") return value;
-        return /** @param {...any} args */ (...args) => {
-            if (["patch", "toggle"].includes(String(key))) args[2] = { ...args[2], metadata: { url: location.href, ...args[2]?.metadata } };
-            return client.call(`state.${String(key)}`, args);
-        };
-    } });
+    const importData = async (/** @type {any} */ data, /** @type {import("../../services/portable-backup-service.js").ImportOptions} */ options = {}) => {
+        await options.assertActive?.();
+        const prepared = options.prepareData ? await options.prepareData() : data;
+        await options.assertActive?.();
+        options.signal?.throwIfAborted();
+        return client.call("backup.importData", [prepared]);
+    };
+    const backup = {
+        ...Object.fromEntries(["exportData", "createSnapshot", "getSnapshotList", "getSnapshot", "deleteSnapshot", "restoreSnapshot", "inspectDataHealth", "repairDataHealth"]
+            .map(name => [name, (/** @type {...any} */ ...args) => client.call(`backup.${name}`, args)])),
+        importData, importDataWithGuard: importData, diffData: diffPortableData,
+    };
+    const state = {
+        ...Object.fromEntries(EXTENSION_STATE_METHODS.map(name => [name, (/** @type {...any} */ ...args) => {
+            if (name === "patch" || name === "toggle") args[2] = { ...args[2], metadata: { url: location.href, ...args[2]?.metadata } };
+            return client.call(`state.${name}`, args);
+        }])),
+        getCommittedListSnapshot: () => null,
+    };
     const settings = new RemoteSettings(client);
     settings.accept(boot.settings);
     const credential = new Proxy(/** @type {any} */ (new EventTarget()), { get(target, key) {
@@ -82,7 +78,7 @@ export async function createRemoteRuntime(client) {
     const syncState = { dispose() {}, requestReconciliation() {}, begin() {}, finish() {}, capture() {}, recoverBeforeMutation() {}, enabled: false };
     /** @type {Record<string, (...args: any[]) => any>} */ const storage = {
         get: key => client.call("storage.get", [key]), set: (key, value) => client.call("storage.set", [key, value]),
-        remove: key => client.call("storage.remove", [key]), keys: () => forage.keys(),
+        remove: key => client.call("storage.remove", [key]), keys: () => client.call("storage.keys"),
         getLocal: key => localStorage.getItem(key), setLocal: (key, value) => localStorage.setItem(key, value), removeLocal: key => localStorage.removeItem(key),
         getValue: gm.GM_getValue, setValue: gm.GM_setValue, removeValue: gm.GM_deleteValue,
         listValues: gm.GM_listValues,
@@ -100,9 +96,20 @@ export async function createRemoteRuntime(client) {
         await eventBus._receive({ ...notice, originId: "extension-domain" });
     });
     const receipts = Object.fromEntries(["getRaw", "read", "prune", "write", "restore"].map(method => [method, /** @param {...any} args */ (...args) => client.call(`receipts.${method}`, args)]));
-    return { eventBus, legacyRuntime: { ...local, storageManager, stateService }, platform: {
+    return { eventBus, platform: {
         http: new ExtensionHttpAdapter(client, new UserscriptHttpAdapter(gm.GM_xmlhttpRequest)),
-        storage, settings, credential, webdavSync, syncState, receipts, taskExecution,
+        storage, state, settings, credential, webdavSync, syncState, backup, receipts, taskExecution,
+        keywordRules: {
+            getTitleKeywords: () => client.call("keywords.getTitleKeywords"),
+            getReviewKeywords: () => client.call("keywords.getReviewKeywords"),
+            saveTitleKeywords: (/** @type {string|string[]} */ value) => client.call("keywords.saveTitleKeywords", [value]),
+            saveReviewKeywords: (/** @type {string[]} */ value) => client.call("keywords.saveReviewKeywords", [value]),
+            addReviewKeyword: (/** @type {string} */ value) => client.call("keywords.addReviewKeyword", [value]),
+        },
+        thirdPartyMutations: {
+            clear: () => client.call("cache.clearThirdPartyCache"),
+            delete: (/** @type {string} */ key) => client.call("cache.deleteThirdPartyCacheEntry", [key]),
+        },
         createWorker: () => new Worker(chrome.runtime.getURL("sync-worker.js")),
     }, remote: true, bundledStyles: true };
 }

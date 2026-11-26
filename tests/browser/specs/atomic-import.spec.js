@@ -159,13 +159,13 @@ test("closing a page during pending writes rolls back for an old-reader tab", as
 test("partial import produces exactly one pre-import snapshot and rejects a future backup", async ({ context, page }) => {
     await fulfillHostFixtures(context); await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page);
     const result = await page.evaluate(async () => {
-        const storage = window.storageManager;
-        const backup = await storage.exportData();
-        await storage.forage.setItem("car_list", [{ carNum: "OLD-123", url: "/v/old" }]);
-        await storage.importData({ data_version: 3, car_list: [] });
-        const snapshots = await storage.forage.getItem("snapshots");
+        const { storage, backup } = window.__jhsBrowserDiagnostics.detailServices;
+        const exported = await backup.exportData();
+        await storage.set("car_list", [{ carNum: "OLD-123", url: "/v/old" }]);
+        await backup.importData({ data_version: 3, car_list: [] });
+        const snapshots = await storage.get("snapshots");
         let future;
-        try { await storage.importData({ ...backup, data_version: 9999 }); } catch (error) { future = error.message; }
+        try { await backup.importData({ ...exported, data_version: 9999 }); } catch (error) { future = error.message; }
         return { snapshots, future };
     });
     expect(result.snapshots.filter(item => item.type === "auto-import" || item.source === "auto-import")).toHaveLength(1);
@@ -175,10 +175,10 @@ test("partial import produces exactly one pre-import snapshot and rejects a futu
 test("an older destination migrates in memory and commits the partial import as one database", async ({ context, page }) => {
     await fulfillHostFixtures(context); await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page);
     const result = await page.evaluate(async () => {
-        const storage = window.storageManager;
-        await storage.forage.setItem("data_version", 1);
-        await storage.forage.setItem("car_list", [{ carNum: "OLD-123", url: "/v/old", status: "favorite" }]);
-        await storage.importData({ data_version: 1, blacklist: ["Keep actor"] });
+        const { storage, backup } = window.__jhsBrowserDiagnostics.detailServices;
+        await storage.set("data_version", 1);
+        await storage.set("car_list", [{ carNum: "OLD-123", url: "/v/old", status: "favorite" }]);
+        await backup.importData({ data_version: 1, blacklist: ["Keep actor"] });
         const legacy = localforage.createInstance({ name: "JAV-JHS", storeName: "appData" });
         return { version: await legacy.getItem("data_version"), cars: await legacy.getItem("car_list"), blacklist: await legacy.getItem("blacklist") };
     });

@@ -1,3 +1,4 @@
+import { storageFromForage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { StateService } from "../src/core/state-service.js";
 import { JhsEventBus } from "../src/core/event-bus.js";
@@ -16,11 +17,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 function fixture() {
   const values = new Map();
-  const storage = { car_list_key: "car_list", favorite_actresses_key: "favorite_actresses", _invalidateCache() {}, forage: {
+  const forage = {
     getItem: async key => structuredClone(values.get(key) ?? null),
     setItem: async (key, value) => values.set(key, structuredClone(value)),
     removeItem: async key => values.delete(key),
-  } };
+  };
+  const storage = storageFromForage(forage);
   const errors = [], events = new JhsEventBus("commit-test", { errorReporter: error => errors.push(error) });
   const coordinator = new StorageMutationCoordinator({ lockManager: null });
   return { values, events, errors, service: new StateService(storage, events, coordinator) };

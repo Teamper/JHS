@@ -23,7 +23,8 @@ for (const blocked of [false, true]) test(`sync computation worker and lifecycle
             const text = await runner.run("stringify", value);
             const parsed = await runner.run("parse", text);
             const model = { records: parsed, frontiers: {} }, eligible = [];
-            const proof = { proofKey: "fixture-revision", model: structuredClone(model), verifiedModel: model, data: structuredClone(payload.data), verifiedData: payload.data, eligible: [], verifiedEligible: eligible };
+            const proof = { proofKey: "fixture-revision", model: structuredClone(model), data: structuredClone(payload.data), eligible: [],
+                verified: { model, data: payload.data, eligibility: eligible } };
             const verified = await runner.run("verified", proof);
             proof.data.car_list[0].stateFlags.favorite = false;
             const changedData = await runner.run("verified", proof);

@@ -34,17 +34,17 @@ node --check JHS-7.0.dev.user.js
 
 `npm run analyze:bundle` 在 `output/static-resource-size/` 生成同一 Dev 元数据的 `unpacked.user.js`、`packed.user.js` 和 `size-report.json`，报告包含最终 UTF-8 字节、Gzip 字节、解码器与许可证成本、资源来源及未编码模块贡献。`unpackedBudget` 和 `packedBudget` 分别给出两种产物的 `ok` / `warning` / `exceeded` 状态、双阈值和剩余字节；负数表示已超出对应阈值。兼容字段 `maximumBytes` 仍表示硬上限，`withinBudget` 仍表示编码产物是否不超过硬上限。分析命令用于对比，实际产物门禁由 `npm run check:performance` 执行。资源编码只处理登记的固定 CSS/HTML 文本，保持单文件与源码明文，不增加线上依赖或存储格式。
 
-资源编码目前默认关闭，候选构建使用 `JHS_PACK_STATIC_RESOURCES=1`；须在等价性、启动、功能与视觉验收完成后再调整默认值。PowerShell 示例：
+Dev 构建默认编码登记的 CSS、图标和模板固定片段。需要对照产物时，PowerShell 支持临时关闭编码。
 
 ```powershell
-$env:JHS_PACK_STATIC_RESOURCES = "1"
+$env:JHS_PACK_STATIC_RESOURCES = "0"
 npm run build:dev
 Remove-Item Env:JHS_PACK_STATIC_RESOURCES
 ```
 
-候选验证时同样向 `npm run check` 与浏览器构建传入该环境变量。`dist/dev/JHS-7.0.dev.size.json` 记录本次 Dev 构建的资源成本。对照启动测试可将 `JHS_STARTUP_BUNDLE` 指向其中一份产物，并分别设置 `JHS_STARTUP_MODE=cold` / `warm`；每站点默认 30 次采样，历史绝对门禁与两份产物的相对变化分别报告。
+`dist/dev/JHS-7.0.dev.size.json` 记录本次 Dev 构建的资源成本。对照启动测试可将 `JHS_STARTUP_BUNDLE` 指向其中一份产物，并分别设置 `JHS_STARTUP_MODE=cold` 或 `warm`。每站点默认采样 30 次。
 
-CI 的 Node 20、Node 22 完整检查、浏览器和视觉任务统一使用默认未编码构建，与普通 Dev 构建一致；编码候选保留为显式手动验证能力。是否采用编码应结合原始大小、Gzip 大小及启动实测决定，体积报告不能证明运行性能改善。
+CI 的完整检查、浏览器和视觉任务使用默认 Dev 构建。Dev 交付核验按产物的构建标识重新构建，并比对 SHA-256。
 
 CI 启动门禁失败后仍独立运行同一默认产物的功能回归；各阶段报告分目录保留，启动失败仍使任务失败，不会被后续功能通过覆盖。
 
@@ -76,7 +76,7 @@ git worktree list
 
 ## 架构与修改归属
 
-两条分支均从 `src/main.js` 进入 `bootstrapJhs`，使用 app/contracts/platform/services/integrations/features/ui 分层。main 仍保留 PluginManager/BasePlugin 执行业务；develop 由 FeatureRuntime 激活 manifest 和 Contribution，CompatibilityBeanRegistry 提供旧 `getBean()` 等兼容入口。
+用户脚本从 `src/main.js` 进入 `bootstrapJhs`。在 7.0，FeatureRuntime 按 manifest 启用各项贡献，命令和能力负责 Feature 间通信，`runtimeLookup` 提供旧 `getBean()` 入口。扩展、Expo 和 Android WebView 在各自入口装配同一组业务服务和平台端口。见 [运行时与代码职责](architecture/ownership.md)。
 
 新增行为进入对应 Feature/Service/View，通过 contracts 和 HostAdapter 访问下层或宿主页面；旧兼容入口不作为 develop 新功能的归属。功能范围查 manifest catalog，职责查 [Ownership](architecture/ownership.md)，路由与能力查 [Feature Matrix](architecture/feature-matrix.md)，设计约束查 [ADR](architecture/adr/README.md)。
 
@@ -91,10 +91,13 @@ git worktree list
 | 命令 | 覆盖范围 |
 | --- | --- |
 | `npm run test` | Vitest 单元与契约回归 |
-| `npm run check` | 单元、所在分支默认构建、类型/架构/集成/预算、发布契约、源码与 UI 审计 |
+| `npm run check` | 单元、Dev 构建、类型、模块边界、集成、预算、发布契约和对比度 |
 | `npm run check:browser` | 先启动性能，后功能回归 |
 | `npm --prefix tests/browser run test:functional` | 独立功能回归；不代表启动性能通过 |
 | `npm run check:visual` | 锁定浏览器中的截图差异 |
+| `npm run build:extension` | 生成 Chrome / Edge 开发扩展 |
+| `npm run check:mobile` | Expo TypeScript、共享解析和 SQLite 行为验证 |
+| `npm run build:android:web` | 构建 Android WebView 前端 |
 | `npm run check:release` | check、浏览器、视觉依次全部通过 |
 | `git diff --check` | 补丁格式；另核对实际改动范围 |
 

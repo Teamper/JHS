@@ -1,49 +1,35 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
-import { assertMovieStateEligible } from "../src/core/movie-identity.js";
+import { StateService } from "../src/core/state-service.js";
+import { storageFromForage } from "./helpers/atomic-storage.js";
 
-function createAdapter(existing = null) {
-    const source = readTestFile(join(import.meta.dirname, "../src/core/storage.js"), "utf8"), show = { error: vi.fn() }, patch = vi.fn(async () => ({ changed: [ "ABC-1" ], transactionId: "tx" })), context = vm.createContext({
-        WeakSet, WeakMap, Map, Set, Promise, Date, JSON, Object, Array, Math, assertMovieStateEligible,
-        a: message => { throw new TypeError(message); },
-        i: (target, key, value) => (target[key] = value),
-        localforage: { INDEXEDDB: "indexeddb", createInstance: () => ({}) },
-        show, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch",
-        normalizeCarNum: value => String(value || "").trim().toUpperCase(),
-        legacyActionToFlag: value => ({ filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" })[value] || null,
-        normalizeStateFlags: flags => ({ favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched, blocked: !!flags?.blocked }),
-        stateService: { patch }, window: { location: { origin: "https://javdb.example" } }, navigator: {}, utils: {}, clog: {}, escapeHtml: value => value,
-        CURRENT_DATA_VERSION: 2, PORTABLE_DATA_KEYS: [], hasPortableUserData: async () => false, validatePortableData() {}, runDataMigrations() {}
-    });
-    vm.runInContext(`${source}; globalThis.Adapter = StorageManager;`, context);
-    const adapter = new context.Adapter;
-    adapter.getCar = vi.fn(async () => existing), adapter.getCarMap = vi.fn(async () => new Map(existing ? [[ existing.carNum, existing ]] : []));
-    return { adapter, patch, show };
+function fixture(initial = []) {
+    const values = new Map([["car_list", initial]]);
+    const setItem = vi.fn(async (key, value) => values.set(key, structuredClone(value)));
+    const storage = storageFromForage({ getItem: async key => structuredClone(values.get(key)), setItem, removeItem: async key => values.delete(key) });
+    const state = new StateService(storage, {}, undefined, { currentUrl: () => "https://javdb.test/v/1" });
+    return { state, values, setItem };
 }
 
-describe("legacy StorageManager state adapters", () => {
-    it("keeps duplicate-state errors while forwarding new writes", async () => {
-        const duplicate = createAdapter({ carNum: "ABC-1", stateFlags: { favorite: true } });
-        await expect(duplicate.adapter.saveCar({ carNum: "abc-1", url: "/v/1", actionType: "favorite" })).rejects.toThrow("已在收藏列表中");
-        expect(duplicate.patch).not.toHaveBeenCalled();
-
-        const fresh = createAdapter();
-        await expect(fresh.adapter.saveCar({ carNum: "abc-1", url: "/v/1", actionType: "favorite" })).resolves.toMatchObject({ transactionId: "tx" });
-        expect(fresh.patch).toHaveBeenCalledWith("ABC-1", { favorite: true }, expect.objectContaining({ type: "legacy-save" }));
+describe("state persistence through the storage port", () => {
+    it("preserves a completed mark and skips the duplicate write", async () => {
+        const { state, setItem, values } = fixture();
+        await expect(state.patch("abc-1", { favorite: true })).resolves.toMatchObject({ changed: ["ABC-1"] });
+        setItem.mockClear();
+        await expect(state.patch("ABC-1", { favorite: true })).resolves.toMatchObject({ changed: [] });
+        expect(setItem).not.toHaveBeenCalled();
+        expect(values.get("car_list")).toMatchObject([{ carNum: "ABC-1", stateFlags: { favorite: true } }]);
     });
 
-    it("prevalidates a batch before forwarding any group", async () => {
-        const { adapter, patch } = createAdapter();
-        await expect(adapter.saveCarList([{ carNum: "ABC-1", url: "/1", actionType: "favorite" }, { carNum: "abc-1", url: "/1", actionType: "favorite" }])).rejects.toThrow("状态已存在");
-        expect(patch).not.toHaveBeenCalled();
+    it("rejects every write if any record in a submitted batch is ambiguous", async () => {
+        const { state, setItem } = fixture();
+        await expect(state.patch(["ABC-1", "HEYZO"], { favorite: true })).rejects.toMatchObject({ code: "UNRELIABLE_MOVIE_IDENTITY" });
+        expect(setItem).not.toHaveBeenCalled();
     });
 
-    it("keeps updateCarInfo missing-record behavior", async () => {
-        const { adapter, patch } = createAdapter();
-        await expect(adapter.updateCarInfo({ carNum: "ABC-1", url: "/1", actionType: "hasDown" })).rejects.toThrow("数据不存在");
-        expect(patch).not.toHaveBeenCalled();
+    it("does not recreate missing data during an existing-record edit", async () => {
+        const { state, setItem, values } = fixture();
+        await expect(state.patch("ABC-1", {}, { existingOnly: true, record: { names: "Updated" } })).resolves.toMatchObject({ changed: [] });
+        expect(setItem).not.toHaveBeenCalled();
+        expect(values.get("car_list")).toEqual([]);
     });
 });

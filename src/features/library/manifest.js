@@ -1,11 +1,12 @@
 // @ts-check
+import { debounce } from "../../core/timing.js";
 
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
 
 export default defineFeature({
     id: "library", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.movie, SERVICE.legacyStorage, SERVICE.domUi, SERVICE.notifications, SERVICE.events, SERVICE.profile, SERVICE.dialog, SERVICE.clipboard, SERVICE.clog],
+    requires: [PORT.host, PORT.style, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.movie, SERVICE.keywordRules, SERVICE.domUi, SERVICE.notifications, SERVICE.events, SERVICE.profile, SERVICE.dialog, SERVICE.clipboard, SERVICE.clog],
     contributionAvailability: {
         "library.keyword-filter": { routes: ["list", "detail", "owned-detail"] },
         "library.state-actions": { sites: ["javdb"], routes: ["list"] },
@@ -54,9 +55,10 @@ export default defineFeature({
                     document, window, jquery: deps[SERVICE.domUi].jquery, domUi: deps[SERVICE.domUi],
                     dialog: deps[SERVICE.dialog], notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog],
                     clipboard: deps[SERVICE.clipboard], movie: deps[SERVICE.movie], settings: deps[SERVICE.settings],
-                    storage: deps[SERVICE.storage], state: deps[SERVICE.state], repository: historyController.repository,
+                    state: deps[SERVICE.state], repository: historyController.repository,
                     selectionModel: historyController.selectionModel, site: runtime.site,
-                    resolveLegacy: (name) => runtime.resolveCompatibilityBean(name),
+                    getOfflineController: () => runtime.getCapability?.("external-bridge.offline"),
+                    getListPage: () => runtime.getCapability?.("list.core"),
                     fc2WorkspaceAvailable: runtime.isContributionEnabled("fc2-workspace", "detail.fc2-owned", "Fc2Plugin"),
                     getFc2Workspace: () => runtime.executeCommand("detail.fc2.workspace"),
                     isAvailable: command => runtime.isCommandAvailable(command),
@@ -81,7 +83,7 @@ export default defineFeature({
                     message: error instanceof Error ? error.message : String(error),
                 });
             }
-            historyController = new HistoryController({ storage: deps[SERVICE.storage], state: deps[SERVICE.state] });
+            historyController = new HistoryController({ state: deps[SERVICE.state] });
             runtime.inspect?.("history", { repository: historyController.repository, get dialog() { return historyDialog; } });
             const historyLookup = runtime.registerCompatibilityBean?.("HistoryPlugin", {
                 openHistory: () => runtime.executeCommand("library.history.open"),
@@ -120,15 +122,15 @@ export default defineFeature({
                 document, location, hostAdapter: deps[PORT.host], jquery: /** @type {any} */ (globalThis).$,
                 state: deps[SERVICE.state], settings: deps[SERVICE.settings],
                 styles: deps[PORT.style], events: deps[SERVICE.events],
-                scope: runtime.scope, diagnostics: runtime.diagnostics, isDetailPage: runtime.route === "detail",
+                scope: runtime.scope, diagnostics: runtime.diagnostics, logger: deps[SERVICE.clog], isDetailPage: runtime.route === "detail",
             });
             controller.start();
         }
         if (runtime.enabledContributions.includes("library.keyword-filter")) {
             const controller = new TitleKeywordController({
                 document, window, site: runtime.site, route: runtime.route,
-                settings: deps[SERVICE.settings], saveKeyword: (/** @type {string} */ keyword) => deps[SERVICE.legacyStorage].saveTitleFilterKeyword(keyword),
-                events: deps[SERVICE.events], ui: deps[SERVICE.domUi], scope: runtime.scope, diagnostics: runtime.diagnostics,
+                settings: deps[SERVICE.settings], saveKeyword: (/** @type {string} */ keyword) => deps[SERVICE.keywordRules].saveTitleKeywords(keyword),
+                events: deps[SERVICE.events], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], scope: runtime.scope, diagnostics: runtime.diagnostics,
             });
             if (controller.start()) disposers.push(() => controller.dispose());
         }
@@ -171,6 +173,7 @@ export default defineFeature({
                     state: deps[SERVICE.state], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
                     events: deps[SERVICE.events], dialog: deps[SERVICE.dialog], ui: deps[SERVICE.domUi],
                     notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog], scope: runtime.scope,
+                    debounce,
                     task, openSettings: () => runtime.executeCommand("settings.open", "task-panel"),
                 });
                 runtime.provideCapability?.("library.blacklist", blacklistWorkspace);

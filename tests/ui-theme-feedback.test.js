@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildThemeCss } from "../src/core/theme.js";
@@ -24,10 +23,9 @@ async function createRuntime() {
         if (options.close) { const close = document.createElement("button"); close.className = "toast-close"; toastElement.appendChild(close); }
         return { toastElement, showToast() { document.body.appendChild(toastElement); } };
     });
-    vi.stubGlobal("Toastify", toastify);
     scope = new LifecycleScope("test-feedback");
     const { initializeLoggerRuntime } = await import("../src/core/logger.js");
-    return { runtime: initializeLoggerRuntime(scope), toastify };
+    return { runtime: initializeLoggerRuntime(scope, { vendors: { Toastify: toastify } }), toastify };
 }
 
 afterEach(() => {
@@ -45,17 +43,6 @@ describe("theme and feedback contracts", () => {
         expect(theme).toContain("--jhs-text-faint: var(--jhs-text-muted)");
         expect(theme).toContain("--jhs-disabled-text: var(--jhs-text-disabled)");
         expect(theme).not.toContain('.jhs-icon path');
-    });
-
-    it("owns feedback styles once and separates loading, image close and toast semantics", () => {
-        const css = buildUiPrimitivesCss(), logger = readFileSync(new URL("../src/core/logger.js", import.meta.url), "utf8");
-        expect(css.match(/\.console-logger-container \{/g)).toHaveLength(2); // Base and narrow-screen placement.
-        expect(css).toContain("background:var(--jhs-loading-overlay)");
-        expect(css).toContain("background:var(--jhs-overlay)!important");
-        expect(css).toContain("var(--jhs-tooltip-max-width)");
-        expect(logger).not.toContain(".console-logger-container {");
-        expect(logger).not.toContain("rgba(222, 51, 51");
-        expect(logger).not.toContain("#4facfe");
     });
 
     it("gives unclassed native fields the touch minimum without shrinking textareas", () => {

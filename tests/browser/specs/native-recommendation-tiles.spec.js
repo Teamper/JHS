@@ -1,3 +1,4 @@
+import { hasVisualBaseline } from "../harness/visual-baselines.js";
 import {test,expect} from '@playwright/test';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -83,7 +84,7 @@ for(const theme of ['light','dark'])for(const path of ['direct','iframe'])test(`
   else {expect(metrics.gallery).toBe(false);expect(metrics.cards.every(card=>!card.gallery&&!card.clipped)).toBe(true);expect(metrics.cards.every(card=>card.number&&card.title&&card.card.height>card.image.height)).toBe(true);if(mode==='current'){await expect(list).toHaveAttribute('data-jhs-native-recommendations','true');expect(metrics.columns).toBe(info.project.name.startsWith('mobile')?2:5);}}
   await list.locator('a.tile-item').first().evaluate(card=>(card.closest('[data-jhs-recommendation-panel]') || card).scrollIntoView({block:'start'}));
   const imageName=`native-tiles-${index}-${path}-${theme}.png`;await page.screenshot({path:resolve(folder,imageName),animations:'disabled'});
-  if(mode==='current'&&process.env.JHS_VISUAL_REGRESSION==='1')await expect.soft(page).toHaveScreenshot(imageName,{maxDiffPixelRatio:.02});
+  if(mode==='current'&&hasVisualBaseline(info))await expect.soft(page).toHaveScreenshot(imageName,{maxDiffPixelRatio:.02});
  }
  await writeFile(resolve(folder,`metrics-${path}-${theme}.json`),JSON.stringify(measures,null,2));
  if(mode==='current'){

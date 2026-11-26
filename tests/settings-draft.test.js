@@ -10,7 +10,7 @@ afterEach(() => { draft?.dispose(); document.body.replaceChildren(); });
 function mount() {
     document.body.innerHTML = '<section><div class="jhs-setting-row"><label class="jhs-setting-row__label">评论数</label><input id="reviewCount" type="number" value="20"></div><input id="live"><div id="reviewKeywordContainer"><div class="tag-box"></div><input class="keyword-input"></div><div id="filterKeywordContainer"><div class="tag-box"></div><input class="keyword-input"></div><textarea id="advanced-resource-json"></textarea><span id="settings-draft-status"></span><button id="saveBtn"></button></section>';
     const root = $("section"); draft = new SettingsDraft(root, { reviewCount: "#reviewCount" }); root.data("jhsSettingsDraft", draft);
-    const values = { reviewCount: 20 }, deps = { jquery: $, settings: { snapshot: () => values, update: vi.fn(async fn => fn(values)) }, legacyStorage: { saveReviewFilterKeyword: vi.fn(async () => {}), saveTitleFilterKeyword: vi.fn(async () => {}) }, events: { emit: vi.fn() } };
+    const values = { reviewCount: 20 }, deps = { jquery: $, settings: { snapshot: () => values, update: vi.fn(async fn => fn(values)) }, keywordRules: { saveReviewKeywords: vi.fn(async () => {}), saveTitleKeywords: vi.fn(async () => {}) }, events: { emit: vi.fn() } };
     return { root, deps, values };
 }
 function keyword(container, value) { const label = document.createElement("span"); label.className = "keyword-label"; label.dataset.keyword = value; label.textContent = value; document.querySelector(`${container} .tag-box`).append(label); }
@@ -44,10 +44,10 @@ it("saves a captured submission while retaining edits made during the asynchrono
 
 it("advances successful keyword groups independently when another group fails", async () => {
     const { root, deps } = mount(); keyword("#reviewKeywordContainer", "review"); keyword("#filterKeywordContainer", "title");
-    deps.legacyStorage.saveTitleFilterKeyword.mockRejectedValue(new Error("synthetic failure"));
+    deps.keywordRules.saveTitleKeywords.mockRejectedValue(new Error("synthetic failure"));
     await expect(saveSettingForm(deps, root)).rejects.toMatchObject({ partialFailure: true });
     expect(draft.refresh().count).toBe(1); expect(root.data("jhsDirtyReviewKeywords")).toBe(false); expect(root.data("jhsDirtyTitleKeywords")).toBe(true);
-    expect(deps.legacyStorage.saveReviewFilterKeyword).toHaveBeenCalledWith(["review"]);
+    expect(deps.keywordRules.saveReviewKeywords).toHaveBeenCalledWith(["review"]);
 });
 
 it("guards settings close once, leaves automatic changes intact, and blocks closing during save", async () => {

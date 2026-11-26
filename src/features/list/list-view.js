@@ -25,11 +25,12 @@ export function syncQuickFilterPresentation(root, options, filter) {
 
 /** Own list visibility, quick-filter controls, and card navigation. */
 export class ListView {
-    /** @param {{hostAdapter: any, selectors: Record<string, string>, logger?: Pick<Console, "error">, onFilterChange?: (filter: unknown, options?: any) => any, onOpenMovieDetail?: (item: any, options?: any) => any}} options */
+    /** @param {{hostAdapter: any, selectors: Record<string, string>, logger?: Pick<Console, "error"> & Partial<Pick<Console, "warn">>, notifyPlaybackError?: (message: string) => void, onFilterChange?: (filter: unknown, options?: any) => any, onOpenMovieDetail?: (item: any, options?: any) => any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.selectors = Object.freeze({ ...(options.hostAdapter?.getLiveListSelectors?.() ?? options.selectors) });
         this.logger = options.logger ?? console;
+        this.notifyPlaybackError = options.notifyPlaybackError;
         this.onFilterChange = options.onFilterChange ?? (() => {});
         this.onOpenMovieDetail = options.onOpenMovieDetail ?? (() => {});
         /** @type {ReturnType<typeof normalizeQuickFilterKey>} */ this.activeFilter = "waitCheck";
@@ -162,7 +163,7 @@ export class ListView {
             event.preventDefault();
             event.stopPropagation();
             const video = /** @type {HTMLVideoElement} */ (event.currentTarget);
-            if (video.paused) await safePlay(video, { context: "列表视频", notify: true });
+            if (video.paused) await safePlay(video, { context: "列表视频", notify: true, notifyUser: this.notifyPlaybackError, warn: (message, error) => this.logger.warn?.(message, error) });
             else video.pause();
         }));
         this.videoRoot = root;

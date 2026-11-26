@@ -1,7 +1,7 @@
 // @ts-check
 
 export class SettingsService extends EventTarget {
-    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, normalizers?: Record<string, (value: unknown) => unknown>, mutationCoordinator?: {runExclusive: (operation: () => any) => Promise<any>} | null, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void}} [options] */
+    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, normalizers?: Record<string, (value: unknown) => unknown>, mutationCoordinator?: {runExclusive: (operation: () => any) => Promise<any>} | null, logger?: Pick<Console, 'error'>, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void}} [options] */
     constructor(storage, options = {}) {
         super();
         this.storage = storage;
@@ -9,6 +9,7 @@ export class SettingsService extends EventTarget {
         this.mutationCoordinator = options.mutationCoordinator ?? null;
         this.normalizers = options.normalizers ?? {};
         this.afterPersist = options.afterPersist ?? null;
+        this.logger = options.logger;
         /** @type {Readonly<Record<string, unknown>>} */ this.snapshotValue = Object.freeze({});
         this.writeChain = Promise.resolve();
     }
@@ -130,7 +131,7 @@ export class SettingsService extends EventTarget {
                 // side effects (legacy cache invalidation / BroadcastChannel) must
                 // never turn a successful persistence into a reported failure.
                 try {
-                    if (typeof /** @type {any} */ (globalThis).clog?.error === "function") /** @type {any} */ (globalThis).clog.error("[settings] afterPersist failed (ignored)", error);
+                    this.logger?.error("[settings] afterPersist failed (ignored)", error);
                 } catch {
                     // Diagnostics are best-effort after the setting is already durable.
                 }
@@ -138,10 +139,17 @@ export class SettingsService extends EventTarget {
             return next;
     }
 
+    /** Read durable settings without entering the write queue or emitting a change.
+     * @returns {Promise<Readonly<Record<string, unknown>>>}
+     */
+    async readStoredSnapshot(storageKey = "setting") {
+        const stored = await this.storage.get(storageKey);
+        return Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
+    }
+
     /** @param {string} storageKey */
     async _readSnapshot(storageKey) {
-        const stored = await this.storage.get(storageKey);
-        this.snapshotValue = Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
+        this.snapshotValue = await this.readStoredSnapshot(storageKey);
         return this.snapshotValue;
     }
 

@@ -8,7 +8,7 @@ import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js"
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 
 const html = readFileSync(join(import.meta.dirname, "fixtures/javdb-detail-actors.html"), "utf8");
 afterEach(() => { initializeRuntimeConstants(new URL("https://example.test/")); vi.unstubAllGlobals(); });
@@ -48,8 +48,8 @@ describe("JavDB movie actors", () => {
     it("supplements fetched detail names from the same modern and legacy actor contract", async () => {
         initializeRuntimeConstants(new URL("https://javdb.com/"));
         const scope = new LifecycleScope("actor-detail"), host = new JavDbHostAdapter(document, new URL("https://javdb.com/"));
-        const list = new ListPageCompatibilityService({ runtimeServices: {
-            legacyStorage: { getSetting: async () => "yes" }, host,
+        const list = new ListPageService({ runtimeServices: {
+            settings: { readStoredSnapshot: async () => ({ enableSaveActressCarInfo: "yes" }) }, host,
             http: { request: async () => ({ data: html }) }, logger: { debug() {} },
         } });
         try { expect(await list.parseActressName("https://javdb.com/v/remote", scope)).toBe("演员甲 旧演员 旧演员纯文本"); }
@@ -59,11 +59,11 @@ describe("JavDB movie actors", () => {
     it("keeps the JavBus fetched-detail name behavior", async () => {
         initializeRuntimeConstants(new URL("https://www.javbus.com/"));
         const scope = new LifecycleScope("javbus-actor-detail");
-        const list = new ListPageCompatibilityService({ runtimeServices: {
-            legacyStorage: { getSetting: async () => "yes" },
+        const list = new ListPageService({ runtimeServices: {
+            settings: { readStoredSnapshot: async () => ({ enableSaveActressCarInfo: "yes" }) },
+            utils: { htmlTo$dom: (source) => jquery(new DOMParser().parseFromString(source, "text/html")) },
             http: { request: async () => ({ data: '<span onmouseover="star_1"><a>演员丙</a></span><span onmouseover="star_2"><a>演员丁</a></span>' }) }, logger: { debug() {} },
         } });
-        vi.stubGlobal("utils", { htmlTo$dom: (source) => jquery(new DOMParser().parseFromString(source, "text/html")) });
         vi.stubGlobal("$", jquery);
         try { expect(await list.parseActressName("https://www.javbus.com/ABC-123", scope)).toBe("演员丙 演员丁"); }
         finally { scope.dispose(); }

@@ -220,11 +220,6 @@ const RESPONSIVE_SHELL_STYLES = `
             html.jhs-fab-mounted .console-logger-container { display:none!important; }
         `;
 
-export const RESPONSIVE_SHELL_CAPABILITIES = Object.freeze([
-    "ListPagePlugin", "ListPageButtonPlugin",
-    "SettingPlugin", "DetailPageButtonPlugin",
-]);
-
 export class ResponsiveShellController {
     /** @param {{jquery: (value: any) => any, window: Window & typeof globalThis, document: Document, profile: any, settings: any, host: any, state: any, logger: any, notifications: any, capabilities?: Record<string, any>, openNewVideo?: () => Promise<unknown>, newVideoAvailable?: () => boolean, magnetActions?: {filterAvailable: () => boolean, hubAvailable: () => boolean}, blacklist?: {available: () => boolean, open: () => Promise<unknown>}, history?: {available: () => boolean, open: () => Promise<unknown>}, getPageActions?: () => Promise<any>, executePageAction?: (action: string) => Promise<any>, privacyActions?: any, mediaActions?: any}} dependencies */
     constructor(dependencies) {
@@ -240,11 +235,7 @@ export class ResponsiveShellController {
             logger: dependencies.logger,
             notifications: dependencies.notifications,
         });
-        const capabilities = /** @type {Record<string, any>} */ (Object.defineProperties({}, Object.getOwnPropertyDescriptors(dependencies.capabilities ?? {})));
-        for (const name of RESPONSIVE_SHELL_CAPABILITIES) {
-            if (!Object.prototype.hasOwnProperty.call(capabilities, name)) capabilities[name] = null;
-        }
-        this.capabilities = Object.freeze(capabilities);
+        this.capabilities = dependencies.capabilities ?? {};
         this.openNewVideo = dependencies.openNewVideo ?? null;
         this.newVideoAvailable = dependencies.newVideoAvailable ?? (() => Boolean(this.openNewVideo));
         this.history = dependencies.history;
@@ -263,11 +254,6 @@ export class ResponsiveShellController {
         this._commandBarSources = [];
         this._started = false;
         this._disposed = false;
-    }
-    /** @param {string} name */
-    getCapability(name) {
-        if (!Object.prototype.hasOwnProperty.call(this.capabilities, name)) throw new Error(`Responsive shell 未声明兼容能力 ${name}`);
-        return this.capabilities[name];
     }
     async initCss() { return RESPONSIVE_SHELL_STYLES; }
     /** @param {{listen: (target: any, event: string, listener: (...args: any[]) => void) => void}} scope */
@@ -322,7 +308,7 @@ export class ResponsiveShellController {
     /** 统一桌面/移动两套 UI Surface：compact 只保留 FAB，regular/wide 只保留桌面工具栏与设置入口。 */
     syncSurfaces() {
         const compact = this.services.profile.current() === "compact";
-        const setting = this.getCapability("SettingPlugin");
+        const setting = this.capabilities.settings;
         if (compact) {
             this.unmountDesktopCommandBar();
             setting?.unmountDesktopSettingNav?.();
@@ -499,7 +485,7 @@ export class ResponsiveShellController {
         this.jquery(".historyBtnBox").each(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
             element.children.length || (element.style.display = "none");
         }));
-        this.getCapability("ListPagePlugin")?.syncQuickFilterUi?.();
+        this.capabilities.listPage?.syncQuickFilterUi?.();
     }
     /** 收集当前页面中所有桌面工具栏来源控件（无论是否曾被 buildCommandBar 收拢）。 */
     collectDesktopCommandSources() {
@@ -576,8 +562,8 @@ export class ResponsiveShellController {
     }
     createMenu() {
         const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" tabindex="-1" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
-        const listPage = this.getCapability("ListPagePlugin"), quickFilters = listPage?.getQuickFilterCatalog?.();
-        const hasListPageButton = !!this.getCapability("ListPageButtonPlugin"), hasListPage = !!listPage && !!quickFilters, hasNewVideo = this.newVideoAvailable(), hasBlacklist = this.blacklist?.available(), hasSetting = !!this.getCapability("SettingPlugin"), hasDetailPageButton = !!this.getCapability("DetailPageButtonPlugin"), hasHighlightMagnet = this.magnetActions?.filterAvailable(), hasMagnetHub = this.magnetActions?.hubAvailable(), hasHistory = this.history?.available();
+        const listPage = this.capabilities.listPage, quickFilters = listPage?.getQuickFilterCatalog?.();
+        const hasListPageButton = !!this.capabilities.listActions, hasListPage = !!listPage && !!quickFilters, hasNewVideo = this.newVideoAvailable(), hasBlacklist = this.blacklist?.available(), hasSetting = !!this.capabilities.settings, hasDetailPageButton = !!this.capabilities.detailActions, hasHighlightMagnet = this.magnetActions?.filterAvailable(), hasMagnetHub = this.magnetActions?.hubAvailable(), hasHistory = this.history?.available();
         let items;
         if (this.window.isListPage) {
             const sortMethod = this.currentSort(), sortLabel = SORT_LABELS[sortMethod], activeFilter = quickFilters?.normalize(listPage.activeQuickFilter) ?? "waitCheck",
@@ -598,7 +584,7 @@ export class ResponsiveShellController {
         return menu;
     }
     currentSort() {
-        const value = this.getCapability("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.services.settings.snapshot().sortMethod;
+        const value = this.capabilities.listActions?.activeSortMethod?.() ?? this.services.settings.snapshot().sortMethod;
         return /** @type {keyof typeof SORT_LABELS} */ (Object.hasOwn(SORT_LABELS, value) ? value : "default");
     }
     /** 刷新详情页菜单的状态指示 */
@@ -677,7 +663,7 @@ export class ResponsiveShellController {
                 // 刷新排序标签
                 if (this.window.isListPage) {
                     syncSort();
-                    this.getCapability("ListPagePlugin")?.syncQuickFilterUi?.();
+                    this.capabilities.listPage?.syncQuickFilterUi?.();
                 }
                 const gen = ++this._fabGeneration;
                 if (this.window.isListPage) void this.refreshPageActions(menu, gen);
@@ -720,7 +706,7 @@ export class ResponsiveShellController {
             void this.executePageAction?.(action).catch(error => this.services.logger.error("移动端列表操作失败", error));
         });
         bindKeys(filterMenu, "button", closeFilterMenu).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
-            event.stopPropagation(), this.getCapability("ListPagePlugin")?.setQuickFilter?.(this.jquery(event.currentTarget).data("jhs-filter")), closeMenu(!0);
+            event.stopPropagation(), this.capabilities.listPage?.setQuickFilter?.(this.jquery(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
         bindKeys(sortMenu, ".jhs-mobile-sort-option", closeSortMenu).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
             event.stopPropagation();
@@ -729,7 +715,7 @@ export class ResponsiveShellController {
             closeMenu(!0);
             try {
                 // 自有榜单页走页内覆盖（不写全局设置），普通列表页写全局 sortMethod
-                await this.getCapability("ListPageButtonPlugin")?.selectSortMethod?.(value);
+                await this.capabilities.listActions?.selectSortMethod?.(value);
             } catch (error) {
                 if (!active()) return;
                 syncSort();
@@ -768,7 +754,7 @@ export class ResponsiveShellController {
             case "mediaConfigure": await this.mediaActions?.configure(); break;
             // 列表页操作
             case "check":
-                await this.getCapability("ListPageButtonPlugin")?.openWaitCheck?.();
+                await this.capabilities.listActions?.openWaitCheck?.();
                 break;
             case "newVideo":
                 await this.openNewVideo?.();
@@ -805,7 +791,7 @@ export class ResponsiveShellController {
                 break;
             // 通用
             case "setting":
-                await this.getCapability("SettingPlugin")?.openQuickSetting();
+                await this.capabilities.settings?.openQuickSetting();
                 break;
             case "logger":
                 this.services.logger.openDialog?.();

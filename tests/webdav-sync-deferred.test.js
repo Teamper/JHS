@@ -32,7 +32,7 @@ describe("durable deferred sync bookkeeping", () => {
             return value;
         });
         const delayed = b.store.read(); await entered;
-        const data = await a.storage.exportPortableData(); await a.storage.importData(data);
+        const data = await a.backup.exportPortableData(); await a.backup.importData(data);
         resume(); await delayed;
         const log = await b.state.getActivityLog();
         expect(log.entries.find(entry => entry.id === result.transactionId).undoAvailable).toBe(false);
@@ -123,9 +123,9 @@ describe("durable deferred sync bookkeeping", () => {
     it("does not regrant restored local activity IDs after pending bookkeeping", async () => {
         const a = await syncReplica(memoryDav()); await a.service.check();
         const result = await a.state.patch("SYNC-1", { downloaded: true });
-        const data = await a.storage.exportPortableData();
+        const data = await a.backup.exportPortableData();
         expect(data).not.toHaveProperty(SYNC_PENDING_KEY);
-        await a.storage.importData(data);
+        await a.backup.importData(data);
         await a.store.flushPending({ full: true });
         expect(a.store.canUndo(result.transactionId)).toBe(false);
         await expect(a.state.undoTransaction(result.transactionId)).rejects.toThrow("不能在本机撤销");

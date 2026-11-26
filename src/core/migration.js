@@ -5,6 +5,7 @@ import { normalizeActressProfileData, readVerifiedActressProfile } from "./actre
 import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./state-model.js";
 import { isPersonalRating } from "./personal-rating.js";
 import { formatUiDateTime } from "./ui-date-time.js";
+import { readReviewKeywords } from "./review-keywords.js";
 
 /** @typedef {Record<string, any>} MigrationRecord */
 
@@ -100,8 +101,9 @@ export function normalizeLegacyDomains(data) {
     }
 }
 
-/** Normalize only supplied portable domains, never a destination database. @param {MigrationRecord} source */
-export function normalizePortableData(source) {
+/** Normalize only supplied portable domains, never a destination database. @param {unknown} input */
+export function normalizePortableData(input) {
+    const source = /** @type {MigrationRecord} */ (input);
     const version = validatePortableData(source), selected = { ...source };
     for (const [old, current] of Object.entries(LEGACY_DATA_ALIASES)) {
         if (!Object.hasOwn(selected, current) && Object.hasOwn(source, old)) selected[current] = source[old];
@@ -169,9 +171,9 @@ export function validatePortableData(/** @type {Record<string, any>} */ data) {
     return version;
 }
 
-/** Read-only guard, also used before bootstrap settings/credential persistence. @param {any} storage */
+/** Read-only guard before settings, credentials or business data are persisted. @param {Pick<MigrationDataPort, "get">} storage */
 export async function assertSupportedDataVersion(storage) {
-    return validatePortableData({ data_version: await storage.getDataVersion() });
+    return validatePortableData({ data_version: await readStoredDataVersion(storage) });
 }
 
 /** Old databases can still store user data under pre-v1 keys. @param {number} version */
@@ -180,16 +182,71 @@ export function getPortableDataKeys(version) {
     return version < 1 ? [...keys, ...Object.keys(LEGACY_DATA_ALIASES)] : keys;
 }
 
-export async function hasPortableUserData(/** @type {any} */ storage) {
-    const values = await Promise.all(getPortableDataKeys(await storage.getDataVersion()).map(key => storage.forage.getItem(key)));
+/** @typedef {Pick<import("../services/storage-service.js").StorageService, "get"|"set"|"remove">} MigrationDataPort */
+
+/** @param {Pick<MigrationDataPort, "get">} storage @param {number} version */
+export async function readPortableData(storage, version) {
+    const keys = getPortableDataKeys(version);
+    const values = await Promise.all(keys.map(key => storage.get(key)));
+    /** @type {MigrationRecord} */ const data = { data_version: version };
+    for (const [index, key] of keys.entries()) {
+        const value = values[index];
+        if (value != null) data[key] = key === "setting" ? selectPortableSettings(value) : value;
+    }
+    return data;
+}
+
+/** @param {Pick<MigrationDataPort, "get">} storage */
+export async function readStoredDataVersion(storage) { return await storage.get("data_version") || 0; }
+
+/** @param {MigrationDataPort} storage */
+export async function mergeLegacyTableNames(storage) {
+    for (const [old, current] of Object.entries(LEGACY_DATA_ALIASES)) {
+        if (old === "review_filter_keyword") continue;
+        const value = await storage.get(old);
+        if (value?.length) await storage.set(current, value);
+        await storage.remove(old);
+    }
+    await readReviewKeywords(storage, undefined, { alreadyLocked: true });
+}
+
+/** @param {MigrationDataPort} storage */
+export async function cleanLegacyBlacklist(storage) {
+    const [cars, actors] = /** @type {[MigrationRecord[], MigrationRecord[]]} */ (await Promise.all([
+        storage.get("blacklist_car_list").then(value => value || []),
+        storage.get("blacklist").then(value => value || []),
+    ]));
+    if (cars.length && !cars[0].actress) return;
+    const names = new Set(actors.map(actor => actor.name));
+    const retainedCars = cars.filter(car => !car.actress || names.has(car.actress));
+    if (cars.length !== retainedCars.length) await storage.set("blacklist_car_list", retainedCars);
+    const retainedNames = new Set(retainedCars.map(car => car.actress));
+    const retainedActors = actors.filter(actor => retainedNames.has(actor.name)).map(({ key, recordTime, ...record }) =>
+        recordTime === undefined ? record : { ...record, createTime: recordTime });
+    if (actors.length !== retainedActors.length || actors.some(actor => "key" in actor || "recordTime" in actor)) {
+        await storage.set("blacklist", retainedActors);
+    }
+}
+
+/** @param {MigrationDataPort} storage @param {string[]} keys */
+export async function normalizeStoredLegacyDomains(storage, keys) {
+    const data = Object.fromEntries(await Promise.all(keys.map(async key => [key, await storage.get(key) || []])));
+    normalizeLegacyDomains(data);
+    for (const [key, value] of Object.entries(data)) await storage.set(key, value);
+}
+
+/** @param {Pick<MigrationDataPort, "get">} storage */
+export async function hasPortableUserData(storage) {
+    const values = await Promise.all(getPortableDataKeys(await readStoredDataVersion(storage)).map(key => storage.get(key)));
     return values.some(value => Boolean(Array.isArray(value) ? value.length : value && "object" == typeof value ? Object.keys(value).length : null != value));
 }
 
-async function ensureV2MigrationSnapshot(/** @type {any} */ storage) {
+/** @param {MigrationDataPort} storage */
+async function ensureV2MigrationSnapshot(storage) {
     if (!await hasPortableUserData(storage)) return null;
-    const snapshots = await storage._getSnapshots(), existing = snapshots.find((/** @type {Record<string, any>} */ item) => "migration-snapshot" === item.kind && 2 === item.targetDataVersion);
+    const snapshots = await storage.get("snapshots") || [], existing = snapshots.find((/** @type {Record<string, any>} */ item) => "migration-snapshot" === item.kind && 2 === item.targetDataVersion);
     if (existing) return existing;
-    const data = await storage._exportPortableDataWithoutLock(), now = new Date().toISOString(), snapshot = {
+    const data = await readPortableData(storage, await readStoredDataVersion(storage)), now = new Date().toISOString(), snapshot = {
         id: "migration_v2_" + Date.now(),
         name: "6.4.0-migration-backup",
         source: "migration",
@@ -205,42 +262,55 @@ async function ensureV2MigrationSnapshot(/** @type {any} */ storage) {
     // the snapshot lock again from inside it.
     snapshots.push(snapshot);
     snapshots.length > 10 && snapshots.splice(0, snapshots.length - 10);
-    await storage._saveSnapshots(snapshots);
+    await storage.set("snapshots", snapshots);
     return snapshot;
 }
 
-async function migrateLegacyStorage(/** @type {any} */ storage) {
-    await storage.merge_table_name(), await storage.clean_no_url_blacklist(), await storage.async_merge_other(),
-    await storage.merge_blacklist(), await storage.merge_favoriteActress(), await storage.merge_tow_car_list_table();
+/** @typedef {{updateSettings?: (mutator: (settings: MigrationRecord) => unknown) => Promise<unknown>, recoverBeforeV4?: () => Promise<unknown>}} MigrationOptions */
+
+/** @param {MigrationDataPort} storage @param {MigrationOptions} options */
+async function migrateV1(storage, options) {
+    await mergeLegacyTableNames(storage);
+    await cleanLegacyBlacklist(storage);
+    if (options.updateSettings) await options.updateSettings(normalizeLegacySettings);
+    else {
+        const settings = await storage.get("setting") || {};
+        normalizeLegacySettings(settings);
+        await storage.set("setting", settings);
+    }
+    await normalizeStoredLegacyDomains(storage, ["blacklist", "blacklist_car_list"]);
+    await normalizeStoredLegacyDomains(storage, ["favorite_actresses"]);
+    await normalizeStoredLegacyDomains(storage, ["blacklist_car_list", "car_list"]);
 }
 
-async function migrateStateFlags(/** @type {any} */ storage) {
+/** @param {MigrationDataPort} storage */
+async function migrateStateFlags(storage) {
     await ensureV2MigrationSnapshot(storage);
-    const cars = await storage.forage.getItem(storage.car_list_key) || [], result = mergeCanonicalCarRecords(cars);
-    await storage._setItemAndInvalidate(storage.car_list_key, result.list);
-    const actresses = await storage.forage.getItem(storage.favorite_actresses_key) || [];
+    const cars = await storage.get("car_list") || [], result = mergeCanonicalCarRecords(cars);
+    await storage.set("car_list", result.list);
+    const actresses = await storage.get("favorite_actresses") || [];
     const migratedActresses = normalizeActressNewVideos(actresses);
-    await storage._setItemAndInvalidate(storage.favorite_actresses_key, migratedActresses);
-    const warnings = await storage.forage.getItem("data_health_warnings") || [];
+    await storage.set("favorite_actresses", migratedActresses);
+    const warnings = await storage.get("data_health_warnings") || [];
     appendStateMigrationWarnings(warnings, result);
-    warnings.length && await storage.forage.setItem("data_health_warnings", warnings);
+    warnings.length && await storage.set("data_health_warnings", warnings);
 }
 
 /**
  * 将 6.5 之前为阻止新作重复出现而写入的空墓碑转换为 dismissed 决策。
  * 只有存在未撤销的 new-video-remove 活动证据时才处理，未知空记录保持不动。
- * @param {any} storage
+ * @param {MigrationDataPort} storage
  */
 export async function repairNewVideoTombstones(storage) {
     const [cars, decisions, activity] = await Promise.all([
-        storage.forage.getItem(storage.car_list_key),
-        storage.forage.getItem("new_video_decisions"),
-        storage.forage.getItem("activity_log"),
+        storage.get("car_list"),
+        storage.get("new_video_decisions"),
+        storage.get("activity_log"),
     ]);
     const { migrated, nextDecisions, remaining } = normalizeNewVideoTombstones(cars, decisions, activity);
     if (!migrated.length) return [];
-    await storage.forage.setItem("new_video_decisions", nextDecisions);
-    await storage._setItemAndInvalidate(storage.car_list_key, remaining);
+    await storage.set("new_video_decisions", nextDecisions);
+    await storage.set("car_list", remaining);
     return migrated;
 }
 
@@ -268,47 +338,42 @@ function normalizeNewVideoTombstones(cars, decisions, activity) {
     return { migrated, nextDecisions, remaining };
 }
 
-async function migrateV3(/** @type {any} */ storage) {
+/** @param {MigrationDataPort & Pick<import("../services/storage-service.js").StorageService, "keys">} storage */
+async function migrateV3(storage) {
     await repairNewVideoTombstones(storage);
-    const keys = typeof storage.forage.keys === "function" ? await storage.forage.keys() : [];
-    for (const key of keys) if (String(key).startsWith("jhs_http_public_cache:v1:")) await storage.forage.removeItem(key);
+    for (const key of await storage.keys()) {
+        if (key.startsWith("jhs_http_public_cache:v1:")) await storage.remove(key);
+    }
 }
 
-async function migrateV4(/** @type {any} */ storage) {
-    await storage.syncState?.recoverWithoutLock?.();
-    await storage.stateService?.recoverPendingTransactionWithoutLock?.();
-    const snapshots = await storage._getSnapshots();
+/** @param {MigrationDataPort} storage @param {MigrationOptions} options */
+async function migrateV4(storage, options) {
+    await options.recoverBeforeV4?.();
+    const snapshots = await storage.get("snapshots") || [];
     if (!snapshots.some((/** @type {MigrationRecord} */ item) => item.kind === "migration-snapshot" && item.targetDataVersion === 4)) {
-        const data = await storage._exportPortableDataWithoutLock();
+        const data = await readPortableData(storage, await readStoredDataVersion(storage));
         const now = new Date().toISOString();
         snapshots.push({ id: `migration_v4_${Date.now()}`, name: "个人评分升级前", source: "migration", kind: "migration-snapshot", targetDataVersion: 4, createdAt: now, time: formatUiDateTime(now), itemCount: Array.isArray(data.car_list) ? data.car_list.length : 0, data });
         if (snapshots.length > 10) snapshots.splice(0, snapshots.length - 10);
-        await storage._saveSnapshots(snapshots);
+        await storage.set("snapshots", snapshots);
     }
-    const ratings = await storage.forage.getItem("personal_ratings");
-    if (ratings == null) await storage._setItemAndInvalidate("personal_ratings", {});
+    const ratings = await storage.get("personal_ratings");
+    if (ratings == null) await storage.set("personal_ratings", {});
     else validatePortableData({ data_version: 4, personal_ratings: ratings });
 }
 
-/** @type {Readonly<Record<number, (storage: any) => Promise<void>>>} */
-const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags, 3: migrateV3, 4: migrateV4 });
+const DATA_MIGRATIONS = { 1: migrateV1, 2: migrateStateFlags, 3: migrateV3, 4: migrateV4 };
 
-export async function runDataMigrations(/** @type {any} */ storage, coordinator = storage.mutationCoordinator, alreadyLocked = false) {
-    // 迁移是“读版本→整表覆写→写版本”的多步过程，必须跨标签页互斥，防止双标签页同时执行互相丢数据
-    const locks = globalThis.navigator?.locks;
-    const run = async () => {
-        let version = await assertSupportedDataVersion(storage);
-        for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
-            const migration = DATA_MIGRATIONS[target];
-            if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
-            await migration(storage), await storage.setDataVersion(target), version = target;
-        }
-        return version;
-    };
-    if (alreadyLocked) return run();
-    if (coordinator?.runExclusive) return coordinator.runExclusive(async () => {
-        storage._invalidateCache?.();
-        return run();
-    });
-    return locks?.request ? locks.request("jhs_data_migration", run) : run();
+/** The caller holds the shared mutation lock or owns an isolated import draft.
+ * @param {MigrationDataPort & Pick<import("../services/storage-service.js").StorageService, "keys">} storage
+ * @param {MigrationOptions} [options] */
+export async function runDataMigrations(storage, options = {}) {
+    const version = await assertSupportedDataVersion(storage);
+    for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
+        const migration = DATA_MIGRATIONS[/** @type {keyof typeof DATA_MIGRATIONS} */ (target)];
+        if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
+        await migration(storage, options);
+        await storage.set("data_version", target);
+    }
+    return CURRENT_DATA_VERSION;
 }

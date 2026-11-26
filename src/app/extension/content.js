@@ -105,6 +105,7 @@ async function start() {
     const client = new ExtensionClient();
     const options = await createRemoteRuntime(client);
     const context = await bootstrapJhs(options);
+    if (!context) return;
     context.rootScope.listen(client, "disconnected", () => context.rootScope.dispose());
     document.documentElement.setAttribute("data-jhs-extension-ready", "true");
     /** @type {Parameters<typeof chrome.runtime.onMessage.addListener>[0]} */

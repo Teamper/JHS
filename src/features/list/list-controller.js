@@ -1,5 +1,4 @@
 // @ts-check
-
 import { SupplementaryCardsController } from "./supplementary-cards-controller.js";
 import { ListView } from "./list-view.js";
 import { ListItemIndex } from "./list-item-index.js";
@@ -18,10 +17,10 @@ import { ListTagExpansionController } from "./list-tag-expansion-controller.js";
 import { normalizeQuickFilterKey } from "../../core/list-filters.js";
 import { ListRefreshCoordinator } from "./list-refresh-coordinator.js";
 import { resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
-
+import { start } from "./list-controller-lifecycle.js";
 /** Own ListPagePlugin startup while its implementation migrates into FeatureRuntime. */
 export class ListController {
-    /** @param {{legacyPlugin: any, controllers?: Record<string, any>, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, legacyStorage?: any, readFilterSources?: (options?: {stateOnly?: boolean}) => Promise<any>, isFavoriteActressesFeatureEnabled?: () => boolean, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug">, window?: any}} options */
+    /** @param {{legacyPlugin: any, controllers?: Record<string, any>, hostAdapter: any, scope: any, styles?: {register: (id: string, css: string) => () => void}, state?: any, storage?: any, readFilterSources?: (options?: {stateOnly?: boolean}) => Promise<any>, isFavoriteActressesFeatureEnabled?: () => boolean, readCardIdentity?: (item: Element) => any, http?: any, settings?: any, navigation?: any, events?: any, coverButtons?: any, batchUi?: any, sortController?: ListSortController | null, busImageLayout?: any, ui?: any, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error" | "debug"> & Partial<Pick<Console, "warn">>, window?: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin;
         this.controllers = options.controllers ?? {};
@@ -31,7 +30,6 @@ export class ListController {
         this.scope = options.scope;
         this.styles = options.styles ?? null;
         this.state = options.state ?? null;
-        this.legacyStorage = options.legacyStorage ?? null;
         this.readFilterSources = options.readFilterSources ?? null;
         this.isFavoriteActressesFeatureEnabled = options.isFavoriteActressesFeatureEnabled ?? null;
         this.readCardIdentity = options.readCardIdentity ?? ((item) => this.legacyPlugin.findCarNumAndHref?.($(item)));
@@ -41,6 +39,7 @@ export class ListController {
         this.busImageLayout = options.busImageLayout ?? null;
         this.events = options.events ?? null;
         this.logger = options.logger ?? console;
+        this.notifications = options.notifications;
         this.coverButtons = options.coverButtons ?? null;
         this.paginationController = new ListPaginationController({ hostAdapter: this.hostAdapter, navigation: options.navigation, scope: this.scope });
         this.hostMarkupController = new ListHostMarkupController({ hostAdapter: this.hostAdapter });
@@ -89,7 +88,6 @@ export class ListController {
             recordPhase: (phase, itemCount) => this.legacyPlugin.recordListPhase?.(phase, itemCount),
             invalidateContext: () => {
                 this.filterContextProvider?.invalidate();
-                this.legacyStorage?._invalidateCache?.(this.legacyStorage.car_list_key);
                 this.legacyPlugin.invalidateListRefreshContext?.();
             },
             filterAll: (revision) => this.filterListItems(null, revision),
@@ -111,7 +109,7 @@ export class ListController {
             document: this.hostAdapter?.document,
             readCardIdentity: (item) => this.readCardIdentity(item),
         });
-        this.detachCardStatePresenter = null;
+        /** @type {(() => void) | null} */ this.detachCardStatePresenter = null;
         this.cardStateStyleRelease = null;
         /** @type {ListFilterContextProvider | null} */ this.filterContextProvider = null;
         this.activeFilter = "waitCheck";
@@ -132,153 +130,7 @@ export class ListController {
         this.scope.addCleanup(() => this.cancelScheduledRecount());
         this.scope.addCleanup(() => { this.favoriteActressStyleRelease?.(); this.favoriteActressStyleRelease = null; });
     }
-
-    start() {
-        this.scope.assertActive();
-        if (this.started) return Promise.resolve();
-        this.started = true;
-        this.activeFilter = normalizeQuickFilterKey(this.settings?.snapshot?.()?.defaultQuickFilterTab ?? this.legacyPlugin.activeQuickFilter ?? "waitCheck");
-        this.legacyPlugin.activeQuickFilter = this.activeFilter;
-        const detachPresenter = this.legacyPlugin.attachCardStatePresenter?.(this.cardStatePresenter) ?? null;
-        let presenterAttached = true;
-        this.detachCardStatePresenter = () => {
-            if (!presenterAttached) return;
-            presenterAttached = false;
-            detachPresenter?.();
-        };
-        const presenter = this.cardStatePresenter, detachCardStatePresenter = this.detachCardStatePresenter;
-        this.scope.addCleanup(() => {
-            detachCardStatePresenter?.();
-            presenter?.dispose();
-            if (this.cardStatePresenter === presenter) this.cardStatePresenter = null;
-            if (this.detachCardStatePresenter === detachCardStatePresenter) this.detachCardStatePresenter = null;
-        });
-        const readFilterSources = this.readFilterSources;
-        if (typeof readFilterSources === "function") {
-            this.filterContextProvider = new ListFilterContextProvider({
-                readSources: (options) => readFilterSources(options),
-                onMissingBlacklistRole: (item) => this.logger.error("黑名单数据源丢失演员信息", item),
-            });
-            const contextProvider = this.filterContextProvider;
-            const detachContext = this.legacyPlugin.attachFilterContextProvider?.(contextProvider);
-            if (detachContext) this.scope.addCleanup(detachContext);
-            this.scope.addCleanup(() => {
-                contextProvider.dispose();
-                if (this.filterContextProvider === contextProvider) this.filterContextProvider = null;
-            });
-        }
-        if (this.settings?.addEventListener) {
-            const onHighlightSettingsChanged = (/** @type {any} */ event) => {
-                const names = Array.isArray(event?.detail?.names) ? event.detail.names : [];
-                if (names.some((/** @type {string} */ name) => name === "enableFavoriteActresses" || name === "highlightedTagNumber" || name === "highlightedTagColor")) {
-                    this.refreshFavoriteActressHighlightStyle();
-                }
-            };
-            this.settings.addEventListener("settings.changed", onHighlightSettingsChanged);
-            this.scope.addCleanup(() => this.settings.removeEventListener?.("settings.changed", onHighlightSettingsChanged));
-        }
-        const doc = this.hostAdapter?.document;
-        if (doc?.addEventListener) {
-            const onActressStateChanged = () => {
-                if (this.listRefreshController.disposed || this.scope.disposed) return;
-                if (typeof this.legacyPlugin.requestListRefresh === "function") {
-                    void this.legacyPlugin.requestListRefresh({ reason: "actress-state-changed", full: true });
-                } else {
-                    void this.listRefreshController.request({ full: true });
-                }
-            };
-            doc.addEventListener("actress-state-changed", onActressStateChanged);
-            this.scope.addCleanup(() => doc.removeEventListener?.("actress-state-changed", onActressStateChanged));
-        }
-        this.legacyPlugin.setSortController?.(this.sortController);
-        this.hostMarkupController.normalizeInitialMarkup();
-        const selectors = (this.hostAdapter?.getLiveListSelectors?.() ?? this.hostAdapter?.getListSelectors?.()) ?? this.legacyPlugin.getSelector?.();
-        if (!selectors) return Promise.reject(new Error("List Feature requires host list selectors"));
-        if (this.hostAdapter?.resolveListBoundary) {
-            const root = this.hostAdapter.locateListRoot();
-            if (!root) return Promise.resolve(false);
-            this.boundListRoot = root;
-            if (root.parentElement) this.rootBoundaryObserver = this.scope.observe(root.parentElement, () => {
-                if (this.hostAdapter.locateListRoot() !== root || !root.isConnected) this.scope.dispose();
-            }, { childList: true });
-        }
-        const initialItems = this.hostAdapter?.document?.querySelectorAll?.(selectors.itemSelector);
-        if (initialItems) this.hostMarkupController.normalizeCards([ ...initialItems ]);
-        this.coverImageController.replace();
-        const view = new ListView({
-            hostAdapter: this.hostAdapter, selectors, logger: this.logger,
-            onFilterChange: (filter, options) => this.setQuickFilter(filter, options),
-            onOpenMovieDetail: (item, options) => this.listNavigationController.openMovieDetail(item, options),
-        });
-        view.setActiveFilter(this.activeFilter);
-        view.bindMovieDetailNavigation(selectors.boxSelector);
-        view.bindCardVideoPlayback(selectors.boxSelector);
-        const itemIndex = new ListItemIndex({
-            root: this.hostAdapter?.locateListRoot?.() ?? this.hostAdapter?.document?.querySelector(selectors.boxSelector) ?? null,
-            readCarNum: (item) => {
-                const identity = this.readCardIdentity(item);
-                if (!identity) throw new Error("List Feature requires card identity parsing");
-                return identity.carNum;
-            },
-            onReadError: (error) => this.logger.debug("列表项索引跳过无效卡片", error),
-        });
-        const domObserver = new ListDomObserver({
-            root: this.hostAdapter?.locateListRoot?.() ?? (typeof document === "undefined" ? null : document.querySelector(selectors.boxSelector)),
-            itemSelector: selectors.itemSelector,
-            scope: this.scope,
-            getRevision: () => this.legacyPlugin.captureListRevision?.() ?? "0",
-            isProcessed: (item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed === "true",
-            onRetained: (items) => itemIndex.add(items),
-            onRemoved: (nodes) => {
-                this.legacyPlugin.removeIndexedItems?.(nodes);
-                if ([...nodes].some(node => !node.isConnected)) {
-                    this.cardStatePresenter?.removeDetachedSummaries();
-                    this.scheduleRecount();
-                }
-            },
-            onAddedNodes: (count) => {
-                this.legacyPlugin.advanceListGeneration?.();
-                this.legacyPlugin.recordListPhase?.("dom-added", count);
-            },
-            onAdded: (items, revision) => {
-                this.hostMarkupController.normalizeCards(items);
-                this.coverImageController.replace(items.flatMap((item) => [ ...item.querySelectorAll(selectors.coverImgSelector) ]));
-                return this.processAddedItems(items, revision);
-            },
-            onError: (error) => this.logger.error("列表增量处理失败", error),
-            onMissingRoot: () => this.logger.error("没有找到容器节点!"),
-        });
-        this.view = view;
-        this.itemIndex = itemIndex;
-        this.domObserver = domObserver;
-        this.batchController = new ListBatchController({
-            hostAdapter: this.hostAdapter, state: this.state, http: this.http, scope: this.scope, ui: this.batchUi,
-            getEvaluationContext: () => this.filterContextProvider?.get()
-                ?? Promise.reject(new Error("List Feature batch evaluation context is unavailable")),
-            getActiveFilter: () => this.view?.getActiveFilter?.() ?? this.activeFilter,
-        });
-        const batchController = this.batchController;
-        this.scope.addCleanup(() => { this.view?.dispose(); this.cardStatePresenter?.resetSummary(); this.itemIndex?.clear(); this.domObserver?.dispose(); batchController.dispose(); });
-        return Promise.resolve()
-            .then(() => {
-                if (!this.hoverPreviewController.start()) return;
-                this.controllers.hoverPreview = this.hoverPreviewController;
-            })
-            .then(() => {
-                if (!this.tagExpansionController.start()) return;
-                this.controllers.tagExpansion = this.tagExpansionController;
-            })
-            .then(() => this.contextMenuController.start())
-            .then(() => this.paginationController.start())
-            .then(() => this.registerStyles())
-            .then(() => { this.legacyPlugin.stateRefreshReady = false; return this.legacyPlugin.handle({ scope: this.scope, view, itemIndex, observer: domObserver, batchController, featureOwnsStartup: true }); })
-            .then(() => this.initializeListRuntime())
-            .then(() => this.supplementaryCards.start())
-            .catch((error) => {
-                this.dispose();
-                throw error;
-            });
-    }
+    start() { return start(this); }
 
     /** Evaluate cards through the Feature-owned presenter and keep stale generations from committing. */
     /** @param {Element[] | null} items @param {string} revision */

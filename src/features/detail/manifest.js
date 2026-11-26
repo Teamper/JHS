@@ -15,7 +15,7 @@ import { DETAIL_SHORTCUT_STYLES, DetailShortcutController } from "./detail-short
 
 export default defineFeature({
     id: "detail", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot, SERVICE.state, SERVICE.events, SERVICE.domUi, SERVICE.settings, SERVICE.notifications, SERVICE.storage, SERVICE.clipboard, SERVICE.dialog, SERVICE.subtitle],
+    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.detailContent, SERVICE.keywordRules, SERVICE.magnet, SERVICE.screenshot, SERVICE.state, SERVICE.events, SERVICE.domUi, SERVICE.settings, SERVICE.notifications, SERVICE.storage, SERVICE.clipboard, SERVICE.dialog, SERVICE.subtitle, SERVICE.clog],
     contributionRoutes: ["detail", "owned-detail"],
     contributionAvailability: {
         "detail.javdb-native": { sites: ["javdb"] },
@@ -36,7 +36,7 @@ export default defineFeature({
                 hostAdapter: deps[PORT.host], route: runtime.route, scope: runtime.scope,
                 readMagnetHub: () => runtime.getCapability?.("detail.external-magnets"),
                 readMagnetFilter: () => runtime.getCapability?.("detail.native-magnets"),
-                settings: deps[SERVICE.settings], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle],
+                settings: deps[SERVICE.settings], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle].search,
                 openSubtitles: (movie) => runtime.isCommandAvailable?.("subtitle.open") ? runtime.executeCommand("subtitle.open", movie) : Promise.resolve(null),
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], events: deps[SERVICE.events], diagnostics: runtime.diagnostics,
             })
@@ -93,7 +93,9 @@ export default defineFeature({
         }
         if (pageActionsController) {
             try {
-                if (!pageActionsController.start()) {
+                if (pageActionsController.start()) {
+                    runtime.provideCapability?.("detail.page-state-actions", pageActionsController);
+                } else {
                     const index = activeContributions.indexOf("detail.page-state-actions");
                     if (index >= 0) activeContributions.splice(index, 1);
                     releasePageActionsBean();
@@ -123,7 +125,8 @@ export default defineFeature({
                 settings: deps[SERVICE.settings], events: deps[SERVICE.events], scope,
                 storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog],
                 hostAdapter: deps[PORT.host], route: runtime.route,
-                detailActions: runtime.resolveCompatibilityBean?.("DetailPageButtonPlugin") ?? null,
+                utilities: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog],
+                detailActions: pageActionsController?.stateBinding ? pageActionsController : null,
             });
             if (!await preview.start() || scope.disposed) return false;
             const release = runtime.registerCompatibilityBean?.("PreviewVideoPlugin", preview);
@@ -136,13 +139,13 @@ export default defineFeature({
                 document, window, hostAdapter: deps[PORT.host], route: runtime.route,
                 settings: deps[SERVICE.settings], events: deps[SERVICE.events], storage: deps[SERVICE.storage],
                 movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], ui: { ...deps[SERVICE.domUi], notifications: deps[SERVICE.notifications] },
-                diagnostics: runtime.diagnostics, scope,
+                diagnostics: runtime.diagnostics, logger: deps[SERVICE.clog], scope,
             });
             return preview.start();
         }));
         if (runtime.enabledContributions.includes("detail.related")) optionalStarts.push(mountContribution(runtime, "detail.related", async (scope) => {
             const related = new RelatedController({
-                document, hostAdapter: deps[PORT.host], route: runtime.route, related: deps[SERVICE.related],
+                document, hostAdapter: deps[PORT.host], route: runtime.route, related: deps[SERVICE.detailContent].related,
                 settings: deps[SERVICE.settings], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope,
             });
             if (!await related.start() || scope.disposed) return false;
@@ -152,8 +155,8 @@ export default defineFeature({
         }));
         if (runtime.enabledContributions.includes("detail.reviews")) optionalStarts.push(mountContribution(runtime, "detail.reviews", async (scope) => {
             const review = new ReviewController({
-                document, window, hostAdapter: deps[PORT.host], route: runtime.route, review: deps[SERVICE.review], movie: deps[SERVICE.movie],
-                settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], ui: deps[SERVICE.domUi], clipboard: deps[SERVICE.clipboard],
+                document, window, hostAdapter: deps[PORT.host], route: runtime.route, review: deps[SERVICE.detailContent].review, movie: deps[SERVICE.movie],
+                settings: deps[SERVICE.settings], keywordRules: deps[SERVICE.keywordRules], ui: deps[SERVICE.domUi], clipboard: deps[SERVICE.clipboard],
                 notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope,
             });
             if (!await review.start() || scope.disposed) return false;

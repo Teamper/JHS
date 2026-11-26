@@ -1,3 +1,4 @@
+import { hasVisualBaseline } from "../harness/visual-baselines.js";
 import {test,expect} from '@playwright/test';
 import {readFile,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -64,7 +65,7 @@ for(const theme of ['light','dark'])for(const frame of [false,true])test(`late s
  await page.getByRole('button',{name:'按宽度显示',exact:true}).click();
  await expect(page.locator('.viewer-tooltip')).toBeHidden();
  const folder=resolve(process.env.JHS_IMAGE_KIND_REVIEW_DIR||'../../output/image-kind-review',info.project.name);await mkdir(folder,{recursive:true});await page.screenshot({path:resolve(folder,`isolated-sheet-${frame?'iframe':'direct'}-${theme}.png`),animations:'disabled'});
- if(process.env.JHS_VISUAL_REGRESSION==='1'){
+ if(hasVisualBaseline(info)){
   await expect(page).toHaveScreenshot(`isolated-sheet-${frame?'iframe':'direct'}-${theme}.png`,{maxDiffPixelRatio:.01});
  }
  await page.keyboard.press('Escape');await expect(trigger).toBeFocused();await expect(page.locator('.jhs-image-viewer-source')).toHaveCount(0);

@@ -20,7 +20,9 @@ async function boot(page, context, themeMode) {
     fc2.fetchAndRenderNativeMagnets = async () => {};
     fc2.fetchAndRenderNativeDetail = async () => {};
     window.__reviewCopies = 0;
-    window.utils.copyToClipboard = async () => { window.__reviewCopies++; };
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      async writeText(text) { window.__reviewCopies++; window.__lastReviewClipboard = text; },
+    } });
     fc2.getRuntimeService("review").list = async (_input, { page }) => page === 1 ? [
       { author: "Reviewer A", score: 4, likes: 2, createdAt: "2026-10-01", content: "Neutral fixture review." },
       { author: "Reviewer B", score: 5, likes: 1, createdAt: "2026-10-02", content: `magnet:?xt=urn:btih:${"1".repeat(40)}` },
@@ -50,7 +52,8 @@ for (const theme of ["light", "dark"]) {
     } else expect(Math.abs(bounds.floor.right - bounds.meta.right)).toBeLessThan(2);
     await expect(root.locator(".jhs-review-link-wrap")).toHaveCSS("justify-content", "space-between");
     await root.locator(".jhs-review-link-copy").click();
-    expect(await page.evaluate(() => window.__reviewCopies)).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.__reviewCopies)).toBe(1);
+    expect(await page.evaluate(() => window.__lastReviewClipboard)).toMatch(/^magnet:/);
     await expect(root.locator(".jhs-review-offline-btn")).toHaveAttribute("data-resource", /^magnet:/);
     const toggle = root.locator(".jhs-review-toggle");
     await toggle.click();

@@ -1,18 +1,12 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import { attachCompatibilityFacade } from "../src/app/compatibility-facade.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
-const bootstrap = readFileSync(join(import.meta.dirname, "../src/app/bootstrap.js"), "utf8");
-const logger = readFileSync(join(import.meta.dirname, "../src/core/logger.js"), "utf8");
-const appContext = readFileSync(join(import.meta.dirname, "../src/app/create-app-context.js"), "utf8");
-
 describe("bootstrap compatibility P0", () => {
     it("compatibility facade rejects when clog is missing", () => {
         expect(() => attachCompatibilityFacade({
-            pluginManager: {}, utils: {}, gmHttp: {}, storageManager: {}, stateService: {}, jhsEventBus: {},
+            pluginManager: {}, utils: {}, stateService: {}, jhsEventBus: {},
             show: () => {}, loading: () => {},
         }, {})).toThrow(/Compatibility facade is missing clog/);
     });
@@ -22,63 +16,10 @@ describe("bootstrap compatibility P0", () => {
         const show = { ok() {}, error() {}, info() {} };
         const loading = () => ({ close() {} });
         const target = {};
-        attachCompatibilityFacade({ pluginManager: {}, utils: {}, gmHttp: {}, storageManager: {}, stateService: {}, jhsEventBus: {}, clog, show, loading }, target);
+        attachCompatibilityFacade({ pluginManager: {}, utils: {}, stateService: {}, jhsEventBus: {}, clog, show, loading }, target);
         expect(target.clog).toBe(clog);
         expect(target.show).toBe(show);
         expect(target.loading).toBe(loading);
-    });
-
-    it("bootstrap passes logger.clog/show/loading, not globalThis.*", () => {
-        expect(bootstrap).toContain("clog: logger.clog");
-        expect(bootstrap).toContain("show: logger.show");
-        expect(bootstrap).toContain("loading: logger.loading");
-        expect(bootstrap).not.toContain("clog: globalThis.clog");
-        expect(bootstrap).not.toContain("show: globalThis.show");
-        expect(bootstrap).not.toContain("loading: globalThis.loading");
-    });
-
-    it("attaches compatibility before FeatureRuntime.start", () => {
-        const attachIndex = bootstrap.indexOf("attachCompatibilityFacade({");
-        const startIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
-        expect(attachIndex).toBeGreaterThan(-1);
-        expect(startIndex).toBeGreaterThan(attachIndex);
-    });
-
-    it("finishes migration and journal recovery before starting Features", () => {
-        const prepareIndex = bootstrap.indexOf("await storageMutationCoordinator.runExclusive(async () =>");
-        const startIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
-        expect(prepareIndex).toBeGreaterThan(-1);
-        expect(bootstrap.indexOf("runDataMigrations(storageManager, storageMutationCoordinator, true)", prepareIndex)).toBeLessThan(startIndex);
-        expect(bootstrap.indexOf("recoverPendingTransactionWithoutLock", prepareIndex)).toBeLessThan(startIndex);
-    });
-
-    it("schedules idle Features only after the first-ready mark", () => {
-        const readyIndex = bootstrap.indexOf('markPhase("first-ready");');
-        const scheduleIndex = bootstrap.indexOf("context.registries.features.scheduleIdle();");
-        expect(readyIndex).toBeGreaterThan(-1);
-        expect(scheduleIndex).toBeGreaterThan(readyIndex);
-    });
-
-    it("does not run a legacy CSS stage and publishes feature readiness after activation", () => {
-        const featureIndex = bootstrap.indexOf("await context.registries.features.start(context.services.settings.snapshot());");
-        const readyIndex = bootstrap.indexOf('await jhsEventBus.emit("jhs-features-ready", {}, { broadcast: false });');
-        expect(featureIndex).toBeGreaterThan(-1);
-        expect(readyIndex).toBeGreaterThan(featureIndex);
-        expect(bootstrap).not.toContain("prepareCss");
-        expect(bootstrap).not.toContain("processPlugins");
-    });
-
-    it("logger runtime is frozen and exposes clog/show/loading before mirroring to window", () => {
-        expect(logger).toContain("loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog, showImageViewer: window.showImageViewer })");
-        expect(logger).toContain("window.clog = loggerRuntime.clog");
-        expect(logger).not.toContain("await storageManager.getSetting");
-        expect(logger).not.toContain("async function()");
-    });
-
-    it("refreshes settings on pageshow/BFCache restore", () => {
-        expect(appContext).toContain('rootScope.listen(window, "pageshow"');
-        expect(appContext).toContain("runtime.legacyStorage?.invalidateSettingCache?.()");
-        expect(appContext).toContain("await settings.refresh()");
     });
 
     it("exposes clog synchronously before compatibility attach", async () => {
@@ -98,7 +39,10 @@ describe("bootstrap compatibility P0", () => {
         try {
             const { initializeLoggerRuntime } = await import("../src/core/logger.js?test=" + Date.now());
             const runtime = initializeLoggerRuntime(scope, { clogMsgCount: 2000 });
-            expect(runtime.clog).toBeTruthy();
+            expect(Object.isFrozen(runtime)).toBe(true);
+            expect(dom.window.clog).toBeUndefined();
+            expect(dom.window.show).toBeUndefined();
+            expect(dom.window.loading).toBeUndefined();
             expect(typeof runtime.clog.log).toBe("function");
             expect(runtime.show?.error).toBeTypeOf("function");
             expect(typeof runtime.loading).toBe("function");

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import jquery from "jquery";
-import { ListPageCompatibilityService as ListPagePlugin } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService as ListPagePlugin } from "../src/features/list/list-page-service.js";
 import { JavDbPreviewController as PreviewVideoPlugin } from "../src/features/detail/javdb-preview-controller.js";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
@@ -24,7 +24,7 @@ describe("reviewed UI regressions", () => {
         const saveProfile = vi.fn(async (_, update) => update({}));
         await saveSettingForm({
             settings: { snapshot: () => ({}), update: async fn => fn({}) }, webdav: { saveProfile },
-            jquery: $, document: dom.window.document, legacyStorage: {}, utilities: {}, events: {}, logger: {},
+            jquery: $, document: dom.window.document, utilities: {}, events: {}, logger: {},
         }, root);
         expect(saveProfile).toHaveBeenCalledWith({ username: "new-user" }, expect.any(Function));
     });

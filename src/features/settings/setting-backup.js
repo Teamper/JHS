@@ -1,4 +1,5 @@
 // @ts-check
+import { getNowStr } from "../../core/ui-date-time.js";
 
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { escapeHtml } from "../../core/constants.js";
@@ -11,7 +12,7 @@ import { formatUiDateTime } from "../../core/ui-date-time.js";
 /** @typedef {(diff: any, current: any, imported: any) => void} ShowDiffPreview */
 /** @typedef {any} WebDavHandle */
 /** @typedef {any} DialogHandle */
-/** @typedef {{jquery: (value: any) => any, document: Document, legacyStorage: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window & typeof globalThis, getScope?: () => Promise<LifecycleScope>, scope?: LifecycleScope, isActive?: () => boolean}} BackupUiDependencies */
+/** @typedef {{jquery: (value: any) => any, document: Document, backup: any, settings: {snapshot: () => Record<string, any>}, utilities: any, notifications: any, logger: any, domUi: any, window: Window & typeof globalThis, getScope?: () => Promise<LifecycleScope>, scope?: LifecycleScope, isActive?: () => boolean}} BackupUiDependencies */
 /** @param {unknown} error */
 function backupErrorDetails(error) {
     const candidate = /** @type {any} */ (error);
@@ -51,15 +52,14 @@ async function measureBackupStage(stage, action, dependencies) {
 /** @param {any} webdavService @param {BackupUiDependencies} dependencies */
 async function resolveWebDavProfile(webdavService, dependencies) {
     if (typeof webdavService?.getProfile === "function") return webdavService.getProfile();
-    const { legacyStorage: storageManager } = dependencies;
-    const settings = await storageManager.getSetting();
+    const settings = dependencies.settings.snapshot();
     return { url: settings.webDavUrl, username: settings.webDavUsername, password: await decryptCredential(settings.webDavPassword || "") };
 }
 
 /** Handle JSON file import via file input, run diff analysis, show preview. */
 /** @param {ShowDiffPreview} showDiffPreviewFn @param {BackupUiDependencies} dependencies */
 export async function importSettingData(showDiffPreviewFn, dependencies) {
-    const { document, legacyStorage: storageManager, notifications: show, logger: clog, domUi, window } = dependencies;
+    const { document, backup, notifications: show, logger: clog, domUi, window } = dependencies;
     const loading = () => domUi.loading();
     const pickerScope = new LifecycleScope("backup-file-picker");
     try {
@@ -91,9 +91,9 @@ export async function importSettingData(showDiffPreviewFn, dependencies) {
                     const a = loading();
                     const releaseLoading = pickerScope.addCleanup(() => a.close());
                     try {
-                        const e = await storageManager.exportData();
+                        const e = await backup.exportData();
                         if (pickerScope.disposed) return;
-                        const t = await storageManager.diffData(e, n);
+                        const t = await backup.diffData(e, n);
                         if (pickerScope.disposed) return;
                         releaseLoading(), showDiffPreviewFn(t, n, null);
                     } catch (i) {
@@ -116,7 +116,7 @@ export async function importSettingData(showDiffPreviewFn, dependencies) {
 /** Create encrypted backup and upload via WebDAV. */
 /** @param {string} folderName @param {WebDavHandle} webdavService @param {BackupUiDependencies} dependencies */
 export async function backupDataByWebDav(folderName, webdavService, dependencies) {
-    const { legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
+    const { backup, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
     const loading = () => domUi.loading();
     const logStage = (/** @type {{stage: string, result: string, durationMs: number, bytes?: number, code?: string, status?: number, timeoutMs?: number}} */ event) => logBackupStage(event, clog);
     const r = loading();
@@ -130,11 +130,11 @@ export async function backupDataByWebDav(folderName, webdavService, dependencies
         const a = t.username;
         if (!a) return void show.error("请填写并保存用户名");
         if (!t.password) return void show.error("请填写并保存密码");
-        const s = utils.getNowStr("_", "_") + ".json";
+        const s = getNowStr("_", "_") + ".json";
         const assertActive = () => {
             if (dependencies.scope?.disposed || dependencies.isActive?.() === false) throw new DOMException("备份已取消", "AbortError");
         };
-        const data = await measureBackupStage("导出数据", () => storageManager.exportData(), dependencies);
+        const data = await measureBackupStage("导出数据", () => backup.exportData(), dependencies);
         assertActive();
         const encrypted = await measureBackupStage("加密", () => encryptPortableBackup(JSON.stringify(data)), dependencies);
         assertActive();
@@ -192,7 +192,7 @@ export async function backupListBtnByWebDav(folderName, openFileListDialogFn, we
 /** @param {BackupFile[]} files @param {WebDavHandle} client @param {string} label @param {string} folderName @param {ShowDiffPreview} showDiffPreviewFn @param {DialogHandle} dialog @param {BackupUiDependencies} dependencies */
 export function openFileListDialog(files, client, label, folderName, showDiffPreviewFn, dialog, dependencies) {
     if (dependencies.isActive?.() === false) return;
-    const { jquery: $, legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi } = dependencies;
+    const { jquery: $, backup, utilities: utils, notifications: show, logger: clog, domUi } = dependencies;
     const scope = new LifecycleScope("backup-file-list");
     /** @type {number | null} */ let index = null;
     /** @type {any} */ let table = null;
@@ -237,9 +237,9 @@ export function openFileListDialog(files, client, label, folderName, showDiffPre
                 if (!active()) return;
                 if (action === "download") utils.download(content, file.name);
                 else {
-                    const parsed = JSON.parse(content), current = await storageManager.exportData();
+                    const parsed = JSON.parse(content), current = await backup.exportData();
                     if (!active()) return;
-                    const diff = await storageManager.diffData(current, parsed);
+                    const diff = await backup.diffData(current, parsed);
                     if (active()) { releaseLoading(); showDiffPreviewFn(diff, null, parsed); }
                 }
             }
@@ -293,9 +293,9 @@ export function openFileListDialog(files, client, label, folderName, showDiffPre
 /** Export all data as a downloadable JSON file. */
 /** @param {BackupUiDependencies} dependencies */
 export async function exportSettingData(dependencies) {
-    const { legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog } = dependencies;
+    const { backup, utilities: utils, notifications: show, logger: clog } = dependencies;
     try {
-        const e = JSON.stringify(await storageManager.exportData()), t = `${utils.getNowStr("_", "_")}.json`;
+        const e = JSON.stringify(await backup.exportData()), t = `${getNowStr("_", "_")}.json`;
         utils.download(e, t), show.ok("已导出数据");
     } catch (t) {
         clog.error(t), show.error("数据导出失败，请重试");

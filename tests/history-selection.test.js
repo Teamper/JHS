@@ -41,13 +41,13 @@ function loadHistory(records = createRecords()) {
             info: vi.fn(),
             error: vi.fn()
         };
-    const stateService = { patch, remove, toggle: vi.fn() }, storageService = { getCarList };
+    const stateService = { patch, remove, toggle: vi.fn(), getCarList, getPersonalRatings: async () => Object.fromEntries(records.filter(item => item.personalRating != null).map(item => [item.carNum, { rating: item.personalRating }])) };
     const plugin = new HistoryDialogController({
         document: dom.window.document, window: dom.window, jquery: $,
         domUi: { confirm: confirmation, getDialogArea: () => [], enhanceSelect: vi.fn(), loading: () => ({ close }) },
         dialog: { open: layer.open, close: layer.close }, notifications: show, logger: { error: vi.fn() },
         clipboard: { copyText: vi.fn() }, movie: {}, settings: { snapshot: () => ({}) },
-        storage: storageService, state: stateService, repository: new HistoryRepository({ storage: storageService, state: stateService }), site: "javdb",
+        state: stateService, repository: new HistoryRepository({ state: stateService }), site: "javdb",
     }), root = $("#history");
     const table = {
         currentData: records.slice(0, 50),

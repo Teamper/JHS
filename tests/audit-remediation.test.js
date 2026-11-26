@@ -1,20 +1,9 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { AutoPageController } from "../src/features/list/auto-page-controller.js";
 import { OtherSitesController } from "../src/features/external-sites/other-sites-controller.js";
-
-function loadClass(file, className, extras = {}) {
-    const source = readTestFile(join(process.cwd(), file), "utf8"), start = source.indexOf(`class ${className}`);
-    const context = vm.createContext({ URL, encodeURIComponent, BasePlugin: class {}, i: (target, key, value) => (target[key] = value), l: false, r: false, o: "https://javdb.com/", ...extras });
-    vm.runInContext(`${source.slice(start)};globalThis.Exported=${className}`, context);
-    return { Class: context.Exported, context };
-}
 
 describe("6.2.0 audit remediation", () => {
     it("disables AutoPage before creating DOM or listeners", async () => {
@@ -113,13 +102,5 @@ describe("6.2.0 audit remediation", () => {
         expect($("[data-jhs-site-id='fanzaBtn']").attr("href")).toBe("https://www.dmm.co.jp/search/ABC-1");
         scope.dispose();
         dom.window.close();
-    });
-
-    it("keeps all JHS UI layout decisions on mobileMode", () => {
-        const setting = readTestFile(join(process.cwd(), "src/features/settings/settings-controller.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/features/identity/image-search-controller.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-controller.js"), "utf8");
-        expect(setting).not.toContain("utils.isMobile()");
-        expect(search).not.toContain("utils.isMobile()");
-        expect(search).toContain("this.settings.snapshot().mobileMode");
-        expect(mobile).not.toContain("@media (min-width: 769px)");
     });
 });

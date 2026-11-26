@@ -23,13 +23,13 @@ test("blacklist host scans use the current site's login session before GM fallba
   const result = await page.evaluate(async (url) => {
     const controller = window.__jhsBrowserDiagnostics.features.scheduler.featureBlacklistScanController;
     const item = { starId: "jhs-auth-fixture", name: "Synthetic Actor", allName: ["Synthetic Actor"], role: "actor", movieType: "", url, createTime: "2026-09-29" };
-    await window.unsafeWindow.storageManager.addBlacklistItem(item);
+    await window.stateService.addBlacklistItem(item);
     await controller.scanActor({ item, site: "javdb" }, {
       requestConfig: { httpTimeout: 5000, httpRetryCount: 1, circuitBreakerThreshold: 3, circuitBreakerCooldown: 30000 },
       getTimestamp: () => "2026-09-29 00:00:00",
     });
-    const saved = (await window.unsafeWindow.storageManager.getBlacklist()).find((entry) => entry.starId === item.starId);
-    const savedCars = (await window.unsafeWindow.storageManager.getBlacklistCarList()).filter((entry) => entry.starId === item.starId);
+    const saved = (await window.stateService.getBlacklist()).find((entry) => entry.starId === item.starId);
+    const savedCars = (await window.stateService.getBlacklistCarList()).filter((entry) => entry.starId === item.starId);
     return {
       gmCallsForTarget: window.__jhsBrowserDiagnostics.requests.filter((request) => request.url === url).length,
       checkTime: saved?.checkTime,
@@ -67,13 +67,13 @@ test("JavBus blacklist scans skip the native actor profile item", async ({ conte
   const result = await page.evaluate(async (url) => {
     const controller = window.__jhsBrowserDiagnostics.features.scheduler.featureBlacklistScanController;
     const item = { starId: "jhs-auth-fixture", name: "Synthetic Actor", allName: ["Synthetic Actor"], role: "actor", movieType: "", url, createTime: "2026-09-29" };
-    await window.unsafeWindow.storageManager.addBlacklistItem(item);
+    await window.stateService.addBlacklistItem(item);
     await controller.scanActor({ item, site: "javbus" }, {
       requestConfig: { httpTimeout: 5000, httpRetryCount: 1, circuitBreakerThreshold: 3, circuitBreakerCooldown: 30000 },
       getTimestamp: () => "2026-09-29 00:00:00",
     });
-    const saved = (await window.unsafeWindow.storageManager.getBlacklist()).find((entry) => entry.starId === item.starId);
-    const savedCars = (await window.unsafeWindow.storageManager.getBlacklistCarList()).filter((entry) => entry.starId === item.starId);
+    const saved = (await window.stateService.getBlacklist()).find((entry) => entry.starId === item.starId);
+    const savedCars = (await window.stateService.getBlacklistCarList()).filter((entry) => entry.starId === item.starId);
     return {
       gmCallsForTarget: window.__jhsBrowserDiagnostics.requests.filter((request) => request.url === url).length,
       checkTime: saved?.checkTime,

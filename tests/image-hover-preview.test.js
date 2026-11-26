@@ -1,7 +1,5 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
+import { ImageHoverPreview } from "../src/core/image-hover-preview.js";
+import { JHS_Z_INDEX } from "../src/core/theme.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 class FakeClassList {
@@ -59,32 +57,28 @@ function loadPreviewClass() {
         set src(value) { this.value = value; }
         get src() { return this.value; }
     }
-    class FakeLifecycleScope {
-        constructor() { this.cleanups = []; }
-        listen(target, type, listener) { target.addEventListener(type, listener); this.cleanups.push(() => target.removeEventListener(type, listener)); }
-        dispose() { this.cleanups.splice(0).reverse().forEach((cleanup) => cleanup()); }
-    }
-    const context = { console, document, Image: FakeImage, LifecycleScope: FakeLifecycleScope, Date, JHS_Z_INDEX: { hoverPreview: 12345690, viewer: 999999993 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
-    context.window = context;
-    context.innerWidth = 800;
-    context.innerHeight = 600;
-    context.requestAnimationFrame = (callback) => (frames.push(callback), frames.length);
-    context.cancelAnimationFrame = () => {};
-    const source = readTestFile(join(process.cwd(), "src/core/logger.js"), "utf8"), start = source.indexOf("window.ImageHoverPreview = class"), end = source.indexOf("}, function() {", start);
-    vm.runInContext(`${source.slice(start, end + 1)}; globalThis.TestImageHoverPreview = window.ImageHoverPreview;`, vm.createContext(context));
+    vi.stubGlobal("document", document);
+    vi.stubGlobal("window", { innerWidth: 800, innerHeight: 600 });
+    vi.stubGlobal("Image", FakeImage);
+    vi.stubGlobal("Element", FakeElement);
+    vi.stubGlobal("HTMLElement", FakeElement);
+    vi.stubGlobal("HTMLImageElement", FakeElement);
+    vi.stubGlobal("Node", FakeElement);
+    vi.stubGlobal("requestAnimationFrame", callback => (frames.push(callback), frames.length));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
     const flushFrames = () => { while (frames.length) frames.shift()(); };
-    return { Preview: context.TestImageHoverPreview, document, firstCover, createCover, head, images, flushFrames };
+    return { Preview: ImageHoverPreview, document, firstCover, createCover, head, images, flushFrames };
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("ImageHoverPreview lifecycle", () => {
     it("uses one delegated listener set and supports dynamically rendered targets", () => {
         const { Preview, document, firstCover, createCover, images } = loadPreviewClass(), preview = new Preview({ selector: ".cover" });
         expect(document.listeners.get("mouseover")?.size).toBe(1);
         // 默认层级必须取 hoverPreview 档：低于 modal/layer，弹窗打开后预览不得盖住详情
-        expect(preview.config.zIndex).toBe(12345690);
-        expect(preview.preview.style.zIndex).toBe("12345690");
+        expect(preview.config.zIndex).toBe(JHS_Z_INDEX.hoverPreview);
+        expect(preview.preview.style.zIndex).toBe(String(JHS_Z_INDEX.hoverPreview));
         document.emit("mouseover", firstCover);
         expect(images).toHaveLength(1);
         const secondCover = createCover("https://example.test/b.jpg");

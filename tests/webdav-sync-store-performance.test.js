@@ -16,6 +16,19 @@ async function writeDomain(replica, domain, value, pruned = []) {
 }
 
 describe("incremental WebDAV sync bookkeeping", () => {
+    it("initializes durable local sync state inside the caller's existing startup lock", async () => {
+        const a = await syncReplica(memoryDav());
+        a.values.delete(SYNC_STATE_KEY);
+        a.values.delete(SYNC_PENDING_KEY);
+        const lock = vi.spyOn(a.coordinator, "runExclusive");
+        await a.coordinator.runExclusive(() => a.service.initializeStoreWithoutLock());
+        const { replicaId, undoEpoch } = a.values.get(SYNC_STATE_KEY);
+        expect(replicaId).toBeTruthy();
+        expect(a.values.get(SYNC_PENDING_KEY)).toMatchObject({ replicaId, epoch: undoEpoch });
+        await a.service.initialize();
+        expect(lock).toHaveBeenCalledOnce();
+    });
+
     it("uses its registered recovery hook once in each initialization lock", async () => {
         const a = await syncReplica(memoryDav()), recover = vi.spyOn(a.store, "recoverWithoutLock");
         a.coordinator.beforeMutation = a.store.recoverBeforeMutation;

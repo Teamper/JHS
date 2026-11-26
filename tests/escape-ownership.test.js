@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import {afterEach,it,expect,vi} from "vitest";
 import jquery from "jquery";
-import {Utils} from "../src/core/utils.js";
-afterEach(()=>{jquery(document).off(".globalLayerEsc .afterOwner");document.body.replaceChildren();Utils.instance=null;vi.unstubAllGlobals();});
+import {DialogEscController} from "../src/core/dialog-esc-controller.js";
+let esc;
+afterEach(()=>{jquery(document).off(".globalLayerEsc .afterOwner");document.body.replaceChildren();esc?.dispose();vi.unstubAllGlobals();});
 function mount() {
     vi.stubGlobal("$",jquery);vi.stubGlobal("clog",{warn:vi.fn()});
     document.body.innerHTML='<div class="layui-layer" id="layui-layer1"><iframe id="layui-layer-iframe1"></iframe></div>';
-    const utils=new Utils();
+    const utils=esc=new DialogEscController({jquery,document,close:id=>layer.close(id)});
     vi.stubGlobal("layer",{close:id=>{document.getElementById(`layui-layer${id}`)?.remove();utils.releaseEscClose(id);}});
     utils.setupEscClose(1);
     return {utils,frame:document.querySelector("iframe").contentDocument};

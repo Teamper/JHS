@@ -7,7 +7,9 @@ export { normalizeMovieCarNum, getMovieStateEligibility } from '../../src/core/m
 export { legacyActionToFlag, normalizeStateFlags } from '../../src/core/state-model.js';
 export { StateService } from '../../src/core/state-service.js';
 export { StorageMutationCoordinator } from '../../src/core/storage-mutation-coordinator.js';
-export { StorageManager } from '../../src/core/storage.js';
+export { StorageService } from '../../src/services/storage-service.js';
+export { KeywordRulesService } from '../../src/services/keyword-rules-service.js';
+export { PortableBackupService } from '../../src/services/portable-backup-service.js';
 export { WebDavSyncStore } from '../../src/core/webdav-sync-store.js';
 export { registerDefaultSettings } from '../../src/app/settings-catalog.js';
 export { SettingsRegistry } from '../../src/app/settings-registry.js';

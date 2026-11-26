@@ -1,14 +1,12 @@
 // @ts-check
 
 export class IndexedDbStorageAdapter {
-    /** @type {((key: string) => Promise<void>) | null} */
-    beforeSet = null;
     /** @param {{getItem: (key: string) => Promise<unknown>, setItem: (key: string, value: unknown) => Promise<unknown>, removeItem: (key: string) => Promise<unknown>, keys: () => Promise<string[]>}} forage @param {Storage} localStore @param {(key: string, fallback?: unknown) => unknown} gmGetValue @param {(key: string, value: unknown) => void} gmSetValue @param {(key: string) => void} [gmDeleteValue] */
     constructor(forage, localStore, gmGetValue, gmSetValue, gmDeleteValue = () => {}) { this.forage = forage; this.localStore = localStore; this.gmGetValue = gmGetValue; this.gmSetValue = gmSetValue; this.gmDeleteValue = gmDeleteValue; }
     /** @param {string} key */
     get(key) { return this.forage.getItem(key); }
     /** @param {string} key @param {unknown} value */
-    async set(key, value) { await this.beforeSet?.(key); await this.forage.setItem(key, value); }
+    async set(key, value) { await this.forage.setItem(key, value); }
     /** @param {string} key */
     async remove(key) { await this.forage.removeItem(key); }
     keys() { return this.forage.keys(); }
@@ -45,6 +43,18 @@ export class IndexedDbStorageAdapter {
     unlistenValue(listener) { this.gmUnlistenValue?.(listener); }
     /** @param {string} key */
     removeValue(key) { return this.gmDeleteValue(key); }
+}
+
+/** Open the original userscript database and bind the userscript manager's value store.
+ * @param {any} localforage
+ * @param {Record<string, any>} runtime */
+export function createUserscriptStorageAdapter(localforage, runtime) {
+    const forage = localforage.createInstance({ driver: localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
+    const adapter = new IndexedDbStorageAdapter(forage, runtime.localStorage, runtime.GM_getValue, runtime.GM_setValue, runtime.GM_deleteValue);
+    adapter.gmListValues = runtime.GM_listValues;
+    adapter.gmListenValue = runtime.GM_addValueChangeListener;
+    adapter.gmUnlistenValue = runtime.GM_removeValueChangeListener;
+    return adapter;
 }
 
 

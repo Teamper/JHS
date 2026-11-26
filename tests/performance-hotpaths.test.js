@@ -1,65 +1,49 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
-import { getIcon } from "../src/core/icons.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ListPageService } from "../src/features/list/list-page-service.js";
+import { initializeUiAccessibility } from "../src/core/ui-primitives.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { initializeRuntimeConstants } from "../src/core/constants.js";
 
-const repoRoot = join(import.meta.dirname, "..");
+const windows = [], scopes = [];
+function fixture(html, url = "https://javdb.com/") {
+    const dom = new JSDOM(html, { url });
+    windows.push(dom.window);
+    for (const name of ["window", "document", "Node", "Element", "HTMLElement", "MutationObserver", "localStorage"]) {
+        vi.stubGlobal(name, name === "window" ? dom.window : dom.window[name]);
+    }
+    return dom;
+}
+
+afterEach(() => {
+    scopes.splice(0).forEach(scope => scope.dispose());
+    windows.splice(0).forEach(window => window.close());
+    vi.unstubAllGlobals();
+});
 
 function loadListObserver() {
-    const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
+    const dom = fixture('<div class="movie-list"></div>'), $ = jqueryFactory(dom.window);
+    vi.stubGlobal("$", $);
     dom.window.isListPage = true;
-    const translate = vi.fn(async () => "译文"), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { car_list_key: "car_list", getSetting: vi.fn(async () => "yes"), _invalidateCache: vi.fn() };
-    class BasePlugin {
-        getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }; }
-        getBean() { return null; }
-        getRuntimeService(name) {
-            if (name === "translation") return { translate };
-            if (name === "settings") return { snapshot: () => ({ translateTitle: "yes" }) };
-            return async () => undefined;
-        }
-    }
-    const context = vm.createContext({
-        console, getIcon, window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver,
-        IntersectionObserver: undefined, localStorage: dom.window.localStorage, URLSearchParams, fetch, $, BasePlugin,
-        r: true, l: false, c: false, _: "yes", C: "no", B: "actor", u: "屏蔽", b: "收藏", y: "下载", k: "观看",
-        storageManager, utils: {}, clog: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() }, show: { error: vi.fn() },
-        isHitShowPage: () => false, mapLimit, i: (target, key, value) => (target[key] = value), setTimeout, clearTimeout,
-        normalizeStateFlags: flags => Object.fromEntries([ "favorite", "downloaded", "watched", "blocked" ].map((key => [ key, !0 === flags?.[key] ]))),
-        hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key]))
-    });
-    const source = [
-        readTestFile(join(repoRoot, "src/core/list-filters.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-refresh-coordinator.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-cover-image-controller.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-compatibility-service.js"), "utf8"),
-        "globalThis.TestListPagePlugin=ListPageCompatibilityService;"
-    ].join("\n");
-    vm.runInContext(source, context);
-    const plugin = new context.TestListPagePlugin({ runtimeServices: {
+    initializeRuntimeConstants(dom.window.location);
+    const translate = vi.fn(async () => "译文");
+    const scope = new LifecycleScope("list-hotpath-fixture");
+    scopes.push(scope);
+    const plugin = new ListPageService({ runtimeServices: {
         host: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }) },
-        legacyStorage: storageManager,
         settings: { snapshot: () => ({ translateTitle: "yes", hoverBigImg: "no" }) },
         translation: { translate },
-        scope: async () => ({ disposed: false }),
+        scope: async () => scope,
     } });
-    return { dom, plugin, $, translate, mapLimit, storageManager, clog: context.clog };
+    return { dom, plugin, $, translate, scope };
 }
 
 function initializeAccessibilityDom(html, clock = performance) {
-    const dom = new JSDOM(html), source = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
-        document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask, performance: clock, setTimeout, clearTimeout
-    });
-    context.lifecycleScope = {
-        addCleanup() {},
-        observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); return observer.observe(target, options), observer; },
-        listen(target, type, handler, options) { target.addEventListener(type, handler, options); return () => target.removeEventListener(type, handler, options); }
-    };
-    vm.runInContext(`${source.slice(start, end)};initializeUiAccessibility(lifecycleScope);`, context);
+    const dom = fixture(html), scope = new LifecycleScope("list-accessibility");
+    scopes.push(scope);
+    vi.stubGlobal("performance", clock);
+    initializeUiAccessibility(scope);
     return dom;
 }
 
@@ -89,9 +73,9 @@ describe("list mutation hot path", () => {
     });
 
     it("processes an appended card once and ignores later sort-style moves", async () => {
-        const { dom, plugin } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
+        const { dom, plugin, scope } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
         plugin.processAddedItems = vi.fn(async (items) => items.forEach((item => item.dataset.jhsProcessed = "true")));
-        plugin.checkDom({ observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); observer.observe(target, options); return observer; } });
+        plugin.checkDom(scope);
         const item = dom.window.document.createElement("div");
         item.className = "item", container.append(item);
         await new Promise((resolve => setTimeout(resolve, 140)));
@@ -104,12 +88,20 @@ describe("list mutation hot path", () => {
     });
 
     it("bounds translation concurrency and delegates translation to the service", async () => {
-        const { dom, plugin, $, translate, mapLimit } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
-        container.innerHTML = '<div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div><div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div>';
+        const { dom, plugin, $, translate } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
+        container.innerHTML = Array.from({ length: 7 }, (_, index) =>
+            `<div class="item"><div class="video-title"><strong>ABC-12${index + 3}</strong> 原題 ${index}</div></div>`).join("");
+        let inFlight = 0, peak = 0;
+        translate.mockImplementation(async () => {
+            peak = Math.max(peak, ++inFlight);
+            await new Promise(resolve => setTimeout(resolve, 5));
+            inFlight--;
+            return "译文";
+        });
         const items = $(container).find(".item").toArray();
         await plugin.translateListItems(items);
-        expect(mapLimit).toHaveBeenCalledWith(items, 3, expect.any(Function));
-        expect(translate).toHaveBeenCalledTimes(2);
+        expect(peak).toBe(3);
+        expect(translate).toHaveBeenCalledTimes(items.length);
         expect($(items[0]).attr("data-jhs-translation-key")).toBe("ABC-123");
     });
 
@@ -180,6 +172,5 @@ describe("accessibility mutation scope", () => {
         // The accessibility budget can yield after the first root; join the observable completion.
         await vi.waitFor(() => expect(document.querySelector("#jhs-dynamic").getAttribute("aria-label")).toBe("动态工具"));
         expect(document.querySelector("#host-dynamic").hasAttribute("aria-label")).toBe(false);
-        dom.window.close();
     });
 });

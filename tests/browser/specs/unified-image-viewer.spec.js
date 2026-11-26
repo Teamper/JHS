@@ -1,3 +1,4 @@
+import { hasVisualBaseline } from "../harness/visual-baselines.js";
 import { test, expect } from "@playwright/test";
 import { readFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -64,7 +65,7 @@ for (const theme of ["light", "dark"]) {
         await page.keyboard.press("Tab");await expect(viewer.getByRole("button",{name:"关闭图片",exact:true})).toBeFocused();
         const folder=resolve("../../output/unified-viewer-review",info.project.name);await mkdir(folder,{recursive:true});
         await page.screenshot({path:resolve(folder,`long-${theme}.png`),animations:"disabled"});
-        if(process.env.JHS_VISUAL_REGRESSION==="1") await expect(page).toHaveScreenshot(`unified-viewer-long-${theme}.png`,{maxDiffPixelRatio:.01});
+        if(hasVisualBaseline(info)) await expect(page).toHaveScreenshot(`unified-viewer-long-${theme}.png`,{maxDiffPixelRatio:.01});
         await viewer.getByRole("button",{name:"完整显示",exact:true}).click();
         await expect.poll(() => image(page).evaluate(node => node.getBoundingClientRect().bottom <= node.closest(".viewer-container").querySelector(".viewer-footer").getBoundingClientRect().top+1)).toBe(true);
         await viewer.getByRole("button",{name:"按宽度显示",exact:true}).click();await expectLongDefault(page);

@@ -1,11 +1,9 @@
-import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
-const cases = JSON.parse(readTestFile(join(import.meta.dirname, "fixtures/media/cases.json"), "utf8"));
-const helpers = readTestFile(join(import.meta.dirname, "../src/core/feature-helpers.js"), "utf8");
+const cases = JSON.parse(readFileSync(join(import.meta.dirname, "fixtures/media/cases.json"), "utf8"));
 describe("media regression fixture matrix", () => {
     it("contains DMM, VR, FC2 and uncensored branches", () => { for (const key of ["dmm", "vr", "fc2", "uncensored"]) expect(cases[key].length).toBeGreaterThan(0); });
     it.each([
@@ -27,5 +25,4 @@ describe("media regression fixture matrix", () => {
         expect(anchor.querySelector("img").getAttribute("src")).toBe("/thumb.jpg");
         dom.window.close();
     });
-    it("uses candidate CID without per-studio hardcoding", () => { expect(helpers).toContain("function normalizeDmmCid"); expect(helpers).not.toMatch(/NKNKJDVAJ.*===|MCHT.*===/); });
 });

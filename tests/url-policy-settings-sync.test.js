@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IndexedDbStorageAdapter } from "../src/platform/userscript/indexeddb-storage-adapter.js";
+import { StorageService } from "../src/services/storage-service.js";
 import { createAppContext } from "../src/app/create-app-context.js";
 
 // Node 26 默认在 globalThis 定义 localStorage 访问器（未提供 --localstorage-file 时取值为 undefined），
@@ -10,35 +12,37 @@ afterEach(() => { vi.unstubAllGlobals(); });
 function createRuntime(initial = {}) {
     const values = new Map([[ "setting", { ...initial } ]]);
     window.matchMedia ||= () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
-    return {
-        values,
-        runtime: {
-            gmRequest: vi.fn(), gmGetValue: (_key, fallback) => fallback, gmSetValue: vi.fn(),
-            storageForage: {
-                getItem: async key => values.get(key),
-                setItem: async (key, value) => { values.set(key, value); },
-                removeItem: async key => { values.delete(key); },
-            },
-            localStorage: window.localStorage, layer: {}, stateService: {}, localOrigins: initial.trustedLocalOrigins ?? [],
-        },
+    const forage = {
+        getItem: async key => values.get(key),
+        setItem: async (key, value) => { values.set(key, value); },
+        removeItem: async key => { values.delete(key); },
+        keys: async () => [...values.keys()],
     };
+    const storage = new StorageService(new IndexedDbStorageAdapter(forage, window.localStorage, (_key, fallback) => fallback, vi.fn()));
+    return { values, runtime: { gmRequest: vi.fn(), storage, localStorage: window.localStorage, layer: {}, localOrigins: initial.trustedLocalOrigins ?? [] } };
 }
 
 describe("trusted local origin runtime synchronization", () => {
     it("preserves viewer ownership, sequence and initial index through the real composition root", () => {
-        const { runtime } = createRuntime(), context = createAppContext(runtime);
-        const open = vi.fn(); vi.stubGlobal("showImageViewer", open);
+        const { runtime } = createRuntime(), open = vi.fn();
+        const context = createAppContext({ ...runtime, createFeedback: () => ({ clog: console, showImageViewer: open }) });
         const source = document.createElement("img"), trigger = document.createElement("button");
         const options = { owner:trigger, trigger, scope:context.rootScope, images:[{url:"https://example.test/full.jpg",alt:"全图"}], initialViewIndex:0 };
         context.services.domUi.openImageViewer(source, options);
         expect(open).toHaveBeenCalledExactlyOnceWith(source, "", options);
         context.rootScope.dispose(); vi.unstubAllGlobals();
     });
-    it("injects the shared DialogService into supporting utility runtimes", () => {
+    it("routes page confirmations through the selected dialog port", () => {
         const { runtime } = createRuntime();
-        runtime.legacyUtils = { setDialogService: vi.fn() };
-        const context = createAppContext(runtime);
-        expect(runtime.legacyUtils.setDialogService).toHaveBeenCalledExactlyOnceWith(context.services.dialog);
+        const dialog = { confirm: vi.fn(() => 5), close: vi.fn() };
+        const context = createAppContext({ ...runtime, platform: { dialog } });
+        const accept = vi.fn();
+        context.services.domUi.q(null, "继续？", accept);
+        const [message, , approve] = dialog.confirm.mock.calls[0];
+        expect(message).toBe("继续？");
+        approve(5);
+        expect(accept).toHaveBeenCalledOnce();
+        expect(dialog.close).toHaveBeenCalledWith(5);
         context.rootScope.dispose();
     });
 
@@ -83,5 +87,19 @@ describe("trusted local origin runtime synchronization", () => {
 
         expect(context.services.urlPolicy.assertAllowed("http://localhost:8080/dav", { trustClass: "user-local", expectedOrigin: "http://localhost:8080" }).pathname).toBe("/dav");
         context.rootScope.dispose();
+    });
+
+    it("refreshes settings on a restored page and releases the listener on disposal", async () => {
+        const { runtime, values } = createRuntime({ themeMode: "light" });
+        const context = createAppContext(runtime);
+        const { settings } = context.services;
+        await settings.load();
+        values.set("setting", { themeMode: "dark" });
+        window.dispatchEvent(new Event("pageshow"));
+        await vi.waitFor(() => expect(settings.snapshot().themeMode).toBe("dark"));
+        const refresh = vi.spyOn(settings, "refresh");
+        context.rootScope.dispose();
+        window.dispatchEvent(new Event("pageshow"));
+        expect(refresh).not.toHaveBeenCalled();
     });
 });

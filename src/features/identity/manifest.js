@@ -5,7 +5,7 @@ import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 
 export default defineFeature({
     id: "identity", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.navigation, SERVICE.notifications, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, REGISTRY.integration, SERVICE.settings],
+    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.domUi, SERVICE.notifications, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, REGISTRY.integration, SERVICE.settings],
     contributionAvailability: {
         "identity.javdb-navigation": { sites: ["javdb"] },
         "identity.javbus-navigation": { sites: ["javbus"] },
@@ -57,7 +57,7 @@ export default defineFeature({
             try {
                 const { JavDbNavigationController, JAVDB_NAVIGATION_CSS } = await import("./javdb-navigation-controller.js");
                 controller = new JavDbNavigationController({
-                    document, location, movie: deps[SERVICE.movie], navigation: deps[SERVICE.navigation],
+                    document, location, movie: deps[SERVICE.movie], navigation: deps[SERVICE.domUi].navigation,
                     searchImage, notifications: deps[SERVICE.notifications], jquery: /** @type {any} */ (globalThis).jQuery,
                     onError: (error) => runtime.diagnostics.recordError({ source: "identity-navigation-links", featureId: "identity", contributionId: "identity.javdb-navigation", message: error instanceof Error ? error.message : String(error) }),
                 });

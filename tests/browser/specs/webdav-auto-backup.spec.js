@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { isolatedDav, sharedUserscriptInstallation } from "../harness/sync-dav.js";
 
-const service = (page, method = "check", ...args) => page.evaluate(({ method, args }) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup")[method](...args), { method, args });
+const service = (page, method = "check", ...args) => page.evaluate(({ method, args }) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdavSync")[method](...args), { method, args });
 async function openSettings(page) {
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("data-panel"));
     const dialog = page.locator(".layui-layer").filter({ has: page.locator("#webdavAutoVerifyBtn") });
@@ -15,7 +15,7 @@ async function configure(page, url) {
     await page.evaluate(url => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdav").saveProfile({ url, username: "synthetic", password: "synthetic-password" }), url);
     await expect.poll(async () => (await service(page, "getStatus")).lastSuccessAt, { timeout: 12000 }).toBeGreaterThan(0);
 }
-const carList = page => page.evaluate(() => window.storageManager.forage.getItem("car_list"));
+const carList = page => page.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("car_list"));
 
 test.beforeEach(async ({}, info) => { test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop and compact sync coverage"); });
 
@@ -74,18 +74,18 @@ test("legacy blocked movies with equivalent numbers sync without losing their re
             { carNum: "ABC123", starId: "legacy-actor", names: "Old", remark: "preserve note", updateDate: "2026-10-20" },
             { carNum: "ABC-123", starId: "legacy-actor", names: "Latest", updateDate: "2026-10-22" },
         ];
-        await page.evaluate(rows => window.storageManager.forage.setItem("blacklist_car_list", rows), original);
+        await page.evaluate(rows => window.__jhsBrowserDiagnostics.detailServices.storage.set("blacklist_car_list", rows), original);
         await configure(page, dav.url);
         await expect.poll(async () => (await service(page, "getStatus")).busy, { timeout: 12000 }).toBe(false);
-        const local = await page.evaluate(() => window.storageManager.forage.getItem("blacklist_car_list"));
+        const local = await page.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("blacklist_car_list"));
         expect(local).toHaveLength(1); expect(local[0]).toMatchObject({ carNum: "ABC-123", names: "Latest", remark: "preserve note" });
-        const snapshots = await page.evaluate(() => window.storageManager.forage.getItem("snapshots"));
+        const snapshots = await page.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("snapshots"));
         expect(snapshots.some(snapshot => JSON.stringify(snapshot.data.blacklist_car_list) === JSON.stringify(original))).toBe(true);
         expect((await service(page, "getStatus")).message).toBe("");
         const installOther = await sharedUserscriptInstallation(other, dav); await fulfillHostFixtures(other);
         const reader = await other.newPage(); await reader.goto("https://javdb.com/");
         await injectUserscriptRuntime(reader, { beforeUserscriptInjection: installOther }); await configure(reader, dav.url);
-        expect(await reader.evaluate(() => window.storageManager.forage.getItem("blacklist_car_list"))).toEqual(local);
+        expect(await reader.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("blacklist_car_list"))).toEqual(local);
     } finally { await other.close(); await dav.close(); }
 });
 
@@ -114,7 +114,7 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         await service(page);
         expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes);
         expect((await carList(page))[0].carNum).toBe("SYNC-2");
-        const stateBefore = await page.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
+        const stateBefore = await page.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("jhs_webdav_sync_state_v1"));
         await service(page, "pause", true);
         const writesBeforeRestore = dav.requests.filter(request => request.method === "PUT").length;
         const recovery = await openSettings(page);
@@ -132,7 +132,7 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writesBeforeRestore);
         await service(page, "pause", false);
         await expect.poll(async () => (await service(page, "getStatus")).pendingChanges, { timeout: 10000 }).toBe(0);
-        const stateAfter = await page.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
+        const stateAfter = await page.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("jhs_webdav_sync_state_v1"));
         expect(stateAfter.replicaId).toBe(stateBefore.replicaId); expect(stateAfter.seq).toBeGreaterThan(stateBefore.seq);
     } finally { await dav.close(); }
 });
@@ -185,12 +185,12 @@ test("an upload keeps newer changes pending after another tab misses the network
             return Date.now();
         });
         await expect.poll(() => other.evaluate(async changedAt => {
-            const status = await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").getStatus();
+            const status = await window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdavSync").getStatus();
             const now = Date.now();
             return { retryScheduled: now >= changedAt + 5000 && !status.busy && status.nextDueAt > now && status.nextDueAt <= now + 1500, status };
         }, changedAt), { timeout: 8500 }).toMatchObject({ retryScheduled: true });
         expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes + 1);
-        const pending = await other.evaluate(() => window.storageManager.forage.getItem("jhs_webdav_sync_state_v1"));
+        const pending = await other.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.storage.get("jhs_webdav_sync_state_v1"));
         expect(pending.localRevision).toBeGreaterThan(pending.pending.coveredRevision);
         held.release();
         await uploading;
@@ -211,7 +211,7 @@ for (const theme of ["light", "dark"]) test(`多端同步布局 ${theme}`, async
     await injectUserscriptRuntime(page, { hostStyles: true, settingOverrides: { themeMode: theme } });
     const dialog = await openSettings(page);
     await service(page); await expect.poll(async () => (await service(page, "getStatus")).busy).toBe(false);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("autoBackup").cancel());
+    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdavSync").cancel());
     await dialog.locator("#webDavSyncKeepCount").evaluate(input => input.closest("details").open = true);
     const keep = dialog.locator("#webDavSyncKeepCount"); await keep.scrollIntoViewIfNeeded(); await keep.focus();
     await page.keyboard.press("ArrowUp"); await expect(keep).toHaveValue("6");

@@ -7,7 +7,7 @@ import { Fc2CatalogController } from "./fc2-catalog-controller.js";
 export default defineFeature({
     id: "fc2-catalog", kind: "feature", disableable: true,
     sites: ["javdb"], routes: [], startup: "idle",
-    requires: [PORT.host, SERVICE.movie, SERVICE.domUi, SERVICE.notifications, SERVICE.diagnostics],
+    requires: [PORT.host, SERVICE.movie, SERVICE.domUi, SERVICE.notifications],
     contributionRoutes: ["list", "detail", "owned-detail"],
     contributes: ["detail.fc2-lookup"], providesCommands: ["fc2-catalog.ensure"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -17,11 +17,11 @@ export default defineFeature({
         /** @type {Fc2CatalogController | null} */ let controller = null;
         let unregisterCompatibilityBean = () => {};
         try {
-            const listPage = runtime.resolveCompatibilityBean?.("ListPagePlugin");
+            const listPage = runtime.getCapability?.("list.core");
             controller = new Fc2CatalogController({
                 document, window, site: runtime.site, route: runtime.route, hostAdapter: deps[PORT.host],
                 movie: deps[SERVICE.movie], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications],
-                diagnostics: deps[SERVICE.diagnostics], scope: runtime.scope,
+                diagnostics: runtime.diagnostics, scope: runtime.scope,
                 processAddedItems: typeof listPage?.processAddedItems === "function" ? (items) => listPage.processAddedItems(items) : undefined,
             });
             if (!(await controller.start())) return { activeContributions: [], commands: unavailable };

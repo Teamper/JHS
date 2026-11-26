@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CacheService } from "../src/services/cache-service.js";
+import { CacheService, THIRD_PARTY_CACHE_KEY } from "../src/services/cache-service.js";
 
 function backend() {
     const data = new Map();
@@ -21,6 +21,19 @@ function backend() {
 afterEach(() => vi.useRealTimers());
 
 describe("CacheService L1/L2 cache", () => {
+    it("serializes invalidation of existing third-party entries and preserves other cached data", async () => {
+        const storage = backend(), cache = new CacheService({ storage });
+        const keep = { time: 10, ttl: 1000, data: "keep" };
+        storage.data.set(THIRD_PARTY_CACHE_KEY, { a: { time: 1 }, b: { time: 2 }, keep });
+        storage.data.set("setting", { themeMode: "dark" });
+
+        await Promise.all([cache.deleteThirdPartyCacheEntry("a"), cache.deleteThirdPartyCacheEntry("b")]);
+        expect(await cache.getThirdPartyCache()).toEqual({ keep });
+        await cache.clearThirdPartyCache();
+        expect(storage.data.has(THIRD_PARTY_CACHE_KEY)).toBe(false);
+        expect(storage.data.get("setting")).toEqual({ themeMode: "dark" });
+    });
+
     it("reuses public entries across instances through the storage layer", async () => {
         const storage = backend(), first = new CacheService({ storage }), second = new CacheService({ storage });
         await first.set("provider:key", { status: 200 }, { scope: "public", ttlMs: 60_000 });

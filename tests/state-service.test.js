@@ -1,39 +1,22 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { webcrypto } from "node:crypto";
-import { join } from "node:path";
-import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
-import { assertMovieStateEligible } from "../src/core/movie-identity.js";
-import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
-
-const repoRoot = join(import.meta.dirname, "..");
-
-function loadStateService(diagnosticConsole = console, uiDiagnostics = {}) {
-    const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
-    const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), domains = readTestFile(join(repoRoot, "src/core/state-domains.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
-    const context = vm.createContext({ assertMovieStateEligible, CURRENT_DATA_VERSION, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, console: diagnosticConsole, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: uiDiagnostics.clog ?? { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: uiDiagnostics.show ?? { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
-    vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${domains}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
-    return context.StateServiceClass;
-}
+import { StateService } from "../src/core/state-service.js";
+import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
+import { storageFromForage } from "./helpers/atomic-storage.js";
 
 function createHarness(initial = {}, mutationCoordinator = null, diagnosticConsole = console, uiDiagnostics = {}) {
-    const data = new Map(Object.entries(initial)), storage = {
-        car_list_key: "car_list", favorite_actresses_key: "favorite_actresses",
-        forage: {
-            getItem: vi.fn(async key => data.get(key)),
-            setItem: vi.fn(async (key, value) => data.set(key, value)),
-            removeItem: vi.fn(async key => data.delete(key))
-        },
-        _setItemAndInvalidate: vi.fn(async (key, value) => data.set(key, value)),
-        _invalidateCache: vi.fn(),
-        getBlacklist: vi.fn(async () => data.get("blacklist") || []),
-        batchSaveBlacklistCarList: vi.fn(async records => ({ records: records.length })),
-        updateBlacklistItem: vi.fn(async update => update),
-        removeBlacklistActor: vi.fn(async starId => ({ removedActor: starId === "actor-1", removedCarRecords: 2 })),
-        getCar: vi.fn(async carNum => (data.get("car_list") || []).find(item => item.carNum === carNum))
-    }, eventBus = { emit: vi.fn(async () => {}) }, StateService = loadStateService(diagnosticConsole, uiDiagnostics);
-    return { service: new StateService(storage, eventBus, mutationCoordinator), storage, eventBus, data };
+    const data = new Map(Object.entries(structuredClone(initial)));
+    const forage = {
+        getItem: vi.fn(async key => structuredClone(data.get(key))),
+        setItem: vi.fn(async (key, value) => data.set(key, structuredClone(value))),
+        removeItem: vi.fn(async key => data.delete(key)),
+    };
+    const storage = storageFromForage(forage), eventBus = { emit: vi.fn(async () => {}) };
+    const coordinator = mutationCoordinator ?? new StorageMutationCoordinator({ lockManager: null });
+    const service = new StateService(storage, eventBus, coordinator, {
+        now: () => "2026-08-22 12:00:00", currentUrl: () => "https://javdb.example/v/1", origin: () => "https://javdb.example",
+        logger: uiDiagnostics.clog ?? diagnosticConsole, notifications: uiDiagnostics.show,
+    });
+    return { service, forage, eventBus, data };
 }
 
 describe("StateService durable transactions", () => {
@@ -56,47 +39,52 @@ describe("StateService durable transactions", () => {
     it("does not rewrite unrelated new-work domains for a movie absent from those domains", async () => {
         const f = createHarness({ car_list: [], favorite_actresses: [{ starId: "actor-1", newVideoList: [{ carNum: "OTHER-1" }] }], new_video_decisions: { "OTHER-1": { action: "dismissed" } }, activity_log: { entries: [] } });
         await f.service.patch("ABC-123", { favorite: true });
-        const writes = f.storage._setItemAndInvalidate.mock.calls.map(([key]) => key);
+        const writes = f.forage.setItem.mock.calls.map(([key]) => key);
         expect(writes).toContain("car_list");
         expect(writes).not.toContain("favorite_actresses");
         expect(writes).not.toContain("new_video_decisions");
         expect(f.data.get("favorite_actresses")).toEqual([{ starId: "actor-1", newVideoList: [{ carNum: "OTHER-1" }] }]);
     });
 
-    it("exposes established actress and movie-map reads through its domain boundary", async () => {
-        const { service, storage } = createHarness();
-        storage.getFavoriteActressList = vi.fn(async () => [{ starId: "actor-1" }]);
-        storage.getCarMap = vi.fn(async () => new Map([["ABC-123", { carNum: "ABC-123" }]]));
-
+    it("reads persisted actress records and indexes movies", async () => {
+        const { service, forage } = createHarness({ favorite_actresses: [{ starId: "actor-1" }], car_list: [{ carNum: "ABC-123" }] });
         await expect(service.getFavoriteActressList()).resolves.toEqual([{ starId: "actor-1" }]);
         await expect(service.getCarMap()).resolves.toEqual(new Map([["ABC-123", { carNum: "ABC-123" }]]));
-        expect(storage.getFavoriteActressList).toHaveBeenCalledOnce();
-        expect(storage.getCarMap).toHaveBeenCalledOnce();
+        expect(forage.getItem.mock.calls).toEqual([["favorite_actresses"], ["car_list"]]);
     });
-    it("routes new-video actress-record updates through StorageManager's mutation boundary", async () => {
-        const { service, storage } = createHarness();
-        storage.updateFavoriteActress = vi.fn(async (update) => ({ saved: update.starId }));
 
-        await expect(service.updateFavoriteActress({ starId: "actor-1", newVideoList: [] })).resolves.toEqual({ saved: "actor-1" });
-        expect(storage.updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", newVideoList: [] });
+    it("updates an actress queue inside the shared mutation coordinator", async () => {
+        const coordinator = new StorageMutationCoordinator({ lockManager: null });
+        const lock = vi.spyOn(coordinator, "runExclusive");
+        const { service, data } = createHarness({ favorite_actresses: [{ starId: "actor-1", newVideoList: ["ABC-123"] }] }, coordinator);
+        await expect(service.updateFavoriteActress({ starId: "actor-1", newVideoList: [] })).resolves.toBe(true);
+        expect(data.get("favorite_actresses")[0].newVideoList).toEqual([]);
+        expect(lock).toHaveBeenCalledOnce();
     });
-    it("exposes the established blacklist read through the StateService boundary", async () => {
-        const { service, storage } = createHarness({ blacklist: [{ starId: "actor-1" }] });
+
+    it("reads the persisted blacklist records", async () => {
+        const { service, forage } = createHarness({ blacklist: [{ starId: "actor-1" }] });
         await expect(service.getBlacklist()).resolves.toEqual([{ starId: "actor-1" }]);
-        expect(storage.getBlacklist).toHaveBeenCalledOnce();
+        expect(forage.getItem).toHaveBeenCalledExactlyOnceWith("blacklist");
     });
-    it("routes blacklist actor deletion through the coordinated storage operation", async () => {
-        const { service, storage } = createHarness();
+
+    it("removes the actor and their blocked records without altering other actors", async () => {
+        const kept = { starId: "actor-2", carNum: "ABC-3" };
+        const { service, data } = createHarness({ blacklist: [{ starId: "actor-1" }, { starId: "actor-2" }],
+            blacklist_car_list: [{ starId: "actor-1", carNum: "ABC-1" }, { starId: "actor-1", carNum: "ABC-2" }, kept] });
         await expect(service.removeBlacklistActor("actor-1")).resolves.toEqual({ removedActor: true, removedCarRecords: 2 });
-        expect(storage.removeBlacklistActor).toHaveBeenCalledWith("actor-1");
+        expect(data.get("blacklist")).toEqual([{ starId: "actor-2" }]);
+        expect(data.get("blacklist_car_list")).toEqual([kept]);
     });
-    it("routes blacklist page commits through the StateService boundary", async () => {
-        const { service, storage } = createHarness(), records = [{ carNum: "A-1" }], update = { starId: "actor-1", checkTime: "2026-09-27" };
-        await expect(service.batchSaveBlacklistCarList(records)).resolves.toEqual({ records: 1 });
-        await expect(service.updateBlacklistItem(update)).resolves.toEqual(update);
-        expect(storage.batchSaveBlacklistCarList).toHaveBeenCalledWith(records);
-        expect(storage.updateBlacklistItem).toHaveBeenCalledWith(update);
+
+    it("saves canonical blacklist records and updates the actor's scan evidence", async () => {
+        const { service, data } = createHarness({ blacklist: [{ starId: "actor-1" }] });
+        await expect(service.batchSaveBlacklistCarList([{ carNum: "abc_1", url: "/v/1", actionType: "filter", starId: "actor-1" }])).resolves.toEqual({ changed: ["ABC-1"] });
+        await service.updateBlacklistItem({ starId: "actor-1", checkTime: "2026-09-27" });
+        expect(data.get("blacklist_car_list")).toMatchObject([{ carNum: "ABC-1", status: "filter", starId: "actor-1" }]);
+        expect(data.get("blacklist")).toEqual([{ starId: "actor-1", checkTime: "2026-09-27" }]);
     });
+
     it("keeps a persisted offline success when broadcasting the history update fails", async () => {
         const {service,eventBus,data}=createHarness();
         eventBus.emit.mockRejectedValueOnce(new Error("channel closed"));
@@ -114,32 +102,32 @@ describe("StateService durable transactions", () => {
     });
     it("keeps a committed state patch successful when the shared mutation lock is injected", async () => {
         const coordinator = { runExclusive: vi.fn(async (operation) => operation()) };
-        const { service, storage, data, eventBus } = createHarness({ car_list: [] }, coordinator);
+        const { service, forage, data, eventBus } = createHarness({ car_list: [] }, coordinator);
         eventBus.emit.mockRejectedValue(new Error("channel closed"));
         await expect(service.patch("ABC-1", { favorite: true })).resolves.toMatchObject({ changed: [ "ABC-1" ] });
         expect(coordinator.runExclusive).toHaveBeenCalledOnce();
         expect(data.get("car_list")[0].stateFlags.favorite).toBe(true);
-        const journal = storage.forage.setItem.mock.calls.find(([ key ]) => key === "mutation_journal")?.[1];
+        const journal = forage.setItem.mock.calls.find(([ key ]) => key === "mutation_journal")?.[1];
         expect(journal).toMatchObject({ schema: 2, state: "prepared", touchedDomains: [ "carList", "activity" ] });
         expect(Object.keys(journal.before)).toEqual([ "carList", "activity" ]);
     });
     it.each(["mutation_journal", "car_list", "favorite_actresses", "new_video_decisions", "activity_log", "journal-clear"])("recovers an undo failure at %s without losing retry eligibility", async stage => {
-        const { service, storage, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }], new_video_decisions: { "ABC-1": { action: "snoozed" } } });
+        const { service, forage, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }], new_video_decisions: { "ABC-1": { action: "snoozed" } } });
         const result = await service.patch("ABC-1", { favorite: true }), before = structuredClone(Object.fromEntries(data));
         let failed = false;
         const write = async (key, value) => { if (!failed && key === stage) { failed = true; throw new Error("injected undo failure"); } data.set(key, value); };
-        storage.forage.setItem.mockImplementation(write); storage._setItemAndInvalidate.mockImplementation(write);
-        storage.forage.removeItem.mockImplementation(async key => { if (!failed && stage === "journal-clear") { failed = true; throw new Error("injected undo failure"); } data.delete(key); });
+        forage.setItem.mockImplementation(write);
+        forage.removeItem.mockImplementation(async key => { if (!failed && stage === "journal-clear") { failed = true; throw new Error("injected undo failure"); } data.delete(key); });
         await expect(service.undoTransaction(result.transactionId)).rejects.toThrow("injected undo failure");
         await service.recoverPendingTransaction();
         expect(Object.fromEntries(data)).toEqual(before);
         expect((await service.undoTransaction(result.transactionId)).reverted).toEqual(["ABC-1"]);
     });
     it("restores undo eligibility when the activity write fails", async () => {
-        const { service, data, storage } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }] });
+        const { service, data, forage } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }] });
         const result = await service.patch("ABC-1", { favorite: true });
         let failed = false;
-        storage._setItemAndInvalidate.mockImplementation(async (key, value) => {
+        forage.setItem.mockImplementation(async (key, value) => {
             if (!failed && key === "activity_log") { failed = true; throw new Error("activity write failed"); }
             data.set(key, value);
         });
@@ -175,11 +163,10 @@ describe("StateService durable transactions", () => {
             new_video_decisions: { "ABC-1": { action: "ignored" } },
             activity_log: { entries: [] },
         };
-        const { service, data, storage } = createHarness(before);
-        let writes = 0;
-        storage._setItemAndInvalidate = vi.fn(async (key, value) => {
-            writes += 1;
-            if (writes === 2) throw new Error("actress write failed");
+        const { service, data, forage } = createHarness(before);
+        let failed = false;
+        forage.setItem.mockImplementation(async (key, value) => {
+            if (!failed && key === "favorite_actresses") { failed = true; throw new Error("actress write failed"); }
             data.set(key, value);
         });
         await expect(service.patch("ABC-1", { favorite: true })).rejects.toThrow("actress write failed");
@@ -253,7 +240,7 @@ describe("StateService durable transactions", () => {
     it("retains the active journal when conflict evidence cannot be archived", async () => {
         const before = { carList: [], actresses: [], decisions: {}, activity: { entries: [] } }, after = { carList: [{ carNum: "ABC-1" }], actresses: [], decisions: {}, activity: { entries: [] } };
         const conflict = createHarness({ car_list: [{ carNum: "OTHER" }], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] }, mutation_journal: { id: "tx", before, after } });
-        conflict.storage.forage.setItem.mockImplementation(async (key, value) => {
+        conflict.forage.setItem.mockImplementation(async (key, value) => {
             if (key === "mutation_journal_conflicts") throw new Error("archive unavailable");
             conflict.data.set(key, value);
         });
@@ -281,7 +268,7 @@ describe("StateService durable transactions", () => {
         const after = { carList: [{ carNum: "ABC-1" }], actresses: [], decisions: {}, activity: { entries: [] } };
         const diagnostics = { clog: { warn: vi.fn(), error: vi.fn(() => { throw new Error("logger failed"); }), log: vi.fn() } };
         const conflict = createHarness({ car_list: [{ carNum: "OTHER" }], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] }, mutation_journal: { id: "tx", before, after } }, null, console, diagnostics);
-        conflict.storage.forage.setItem.mockImplementation(async (key, value) => {
+        conflict.forage.setItem.mockImplementation(async (key, value) => {
             if (key === "mutation_journal_conflicts") throw new Error("archive unavailable");
             conflict.data.set(key, value);
         });
@@ -313,11 +300,11 @@ describe("StateService durable transactions", () => {
     });
 
     it("journals only domains actually changed by a conflicted undo", async () => {
-        const { service, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: { downloaded: false }, status: "" }], favorite_actresses: [], new_video_decisions: {} });
+        const { service, data, forage } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: { downloaded: false }, status: "" }], favorite_actresses: [], new_video_decisions: {} });
         const transaction = await service.patch("ABC-1", { downloaded: true });
         data.get("car_list")[0].stateFlags.downloaded = false;
         const journals = [];
-        service.storage.forage.setItem = vi.fn(async (key, value) => {
+        forage.setItem.mockImplementation(async (key, value) => {
             if (key === "mutation_journal") journals.push(value);
             data.set(key, value);
         });

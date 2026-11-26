@@ -1,159 +1,54 @@
 // @ts-check
-
-import { jsonCloneSteps } from "./cooperative-work.js";
+import { formatUiDateTime } from "./ui-date-time.js";
 import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
+import { assertMovieStateEligible } from "./movie-identity.js";
 import { STATE_FLAG_NAMES, createEmptyStateFlags, normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
 import { createStateDomainRegistry } from "./state-domains.js";
-import { assertMovieStateEligible } from "./movie-identity.js";
+import { cloneStateValue, stableStateValue, getStatePath, setStatePath, uniqueStateKeys, assertStateMutationEligible, createNewVideoEffectReader, canRestoreNewVideoEffect, restoreNewVideoEffect, pruneActivityLog } from "./state-activity-model.js";
 import { assertSupportedDataVersion } from "./migration.js";
-
-/** @typedef {Record<string, any>} StateRecord */
+import { StorageMutationCoordinator } from "./storage-mutation-coordinator.js";
+import { FavoriteActressRepository } from "./favorite-actress-repository.js";
+import { BlacklistRepository } from "./blacklist-repository.js";
+import { createIndexedMap } from "./storage-index.js";
+import { _prepareActivity, _writeActivity, _commit, _workPatch, _commitWrites, _commitAtomic, _commitUndoAtomic, _recoverJournal, _recoverWithoutLock } from "./state-transaction-journal.js";
+/** @typedef {import("./state-activity-model.js").StateRecord} StateRecord */
 /** @typedef {keyof import("./state-model.js").StateFlags} StateFlag */
-
-const ACTIVITY_SOFT_LIMIT = 1e3, ACTIVITY_HARD_LIMIT = 1e4, ACTIVITY_RETENTION_MS = 30 * 864e5;
-
-/** @param {any} value @returns {any} */
-function cloneStateValue(value) {
-    return null == value ? value : JSON.parse(JSON.stringify(value));
-}
-
-/** @param {any} value @returns {string | undefined} */
-function stableStateValue(value) {
-    if (null === value || "object" != typeof value) return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(stableStateValue).join(",")}]`;
-    return `{${Object.keys(value).sort().map((key => `${JSON.stringify(key)}:${stableStateValue(value[key])}`)).join(",")}}`;
-}
-
-/** @param {any} value @returns {Promise<string>} */
-async function hashState(value) {
-    const subtle = globalThis.crypto?.subtle;
-    if (!subtle) throw new Error("当前环境不支持状态冲突归档哈希");
-    const bytes = new TextEncoder().encode(stableStateValue(value));
-    const digest = await subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(digest), (byte => byte.toString(16).padStart(2, "0"))).join("");
-}
-
-/** @param {StateRecord} value @param {string} path @returns {any} */
-function getStatePath(value, path) {
-    return path.split(".").reduce(((current, key) => current?.[key]), value);
-}
-
-/** @param {StateRecord} value @param {string} path @param {any} next */
-function setStatePath(value, path, next) {
-    const keys = path.split("."), last = keys.pop(), target = keys.reduce(((current, key) => current[key] ||= {}), value);
-    if (!last) return;
-    void 0 === next ? delete target[last] : target[last] = cloneStateValue(next);
-}
-
-/** @param {Array<string | null>} values @returns {string[]} */
-function uniqueStateKeys(values) {
-    return [ ...new Set(values.filter((/** @returns {value is string} */ value => "string" === typeof value && !!value))) ];
-}
-
-/** @param {string[]} keys @param {StateRecord} options */
-function assertStateMutationEligible(keys, options) {
-    if (!keys.length) assertMovieStateEligible(null);
-    keys.forEach(assertMovieStateEligible);
-    if (options.record) assertMovieStateEligible({ carNum: keys[0], ...options.record });
-    if (Array.isArray(options.records)) options.records.forEach(assertMovieStateEligible);
-}
-
-/** @param {unknown} value */
-function effectActressIdentity(value) { return typeof value === "string" && value.trim() || typeof value === "number" && Number.isFinite(value) ? String(value) : null; }
-/** Build once per locked snapshot; clone only the effects of the requested movies.
- * @param {StateRecord[]} actresses @param {StateRecord} decisions @param {Iterable<string>} targets */
-function createNewVideoEffectReader(actresses, decisions, targets) {
-    const requested = new Set(targets);
-    /** @type {Map<string | null, number>} */ const counts = new Map();
-    for (const actress of actresses) { const id = effectActressIdentity(actress.starId); counts.set(id, (counts.get(id) || 0) + 1); }
-    /** @type {Map<string, StateRecord[]>} */ const occurrences = new Map();
-    actresses.forEach((actress, actressIndex) => (actress.newVideoList || []).forEach((/** @type {any} */ item, /** @type {number} */ itemIndex) => {
-        const key = normalizeCarNum(typeof item === "string" ? item : item.carNum);
-        if (!key || !requested.has(key)) return;
-        const id = effectActressIdentity(actress.starId), entries = occurrences.get(key) || [];
-        entries.push({ starId: id !== null && counts.get(id) === 1 ? actress.starId : null, actressIndex, itemIndex, item });
-        occurrences.set(key, entries);
-    }));
-    return (/** @type {unknown} */ carNum) => {
-        const key = /** @type {string} */ (normalizeCarNum(carNum));
-        return { actressItems: (occurrences.get(key) || []).map(entry => ({ ...entry, item: cloneStateValue(entry.item) })), decision: cloneStateValue(decisions[key] || null) };
-    };
-}
-
-/** @param {StateRecord[]} actresses @param {StateRecord} entry */
-function findEffectActress(actresses, entry) {
-    const id = effectActressIdentity(entry.starId);
-    if (id === null) return null;
-    const matches = actresses.filter((actress) => effectActressIdentity(actress.starId) === id);
-    return matches.length === 1 ? matches[0] : null;
-}
-
-/** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {unknown} carNum @param {StateRecord} effect @param {StateRecord | null} [expectedDecision] */
-function canRestoreNewVideoEffect(actresses, decisions, carNum, effect, expectedDecision = null) {
-    const key = /** @type {string} */ (normalizeCarNum(carNum));
-    if (stableStateValue(decisions[key] || null) !== stableStateValue(expectedDecision)) return !1;
-    return (/** @type {StateRecord[]} */ (effect.actressItems)).every((entry => {
-        const actress = findEffectActress(actresses, entry);
-        return actress != null && !(actress.newVideoList || []).some((/** @type {any} */ item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key);
-    }));
-}
-
-/** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {unknown} carNum @param {StateRecord} effect */
-function restoreNewVideoEffect(actresses, decisions, carNum, effect) {
-    (/** @type {StateRecord[]} */ (effect.actressItems)).forEach((entry => {
-        const actress = findEffectActress(actresses, entry);
-        if (!actress) return;
-        const list = [ ...(actress.newVideoList || []) ], index = Math.min(entry.itemIndex, list.length);
-        list.splice(index, 0, cloneStateValue(entry.item)), actress.newVideoList = list;
-    }));
-    const key = /** @type {string} */ (normalizeCarNum(carNum));
-    effect.decision ? decisions[key] = cloneStateValue(effect.decision) : delete decisions[key];
-}
-
-/** @param {StateRecord | null | undefined} log @param {number} [now] @returns {StateRecord} */
-function pruneActivityLog(log, now = Date.now()) {
-    const result = { entries: Array.isArray(log?.entries) ? log.entries : [], trackingStartedAt: log?.trackingStartedAt || new Date(now).toISOString(), coverageStart: log?.coverageStart || null, truncatedAt: log?.truncatedAt || null };
-    const cutoff = now - ACTIVITY_RETENTION_MS;
-    /** @type {StateRecord[]} */
-    const recent = [];
-    /** @type {StateRecord[]} */
-    const older = [];
-    result.entries.forEach((entry => (Date.parse(entry.createdAt) >= cutoff || "pending" === entry.commitState ? recent : older).push(entry)));
-    older.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en"))), recent.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en")));
-    const olderAllowance = Math.max(0, ACTIVITY_SOFT_LIMIT - recent.length);
-    result.entries = [ ...older.slice(-olderAllowance), ...recent ].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en")));
-    if (result.entries.length > ACTIVITY_HARD_LIMIT) {
-        const pending = result.entries.filter((entry => "pending" === entry.commitState)), committed = result.entries.filter((entry => "pending" !== entry.commitState));
-        const committedAllowance = Math.max(0, ACTIVITY_HARD_LIMIT - pending.length);
-        result.entries = [ ...(committedAllowance ? committed.slice(-committedAllowance) : []), ...pending ].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id), "en")));
-        result.truncatedAt = new Date(now).toISOString(), result.coverageStart = result.entries[0]?.createdAt || result.truncatedAt;
-    }
-    return result;
-}
-
+/** @template {(...args: any[]) => unknown} F @typedef {Parameters<F> extends [any, ...infer Args] ? Args : never} JournalArgs */
 export class StateService {
-    /** @param {StateRecord} storage @param {StateRecord} eventBus @param {{runExclusive: (operation: () => any) => Promise<any>} | null} [mutationCoordinator] @param {{now?: () => string, currentUrl?: () => string}} [runtime] */
-    constructor(storage, eventBus, mutationCoordinator = null, runtime = {}) {
+    /** @param {import("../services/storage-service.js").StorageService} storage
+     * @param {StateRecord} eventBus
+     * @param {Pick<StorageMutationCoordinator, "runExclusive">} [mutationCoordinator]
+     * @param {{now?: () => string, currentUrl?: () => string, origin?: () => string, actorClock?: () => string,
+     * sync?: any, logger?: any, notifications?: any, incrementalCarStore?: any}} [runtime] */
+    constructor(storage, eventBus, mutationCoordinator = new StorageMutationCoordinator(), runtime = {}) {
         /** @type {any} */ this.computation = null;
-        this.now = runtime.now ?? (() => utils.getNowStr());
+        this.now = runtime.now ?? (() => formatUiDateTime(new Date()));
         this.currentUrl = runtime.currentUrl ?? (() => window.location.href);
-        this.storage = storage, this.eventBus = eventBus, this.mutationCoordinator = mutationCoordinator, this.domains = createStateDomainRegistry(storage), this._queue = Promise.resolve(), this._recovering = !1;
+        this.storage = storage;
+        this.eventBus = eventBus;
+        this.mutationCoordinator = mutationCoordinator;
+        this.domains = createStateDomainRegistry(storage);
+        this.sync = runtime.sync;
+        this.logger = runtime.logger;
+        this.notifications = runtime.notifications;
+        this.incrementalCarStore = runtime.incrementalCarStore;
+        this.actresses = new FavoriteActressRepository(storage, this.logger, runtime.actorClock ?? this.now);
+        this.blacklist = new BlacklistRepository(storage, {
+            now: this.now, origin: runtime.origin ?? (() => globalThis.location?.origin ?? window.location.origin),
+            logger: this.logger, notifications: this.notifications,
+        });
         /** @type {Array<{type: string, payload: StateRecord}> | null} */ this._notificationBatch = null;
         /** @type {StateRecord | null} */ this._listSnapshot = null;
     }
     /** @param {() => any} callback */
     _withLock(callback) {
         const execute = async () => {
-            if (this.storage.getDataVersion) await assertSupportedDataVersion(this.storage);
-            this.storage._invalidateCache?.();
+            await assertSupportedDataVersion(this.storage);
             /** @type {Array<{type: string, payload: StateRecord}>} */ const notices = []; this._notificationBatch = notices;
             try { return { value: await callback(), notices }; }
             finally { this._notificationBatch = null; }
         };
-        const lockManager = globalThis.navigator?.locks;
-        const run = this.mutationCoordinator ? this.mutationCoordinator.runExclusive(execute)
-            : lockManager ? lockManager.request("jhs_state_mutation", execute) : this._queue.then(execute, execute);
-        if (!this.mutationCoordinator && !lockManager) this._queue = run.catch(() => {});
+        const run = this.mutationCoordinator.runExclusive(execute);
         return run.then(({ value, notices }) => { this._publishCommitted(notices); return value; });
     }
     /** Collect inside the transaction; publish only after its lock has been released. */
@@ -165,7 +60,7 @@ export class StateService {
     /** @param {Array<{type: string, payload: StateRecord}>} notices */
     _publishCommitted(notices) {
         const report = (/** @type {unknown} */ error) => {
-            try { globalThis.console?.warn?.("[JHS] 持久化已完成，但状态通知失败", error); }
+            try { (this.logger ?? console).warn?.("[JHS] 持久化已完成，但状态通知失败", error); }
             catch { /* Durable state must not be reclassified as failed by diagnostics. */ }
         };
         try {
@@ -174,9 +69,9 @@ export class StateService {
         } catch (error) { report(error); }
     }
     async getActivityLog() {
-        await this.storage.syncState?.refreshUndo?.();
+        await this.sync?.refreshUndo?.();
         const log = pruneActivityLog(await this.domains.activity.read());
-        if (this.storage.syncState) log.entries = log.entries.map((/** @type {StateRecord} */ entry) => ({ ...entry, undoAvailable: this.storage.syncState.canUndo(entry.id) }));
+        if (this.sync) log.entries = log.entries.map((/** @type {StateRecord} */ entry) => ({ ...entry, undoAvailable: this.sync.canUndo(entry.id) }));
         return log;
     }
     /** List filtering needs committed recent changes, not history UI undo permissions or retention sorting. */
@@ -211,23 +106,22 @@ export class StateService {
     }
     /** @param {string | string[]} carNums */
     clearPersonalRating(carNums) { return this.setPersonalRating(carNums, null); }
-    /** A process-local optimization, invalidated by every observed storage generation change.
+    /** A committed change can refresh its visible cards without rereading the library.
      * @param {string} transactionId @param {string[]} [carNums] */
     getCommittedListSnapshot(transactionId, carNums = []) {
         const snapshot = this._listSnapshot;
-        try { return snapshot?.transactionId === transactionId && typeof this.storage._getCacheGeneration === "function"
-            && snapshot.generation === this.storage._getCacheGeneration(this.storage.car_list_key) && carNums.every(key => snapshot.records.has(key)) ? snapshot : null; }
-        catch { return null; }
+        return snapshot?.transactionId === transactionId && snapshot.revision === this.storage.carListRevision
+            && carNums.every(key => snapshot.records.has(key)) ? snapshot : null;
     }
-    /** Retain only changed records, never another full detached library/history graph.
+    clearCommittedListSnapshot() { this._listSnapshot = null; }
+    /** Retain only changed records for immediate card refresh.
      * @param {string} transactionId @param {StateRecord[]} changes @param {StateRecord} activity */
     _rememberListSnapshot(transactionId, changes, activity) {
         if (changes.some(change => !["patch", "create"].includes(change.operation))) { this._listSnapshot = null; return; }
         const createdAt = Date.parse(activity.createdAt), recent = createdAt >= Date.now() - 7 * 864e5;
-        try { this._listSnapshot = { transactionId, records: new Map(changes.map(change => [change.carNum, change.after])),
+        this._listSnapshot = { transactionId, records: new Map(changes.map(change => [change.carNum, change.after])),
             recentCarNums: new Set(changes.filter(change => recent && change.fields.some((/** @type {string} */ field) => field.startsWith("stateFlags."))).map(change => change.carNum)), recentExpiresAt: createdAt + 7 * 864e5 + 1,
-            generation: this.storage._getCacheGeneration?.(this.storage.car_list_key) }; }
-        catch { this._listSnapshot = null; }
+            revision: this.storage.carListRevision };
     }
     async getOfflineHistory() {
         return await this.domains.offlineHistory.read();
@@ -238,7 +132,7 @@ export class StateService {
             const { stateEligibility, ...savedRecord } = record;
             const history = await this.getOfflineHistory(), item = { id: savedRecord.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: savedRecord.createdAt || new Date().toISOString(), ...savedRecord, carNum: normalizeCarNum(savedRecord.carNum) };
             history.push(item);
-            if (history.length > 1e3) { const removed = history.splice(0, history.length - 1e3); this.storage.syncState?.notePruned("offline_history", removed); }
+            if (history.length > 1e3) { const removed = history.splice(0, history.length - 1e3); this.sync?.notePruned("offline_history", removed); }
             await this.domains.offlineHistory.write(history);
             await this._notifyCommitted("offline-history-changed", { ids: [ item.id ] });
             return item;
@@ -272,75 +166,86 @@ export class StateService {
     async getNewVideoDecisions() {
         return await this.domains.decisions.read();
     }
-    /** Preserve the 6.5.1 actress record API while routing feature callers through the state service. */
-    async getFavoriteActressList() {
-        return this.storage.getFavoriteActressList();
+    getFavoriteActressList() { return this.actresses.read(); }
+    /** Prune queued works after adding a title prefix under the current mutation lock. @param {string} prefix */
+    async pruneNewVideoByTitleKeywordWithoutLock(prefix) {
+        const actresses = await this.domains.actresses.read();
+        let changed = false;
+        const next = actresses.map((/** @type {StateRecord} */ actress) => {
+            if (!Array.isArray(actress.newVideoList)) return actress;
+            const newVideoList = actress.newVideoList.filter((/** @type {any} */ item) => {
+                const code = typeof item === "string" ? item : item?.carNum;
+                return typeof code !== "string" || !code.startsWith(prefix);
+            });
+            if (newVideoList.length === actress.newVideoList.length) return actress;
+            changed = true;
+            return { ...actress, newVideoList };
+        });
+        if (changed) await this.domains.actresses.write(next);
     }
-    /** Read the established movie map through the StateService domain boundary. @param {string[]} [carNums] */
+    getCarList() { return this.domains.carList.read(); }
+
+    /** @param {string[]} [carNums] */
     async getCarMap(carNums) {
-        if (carNums && this.storage.incrementalCarStore) {
-            const records = await this.storage.incrementalCarStore.getWorksByCarNums(uniqueStateKeys(carNums.map(normalizeCarNum)));
-            return new Map(records.map((/** @type {StateRecord} */ record) => [normalizeCarNum(record.carNum), record]));
-        }
-        return this.storage.getCarMap();
+        const records = carNums && this.incrementalCarStore
+            ? await this.incrementalCarStore.getWorksByCarNums(uniqueStateKeys(carNums.map(normalizeCarNum)))
+            : await this.getCarList();
+        return createIndexedMap(records, "carNum");
     }
-    /** Read the established blacklist records for native Feature surfaces. */
-    async getBlacklist() {
-        return this.storage.getBlacklist();
+
+    getBlacklist() { return this.blacklist.readActors(); }
+    async getBlacklistMap() { return createIndexedMap(await this.getBlacklist(), "starId"); }
+    getBlacklistCarList() { return this.blacklist.readMovies(); }
+
+    /** @param {StateRecord} item */
+    addBlacklistItem(item) { return this._withLock(() => this.blacklist.addActor(item)); }
+    /** @param {StateRecord} update */
+    updateBlacklistItem(update) { return this._withLock(() => this.blacklist.updateActor(update)); }
+
+    /** @param {StateRecord[]} records */
+    batchSaveBlacklistCarList(records) {
+        return this._withLock(async () => {
+            const { changed, removedNewVideos } = await this.blacklist.addMovies(records);
+            if (removedNewVideos.length) await this._notifyCommitted("new-video-changed", { reason: "blacklist-car-removed", carNums: removedNewVideos });
+            if (changed.length) await this._notifyCommitted("blacklist-rules-changed", {});
+            return { changed };
+        });
     }
-    /** Read the established blocked-car records for Discovery workflows. */
-    async getBlacklistCarList() {
-        return this.storage.getBlacklistCarList();
+
+    /** @param {string} starId */
+    removeBlacklistActor(starId) {
+        return this._withLock(async () => {
+            const result = await this.blacklist.removeActor(starId);
+            if (result.removedCarRecords) await this._notifyCommitted("blacklist-rules-changed", {});
+            return result;
+        });
     }
-    /** Add or refresh one blacklist actor using the established StorageManager schema and shared mutation lock. @param {StateRecord} item */
-    async addBlacklistItem(item) {
-        return this.storage.addBlacklistItem(item);
-    }
-    /** Persist parsed blacklist-car records through the shared storage coordinator. @param {StateRecord[]} records */
-    async batchSaveBlacklistCarList(records) {
-        return this.storage.batchSaveBlacklistCarList(records);
-    }
-    /** Update the existing blacklist actor metadata without changing its stored schema. @param {StateRecord} update */
-    async updateBlacklistItem(update) {
-        return this.storage.updateBlacklistItem(update);
-    }
-    /** Keep blacklist record deletion and related blocked-card cleanup under one shared mutation lock. @param {string} starId */
-    async removeBlacklistActor(starId) {
-        return this.storage.removeBlacklistActor(starId);
-    }
-    /** Keep the established actress merge rules; StorageManager enters the shared mutation coordinator. @param {StateRecord[]} actresses */
-    async addFavoriteActressList(actresses) {
-        return this.storage.addFavoriteActressList(actresses);
-    }
-    /** Keep the existing strict starId deletion semantics under the shared mutation coordinator. @param {unknown} starId */
+
+    /** @param {StateRecord[]} actresses */
+    addFavoriteActressList(actresses) { return this._withLock(() => this.actresses.add(actresses)); }
     /** @param {StateRecord} update @param {{scan?: boolean, keepUnseen?: boolean, signal?: AbortSignal}} [options] */
-    async updateFavoriteActress(update, options) {
-        return options?.scan ? this.storage.updateFavoriteActress(update, options) : this.storage.updateFavoriteActress(update);
+    updateFavoriteActress(update, options) { return this._withLock(() => this.actresses.update(update, options)); }
+    /** @param {Array<{starId: string, actressProfile: StateRecord}>} updates */
+    batchUpdateFavoriteActressProfiles(updates) {
+        if (!Array.isArray(updates) || !updates.length) return Promise.resolve(0);
+        return this._withLock(() => this.actresses.updateProfiles(updates));
     }
-    /** Atomically update materially changed actress profiles under the actress lock. @param {Array<{starId: string, actressProfile: StateRecord}>} updates */
-    async batchUpdateFavoriteActressProfiles(updates) {
-        return this.storage.batchUpdateFavoriteActressProfiles(updates);
-    }
-    /** Atomically migrate or merge a favorite actress record onto a new starId under the actress lock. @param {StateRecord} payload */
-    async rebindFavoriteActress(payload) {
-        return this.storage.rebindFavoriteActress(payload);
-    }
+    /** @param {StateRecord} payload */
+    rebindFavoriteActress(payload) { return this._withLock(() => this.actresses.rebind(payload)); }
     /** @param {unknown} starId */
-    async removeFavoriteActress(starId) {
-        return this.storage.removeFavoriteActress(starId);
-    }
-    /** Read one normalized state record for post-mutation verification. */
-    /** @param {unknown} carNum */
+    removeFavoriteActress(starId) { return this._withLock(() => this.actresses.remove(starId)); }
+
+    /** Read one normalized state record for post-mutation verification. @param {unknown} carNum */
     async getState(carNum) {
         const key = normalizeCarNum(carNum);
         if (!key) return null;
-        const record = await this.storage.getCar(key);
+        const record = this.incrementalCarStore ? await this.incrementalCarStore.getWorkByCarNum(key) : (await this.getCarMap()).get(key);
         return record ? cloneStateValue(record) : null;
     }
     /** @param {string[] | null} [requestedDomains] @param {string[]} [carNums] @returns {Promise<StateRecord>} */
     async _readDomains(requestedDomains = null, carNums) {
         const requested = new Set(requestedDomains ?? [ "carList", "actresses", "decisions", "activity" ]), read = (/** @type {string} */ domain) => requested.has(domain) ? this.domains[domain].read() : Promise.resolve(domain === "activity" ? { entries: [] } : domain === "decisions" ? {} : []);
-        const incremental = requested.has("carList") && carNums ? this.storage.incrementalCarStore : null;
+        const incremental = requested.has("carList") && carNums ? this.incrementalCarStore : null;
         const [carList, actresses, decisions, activity, ratings] = await Promise.all([ incremental ? incremental.getWorksByCarNums(carNums) : read("carList"), read("actresses"), read("decisions"), read("activity"), requested.has("ratings") ? this.domains.ratings.read() : Promise.resolve({}) ]);
         return { carList, actresses, decisions, ratings, partialCarList: !!incremental, activity: { ...activity, entries: Array.isArray(activity.entries) ? activity.entries : [] } };
     }
@@ -359,153 +264,23 @@ export class StateService {
         }));
         return { actresses: actressesChanged ? nextActresses : actresses, decisions: decisionsChanged ? nextDecisions : decisions };
     }
-    /** @param {StateRecord} log */
-    _prepareActivity(log) {
-        const pruned = pruneActivityLog(log), ids = new Set(pruned.entries.map((/** @type {any} */ entry) => entry.id));
-        this.storage.syncState?.notePruned("activity_log", log.entries.filter((/** @type {any} */ entry) => !ids.has(entry.id)));
-        return pruned;
-    }
-    /** @param {StateRecord} log @param {boolean} [prepared] */
-    async _writeActivity(log, prepared = false) { await this.domains.activity.write(prepared ? log : this._prepareActivity(log)); }
-    /** @param {StateRecord} domains @param {StateRecord} next @param {StateRecord} activity @param {string[]} [touchedDomains] */
-    async _commit(domains, next, activity, touchedDomains = ["carList", "activity"]) {
-        if (this.storage.syncState?.replicaId) activity.originReplicaId = this.storage.syncState.replicaId;
-        const clone = (/** @type {any} */ value) => this.computation ? this.computation.run("state.clone", jsonCloneSteps(value)) : Promise.resolve(cloneStateValue(value));
-        const pendingActivity = await clone(activity), pendingLog = this._prepareActivity({ ...domains.activity, entries: [ ...domains.activity.entries, pendingActivity ] });
-        const touched = [ ...new Set([ ...touchedDomains, "activity" ]) ];
-        const workPatch = domains.partialCarList && touched.includes("carList")
-            ? this._workPatch(activity.changes.map((/** @type {StateRecord} */ change) => change.carNum), next.carList) : undefined;
-        if (await this._commitAtomic(next, activity, pendingLog, touched, workPatch)) return;
-        if (workPatch) throw new Error("作品行更新需要原子存储事务");
-        const select = async (/** @type {StateRecord} */ source, includePendingActivity = false) => {
-            /** @type {StateRecord} */ const result = {};
-            for (const key of touched) result[key] = await clone(key === "activity" && includePendingActivity ? pendingLog : source[key]);
-            return result;
-        };
-        const journal = { schema: 2, dataVersion: CURRENT_DATA_VERSION, id: activity.id, state: "prepared", createdAt: activity.createdAt, touchedDomains: touched, before: await select(domains), after: await select(next, true) };
-        await this.storage.forage.setItem("mutation_journal", journal);
-        try {
-            for (const key of touched) {
-                if (key === "activity") await this._writeActivity(pendingLog, true);
-                else await this.domains[key].write(next[key]);
-            }
-            activity.commitState = "committed", pendingLog.entries = pendingLog.entries.map((/** @param {StateRecord} entry */ entry => entry.id === activity.id ? activity : entry)), await this._writeActivity(pendingLog, true);
-        } catch (error) {
-            await this._recoverJournal(journal);
-            throw error;
-        }
-        // All domain writes precede the durable committed marker. Cleanup must
-        // not turn that successful mutation into a failed non-idempotent toggle.
-        let handedOff = true;
-        try { await this.storage.syncState?.recordCommittedActivity?.(activity, pendingLog.entries); }
-        catch (error) { handedOff = false; try { clog.warn("[状态] 已提交，同步待处理证明待恢复", error); } catch { /* A logger failure leaves the journal available for recovery. */ } }
-        try { if (handedOff) await this.storage.forage.removeItem("mutation_journal"); }
-        catch (error) {
-            try { clog.warn("[状态] 已提交，事务日志待清理", error); } catch { /* Keep the durable result. */ }
-        }
-        try { this.storage._invalidateCache(); } catch { /* Cache cleanup is post-commit. */ }
-        if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
-    }
-    /** The same indexed rows back mutations and undo, including deletion and recreation.
-     * @param {Iterable<string>} keys @param {StateRecord[]} records */
-    _workPatch(keys, records) {
-        const byNumber = new Map(records.map(record => [normalizeCarNum(record.carNum), record]));
-        /** @type {StateRecord[]} */ const upserts = [];
-        /** @type {string[]} */ const deletes = [];
-        for (const key of new Set(keys)) {
-            const record = byNumber.get(key);
-            if (record) upserts.push(record);
-            else deletes.push(key);
-        }
-        return { upserts, deletes };
-    }
-    /** @param {StateRecord} puts @param {{upserts: StateRecord[], deletes: string[]}} [workPatch] */
-    _commitWrites(puts, workPatch) {
-        if (!workPatch) return this.storage.atomicStorage.commitLockedBatch({ puts, deletes: [] });
-        delete puts[this.domains.carList.storageKey];
-        return this.storage.incrementalCarStore.patchWorks(workPatch.upserts, workPatch.deletes, { puts });
-    }
-    /** Use detached domain snapshots prepared under the shared mutation lock.
-     * @param {StateRecord} next @param {StateRecord} activity @param {StateRecord} log @param {string[]} touched
-     * @param {{upserts: StateRecord[], deletes: string[]}} [workPatch] */
-    async _commitAtomic(next, activity, log, touched, workPatch) {
-        if (!this.mutationCoordinator || !(workPatch || this.storage.atomicStorage?.commitLockedBatch)) return false;
-        const committed = { ...activity, commitState: "committed" };
-        const committedLog = { ...log, entries: log.entries.map((/** @type {StateRecord} */ entry) => entry.id === activity.id ? committed : entry) };
-        const puts = Object.fromEntries(touched.map(key => [this.domains[key].storageKey, key === "activity" ? committedLog : next[key]]));
-        const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), committed, committedLog.entries);
-        if (!await this._commitWrites({ ...puts, ...sync?.puts }, workPatch)) return false;
-        activity.commitState = "committed";
-        // Post-commit bookkeeping cannot turn a durable toggle into a retry.
-        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed toggle intact. */ } }
-        try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
-        if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
-        return true;
-    }
-    /** Persist an undo mutation atomically with sync receipts under the shared lock.
-     * @param {StateRecord} nextState @param {StateRecord} log @param {string[]} touchedDomains @param {string} undoJournalId
-     * @param {{upserts: StateRecord[], deletes: string[]}} [workPatch] */
-    async _commitUndoAtomic(nextState, log, touchedDomains, undoJournalId, workPatch) {
-        if (!this.mutationCoordinator || !(workPatch || this.storage.atomicStorage?.commitLockedBatch)) return false;
-        const puts = Object.fromEntries(touchedDomains.map(key => [this.domains[key].storageKey, key === "activity" ? log : nextState[key]]));
-        const undoNotice = { id: undoJournalId, changes: [], commitState: "committed" };
-        const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), undoNotice, log.entries);
-        if (!await this._commitWrites({ ...puts, ...sync?.puts }, workPatch)) return false;
-        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed undo intact. */ } }
-        try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
-        this._listSnapshot = null;
-        return true;
-    }
-    /** @param {StateRecord} journal */
-    async _recoverJournal(journal) {
-        if (journal.dataVersion !== undefined && (!Number.isInteger(journal.dataVersion) || journal.dataVersion < 0 || journal.dataVersion > CURRENT_DATA_VERSION)) throw new Error("状态恢复日志来自不支持的数据版本，请更新 JHS");
-        if (journal.schema != null && ![1, 2].includes(journal.schema) || !journal.before || !journal.after) throw new Error("状态恢复日志格式无效，已保留原数据");
-        const touched = Array.isArray(journal.touchedDomains) ? journal.touchedDomains : ["carList", "actresses", "decisions", "activity"];
-        if (touched.some((/** @type {string} */ key) => !Object.hasOwn(this.domains, key))) throw new Error("状态恢复日志包含未知数据域");
-        if (journal.dataVersion >= 4 && touched.some((/** @type {string} */ key) => !Object.hasOwn(journal.before, key) || !Object.hasOwn(journal.after, key))) throw new Error("状态恢复日志缺少数据域快照，已保留原数据");
-        const log = await this.getActivityLog(), activity = log.entries.find((/** @param {StateRecord} entry */ entry => entry.id === journal.id));
-        if ("committed" === activity?.commitState) {
-            if (journal.schema !== 2) {
-                for (const key of touched.filter((/** @type {string} */ key) => key !== "activity")) await this.domains[key].write(journal.after[key]);
-            }
-            await this.storage.syncState?.recordCommittedActivity?.(activity, log.entries);
-        } else {
-            const current = await this._readDomains(touched), keys = touched.filter((key) => key !== "activity");
-            const conflict = keys.some((key => {
-                const value = stableStateValue(current[key]);
-                return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
-            }));
-            if (conflict) {
-                // 冲突时保留业务数据，但先把证据归档，避免静默丢失诊断线索。
-                const archive = {
-                    journal: cloneStateValue(journal),
-                    detectedAt: new Date().toISOString(),
-                    currentStateHash: await hashState(Object.fromEntries(keys.map((key) => [key, current[key]]))),
-                };
-                try {
-                    const archives = await this.storage.forage.getItem("mutation_journal_conflicts") || [];
-                    archives.push(archive), archives.length > 20 && archives.splice(0, archives.length - 20);
-                    await this.storage.forage.setItem("mutation_journal_conflicts", archives), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
-                } catch (archiveError) {
-                    try { clog.error("[状态] 冲突事务归档失败，保留原事务日志", archiveError); }
-                    catch { /* Preserve the archive failure and the active journal. */ }
-                    throw archiveError;
-                }
-                try { clog.warn("[状态] 检测到未完成状态事务且数据已变化，已归档证据并保留当前数据"); }
-                catch { /* Recovery is already durable. */ }
-                try { show.info("检测到未完成的状态事务，已保留当前数据并归档冲突证据"); }
-                catch { /* Recovery is already durable. */ }
-                return;
-            }
-            for (const key of touched.filter((/** @type {string} */ key) => key !== "activity")) await this.domains[key].write(journal.before[key]);
-            journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter((/** @param {StateRecord} entry */ entry => entry.id !== journal.id)), await this._writeActivity(log));
-        }
-        await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
-    }
-    async _recoverWithoutLock() {
-        const journal = await this.storage.forage.getItem("mutation_journal");
-        return journal ? (await this._recoverJournal(journal), !0) : !1;
-    }
+    /** @param {JournalArgs<typeof _prepareActivity>} args */
+    _prepareActivity(...args) { return _prepareActivity(this, ...args); }
+    /** @param {JournalArgs<typeof _writeActivity>} args */
+    _writeActivity(...args) { return _writeActivity(this, ...args); }
+    /** @param {JournalArgs<typeof _commit>} args */
+    _commit(...args) { return _commit(this, ...args); }
+    /** @param {JournalArgs<typeof _workPatch>} args */
+    _workPatch(...args) { return _workPatch(this, ...args); }
+    /** @param {JournalArgs<typeof _commitWrites>} args */
+    _commitWrites(...args) { return _commitWrites(this, ...args); }
+    /** @param {JournalArgs<typeof _commitAtomic>} args */
+    _commitAtomic(...args) { return _commitAtomic(this, ...args); }
+    /** @param {JournalArgs<typeof _commitUndoAtomic>} args */
+    _commitUndoAtomic(...args) { return _commitUndoAtomic(this, ...args); }
+    /** @param {JournalArgs<typeof _recoverJournal>} args */
+    _recoverJournal(...args) { return _recoverJournal(this, ...args); }
+    _recoverWithoutLock() { return _recoverWithoutLock(this); }
     async recoverPendingTransaction() {
         return this._withLock((() => this._recoverWithoutLock()));
     }
@@ -515,10 +290,11 @@ export class StateService {
     }
     /** @param {string | string[]} carNums @param {Partial<import("./state-model.js").StateFlags>} patch @param {StateRecord} [options] */
     async patch(carNums, patch, options = {}) {
-        const keys = Array.isArray(carNums) ? carNums : [ carNums ];
-        const invalidFlag = Object.keys(patch).find((key => !(/** @type {readonly string[]} */ (STATE_FLAG_NAMES)).includes(key) || "boolean" != typeof patch[/** @type {StateFlag} */ (key)]));
+        const keys = Array.isArray(carNums) ? [...carNums] : [carNums], flags = { ...patch };
+        const invalidFlag = Object.keys(flags).find((key => !(/** @type {readonly string[]} */ (STATE_FLAG_NAMES)).includes(key) || "boolean" != typeof flags[/** @type {StateFlag} */ (key)]));
         if (invalidFlag) throw new TypeError(`无效状态字段: ${invalidFlag}`);
-        return this._withLock((() => this._patchWithoutLock(keys, patch, options)));
+        const request = { ...options, record: cloneStateValue(options.record), records: cloneStateValue(options.records) };
+        return this._withLock(() => this._patchWithoutLock(keys, flags, request));
     }
     /** @param {string[]} carNums @param {string} collection @param {boolean} selected @param {StateRecord} options */
     async setCollectionMembership(carNums, collection, selected, options) {
@@ -660,9 +436,9 @@ export class StateService {
     async undoTransaction(transactionId) {
         return this._withLock(async () => {
             await this._recoverWithoutLock();
-            await this.storage.syncState?.refreshUndo?.();
-            if (this.storage.syncState && !this.storage.syncState.canUndo(transactionId)) throw new Error("来自其他设备或恢复文件的操作只供查看，不能在本机撤销");
-            const incremental = this.storage.incrementalCarStore;
+            await this.sync?.refreshUndo?.();
+            if (this.sync && !this.sync.canUndo(transactionId)) throw new Error("来自其他设备或恢复文件的操作只供查看，不能在本机撤销");
+            const incremental = this.incrementalCarStore;
             const before = await this._readDomains([...(incremental ? [] : ["carList"]), "actresses", "decisions", "activity", "ratings"]);
             const domains = cloneStateValue(before), transaction = domains.activity.entries.find((/** @param {StateRecord} entry */ entry => entry.id === transactionId && "committed" === entry.commitState));
             if (!transaction) throw new Error("操作记录不存在或尚未提交");
@@ -749,12 +525,12 @@ export class StateService {
             if (!committedAtomically) {
                 if (workPatch) throw new Error("作品行撤销需要原子存储事务");
                 try {
-                    await this.storage.forage.setItem("mutation_journal", journal);
+                    await this.storage.set("mutation_journal", journal);
                     for (const key of touchedDomains) {
                         if (key === "activity") await this._writeActivity(log, true);
                         else await this.domains[key].write(journal.after[key]);
                     }
-                    await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+                    await this.storage.remove("mutation_journal");
                     this._listSnapshot = null;
                 } catch (error) {
                     await this._recoverWithoutLock();
@@ -770,10 +546,4 @@ export class StateService {
             return { reverted, conflicts };
         });
     }
-}
-
-/** 在 Composition Root 中挂载仍由旧 StorageManager 调用的兼容引用。 */
-/** @param {StateService} stateService @param {StateRecord} storageManager */
-export function attachStateServiceCompatibility(stateService, storageManager) {
-    storageManager.stateService = stateService;
 }

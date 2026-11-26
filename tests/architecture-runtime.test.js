@@ -16,11 +16,11 @@ import { openSettingsUi, registerSettingsUiOwner } from "../src/core/settings-ui
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { createIntegrationRequestFacade } from "../src/app/integration-registry.js";
 
-describe("v6.5 architecture runtime contracts", () => {
+describe("architecture runtime contracts", () => {
     it("activates sync through its public API and stops if initialization fails", async () => {
         const feature = featureManifests.find(item => item.id === "webdav-sync");
         const scope = new LifecycleScope("sync-contract"), service = { initialize: vi.fn(async () => {}), start: vi.fn() };
-        const dependencies = { [SERVICE.webdavSync]: service, [PORT.host]: { document } };
+        const dependencies = { [SERVICE.settingsTools]: { webdavSync: service }, [PORT.host]: { document } };
         await feature.activate(dependencies, { scope });
         expect(service.start).toHaveBeenCalledWith(scope, document);
         service.initialize.mockRejectedValueOnce(new Error("unavailable storage"));
@@ -39,8 +39,7 @@ describe("v6.5 architecture runtime contracts", () => {
                 .register(PORT.host, { site: "javdb", document, location: window.location })
                 .register(SERVICE.movie, { resolve: vi.fn() })
                 .register(SERVICE.domUi, { jquery: (value) => jquery(value), loading: vi.fn() })
-                .register(SERVICE.notifications, { error: vi.fn() })
-                .register(SERVICE.diagnostics, diagnostics),
+                .register(SERVICE.notifications, { error: vi.fn() }),
             commands, diagnostics, site: "javdb", route: "detail",
         });
         runtime.register(fc2Catalog);
@@ -63,8 +62,8 @@ describe("v6.5 architecture runtime contracts", () => {
         const movie = { id: "movie" };
         container.register(SERVICE.movie, movie);
         expect(container.resolveDeclared([SERVICE.movie])[SERVICE.movie]).toBe(movie);
-        container.register(SERVICE.review, {});
-        expect(container.resolveDeclared([SERVICE.movie])[SERVICE.review]).toBeUndefined();
+        container.register(SERVICE.detailContent, {});
+        expect(container.resolveDeclared([SERVICE.movie])[SERVICE.detailContent]).toBeUndefined();
         expect(() => container.register(SERVICE.movie, {})).toThrow(/Duplicate/);
         expect(() => container.resolveDeclared([SERVICE.state])).toThrow(/Missing/);
         expect(() => container.resolveDeclared([SERVICE.movie, SERVICE.movie])).toThrow(/Duplicate declared dependency/);
@@ -86,7 +85,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(featureManifests.find(item => item.id === "privacy").providesCommands).toContain("privacy.toggle");
         expect(featureManifests.find(item => item.id === "enhancement-settings").providesCommands).toContain("media.configure");
         expect(featureManifests.find(item => item.id === "subtitle-workspace")).toMatchObject({ startup: "on-command", providesCommands: ["subtitle.open"], contributes: [] });
-        expect(featureManifests.find(item => item.id === "webdav-sync")).toMatchObject({ kind: "system", startup: "eager", disableable: false, requires: [SERVICE.webdavSync, PORT.host] });
+        expect(featureManifests.find(item => item.id === "webdav-sync")).toMatchObject({ kind: "system", startup: "eager", disableable: false, requires: [SERVICE.settingsTools, PORT.host] });
         expect(featureManifests.find((item) => item.id === "fc2-workspace")).toMatchObject({ startup: "eager", providesCommands: ["detail.fc2.workspace"], contributes: ["detail.fc2-owned"] });
         expect(featureManifests.find((item) => item.id === "settings-effects")).toMatchObject({ kind: "system", startup: "eager", contributes: [], requires: expect.arrayContaining([SERVICE.clog, SERVICE.settings, SERVICE.busImageLayout]) });
         expect(featureManifests.find((item) => item.id === "settings-entry")).toMatchObject({ kind: "system", startup: "eager", contributes: ["settings.core"], requires: expect.arrayContaining([PORT.style]) });
@@ -120,9 +119,9 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(featureManifests.find((item) => item.id === "detail").contributes).not.toContain("detail.external-magnets");
         expect(featureManifests.find((item) => item.id === "list").contributes).toContain("detail.fc2-navigation");
         expect(featureManifests.find((item) => item.id === "detail").contributes).not.toContain("detail.fc2-navigation");
-        expect(featureManifests.find((item) => item.id === "identity").requires).toEqual(expect.arrayContaining([PORT.host, PORT.style, SERVICE.movie, SERVICE.navigation, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, REGISTRY.integration, SERVICE.settings]));
+        expect(featureManifests.find((item) => item.id === "identity").requires).toEqual(expect.arrayContaining([PORT.host, PORT.style, SERVICE.movie, SERVICE.domUi, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, REGISTRY.integration, SERVICE.settings]));
         expect(featureManifests.find((item) => item.id === "detail").requires).toContain(SERVICE.domUi);
-        expect(featureManifests.find((item) => item.id === "library").requires).toEqual(expect.arrayContaining([SERVICE.legacyStorage, SERVICE.domUi, SERVICE.events, SERVICE.profile]));
+        expect(featureManifests.find((item) => item.id === "library").requires).toEqual(expect.arrayContaining([SERVICE.keywordRules, SERVICE.domUi, SERVICE.events, SERVICE.profile]));
         expect(featureManifests.find((item) => item.id === "identity").contributes).toContain("identity.javdb-navigation");
         expect(featureManifests.find((item) => item.id === "identity").contributes).toContain("identity.javbus-navigation");
         expect(featureManifests.find((item) => item.id === "identity").contributes).toContain("detail.javbus-native");
@@ -212,7 +211,7 @@ describe("v6.5 architecture runtime contracts", () => {
 
     it("keeps diagnostics export available while deferring its command Feature until first use", async () => {
         const commands = new CommandRegistry(), diagnostics = new DiagnosticsService();
-        const container = new DependencyContainer().register(SERVICE.diagnostics, diagnostics);
+        const container = new DependencyContainer();
         const runtime = new FeatureRuntime({ container, commands, diagnostics, site: "javdb", route: "detail" });
         const manifest = featureManifests.find((item) => item.id === "diagnostics");
         runtime.register(manifest);
@@ -223,17 +222,18 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(diagnostics.exportSnapshot().activeFeatures).toContain("diagnostics");
     });
 
-    it("resolves compatibility beans directly through the injected lookup boundary", async () => {
+    it("shares mounted Feature capabilities and releases them on disposal", async () => {
         const runtime = new FeatureRuntime({ container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), site: "javdb", route: "list" });
         const adapter = {};
-        let resolvedAdapter = null;
-        runtime.runtimeLookup.register("LegacyAdapter", adapter);
-        runtime.register(defineFeature({ id: "migration", kind: "feature", disableable: true, sites: ["javdb"], routes: [], startup: "eager", requires: [], contributes: ["migration.adapter"], providesCommands: [], activate: (_deps, api) => {
-            resolvedAdapter = api.resolveCompatibilityBean("LegacyAdapter");
-            return {};
-        } }));
-        expect((await runtime.activate("migration")).enabledContributions).toEqual(["migration.adapter"]);
-        expect(resolvedAdapter).toBe(adapter);
+        const start = (id, activate) => runtime.register(defineFeature({ id, kind: "feature", disableable: true, sites: [], routes: [], startup: "on-demand", requires: [], contributes: [id], providesCommands: [], activate }));
+        start("owner", (_deps, api) => { api.provideCapability("owner", adapter); return {}; });
+        const mounted = await runtime.activate("owner");
+        let readAdapter;
+        start("consumer", (_deps, api) => { readAdapter = () => api.getCapability("owner"); return {}; });
+        await runtime.activate("consumer");
+        expect(readAdapter()).toBe(adapter);
+        mounted.dispose();
+        expect(readAdapter()).toBeUndefined();
     });
 
     it("registers a legacy-named compatibility bean for a native feature only within its lifetime", async () => {

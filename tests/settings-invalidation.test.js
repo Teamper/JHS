@@ -1,70 +1,21 @@
-import { SYNC_DEFAULTS, syncRetention } from "../src/core/webdav-sync-model.js";
-import { AUTO_BACKUP_DEFAULTS, AUTO_BACKUP_KEYS, autoBackupPolicy, backupEnabled, validBackupNumber } from "../src/core/auto-backup-policy.js";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
+import { saveSettingForm } from "../src/features/settings/setting-forms.js";
+import { bindClick } from "../src/features/settings/settings-form-actions.js";
+import { SettingsService } from "../src/services/settings-service.js";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
-const storage = readTestFile(join(process.cwd(), "src/core/storage.js"), "utf8");
-const settingsService = readTestFile(join(process.cwd(), "src/services/settings-service.js"), "utf8");
-const settingForms = readTestFile(join(process.cwd(), "src/features/settings/setting-forms.js"), "utf8");
-const settingPlugin = readTestFile(join(process.cwd(), "src/features/settings/settings-controller.js"), "utf8");
-const settingTemplates = readTestFile(join(process.cwd(), "src/ui/settings/setting-templates.js"), "utf8");
-const settingsEffects = readTestFile(join(process.cwd(), "src/features/system/settings-effects-controller.js"), "utf8");
-const systemCatalog = readTestFile(join(process.cwd(), "src/features/system/catalog.js"), "utf8");
-
-function methodBody(source, start, end) {
-    return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
-}
-
 describe("settings invalidation ownership", () => {
-    it("emits exactly once from saveSetting and never duplicates it in saveSettingItem", () => {
-        const saveSetting = methodBody(storage, "async saveSetting(e)", "async saveSettingItem");
-        const saveSettingItem = methodBody(storage, "async saveSettingItem", "async getSetting");
-        expect(saveSetting.match(/clean_cacheSettingObj/g)).toHaveLength(1);
-        expect(saveSettingItem).not.toContain("clean_cacheSettingObj");
-    });
-
-    it("routes the settings form through the SettingsService ownership patch", () => {
-        const saveForm = methodBody(settingForms, "async function saveSettingForm", "async function collectManualSettingPatch");
-        expect(saveForm).toContain("dependencies.settings.update");
-        expect(saveForm).not.toContain("dependencies.settings.replace");
-        expect(saveForm).not.toContain("dependencies.settings.patch");
-        expect(saveForm).not.toContain("{ ...dependencies.settings.snapshot() }");
-        expect(saveForm).not.toContain("changedValues");
-        expect(saveForm).not.toContain("storageManager.saveSetting(");
-        expect(saveForm).not.toContain("invalidateConfig");
-        expect(settingForms).toContain("MANUAL_FORM_SETTING_KEYS");
-        expect(settingForms).toContain("dependencies.newVideo?.resetBtnTip?.()");
-        expect(settingForms).toContain("dependencies.blacklist?.resetBtnTip?.()");
-        expect(settingForms).toContain("dependencies.blacklist?.reloadTable?.()");
-    });
-
-    it("writes settings through a lock-scoped read-modify-write in SettingsService", () => {
-        const update = settingsService.slice(settingsService.indexOf("async update("));
-        expect(update).toContain("jhs_setting_lock");
-        expect(update).toContain("this.storage.get(storageKey)");
-        expect(update).toContain("this.storage.set(storageKey, next)");
-        expect(update).toContain("this.writeChain");
-        expect(update).not.toContain("this.snapshotValue, ...values");
-    });
-
-    it("keeps legacy StorageManager as the fallback but routes through the single entry when available", () => {
-        const saveSetting = methodBody(storage, "async saveSetting(e)", "async saveSettingItem");
-        const saveSettingItem = methodBody(storage, "async saveSettingItem", "async getSetting");
-        expect(saveSetting).toContain("globalThis.settingsService?.replace");
-        expect(saveSettingItem).toContain("globalThis.settingsService?.set");
-        expect(saveSettingItem).not.toContain("clean_cacheSettingObj");
-    });
-
-    it("opens and closes Settings without requiring CoverButtonPlugin", () => {
-        const openDialog = methodBody(settingPlugin, "async openSettingDialog", "renderTaskStatuses()");
-        expect(openDialog).not.toContain('getDependency("CoverButtonPlugin")');
-        expect(settingPlugin).toContain("this.readCoverButtons?.()?.enableSvgBtn()");
-        expect(settingTemplates).not.toContain("coverButtonPlugin");
+    it("emits one completion event for a stored settings patch", async () => {
+        let stored = { themeMode: "light", reviewCount: 20 };
+        const set = vi.fn(async (_key, value) => { stored = value; }), afterPersist = vi.fn();
+        const settings = new SettingsService({ get: async () => stored, set }, { afterPersist });
+        const onChange = vi.fn();
+        settings.addEventListener("settings.changed", onChange);
+        await settings.patch({ themeMode: "dark", reviewCount: 30 });
+        expect(set).toHaveBeenCalledOnce();
+        expect(afterPersist).toHaveBeenCalledExactlyOnceWith({ themeMode: "dark", reviewCount: 30 }, ["themeMode", "reviewCount"]);
+        expect(onChange).toHaveBeenCalledOnce();
     });
 
     it("uses the EventBus binding initialized after form import and isolates UI refresh failures", async () => {
@@ -72,54 +23,36 @@ describe("settings invalidation ownership", () => {
         const newVideo = { resetBtnTip: () => { throw new Error("new-video unavailable"); } };
         const blacklist = { resetBtnTip: vi.fn(), reloadTable: vi.fn() };
         const logger = { error: vi.fn() };
-        const context = vm.createContext({ window: dom.window, document: dom.window.document, $, C: "no", _: "yes", r: true, AUTO_BACKUP_DEFAULTS, AUTO_BACKUP_KEYS, autoBackupPolicy, backupEnabled, validBackupNumber, SYNC_DEFAULTS, syncRetention });
-        vm.runInContext(`${settingForms}; globalThis.saveSettingFormForTest = saveSettingForm;`, context);
-        context.jhsEventBus = bus;
         const settings = { snapshot: () => ({ trustedLocalOrigins: [] }), update: async updater => updater({ trustedLocalOrigins: [] }) };
         const dependencies = {
             settings, newVideo, blacklist, movie: {}, jquery: $, document: dom.window.document,
-            legacyStorage: { getReviewFilterKeywordList: async () => [], getTitleFilterKeyword: async () => [] },
+            keywordRules: { getReviewKeywords: async () => [], getTitleKeywords: async () => [] },
             utilities: {}, events: bus, logger,
         };
-        await expect(context.saveSettingFormForTest(dependencies, $(dom.window.document.querySelector("div")))).resolves.toEqual({ ok: true });
+        await expect(saveSettingForm(dependencies, $(dom.window.document.querySelector("div")))).resolves.toEqual({ ok: true });
         expect(blacklist.resetBtnTip).toHaveBeenCalledOnce();
         expect(blacklist.reloadTable).toHaveBeenCalledOnce();
         expect(logger.error).toHaveBeenCalledTimes(2);
+        dom.window.close();
     });
 
-    it("owns initial logger and live layout effects in the eager Settings system Feature", () => {
-        const surface = methodBody(settingPlugin, "activateFeatureSurface(scope, profile)", "/** 桌面设置入口 Surface");
-        expect(settingsEffects).toContain('snapshot.enableClog ?? "yes"');
-        expect(settingsEffects).toContain('this.scope.listen(this.settings, "settings.changed"');
-        expect(systemCatalog).toContain('id: "settings-effects"');
-        expect(systemCatalog).toContain('startup: "eager"');
-        expect(surface).not.toContain("settings.changed");
-        expect(surface).not.toContain("applyLayoutFromSettings");
-        expect(surface).not.toContain('storageManager.getSetting("enableClog"');
-    });
-});
-
-describe("migration write ownership", () => {
-    const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
-
-    it("bootstrap local-origin migration is deferred to an atomic settings update", () => {
-        expect(bootstrap).toContain("async function resolveLocalOrigins");
-        expect(bootstrap).toContain("await persistBootstrapMigration(");
-        expect(bootstrap).not.toContain("saveSetting({ ...settings");
-    });
-
-    it("async_merge_other uses updateSetting instead of whole-object saveSetting(e)", () => {
-        const merge = methodBody(storage, "async async_merge_other", "merge_blacklist");
-        expect(merge).toContain("this.updateSetting");
-        expect(merge).not.toContain("await this.saveSetting(e)");
-    });
-
-    it("invalidates favorite_actresses cache on cross-tab new-video-changed and clears local profile attempts in SettingPlugin", () => {
-        expect(bootstrap).toContain('jhsEventBus.on("new-video-changed"');
-        expect(bootstrap).toContain("storageManager.favorite_actresses_key");
-        const cleanBtn = methodBody(settingPlugin, 'root.find(".clean-btn")', 'root.find(".view-btn")');
-        expect(cleanBtn).toContain('"jhs_actress_info" === key');
-        expect(cleanBtn).toContain('storage.removeLocal("jhs_actress_profile_attempts_v1")');
-        expect(cleanBtn.slice(cleanBtn.indexOf("#clean-all"))).toContain('storage.removeLocal("jhs_actress_profile_attempts_v1")');
+    it.each([".clean-btn", "#clean-all"])("clears actress profile attempts from %s", async selector => {
+        const dom = new JSDOM('<main><button class="clean-btn" data-key="jhs_actress_info"></button><button id="clean-all"></button></main>');
+        const $ = jqueryFactory(dom.window);
+        const local = new Map([["jhs_actress_info", "{}"], ["jhs_actress_profile_attempts_v1", "{}"]]);
+        const services = {
+            storage: { removeLocal: key => local.delete(key) },
+            cache: { clearNamespace: vi.fn(), clearAll: vi.fn(), clearThirdPartyCache: vi.fn() },
+            translation: { clearCache: vi.fn() },
+        };
+        bindClick({
+            jquery: $, document: dom.window.document, _settingPanels: {},
+            getFormDependencies: () => ({}), getRuntimeService: name => services[name],
+            cacheItems: [{ key: "jhs_actress_info" }], notifications: { ok: vi.fn() },
+        }, $("main"));
+        $(selector).trigger("click");
+        await vi.waitFor(() => expect(local.has("jhs_actress_profile_attempts_v1")).toBe(false));
+        expect(local.has("jhs_actress_info")).toBe(false);
+        dom.window.close();
     });
 });

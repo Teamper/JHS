@@ -7,6 +7,69 @@ import { ownedPopoverRoots } from "./owned-popover.js";
 /** @type {WeakMap<Document, Set<{root: HTMLElement, previous: HTMLElement | null}>>} */
 const focusOwners = new WeakMap();
 
+/** @typedef {{layerIndex?: number | null, root?: Element | {jquery: string, 0?: Element} | null}} LayerOwner */
+
+/** @param {LayerOwner} [options] @param {Window} [view] */
+export function getOwningLayerIndex(options = {}, view = window) {
+    /** @param {Element | null | undefined} element */
+    const read = element => {
+        const match = /^layui-layer(\d+)$/.exec(element?.id ?? "");
+        return match ? Number(match[1]) : null;
+    };
+    if (Number.isInteger(options.layerIndex)) return options.layerIndex ?? null;
+    try {
+        const index = read(view.frameElement?.closest(".layui-layer"));
+        if (index !== null) return index;
+    } catch { /* An embedded document may not own the parent layer. */ }
+    const root = options.root && "jquery" in options.root ? options.root[0] : options.root;
+    return read(root?.closest(".layui-layer"));
+}
+
+const sizePresets = { sm: [480, 640], md: [720, 700], lg: [1040, 760], xl: [1320, 860], workspace: [1440, 960] };
+
+/** @param {string} [size] @param {Pick<Window, "innerWidth" | "innerHeight">} [view] @returns {[string, string]} */
+export function getDialogArea(size = "md", view = window) {
+    const [width, height] = sizePresets[/** @type {keyof typeof sizePresets} */ (size)] ?? sizePresets.md;
+    const margin = view.innerWidth <= 768 ? 16 : size === "workspace" ? 32 : 64;
+    return [
+        `${Math.max(320, Math.min(width, view.innerWidth - margin))}px`,
+        size === "form" ? "auto" : `${Math.max(320, Math.min(height, view.innerHeight - margin))}px`,
+    ];
+}
+
+/** The settings surface and confirmations choose their own initial focus. @param {HTMLElement} container @param {HTMLElement | null} [initialFocus] */
+export function trapDialogFocus(container, initialFocus = null) {
+    const doc = container.ownerDocument;
+    const previous = /** @type {HTMLElement | null} */ (doc.activeElement);
+    const selector = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const roots = () => [container, ...ownedPopoverRoots(container)];
+    const visible = () => roots().flatMap(root => [...root.querySelectorAll(selector)]).map(element => /** @type {HTMLElement} */ (element))
+        .filter(element => !element.hidden && !element.closest("[inert]") && element.getAttribute("aria-hidden") !== "true" && element.offsetParent !== null);
+    /** @param {KeyboardEvent} event */
+    const keydown = event => {
+        if (event.key !== "Tab" || !roots().some(root => root.contains(/** @type {Node | null} */ (event.target)))) return;
+        const items = visible();
+        if (!items.length) { event.preventDefault(); return; }
+        const first = items[0], last = items[items.length - 1];
+        if (event.shiftKey && doc.activeElement === first || !event.shiftKey && doc.activeElement === last) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+        }
+    };
+    let disposed = false;
+    doc.addEventListener("keydown", keydown);
+    queueMicrotask(() => {
+        if (disposed) return;
+        const items = visible();
+        (initialFocus && items.includes(initialFocus) ? initialFocus : items[0])?.focus();
+    });
+    return () => {
+        disposed = true;
+        doc.removeEventListener("keydown", keydown);
+        if (previous?.isConnected) previous.focus();
+    };
+}
+
 /** Limit focus to the top owned dialog and its portal children. @param {HTMLElement} root @param {string | undefined} initialFocus */
 function bindDialogFocus(root, initialFocus) {
     const doc = root.ownerDocument, view = doc.defaultView;
@@ -154,8 +217,8 @@ export function prepareDialogOptions(options = {}, utils = {}) {
             scope.addCleanup(enhanceDialogButtons(root));
             if (Number(vendor.type) !== 2 && ui?.focus !== "caller") scope.addCleanup(bindDialogFocus(root, ui?.initialFocus));
             const resize = () => {
-                const viewportWidth = root.ownerDocument.documentElement.clientWidth || window.innerWidth;
-                const viewportHeight = root.ownerDocument.documentElement.clientHeight || window.innerHeight;
+                const viewportWidth = root.ownerDocument.documentElement.clientWidth || view?.innerWidth || 0;
+                const viewportHeight = root.ownerDocument.documentElement.clientHeight || view?.innerHeight || 0;
                 if (ui?.size && utils.getDialogArea) {
                     const [width, height] = utils.getDialogArea(ui.size);
                     Object.assign(root.style, { width, height });
@@ -173,7 +236,7 @@ export function prepareDialogOptions(options = {}, utils = {}) {
                 if (ui?.size || rect.right > viewportWidth - 8 || rect.left < 8) root.style.left = `${root.offsetLeft + Math.max(8, (viewportWidth - rect.width) / 2) - rect.left}px`;
                 if (ui?.size || rect.bottom > viewportHeight - 8 || rect.top < 8) root.style.top = `${root.offsetTop + Math.max(8, (viewportHeight - rect.height) / 2) - rect.top}px`;
             };
-            scope.listen(window, "resize", resize);
+            if (view) scope.listen(view, "resize", resize);
             if (ui?.size === "form" && view?.ResizeObserver) {
                 const observer = new view.ResizeObserver(resize);
                 observer.observe(root);

@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StateService } from "../src/core/state-service.js";
-import { StorageManager } from "../src/core/storage.js";
+import { PortableBackupService } from "../src/services/portable-backup-service.js";
 import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
 import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 import { getPortableDataKeys, normalizePortableData, runDataMigrations, validatePortableData } from "../src/core/migration.js";
 import { emptySyncModel, joinSyncModels, materializeSyncData, projectSyncData, validateSyncEnvelope, versionSyncDiff } from "../src/core/webdav-sync-model.js";
-import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
+import { memoryAtomicStorage, storageFromForage } from "./helpers/atomic-storage.js";
 import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
 import { SYNC_JOURNAL_KEY } from "../src/core/webdav-sync-store.js";
 
@@ -19,30 +19,22 @@ function fixture(initial = {}, { atomic = false } = {}) {
     vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn(), error: vi.fn() });
     const data = new Map(Object.entries({ data_version: 4, car_list: [], activity_log: { entries: [] }, personal_ratings: {}, ...initial }));
     const clone = value => value == null ? value : structuredClone(value);
-    const storage = Object.create(StorageManager.prototype);
-    storage.car_list_key = "car_list";
-    storage.favorite_actresses_key = "favorite_actresses";
-    storage.setting_key = "setting";
-    storage.forage = { getItem: vi.fn(async key => clone(data.get(key))), setItem: vi.fn(async (key, value) => { data.set(key, clone(value)); }), removeItem: vi.fn(async key => data.delete(key)), keys: async () => [...data.keys()] };
-    storage._setItemAndInvalidate = (key, value) => storage.forage.setItem(key, value);
-    storage._invalidateCache = vi.fn();
+    const forage = { getItem: vi.fn(async key => clone(data.get(key))), setItem: vi.fn(async (key, value) => { data.set(key, clone(value)); }), removeItem: vi.fn(async key => data.delete(key)), keys: async () => [...data.keys()] };
     const coordinator = new StorageMutationCoordinator({ lockManager: null });
-    storage.mutationCoordinator = coordinator;
-    if (atomic) {
-        const port = memoryAtomicStorage(data);
-        storage.atomicStorage = { ...port, commitLockedBatch: async batch => { await port.commitAtomicBatch({ expected: {}, deletes: [], ...batch }); return true; } };
-    }
+    const port = atomic ? memoryAtomicStorage(data) : {};
+    if (atomic) port.commitLockedBatch = async batch => { await port.commitAtomicBatch({ expected: {}, deletes: [], ...batch }); return true; };
+    const storage = storageFromForage(forage, port);
     const events = { emit: vi.fn(async () => {}) };
     const state = new StateService(storage, events, coordinator);
-    storage.stateService = state;
-    return { data, storage, state, events, coordinator };
+    const backup = new PortableBackupService({ storage, state, coordinator });
+    return { data, storage, forage, state, events, coordinator, backup };
 }
 
 describe("independent personal rating transactions", () => {
     it("preserves incomplete v4 journals before reading or rewriting any domain", async () => {
         const f = fixture({mutation_journal:{schema:2,dataVersion:4,id:"incomplete",touchedDomains:["ratings"],before:{},after:{ratings:{}}},personal_ratings:{"ABC-123":score(5)}});
         await expect(f.state.recoverPendingTransactionWithoutLock()).rejects.toThrow("缺少数据域快照");
-        expect(f.storage.forage.setItem).not.toHaveBeenCalled();
+        expect(f.forage.setItem).not.toHaveBeenCalled();
         expect(f.data.get("personal_ratings")["ABC-123"].rating).toBe(5);
         expect(f.data.has("mutation_journal")).toBe(true);
     });
@@ -53,7 +45,7 @@ describe("independent personal rating transactions", () => {
         expect(result.changed).toEqual(["ABC-123", "FC2-PPV-0012345"]);
         expect((await f.state.getPersonalRatings())["ABC-123"].rating).toBe(4);
         expect(f.data.get("car_list")).toEqual(before);
-        expect(f.storage.forage.setItem.mock.calls.some(([key]) => key === "car_list")).toBe(false);
+        expect(f.forage.setItem.mock.calls.some(([key]) => key === "car_list")).toBe(false);
         const cleared = await f.state.clearPersonalRating("ABC-123");
         expect(f.data.get("personal_ratings")["ABC-123"]).toBeUndefined();
         await f.state.undoTransaction(cleared.transactionId);
@@ -74,14 +66,14 @@ describe("independent personal rating transactions", () => {
     it.each([0, 6, 2.5, "4", NaN])("rejects invalid score %s before writing", async rating => {
         const f = fixture();
         await expect(f.state.setPersonalRating("ABC-123", rating)).rejects.toThrow();
-        expect(f.storage.forage.setItem).not.toHaveBeenCalled();
+        expect(f.forage.setItem).not.toHaveBeenCalled();
     });
 
     it("prewrites versioned intent and rolls back a failed partial rating transaction", async () => {
-        const f = fixture(), write = f.storage.forage.setItem.getMockImplementation();
+        const f = fixture(), write = f.forage.setItem.getMockImplementation();
         const journals = [];
         let failed = false;
-        f.storage.forage.setItem.mockImplementation(async (key, value) => {
+        f.forage.setItem.mockImplementation(async (key, value) => {
             if (key === "mutation_journal") journals.push(structuredClone(value));
             if (key === "personal_ratings" && !failed) { failed = true; throw new Error("disk full"); }
             return write(key, value);
@@ -97,11 +89,11 @@ describe("independent personal rating transactions", () => {
     it("rejects a future local database and future mutation journal without writes", async () => {
         const f = fixture({ data_version: 5 });
         await expect(f.state.setPersonalRating("ABC-123", 3)).rejects.toThrow("更新版本");
-        expect(f.storage.forage.setItem).not.toHaveBeenCalled();
+        expect(f.forage.setItem).not.toHaveBeenCalled();
         f.data.set("data_version", 4);
         f.data.set("mutation_journal", { schema: 2, dataVersion: 5 });
         await expect(f.state.recoverPendingTransaction()).rejects.toThrow("不支持");
-        expect(f.storage.forage.setItem).not.toHaveBeenCalled();
+        expect(f.forage.setItem).not.toHaveBeenCalled();
     });
 });
 
@@ -110,7 +102,7 @@ describe("rating migration, portable restore and synchronization", () => {
         const before = { carList: [], activity: { entries: [] } };
         const after = { carList: [{ carNum: "ABC-123" }], activity: { entries: [] } };
         const f = fixture({ data_version: 3, personal_ratings: undefined, car_list: after.carList, mutation_journal: { schema: 2, id: "interrupted", before, after, touchedDomains: ["carList", "activity"] } });
-        await f.coordinator.runExclusive(() => runDataMigrations(f.storage, f.coordinator, true));
+        await f.coordinator.runExclusive(() => runDataMigrations(f.storage, { recoverBeforeV4: () => f.state.recoverPendingTransactionWithoutLock() }));
         expect(f.data.get("data_version")).toBe(4);
         expect(f.data.get("car_list")).toEqual([]);
         expect(f.data.get("personal_ratings")).toEqual({});
@@ -120,30 +112,34 @@ describe("rating migration, portable restore and synchronization", () => {
         expect(snapshots[0].itemCount).toBe(0);
         expect(snapshots[0].time).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
         expect(snapshots[0].data).not.toHaveProperty("personal_ratings");
-        await f.coordinator.runExclusive(() => runDataMigrations(f.storage, f.coordinator, true));
+        await f.coordinator.runExclusive(() => runDataMigrations(f.storage));
         expect(f.data.get("snapshots")).toHaveLength(1);
     });
 
     it("keeps the v3 marker and ratings intact if the upgrade recovery point fails", async () => {
         const f = fixture({ data_version: 3, personal_ratings: { "ABC-123": score(4) } });
-        f.storage._saveSnapshots = vi.fn(async () => { throw new Error("snapshot failure"); });
-        await expect(runDataMigrations(f.storage)).rejects.toThrow("snapshot failure");
+        const write = f.forage.setItem.getMockImplementation();
+        f.forage.setItem.mockImplementation(async (key, value) => {
+            if (key === "snapshots") throw new Error("snapshot failure");
+            return write(key, value);
+        });
+        await expect(f.coordinator.runExclusive(() => runDataMigrations(f.storage))).rejects.toThrow("snapshot failure");
         expect(f.data.get("data_version")).toBe(3);
         expect(f.data.get("personal_ratings")).toEqual({ "ABC-123": score(4) });
     });
 
     it("reports the recovered film count in the pre-upgrade recovery point", async () => {
         const f = fixture({data_version:3,personal_ratings:undefined,car_list:[{carNum:"ABC-123"},{carNum:"ABC-124"}]});
-        await runDataMigrations(f.storage);
+        await f.coordinator.runExclusive(() => runDataMigrations(f.storage));
         expect(f.data.get("snapshots")[0].itemCount).toBe(2);
     });
 
     it("preserves ratings when restoring an older partial backup and exports v4 ratings", async () => {
         vi.stubGlobal("utils", { getNowStr: () => timestamp });
         const f = fixture({ personal_ratings: { "ABC-123": score(4) } }, { atomic: true });
-        await f.storage.importData({ data_version: 3, car_list: [] });
+        await f.backup.importData({ data_version: 3, car_list: [] });
         expect(f.data.get("personal_ratings")).toEqual({ "ABC-123": score(4) });
-        const exported = await f.storage.exportPortableData();
+        const exported = await f.backup.exportPortableData();
         expect(exported).toMatchObject({ data_version: 4, personal_ratings: { "ABC-123": score(4) } });
         expect(getPortableDataKeys(3)).not.toContain("personal_ratings");
         expect(getPortableDataKeys(4)).toContain("personal_ratings");

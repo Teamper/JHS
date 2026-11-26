@@ -15,7 +15,7 @@ export const JAVBUS_PREVIEW_STYLES = `
 
 /** Owns the JavBus DMM preview surface and its asynchronous media lifetime. */
 export class JavBusPreviewController {
-    /** @param {{document: Document, window: Window, hostAdapter: any, route: string, settings: any, events: any, storage: any, movie: any, dialog: any, ui: any, diagnostics: any, scope: LifecycleScope}} options */
+    /** @param {{document: Document, window: Window, hostAdapter: any, route: string, settings: any, events: any, storage: any, movie: any, dialog: any, ui: any, diagnostics: any, logger?: Pick<Console, "debug" | "warn" | "error">, scope: LifecycleScope}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -28,6 +28,7 @@ export class JavBusPreviewController {
         this.dialog = options.dialog;
         this.ui = options.ui;
         this.diagnostics = options.diagnostics;
+        this.logger = options.logger;
         this.scope = options.scope;
         this.started = false;
         this.previewIntentConsumed = false;
@@ -123,7 +124,7 @@ export class JavBusPreviewController {
             if (!video) {
                 const carNum = this.hostAdapter.readMovieRef?.()?.carNum;
                 if (!carNum) throw new Error("番号不可用");
-                const { sources, error } = await fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, session.scope, this.settings.snapshot());
+                const { sources, error } = await fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, session.scope, this.settings.snapshot(), this.logger);
                 if (generation !== this.generation || this.scope.disposed || !isPreviewEnabled(this.settings.snapshot())) return;
                 if (!sources || !Object.keys(sources).length) throw new Error(error?.code === "REGION_BLOCKED" ? "视频访问受限" : "未找到可用视频");
                 await this.createVideoPlayerAndControls(sources, modal.find(".bus-preview-modal-content"));

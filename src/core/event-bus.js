@@ -12,8 +12,7 @@ export class JhsEventBus {
     }
     /** @param {unknown} error */
     _reportHandlerError(error) {
-        if (this.errorReporter) { try { this.errorReporter(error); } catch { /* never let reporting break dispatch */ } }
-        else { try { /** @type {any} */ (globalThis).clog?.error?.("[JHS] event listener failed:", error); } catch { /* ignore */ } }
+        try { this.errorReporter?.(error); } catch { /* reporting must not interrupt dispatch */ }
     }
     /** @param {string} type @param {(payload: any, event: any) => unknown} handler */
     on(type, handler) {
@@ -81,7 +80,6 @@ export function initializeEventBus() {
     jhsEventBus = new JhsEventBus();
     const runtimeWindow = /** @type {any} */ (window);
     runtimeWindow.refresh = () => jhsEventBus?.emit("legacy-refresh");
-    runtimeWindow.cleanCache_filter_actor_actress_car_list = () => jhsEventBus?.emit("blacklist-rules-changed");
     runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed", { source: "legacy" });
     return jhsEventBus;
 }

@@ -1,3 +1,4 @@
+import { hasVisualBaseline } from "../harness/visual-baselines.js";
 import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import {test,expect} from "@playwright/test";
 import {readFile,mkdir,writeFile} from "node:fs/promises";
@@ -13,7 +14,7 @@ async function answerImportConfirmation(page,accept){
  await confirmation.locator(accept?'.layui-layer-btn1':'.layui-layer-btn0').click();
  await expect(confirmation).toHaveCount(0);
 }
-async function capture(page,info,name){const folder=resolve(process.env.JHS_DETAIL_CAPTURE_ROOT || '../../output/ui-detail-regression',before?'before':'after',info.project.name);await mkdir(folder,{recursive:true});await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:resolve(folder,name+'.png'),animations:'disabled'});if(!before&&process.env.JHS_VISUAL_REGRESSION==='1')await expect.soft(page).toHaveScreenshot('detail-fix-'+name+'.png',{maxDiffPixelRatio:.02});return folder;}
+async function capture(page,info,name){const folder=resolve(process.env.JHS_DETAIL_CAPTURE_ROOT || '../../output/ui-detail-regression',before?'before':'after',info.project.name);await mkdir(folder,{recursive:true});await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:resolve(folder,name+'.png'),animations:'disabled'});if(!before&&hasVisualBaseline(info))await expect.soft(page).toHaveScreenshot('detail-fix-'+name+'.png',{maxDiffPixelRatio:.02});return folder;}
 const options=theme=>({hostStyles:true,realFeedback:true,settingOverrides:{themeMode:theme,enableLoadScreenShot:'no',enableLoadPreviewVideo:'no',enableLoadReview:'no',enableLoadOtherSite:'no',enableLoadRelatedList:'no'},beforeUserscriptInjection:injectRealLayer});
 async function imageRoutes(context){await context.route('https://images.example.test/**',route=>{const cover=route.request().url().includes('cover'),long=route.request().url().includes('long');const portrait=route.request().url().includes('cover-0');const width=portrait?200:640,height=long?1600:portrait?300:420;return route.fulfill({contentType:'image/svg+xml',body:`<svg xmlns="http://www.w3.org/2000/svg" font-family="Arial, Microsoft YaHei UI, sans-serif" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#63768c"/><text x="12" y="45" fill="white" font-size="26">${cover?'推荐封面':long?'长缩略图':'宿主截图'}</text></svg>`});});}
 for(const theme of ['light','dark'])for(const path of ['direct','iframe'])test(`nested native gallery and recommendations ${path} ${theme}`,async({page,context},info)=>{

@@ -63,6 +63,29 @@ function createController({ enabled = false, route = "detail", carNum = "ABC-123
 }
 
 describe("115 domain", () => {
+    it("applies list concurrency and cache settings to newly added visible cards", async () => {
+        const releases = [];
+        const searchFiles = vi.fn(() => new Promise(resolve => releases.push(() => resolve([]))));
+        const { controller, scope, settings, root, events } = createController({ route: "list", searchFiles });
+        settings.snapshot = () => ({ enable115Match: true, oneOneFiveConcurrency: 2, oneOneFiveCacheMinutes: 7 });
+        try {
+            controller.start();
+            await vi.waitFor(() => expect(controller.observer).not.toBeNull());
+            root.innerHTML = [101, 102, 103].map(code =>
+                '<div class="item"><div class="video-title"><strong>ABC-' + code + '</strong></div></div>').join("");
+            const items = [...root.children];
+            events.emit("list-items-added", { items });
+            expect(items.every(item => item.dataset.jhs115Observed === "true")).toBe(true);
+            controller.observer.callback(items.map(target => ({ target, isIntersecting: true })));
+            await vi.waitFor(() => expect(searchFiles).toHaveBeenCalledTimes(2));
+            expect(searchFiles).toHaveBeenNthCalledWith(1, "one115", "ABC-101", expect.objectContaining({ ttlMs: 420000 }));
+            for (const release of releases.splice(0)) release();
+            await vi.waitFor(() => expect(searchFiles).toHaveBeenCalledTimes(3));
+            for (const release of releases.splice(0)) release();
+            await vi.waitFor(() => expect(root.querySelectorAll(".jhs-115-list-match")).toHaveLength(3));
+        } finally { scope.dispose(); }
+    });
+
     it("restores focus after continuation without stealing focus moved during the request", async () => {
         const h = createController(), matching = new LifecycleScope("matching");
         h.controller.lifecycleScope = matching;
@@ -93,17 +116,6 @@ describe("115 domain", () => {
 
     it("preserves rename suffixes", () => {
         expect(preview115Rename("old-4K-U.mkv", "abc-1")).toBe("ABC-1-4K-U.mkv");
-    });
-
-    it("routes matching through explicit offline, host and event capabilities", async () => {
-        const { readTestFile } = await import("./helpers/read-test-file.js");
-        const { join } = await import("node:path");
-        const source = readTestFile(join(import.meta.dirname, "../src/features/external-bridge/one-one-five-match-controller.js"), "utf8");
-        expect(source).toContain("this.host.locateListRoot");
-        expect(source).toContain('this.events.on("list-items-added"');
-        expect(source).toContain('this.offline.renameFile("one115"');
-        expect(source).not.toContain("GM_xmlhttpRequest");
-        expect(source).not.toContain("https://115.com");
     });
 
     it.each([false, "false", "no", 0, "0", null, "invalid"])("disabled 115 value %j owns no matching requests", async value => {

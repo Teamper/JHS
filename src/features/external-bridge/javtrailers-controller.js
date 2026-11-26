@@ -7,8 +7,8 @@ const VIDEO_SELECTOR = "#vjs_video_3_html5_api";
 const PLAYER_SELECTOR = "#videoPlayerContainer";
 
 export class JavTrailersController {
-    /** @param {{document?: Document, window?: Window, scope: import("../../core/lifecycle-scope.js").LifecycleScope, navigate?: (url: string) => void, playVideo?: (video: HTMLVideoElement) => void}} options */
-    constructor({ document: doc = document, window: win = window, scope, navigate = (url) => { win.location.href = url; }, playVideo = (video) => { void safePlay(video, { context: "JavTrailers 预览" }); } }) {
+    /** @param {{document?: Document, window?: Window, scope: import("../../core/lifecycle-scope.js").LifecycleScope, navigate?: (url: string) => void, playVideo?: (video: HTMLVideoElement) => void, warnPlayback?: (message: string, error?: unknown) => void}} options */
+    constructor({ document: doc = document, window: win = window, scope, navigate = (url) => { win.location.href = url; }, warnPlayback, playVideo = (video) => { void safePlay(video, { context: "JavTrailers 预览", warn: warnPlayback }); } }) {
         this.document = doc;
         this.window = win;
         this.scope = scope;

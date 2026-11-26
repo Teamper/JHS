@@ -6,6 +6,31 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const devUserscriptPath = join(repoRoot, "dist", "dev", "JHS-7.0.dev.user.js");
 
+async function expectListCardNavigation(page, image, expectedUrl, carNum) {
+  await page.evaluate(() => {
+    window.__listOpenedTabs = [];
+    const dialog = window.utils.dialogService, open = dialog.open.bind(dialog);
+    dialog.open = options => { if (options.type === 2) window.__listShadeClose = options.shadeClose; return open(options); };
+    window.GM_openInTab = (url, options) => {
+      window.__listOpenedTabs.push({ url, options });
+      return { close() {} };
+    };
+  });
+  await image.evaluate(element => element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true })));
+  const isJavDb = new URL(expectedUrl).pathname.startsWith("/v/");
+  const tabUrl = new URL(expectedUrl);
+  if (isJavDb) tabUrl.searchParams.set("jhsCarNum", carNum);
+  await expect.poll(() => page.evaluate(() => window.__listOpenedTabs)).toEqual([{ url: tabUrl.href, options: { insert: 0 } }]);
+  await image.evaluate(element => element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
+  const frameUrl = new URL(tabUrl);
+  frameUrl.searchParams.set("hideNav", "1");
+  const frame = page.locator('.layui-layer iframe').last();
+  await expect(frame).toHaveAttribute("src", frameUrl.href);
+  expect(await page.evaluate(() => window.__listShadeClose)).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(frame).toHaveCount(0);
+}
+
 test.describe("JavDB list actions Feature lifecycle", () => {
   test("actor blacklist batch uses the shared Feature runner and keeps its transaction type", async ({ context, page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-wide");
@@ -49,13 +74,12 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     });
     expect(ownership).toEqual({ featureRunner: "function", button: true });
     await page.evaluate(() => {
-      window.__loadingAudit = { count: 0, stacks: [] };
-      const original = window.loading;
-      window.loading = () => {
-        window.__loadingAudit.count += 1;
-        window.__loadingAudit.stacks.push(new Error("loading created").stack);
-        return original();
-      };
+      window.__loadingAudit = { count: 0 };
+      new MutationObserver((records) => {
+        for (const record of records) for (const node of record.addedNodes) {
+          if (node instanceof Element && node.matches(".loading-container")) window.__loadingAudit.count += 1;
+        }
+      }).observe(document.body, { childList: true });
     });
 
     await page.locator(".jhs-commandbar__batch .jhs-commandbar__menu-toggle").click();
@@ -146,21 +170,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
       navigationAdapterActive: true,
     });
 
-    await page.evaluate(() => {
-      window.__javbusCardOpens = [];
-      window.utils.openPage = (url, carNum, shadeClose, options) => window.__javbusCardOpens.push({
-        url, carNum, shadeClose, newTab: options.newTab, ctrlKey: Boolean(options.event?.ctrlKey),
-      });
-    });
-    const image = page.locator(".masonry .item img").first();
-    await image.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true })));
-    await expect.poll(() => page.evaluate(() => window.__javbusCardOpens.length)).toBe(1);
-    await image.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
-    await expect.poll(() => page.evaluate(() => window.__javbusCardOpens.length)).toBe(2);
-    expect(await page.evaluate(() => window.__javbusCardOpens)).toEqual([
-      { url: "https://www.javbus.com/ABC-123", carNum: "ABC-123", shadeClose: true, newTab: true, ctrlKey: true },
-      { url: "https://www.javbus.com/ABC-123", carNum: "ABC-123", shadeClose: true, newTab: false, ctrlKey: false },
-    ]);
+    await expectListCardNavigation(page, page.locator(".masonry .item img").first(), "https://www.javbus.com/ABC-123", "ABC-123");
 
     await page.evaluate(() => {
       const root = document.querySelector(".masonry"), template = root?.querySelector(".item");
@@ -397,11 +407,6 @@ test.describe("JavDB list actions Feature lifecycle", () => {
       actor.className = "actor-section-name";
       actor.textContent = "Fixture Actress, Other";
       document.body.append(actor);
-      window.__listBlockConfirms = [];
-      window.utils.q = (_event, message, confirm) => {
-        window.__listBlockConfirms.push(message);
-        return confirm();
-      };
     });
     const image = page.locator(".movie-list > .item img").first();
     await expect(image).toHaveCount(1);
@@ -411,15 +416,11 @@ test.describe("JavDB list actions Feature lifecycle", () => {
       return event.defaultPrevented;
     });
     expect(prevented).toBe(true);
+    const confirmation = page.getByRole("dialog").filter({ hasText: "屏蔽「ABC-123」？" });
+    await expect(confirmation).toHaveCount(1);
+    await confirmation.getByRole("button", { name: "屏蔽", exact: true }).click();
     await expect.poll(() => page.evaluate(async () => (await window.stateService.getState("ABC-123"))?.stateFlags?.blocked)).toBe(true);
-    const result = await page.evaluate(() => ({
-      confirmations: window.__listBlockConfirms,
-      names: window.__listBlockConfirms.length,
-      listCore: window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true,
-    }));
-    expect(result).toEqual({
-      confirmations: ["屏蔽「ABC-123」？"], names: 1, listCore: true,
-    });
+    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature)).toBe(true);
     await expect(page.locator(".movie-list > .item .jhs-status-tags .status-tag")).toHaveText(["已屏蔽"]);
   });
 
@@ -475,21 +476,6 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page, { userscriptPath: devUserscriptPath });
-    await page.evaluate(() => {
-      window.__listCardOpens = [];
-      window.utils.openPage = (url, carNum, shadeClose, options) => window.__listCardOpens.push({
-        url, carNum, shadeClose, newTab: options.newTab, ctrlKey: Boolean(options.event?.ctrlKey),
-      });
-    });
-
-    const image = page.locator(".movie-list > .item img").first();
-    await image.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true })));
-    await expect.poll(() => page.evaluate(() => window.__listCardOpens.length)).toBe(1);
-    await image.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
-    await expect.poll(() => page.evaluate(() => window.__listCardOpens.length)).toBe(2);
-    expect(await page.evaluate(() => window.__listCardOpens)).toEqual([
-      { url: "https://javdb.com/v/abc-123", carNum: "ABC-123", shadeClose: true, newTab: true, ctrlKey: true },
-      { url: "https://javdb.com/v/abc-123", carNum: "ABC-123", shadeClose: true, newTab: false, ctrlKey: false },
-    ]);
+    await expectListCardNavigation(page, page.locator(".movie-list > .item img").first(), "https://javdb.com/v/abc-123", "ABC-123");
   });
 });

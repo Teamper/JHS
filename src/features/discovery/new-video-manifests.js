@@ -1,4 +1,5 @@
 // @ts-check
+import { getNowStr } from "../../core/ui-date-time.js";
 
 import { ActorSourceHealth } from "./actor-source-health.js";
 import { defineFeature } from "../../contracts/manifests.js";
@@ -12,9 +13,9 @@ async function registerNewVideoStyles(styles) {
 }
 
 export const newVideoFeature = defineFeature({
-    optionalRequires: [SERVICE.backgroundWork, SERVICE.taskExecution],
+    optionalRequires: [SERVICE.taskExecution],
     id: "new-video", kind: "feature", disableable: true, sites: ["javdb"], routes: [], startup: "idle",
-    requires: [PORT.style, SERVICE.dialog, SERVICE.events, SERVICE.state, SERVICE.settings, SERVICE.profile, SERVICE.storage, SERVICE.movie, SERVICE.actressInfo, SERVICE.legacyUtils, SERVICE.legacyStorage, SERVICE.domUi, SERVICE.notifications, SERVICE.clog], contributes: ["discovery.new-video"], providesCommands: ["new-video.open"],
+    requires: [PORT.style, SERVICE.dialog, SERVICE.events, SERVICE.state, SERVICE.settings, SERVICE.profile, SERVICE.storage, SERVICE.movie, SERVICE.actressInfo, SERVICE.keywordRules, SERVICE.domUi, SERVICE.notifications, SERVICE.clog], contributes: ["discovery.new-video"], providesCommands: ["new-video.open"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "discovery.new-video";
         if (!runtime.enabledContributions.includes(id)) return { activeContributions: [], commands: { "new-video.open": () => undefined } };
@@ -40,14 +41,14 @@ export const newVideoFeature = defineFeature({
             state: deps[SERVICE.state], settings: deps[SERVICE.settings], movie: deps[SERVICE.movie],
         });
         const scanController = new NewVideoScanController({
-            sourceHealth, backgroundWork: deps[SERVICE.backgroundWork],
+            sourceHealth, backgroundWork: runtime.backgroundWork,
             storage: deps[SERVICE.storage],
             state: deps[SERVICE.state],
-            readTitleKeywords: () => deps[SERVICE.legacyStorage].getTitleFilterKeyword(),
+            readTitleKeywords: () => deps[SERVICE.keywordRules].getTitleKeywords(),
             actressInfo: deps[SERVICE.actressInfo],
             scope: runtime.scope,
             logger: deps[SERVICE.clog],
-            getTimestamp: () => deps[SERVICE.legacyUtils].getNowStr(),
+            getTimestamp: getNowStr,
             onNewItems: (name, count) => deps[SERVICE.clog].html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${count}部</span>`),
         });
         runtime.provideCapability?.("discovery.new-video-scan", scanController);
@@ -82,9 +83,9 @@ export const newVideoFeature = defineFeature({
             },
             batchController, workspaceController, loadStyles: ensureStyles,
             openTaskSettings: (callback) => runtime.getCapability?.("settings.core")?.openSettingDialog("task-panel", callback),
-            jquery: deps[SERVICE.domUi].jquery, legacyStorage: deps[SERVICE.legacyStorage],
-            utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
-            logger: deps[SERVICE.clog], events: deps[SERVICE.events],
+            jquery: deps[SERVICE.domUi].jquery,
+            utilities: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications],
+            logger: deps[SERVICE.clog], events: deps[SERVICE.events], startLoading: deps[SERVICE.domUi].loading,
             createImageHoverPreview: (/** @type {Record<string, any>} */ config) => deps[SERVICE.domUi].createImageHoverPreview(config),
             document, window,
         });
@@ -105,9 +106,9 @@ export const newVideoFeature = defineFeature({
 });
 
 export const schedulerFeature = defineFeature({
-    optionalRequires: [SERVICE.backgroundWork, SERVICE.taskExecution],
+    optionalRequires: [SERVICE.taskExecution],
     id: "scheduler", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "idle",
-    requires: [PORT.javdbHost, PORT.javbusHost, SERVICE.events, SERVICE.storage, SERVICE.settings, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, SERVICE.state, SERVICE.domUi, SERVICE.hostListParser, SERVICE.clog, SERVICE.notifications],
+    requires: [PORT.javdbHost, PORT.javbusHost, SERVICE.events, SERVICE.storage, SERVICE.settings, SERVICE.keywordRules, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, SERVICE.state, SERVICE.domUi, SERVICE.clog, SERVICE.notifications],
     contributes: ["discovery.scheduler"], providesCommands: ["scheduler.service"],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "discovery.scheduler";
@@ -126,9 +127,9 @@ export const schedulerFeature = defineFeature({
         ]) => {
         const taskService = new TaskExecutionService({
             runtimeServices: {
-                storage: deps[SERVICE.storage], http: deps[SERVICE.http], actressInfo: deps[SERVICE.actressInfo],
+                storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], keywordRules: deps[SERVICE.keywordRules], http: deps[SERVICE.http], actressInfo: deps[SERVICE.actressInfo],
                 movie: deps[SERVICE.movie], state: deps[SERVICE.state], events: deps[SERVICE.events], scope: () => runtime.scope,
-                hostAdapters: { javdb: deps[PORT.javdbHost], javbus: deps[PORT.javbusHost] }, hostListParser: deps[SERVICE.hostListParser],
+                hostAdapters: { javdb: deps[PORT.javdbHost], javbus: deps[PORT.javbusHost] },
             },
             blacklist: {
                 available: () => runtime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin"),
@@ -137,7 +138,7 @@ export const schedulerFeature = defineFeature({
             },
             getNewVideoScanner: () => runtime.getCapability?.("discovery.new-video-scan"),
             getBlacklistScanner: () => runtime.getCapability?.("library.blacklist-scan"),
-            legacyStorage: deps[SERVICE.legacyStorage], utilities: deps[SERVICE.legacyUtils], logger: deps[SERVICE.clog],
+            logger: deps[SERVICE.clog],
             jquery: deps[SERVICE.domUi].jquery, window, notifications: deps[SERVICE.notifications],
         });
         runtime.provideCapability?.(id, taskService);
@@ -146,11 +147,10 @@ export const schedulerFeature = defineFeature({
         if (release) runtime.scope.addCleanup(release);
         runtime.scope.addCleanup(() => taskService.dispose());
         const controller = new TaskSchedulerController({
-            backgroundWork: deps[SERVICE.backgroundWork],
+            backgroundWork: runtime.backgroundWork,
             window,
             document,
             events: deps[SERVICE.events],
-            storage: deps[SERVICE.storage],
             scope: runtime.scope,
             isListPage: () => window.isListPage,
             runTask: () => taskService.doTask(),

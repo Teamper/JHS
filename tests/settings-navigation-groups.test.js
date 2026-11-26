@@ -7,7 +7,7 @@ import { MANUAL_FORM_SELECTORS, loadSettingForm, saveSettingForm } from "../src/
 import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";
-import { Utils } from "../src/core/utils.js";
+import { trapDialogFocus } from "../src/core/dialog-shell.js";
 import * as templates from "../src/ui/settings/setting-templates.js";
 
 import { FullSettingsSession } from "../src/ui/settings/full-settings-session.js";
@@ -21,14 +21,13 @@ async function fixture(initial = {}) {
     const settings = new SettingsService({ get: async (key) => stored[key], set: async (key, value) => { stored[key] = value; } });
     await settings.load();
     const registry = new SettingsRegistry(); registerDefaultSettings(registry);
-    const legacyStorage = { getReviewFilterKeywordList: async () => [], getTitleFilterKeyword: async () => [], saveReviewFilterKeyword: vi.fn(), saveTitleFilterKeyword: vi.fn() };
-    vi.stubGlobal("storageManager", legacyStorage);
+    const keywordRules = { getReviewKeywords: async () => [], getTitleKeywords: async () => [], saveReviewKeywords: vi.fn(), saveTitleKeywords: vi.fn() };
     const webdav = { getProfile: async () => ({ url: "", username: "", password: "" }), saveProfile: vi.fn(async () => {}) };
     const notifications = { ok: vi.fn(), info: vi.fn(), error: vi.fn() };
     const utilities = { isMobileMode: () => false, q: vi.fn() };
     const plugin = new SettingPlugin({
-        runtimeServices: { settings, settingsRegistry: registry, host: {}, movie: { externalSiteOrigin: () => "https://example.test", providerOrigin: () => "https://example.test" }, webdav, diagnostics: {}, storage: {}, translation: {} },
-        capabilities: {}, jquery: $, utilities, notifications, logger: { error: vi.fn() }, legacyStorage, events: { emit: vi.fn() }, domUi: {}, document, window,
+        runtimeServices: { settings, settingsRegistry: registry, host: {}, movie: { externalSiteOrigin: () => "https://example.test", providerOrigin: () => "https://example.test" }, webdav, diagnostics: {}, storage: {}, translation: {}, keywordRules },
+        capabilities: {}, jquery: $, utilities, notifications, logger: { error: vi.fn() }, events: { emit: vi.fn() }, domUi: {}, document, window,
     });
     plugin._settingTemplates = templates;
     plugin._settingPanels = { renderSnapshotPanel: vi.fn(), renderDataHealthPanel: vi.fn(), renderPluginMgmtPanel: vi.fn(), renderNetworkPanel: vi.fn() };
@@ -132,12 +131,12 @@ describe("settings business navigation", () => {
         for (const element of navs) Object.defineProperty(element, "offsetParent", { configurable: true, get: () => container });
         const firstFocus = vi.spyOn(navs[0], "focus");
         const activeNav = navs[5];
-        let cleanup = Utils.prototype.trapFocus(container, activeNav);
+        let cleanup = trapDialogFocus(container, activeNav);
         await Promise.resolve();
         expect(document.activeElement).toBe(activeNav);
         expect(firstFocus).not.toHaveBeenCalled();
         cleanup();
-        cleanup = Utils.prototype.trapFocus(container);
+        cleanup = trapDialogFocus(container);
         await Promise.resolve();
         expect(document.activeElement).toBe(navs[0]);
         cleanup();

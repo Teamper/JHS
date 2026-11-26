@@ -1,9 +1,9 @@
+import { readFileSync } from "node:fs";
 import { afterEach, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { prepareDialogOptions } from "../src/core/dialog-shell.js";
 import { OwnedPopover } from "../src/core/owned-popover.js";
 import jquery from "jquery";
-import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 let dom;
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
@@ -117,7 +117,7 @@ it("restores nested Layer focus after native removal and still respects later hi
     dom = new JSDOM('<button id="opener">打开</button><script src="https://example.test/layer.js"></script>', { runScripts: "outside-only" });
     const { window } = dom, doc = window.document;
     window.jQuery = jquery(window);
-    window.eval(readTestFile(join(import.meta.dirname, "browser/fixtures/layer-runtime/layer-1.0.9.min.js"), "utf8"));
+    window.eval(readFileSync(join(import.meta.dirname, "browser/fixtures/layer-runtime/layer-1.0.9.min.js"), "utf8"));
     vi.stubGlobal("window", window);
     const computed = window.getComputedStyle.bind(window);
     // Chromium returns no computed z-index after Layer removes its DOM, unlike jsdom.

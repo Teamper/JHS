@@ -1,22 +1,17 @@
-import { fileURLToPath } from "node:url";
-import vm from "node:vm";
+import { createPageDialogs } from "../src/platform/browser/page-dialogs.js";
+import { JHS_Z_INDEX } from "../src/core/theme.js";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
-import { ownedPopoverRoots } from "../src/core/owned-popover.js";
-import { enhanceDialogButtons } from "../src/core/dialog-shell.js";
 import { DomUiService } from "../src/services/dom-ui-service.js";
 import { LayerDialogAdapter } from "../src/platform/userscript/layer-dialog-adapter.js";
-import { readTestFile } from "./helpers/read-test-file.js";
 
-function loadUtils(mobile, document = undefined) {
-    const layer = { confirm: vi.fn(() => 7), close: vi.fn() };
-    const context = vm.createContext({ ownedPopoverRoots, layer, document, queueMicrotask, window: { innerWidth: 1440, innerHeight: 900 }, JHS_Z_INDEX: { layer: 2000 }, i: (object, key, value) => object[key] = value });
-    context.enhanceDialogButtons = enhanceDialogButtons;
-    vm.runInContext(`${readTestFile(fileURLToPath(new URL("../src/core/utils.js", import.meta.url)), "utf8")};globalThis.TestUtils=Utils;`, context);
-    const utils = new context.TestUtils();
-    utils.isMobileMode = () => mobile;
-    utils.setupEscClose = vi.fn();
-    utils.releaseEscClose = vi.fn();
+function loadUtils(mobile, document = new JSDOM("").window.document, port) {
+    const layer = { confirm: vi.fn(() => 7), close: vi.fn(), open: vi.fn(), alert: vi.fn() };
+    const esc = { setupEscClose: vi.fn(), releaseEscClose: vi.fn() };
+    const options = {
+        esc, isMobileMode: () => mobile, window: { innerWidth: 1440, innerHeight: 900, document },
+    };
+    const utils = Object.assign(createPageDialogs({ ...options, dialog: port ?? new LayerDialogAdapter(layer) }), esc);
     return { utils, layer };
 }
 
@@ -28,13 +23,13 @@ describe("user confirmation actions", () => {
             const [, options, first, second] = layer.confirm.mock.calls[0];
             expect(options.btn).toEqual(["取消", "移除"]);
             expect(options.skin).toBe("caller-skin jhs-confirm-actions");
-            first();
+            first(7);
             expect(cancel).toHaveBeenCalledOnce();
             expect(accept).not.toHaveBeenCalled();
-            second();
+            second(7);
             expect(accept).not.toHaveBeenCalled();
             utils.q(null, "移除记录？", accept, cancel, { confirmText: "移除" });
-            layer.confirm.mock.calls[1][3]();
+            layer.confirm.mock.calls[1][3](7);
             expect(accept).toHaveBeenCalledOnce();
             expect(cancel).toHaveBeenCalledOnce();
             expect(layer.close).toHaveBeenCalledWith(7);
@@ -42,21 +37,20 @@ describe("user confirmation actions", () => {
     }
 
     it("lets the dialog service stack confirmations while the direct Layer path keeps its index", () => {
-        const { utils } = loadUtils(false), service = { confirm: vi.fn(() => 9), close: vi.fn() };
-        utils.setDialogService(service);
+        const service = { confirm: vi.fn(() => 9), close: vi.fn() }, { utils } = loadUtils(false, undefined, service);
         utils.q(null, "屏蔽记录？", vi.fn(), vi.fn());
         expect(service.confirm.mock.calls[0][1]).not.toHaveProperty("zIndex");
 
         const { utils: legacy, layer } = loadUtils(false);
         legacy.q(null, "旧确认", vi.fn(), vi.fn());
-        expect(layer.confirm.mock.calls[0][1].zIndex).toBe(2000);
+        expect(layer.confirm.mock.calls[0][1].zIndex).toBe(JHS_Z_INDEX.layer);
     });
 
     it("unifies unnamed confirmations to cancel-left and preserves the fourth cancellation callback", () => {
         const { utils, layer } = loadUtils(false), accept = vi.fn(), cancel = vi.fn();
         utils.q(null, "旧确认", accept, cancel);
         const [, options, first, second] = layer.confirm.mock.calls[0];
-        expect(options.ui).toEqual({ focus: "caller" });
+        expect(options.title).toBe("提示");
         expect(options.btn).toEqual(["取消", "确定"]);
         expect(options.skin).toBe("jhs-confirm-actions");
         first();
@@ -105,8 +99,8 @@ describe("user confirmation actions", () => {
         const { utils, layer } = loadUtils(false), accept = vi.fn(), cancel = vi.fn();
         Object.assign(layer, { open: vi.fn(), alert: vi.fn() });
         const service = new LayerDialogAdapter(layer), confirm = vi.spyOn(service, "confirm");
-        utils.setDialogService(service);
-        utils.q(null, "授权此地址？", accept, cancel, { confirmText: "授权" });
+        const actions = createPageDialogs({ dialog: service, esc: utils, isMobileMode: () => false, window: { innerWidth: 1440, innerHeight: 900, document: new JSDOM("").window.document } });
+        actions.q(null, "授权此地址？", accept, cancel, { confirmText: "授权" });
         expect(confirm).toHaveBeenCalledWith("授权此地址？", expect.objectContaining({ confirmText: "授权" }), expect.any(Function), expect.any(Function));
         const [, options, first, second] = layer.confirm.mock.calls[0];
         expect(options.btn).toEqual(["取消", "授权"]);
@@ -123,12 +117,8 @@ describe("user confirmation actions", () => {
         expect(layer.close).toHaveBeenCalledExactlyOnceWith(7);
     });
 
-    it.each([false, true])("settles an undecided confirmation as cancel on end with service=%s", injected => {
-        const { utils, layer } = loadUtils(false), accept = vi.fn(), cancel = vi.fn();
-        if (injected) {
-            Object.assign(layer, { open: vi.fn(), alert: vi.fn() });
-            utils.setDialogService(new LayerDialogAdapter(layer));
-        }
+    it.each([false, true])("settles an undecided confirmation as cancel on end (mobile=%s)", mobile => {
+        const { utils, layer } = loadUtils(mobile), accept = vi.fn(), cancel = vi.fn();
         utils.q(null, "授权此地址？", accept, cancel, { confirmText: "授权" });
         const [, options, , action] = layer.confirm.mock.calls[0];
         options.success(null, 7);
@@ -143,7 +133,6 @@ describe("user confirmation actions", () => {
     it("never invokes cancellation when an injected confirmation was accepted", () => {
         const { utils, layer } = loadUtils(true), accept = vi.fn(), cancel = vi.fn();
         Object.assign(layer, { open: vi.fn(), alert: vi.fn() });
-        utils.setDialogService(new LayerDialogAdapter(layer));
         utils.q(null, "授权此地址？", accept, cancel, { confirmText: "授权" });
         const [, options, , action] = layer.confirm.mock.calls[0];
         options.success(null, 7);

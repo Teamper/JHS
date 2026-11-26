@@ -404,9 +404,6 @@ export async function syncJsonAsync(value, work) {
     budget.diagnostics?.recordWork("sync.serializedCharacters", result?.length || 0);
     return result;
 }
-/** @param {any} value @param {any} [work] */
-export function syncCloneAsync(value, work) { return computationBudget(work).run("sync.clone", cloneSteps(value)); }
-
 /** @param {any} data @param {any} [frontiers] @param {any} [work] */
 export async function projectSyncDataAsync(data, frontiers = {}, work = undefined) {
     const budget = computationBudget(work), result = await budget.run("sync.projectSyncData", projectSyncDataSteps(data, frontiers));

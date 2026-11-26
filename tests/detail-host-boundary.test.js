@@ -1,28 +1,15 @@
-import { readTestFile } from "./helpers/read-test-file.js";
+import { DetailWorkspaceController } from "../src/features/detail/detail-workspace-controller.js";
+import { JhsSelect } from "../src/core/ui-primitives.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import jquery from "jquery";
-import vm from "node:vm";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { UnifiedOfflineController } from "../src/features/external-bridge/unified-offline-controller.js";
-import { OwnedPopover } from "../src/core/owned-popover.js";
-import { getIcon } from "../src/core/icons.js";
-import { NativeDetailMediaController, NATIVE_DETAIL_MEDIA_CSS } from "../src/features/detail/native-detail-media-controller.js";
 
 afterEach(() => vi.unstubAllGlobals());
-
-const workspaceSource = readTestFile(join(process.cwd(), "src/features/detail/detail-workspace-controller.js"), "utf8").replace(/^import .*;\r?\n/m, "");
-const adapterSource = readTestFile(join(process.cwd(), "src/ui/detail/detail-resource-adapter.js"), "utf8");
-const selectSource = readTestFile(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").slice(readTestFile(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").indexOf("class JhsSelect"));
-
-class BasePlugin {
-    getBean() { return null; }
-    getRuntimeService(name) { return this.runtimeServices?.[name] ?? null; }
-}
 
 function createEventBus() {
     const handlers = new Map;
@@ -35,21 +22,13 @@ function createEventBus() {
 function createContext(html, { javdb = true } = {}) {
     const dom = new JSDOM(html, { url: javdb ? "https://javdb.com/v/test?hideNav=1" : "https://www.javbus.com/ABC-1" }), $ = jquery(dom.window), eventBus = createEventBus();
     dom.window.isDetailPage = true;
-    vi.stubGlobal("MutationObserver", dom.window.MutationObserver);
-    const context = vm.createContext({
+    for (const [key, value] of Object.entries({
         window: dom.window, document: dom.window.document, Node: dom.window.Node, Event: dom.window.Event,
-        MutationObserver: dom.window.MutationObserver, NativeDetailMediaController, NATIVE_DETAIL_MEDIA_CSS, OwnedPopover, $, getIcon, r: javdb, l: !javdb, BasePlugin, jhsEventBus: eventBus,
-        setTimeout, clearTimeout, queueMicrotask, clog: { warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-        utils: { loopDetector: (condition, callback) => condition() && callback() },
-        storageManager: {}, stateService: {}, show: {}, layer: {}, escapeHtml: value => String(value),
-        normalizeStateFlags: value => value || {}, _: "yes"
-    });
-    vm.runInContext(`${selectSource};globalThis.JhsSelect=JhsSelect`, context);
-    vm.runInContext(`${adapterSource};globalThis.getDetailResourceAdapter=getDetailResourceAdapter`, context);
-    vm.runInContext(`${workspaceSource};globalThis.DetailWorkspaceController=DetailWorkspaceController`, context);
+        MutationObserver: dom.window.MutationObserver, $,
+    })) vi.stubGlobal(key, value);
     const scope = new LifecycleScope("detail-test");
     const host = javdb ? new JavDbHostAdapter(dom.window.document, dom.window.location) : new JavBusHostAdapter(dom.window.document, dom.window.location);
-    return { dom, $, context, eventBus, scope, host };
+    return { dom, $, eventBus, scope, host };
 }
 
 function createOfflineController(host, dom, $) {
@@ -117,10 +96,10 @@ describe("host movie identity reads", () => {
 
 describe("host detail resource boundaries", () => {
     it("registers workspace styles and releases its observers with the Feature scope", () => {
-        const { $, dom, context, eventBus, host } = createContext(javdbFixture), scope = new LifecycleScope("detail-workspace-feature:test");
+        const { $, dom, eventBus, host } = createContext(javdbFixture), scope = new LifecycleScope("detail-workspace-feature:test");
         const releaseStyle = vi.fn(), styles = { register: vi.fn(() => releaseStyle) }, ui = { jquery: value => $(value), enhanceSelect: vi.fn(), refreshSelect: vi.fn() };
         vi.stubGlobal("MutationObserver", dom.window.MutationObserver);
-        const workspace = new context.DetailWorkspaceController({ hostAdapter: host, scope, styles, eventBus, ui });
+        const workspace = new DetailWorkspaceController({ hostAdapter: host, scope, styles, eventBus, ui });
         workspace.start();
         expect(styles.register).toHaveBeenCalledOnce();
         expect(styles.register.mock.calls[0][0]).toBe("jhs-detail-workspace-feature");
@@ -136,7 +115,7 @@ describe("host detail resource boundaries", () => {
     });
 
     it("preserves the JavDB controller target and reinjects one rightmost action after native redraws", async () => {
-        const { $, dom, context, eventBus, scope, host } = createContext(javdbFixture), controller = $('[data-controller="magnet-sort"]')[0], list = $("#magnets-content")[0];
+        const { $, dom, eventBus, scope, host } = createContext(javdbFixture), controller = $('[data-controller="magnet-sort"]')[0], list = $("#magnets-content")[0];
         let nativeCount = 0, jqueryCount = 0;
         const render = value => {
             const order = "date" === value ? [ [ "two", 2, 1 ], [ "one", 1, 0 ] ] : [ [ "one", 1, 0 ], [ "two", 2, 1 ] ];
@@ -144,7 +123,7 @@ describe("host detail resource boundaries", () => {
         };
         const select = $("select[data-action]")[0];
         select.addEventListener("change", (() => { nativeCount++, render(select.value); })), $(select).on("change.test", (() => jqueryCount++));
-        const workspace = new context.DetailWorkspaceController({ hostAdapter: host, scope, styles: { register: vi.fn(() => () => {}) }, eventBus, ui: { jquery: value => $(value), enhanceSelect: vi.fn(), refreshSelect: vi.fn() } }), offline = createOfflineController(host, dom, $);
+        const workspace = new DetailWorkspaceController({ hostAdapter: host, scope, styles: { register: vi.fn(() => () => {}) }, eventBus, ui: { jquery: value => $(value), enhanceSelect: vi.fn(), refreshSelect: vi.fn() } }), offline = createOfflineController(host, dom, $);
         workspace.ensureWorkspace(), eventBus.on("magnet-items-updated", (() => offline.injectNativeButtons())), offline.injectNativeButtons();
         const resourceRegion = $(controller).closest(".video-detail > *")[0], postResource = $('[data-jhs-slot-group="post-resource"]')[0], reviews = $('[data-jhs-slot="reviews"]')[0], related = $('[data-jhs-slot="related"]')[0], similar = $(".host-similar")[0];
         expect($(".video-detail").css("display")).not.toBe("flex");
@@ -157,13 +136,13 @@ describe("host detail resource boundaries", () => {
         expect($("#magnets-content > .item").toArray().every(row => $(row).find(".buttons").children().last().hasClass("jhs-offline-btn"))).toBe(true);
         expect($(".one23-offline-btn,.one115-offline-btn")).toHaveLength(0);
 
-        context.JhsSelect.setValue(select, "date", true);
+        JhsSelect.setValue(select, "date", true);
         await new Promise(resolve => setTimeout(resolve, 20));
         expect(nativeCount).toBe(1), expect(jqueryCount).toBe(1);
         expect($("#magnets-content > .item .name").first().text()).toBe("two");
         expect($("#magnets-content > .item").toArray().every(row => $(row).find(".jhs-offline-btn").length === 1 && $(row).find(".buttons").children().last().hasClass("jhs-offline-btn"))).toBe(true);
 
-        context.JhsSelect.setValue(select, "default", true);
+        JhsSelect.setValue(select, "default", true);
         await new Promise(resolve => setTimeout(resolve, 20));
         expect(nativeCount).toBe(2), expect(jqueryCount).toBe(2);
         expect($("#magnets-content > .item .name").first().text()).toBe("one");
@@ -178,7 +157,7 @@ describe("host detail resource boundaries", () => {
     });
 
     it("does not emit magnet lifecycle events for review, related, or native sibling changes", async () => {
-        const { $, context, eventBus, scope, host } = createContext(javdbFixture), workspace = new context.DetailWorkspaceController({ hostAdapter: host, scope, styles: { register: vi.fn(() => () => {}) }, eventBus, ui: { jquery: value => $(value), enhanceSelect: vi.fn(), refreshSelect: vi.fn() } });
+        const { $, eventBus, scope, host } = createContext(javdbFixture), workspace = new DetailWorkspaceController({ hostAdapter: host, scope, styles: { register: vi.fn(() => () => {}) }, eventBus, ui: { jquery: value => $(value), enhanceSelect: vi.fn(), refreshSelect: vi.fn() } });
         let events = 0;
         eventBus.on("magnet-items-updated", (() => events++)), workspace.ensureWorkspace();
         await new Promise(resolve => setTimeout(resolve, 20));

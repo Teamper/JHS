@@ -136,13 +136,17 @@ export class Fc2WorkspaceService {
             openFc2Page: (movieId, carNum, url, navigation, options) => this.openFc2Page(movieId, carNum, url, navigation, options),
             openFc2Dialog: (movieId, carNum, url, options) => this.openFc2Dialog(movieId, carNum, url, options),
             openNativeFallback: (url, carNum, { event, newTab }) => {
-                if (newTab) utils.openPage(url, carNum, true, { event, newTab: true });
+                if (newTab) this.getRuntimeService("ui").openPage(url, carNum, true, { event, newTab: true });
                 else window.location.href = url;
             },
         });
     }
     getDetailStateController() {
-        return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
+        return this.detailStateController ??= new DetailStateController(this.getRuntimeService("state"), {
+            ...this.getRuntimeService("ui"),
+            reportError: this.getRuntimeService("notifications").error,
+            logError: this.logger.error.bind(this.logger),
+        });
     }
     /** @param {string} carNum */
     async resolveMovieId(carNum) {
@@ -157,7 +161,7 @@ export class Fc2WorkspaceService {
         /** @type {Fc2DetailContext | null} */
         let context = null;
         return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', ui: { size: "workspace", body: "scroll" }, skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
-            success: (/** @type {HTMLElement} */ layerRoot, /** @type {number} */ layerIndex) => { context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog", initialMovie }), utils.setupEscClose(layerIndex); },
+            success: (/** @type {HTMLElement} */ layerRoot, /** @type {number} */ layerIndex) => { context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog", initialMovie }), this.getRuntimeService("ui").setupEscClose(layerIndex); },
             end: () => context?.destroy()
         });
     }
@@ -197,7 +201,7 @@ export class Fc2WorkspaceService {
             const trigger = event.currentTarget, image = $(trigger).find("img")[0];
             const scope = await this.getRuntimeService("scope")();
             if (!context.isAlive() || scope.disposed) return;
-            const session = image && (/** @type {any} */ (globalThis)).showImageViewer(image, "", { imageKind:"photo", galleryRoot: gallery[0], owner: context.root[0], trigger, scope });
+            const session = image && this.getRuntimeService("ui").openImageViewer(image, { imageKind:"photo", galleryRoot: gallery[0], owner: context.root[0], trigger, scope });
             if (session) context.addObserver({ disconnect: () => session.close(false) });
         }));
         context.getSlot("gallery").append(gallery, screenshot);
@@ -323,6 +327,7 @@ export class Fc2WorkspaceService {
             context.releaseScreenshotScope = parentScope.addCleanup(() => scope.dispose());
             return renderScreenshotPanel({
                 target: screenshot, carNum: context.carNum, screenshot: screenshotService,
+                openImageViewer: this.getRuntimeService("ui").openImageViewer, logger: this.logger,
                 title: context.summaryMovie?.originalTitle || context.summaryMovie?.title,
                 settings: settings.snapshot(), scope, isActive,
                 isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
@@ -378,7 +383,7 @@ export class Fc2WorkspaceService {
         Promise.resolve().then(() => this.getRuntimeService("scope")()).then((/** @type {LifecycleScope} */ parent) => {
             if (!isActive()) return;
             const release = parent.addCleanup(() => scope.dispose()); scope.addCleanup(release);
-            return renderTranslatedTitle({root:context.root,carNum:context.carNum,translation,scope,isActive});
+            return renderTranslatedTitle({root:context.root,carNum:context.carNum,translation,scope,isActive,logger:this.logger});
         }).catch(error => { if (isActive()) this.logger.error("FC2 标题翻译失败",error); });
     }
     /** OFF：移除 FC2 已渲染的翻译节点。 */
@@ -472,7 +477,7 @@ export class Fc2WorkspaceService {
     }
     async wantSession() {
         if (this.runtimeServices.want) return this.runtimeServices.want.session();
-        const credential = this.runtimeServices.credential ?? /** @type {any} */ (globalThis).credentialService;
+        const credential = this.runtimeServices.credential;
         return credential?.readEntry ? credential.readEntry("jhs_appAuthorization") : { revision: null, value: await credential?.get?.("jhs_appAuthorization") };
     }
     refreshWantAccounts() {
@@ -537,7 +542,7 @@ export class Fc2WorkspaceService {
                     ui: this.getRuntimeService("ui"), notifications: this.getRuntimeService("notifications"), logger: this.logger,
                     onSuccess: () => this.submitJavDbWant(context, movieId, button),
                 });
-                show.error(`加入 ${PRODUCT_NAMES.javdb} 想看失败`);
+                this.getRuntimeService("notifications").error(`加入 ${PRODUCT_NAMES.javdb} 想看失败`);
                 this.logger.error("加入 JavDB 想看失败", error);
                 return;
             }
@@ -546,7 +551,7 @@ export class Fc2WorkspaceService {
             if (session.revision) this.submittedWantMovieIds.add(key);
             if (!context.isAlive() || scope.disposed) return result;
             button.attr({ "aria-pressed": "true", "aria-disabled": "false" }).text(`已加入 ${PRODUCT_NAMES.javdb} 想看`);
-            try { show.ok(`已加入 ${PRODUCT_NAMES.javdb} 想看`); }
+            try { this.getRuntimeService("notifications").ok(`已加入 ${PRODUCT_NAMES.javdb} 想看`); }
             catch (error) { try { this.logger.warn("JavDB 想看已提交，成功提示失败", error); } catch { /* committed */ } }
             return result;
         } finally {
@@ -686,7 +691,7 @@ export class Fc2WorkspaceService {
         const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm" data-jhs-action="filter-native-magnets"></button>'), apply = (/** @type {boolean} */ enabled) => { host.find(".jhs-fc2-magnet-item").show(); enabled && hasMatch && host.find('.jhs-fc2-magnet-item[data-jhs-high-quality="false"]').hide(); button.attr("aria-pressed", String(enabled && hasMatch)).text(hasMatch ? enabled ? "显示全部磁力" : "过滤低质量" : "暂无可过滤项").prop("disabled", !hasMatch); };
         const settings = this.getRuntimeService("settings");
         const writeFilter = createLatestSettingWriter({ settings, key: "enableMagnetsFilter", fallback: "no", apply: (value) => apply(value === _), onError: (error) => {
-            this.logger.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+            this.logger.error("磁力过滤设置保存失败，已恢复", error), this.getRuntimeService("notifications").error("磁力过滤设置保存失败，已恢复原设置");
         } });
         context.magnetFilterApply = apply, actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => {
             const enabled = button.attr("aria-pressed") !== "true";
@@ -700,7 +705,13 @@ export class Fc2WorkspaceService {
             if (!context.isAlive()) return;
             if (!movieId) return this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related"), renderFc2State(context.getSlot("reviews"), `${PRODUCT_NAMES.javdb} 暂无对应影片`), renderFc2State(context.getSlot("related"), `${PRODUCT_NAMES.javdb} 暂无对应影片`);
             this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
-            const scope = () => this.getRuntimeService("scope")(), relatedPanel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope }), reviewPanel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope });
+            const ui = this.getRuntimeService("ui");
+            const dependencies = {
+                settings: this.getRuntimeService("settings"), scope: () => this.getRuntimeService("scope")(),
+                jquery: ui.jquery, notifications: this.getRuntimeService("notifications"), logger: this.logger,
+            };
+            const relatedPanel = new RelatedPanel({ ...dependencies, related: this.getRuntimeService("related"), formatDate: ui.formatDate });
+            const reviewPanel = new ReviewPanel({ ...dependencies, review: this.getRuntimeService("review"), keywordRules: this.getRuntimeService("keywordRules"), ui, clipboard: this.getRuntimeService("clipboard") });
             await Promise.allSettled([ reviewPanel.show(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive, ownCleanup: cleanup => context.addObserver({ disconnect: cleanup }) }), relatedPanel.show(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive, ownCleanup: cleanup => context.addObserver({ disconnect: cleanup }) }) ]);
         } catch (error) {
             if (!context.isAlive()) return;
@@ -735,7 +746,7 @@ export class Fc2WorkspaceService {
     async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "", initialMovie } = {}) {
         source = [ "fc2", "123av" ].includes(source) ? source : "";
         const resolvedMovieId = String(movieId || "").trim();
-        if (!resolvedMovieId) return void utils.openPage(url, carNum, !0, navigation);
-        utils.openPage(this.createFc2PageUrl(resolvedMovieId, carNum, url, { source, initialMovie }), carNum, !0, navigation);
+        if (!resolvedMovieId) return void this.getRuntimeService("ui").openPage(url, carNum, !0, navigation);
+        this.getRuntimeService("ui").openPage(this.createFc2PageUrl(resolvedMovieId, carNum, url, { source, initialMovie }), carNum, !0, navigation);
     }
 }

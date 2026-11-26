@@ -1,3 +1,4 @@
+import { hasVisualBaseline } from "../harness/visual-baselines.js";
 import { openDetailEnhancements, enterMovieSelection, openUtility } from "../harness/enhancement-navigation.js";
 import {expect,test} from "@playwright/test";
 import {readFile,writeFile} from "node:fs/promises";
@@ -106,7 +107,7 @@ for(const theme of ["light","dark"]) {
     await primary.getByLabel("名称",{exact:true}).scrollIntoViewIfNeeded();
     expect(await panel.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await page.screenshot({path:info.outputPath(`translation-connections-${theme}.png`)});
-    if(process.env.JHS_VISUAL_REGRESSION==="1")await expect(page).toHaveScreenshot(`translation-connections-${theme}.png`,{maxDiffPixelRatio:.02});
+    if(hasVisualBaseline(info))await expect(page).toHaveScreenshot(`translation-connections-${theme}.png`,{maxDiffPixelRatio:.02});
     await page.keyboard.press("Escape");await expect(panel).toHaveCount(0);
     await page.evaluate(()=>{window.translationFailPrimary=true;});
     await workspace.getByRole("button",{name:"翻译所列标题",exact:true}).click();
@@ -123,7 +124,7 @@ for(const theme of ["light","dark"]) {
     await writeFile(info.outputPath("translation-geometry.json"),JSON.stringify(await page.evaluate(()=>({innerWidth,clientWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll("body *")].filter(node=>node.getBoundingClientRect().right>document.documentElement.clientWidth+1).slice(0,25).map(node=>({tag:node.tagName,id:node.id,className:typeof node.className==="string"?node.className:"",right:node.getBoundingClientRect().right,width:getComputedStyle(node).width,position:getComputedStyle(node).position})),elements:[...document.querySelectorAll("html,body,main,.layui-layer,.jhs-translation-workspace,.jhs-translation-row")].map(node=>{const style=getComputedStyle(node);return {tag:node.tagName,id:node.id,className:node.className,rect:node.getBoundingClientRect().toJSON(),width:style.width,padding:style.padding,boxSizing:style.boxSizing,position:style.position,transform:style.transform};})})),null,2));
     await assertNoHorizontalOverflow(page);
     await page.screenshot({path:info.outputPath(`translation-manual-${theme}.png`)});
-    if(process.env.JHS_VISUAL_REGRESSION==="1")await expect(page).toHaveScreenshot(`translation-manual-${theme}.png`,{maxDiffPixelRatio:.02});
+    if(hasVisualBaseline(info))await expect(page).toHaveScreenshot(`translation-manual-${theme}.png`,{maxDiffPixelRatio:.02});
     const requests=await page.evaluate(()=>window.translationCalls);
     expect(requests.every(request=>request.body.model==="configured-model"&&request.body.stream===false&&request.headers.Authorization==="Bearer fixture-api-secret")).toBe(true);
     await page.keyboard.press("Escape");await expect(workspace).toHaveCount(0);await expect(entry).toBeFocused();expect(errors).toEqual([]);

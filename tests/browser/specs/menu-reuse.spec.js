@@ -1,3 +1,4 @@
+import { hasVisualBaseline } from "../harness/visual-baselines.js";
 import {test,expect} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -20,7 +21,9 @@ async function capture(page,info,name){
   await expect.poll(()=>mobileMenu.evaluate(node=>node.closest('.jhs-fab-menu').scrollTop)).toBe(0);
  }
  const folder=resolve('../../output/ui-menu-reuse/after',info.project.name);await mkdir(folder,{recursive:true});await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:resolve(folder,name+'.png'),animations:'disabled'});
- if(process.env.JHS_VISUAL_REGRESSION==='1')await expect.soft(page).toHaveScreenshot('menu-reuse-'+name+'.png',{maxDiffPixelRatio:.02});
+ const projects = name.startsWith("mobile-") ? ["mobile"] : ["desktop-wide"];
+ if (name.startsWith("quick-select-")) projects.push("desktop-regular");
+ if(hasVisualBaseline(info, projects))await expect.soft(page).toHaveScreenshot('menu-reuse-'+name+'.png',{maxDiffPixelRatio:.02});
 }
 async function closePortal(page){
  if(await page.getByRole('tooltip').count()){await page.keyboard.press('Escape');await expect(page.getByRole('tooltip')).toHaveCount(0);}

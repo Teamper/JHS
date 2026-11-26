@@ -2,12 +2,11 @@
 
 /** Owns the list-page lifecycle for delayed background task batches. */
 export class TaskSchedulerController {
-    /** @param {{window: Window & typeof globalThis, document: Document, events: any, storage: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, isListPage: () => boolean, runTask: () => Promise<unknown>, refreshConfiguration: () => Promise<unknown>, backgroundWork?: any, onError: (error: unknown) => void}} options */
+    /** @param {{window: Window & typeof globalThis, document: Document, events: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, isListPage: () => boolean, runTask: () => Promise<unknown>, refreshConfiguration: () => Promise<unknown>, backgroundWork?: any, onError: (error: unknown) => void}} options */
     constructor(options) {
         this.window = options.window;
         this.document = options.document;
         this.events = options.events;
-        this.storage = options.storage;
         this.scope = options.scope;
         this.isListPage = options.isListPage;
         this.runTask = options.runTask;
@@ -41,7 +40,6 @@ export class TaskSchedulerController {
     /** Refresh due times after settings change, then run eligible work promptly. */
     async refreshSchedule() {
         try {
-            this.storage.invalidateSettingCache?.();
             await this.refreshConfiguration();
             this.scheduleTask(0);
         } catch (error) {

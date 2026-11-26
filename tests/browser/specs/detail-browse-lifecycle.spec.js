@@ -23,10 +23,10 @@ async function bootDetail(page, context, { enabled = true } = {}) {
 
 async function readBrowseState(page) {
   return page.evaluate(async () => {
-    const storage = window.storageManager.forage;
+    const storage = window.__jhsBrowserDiagnostics.detailServices.storage;
     return {
-      actresses: await storage.getItem("favorite_actresses"),
-      decisions: await storage.getItem("new_video_decisions"),
+      actresses: await storage.get("favorite_actresses"),
+      decisions: await storage.get("new_video_decisions"),
     };
   });
 }
@@ -37,7 +37,7 @@ test("detail Feature removes the browsed movie mark once when its setting is ena
     actresses: [{ starId: "fixture-star", name: "测试演员", newVideoList: [] }],
     decisions: expect.objectContaining({ "ABC-123": expect.objectContaining({ action: "dismissed" }) }),
   });
-  const removals = await page.evaluate(async () => (await window.storageManager.forage.getItem("activity_log"))?.entries?.filter(entry => entry.type === "new-video-remove").length ?? 0);
+  const removals = await page.evaluate(async () => (await window.__jhsBrowserDiagnostics.detailServices.storage.get("activity_log"))?.entries?.filter(entry => entry.type === "new-video-remove").length ?? 0);
   expect(removals).toBe(1);
 });
 

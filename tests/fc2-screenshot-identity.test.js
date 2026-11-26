@@ -63,7 +63,7 @@ it.each(["FC2-1234567", "FC2-PPV-1234567"])("renders the FC2 workspace screensho
     const { screenshot, request, scope, settings } = createScreenshotChain();
     vi.stubGlobal("$", jquery);
     document.body.innerHTML = '<main><div data-jhs-role="screenshot"></div></main>';
-    const service = new Fc2WorkspaceService({ runtimeServices: { screenshot, settings, scope: () => scope } });
+    const service = new Fc2WorkspaceService({ runtimeServices: { screenshot, settings, scope: () => scope, ui: { openImageViewer: vi.fn() } } });
     service.loadFc2Screenshot({ root: jquery("main"), carNum, isAlive: () => true });
     await vi.waitFor(() => expect(document.querySelector('[data-jhs-role="screenshot"] img')?.getAttribute("src")).toBe(imageUrl));
     expect(request.mock.calls.map(([options]) => options.url)).toEqual([

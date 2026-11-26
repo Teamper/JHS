@@ -13,7 +13,7 @@ import { formatUiDateTime } from "../../core/ui-date-time.js";
 
 /** Owns the blacklist table and its dialog lifetime inside the Library Feature. */
 export class BlacklistWorkspaceController {
-    /** @param {{document: Document, window: Window, jquery: (value: any) => any, site: string, state: any, settings: any, storage: any, events: any, dialog: any, ui: any, notifications: any, logger: any, scope: any, task: any, openSettings: () => unknown}} options */
+    /** @param {{document: Document, window: Window, jquery: (value: any) => any, site: string, state: any, settings: any, storage: any, events: any, dialog: any, ui: any, notifications: any, logger: any, scope: any, task: any, debounce: (callback: () => void, wait: number) => (() => void) & {cancel?: () => void}, openSettings: () => unknown}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -29,6 +29,7 @@ export class BlacklistWorkspaceController {
         this.logger = options.logger;
         this.scope = options.scope;
         this.task = options.task;
+        this.debounce = options.debounce;
         this.openSettings = options.openSettings;
         this.blacklistRoot = null;
         this.tableObj = null;
@@ -109,8 +110,7 @@ export class BlacklistWorkspaceController {
         await this.loadTableData(generation);
         if (!this.isCurrent(generation)) return;
         const content = $(layer).find(".layui-layer-content"), search = content.find("#searchValue");
-        const debounce = /** @type {any} */ (globalThis).utils?.debounce;
-        this.blacklistSearchDebounced = typeof debounce === "function" ? debounce(() => void this.reloadTable(generation), 200) : () => void this.reloadTable(generation);
+        this.blacklistSearchDebounced = this.debounce(() => void this.reloadTable(generation), 200);
         content.on("click.jhsBlacklist", "#cleanQueryBtn", async () => {
             if (!this.isCurrent(generation)) return;
             search.val("");

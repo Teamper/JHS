@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
-import { ListPageCompatibilityService as ListPagePlugin } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService as ListPagePlugin } from "../src/features/list/list-page-service.js";
 import { ExternalBridgeTranslationController } from "../src/features/translation/translation-controller.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { installVisibleLayout } from "./helpers/visible-layout.js";

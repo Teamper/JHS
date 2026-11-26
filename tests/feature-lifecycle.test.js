@@ -1,57 +1,16 @@
 // @vitest-environment jsdom
 import jquery from "jquery";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { join } from "node:path";
-import vm from "node:vm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { AutoPageController } from "../src/features/list/auto-page-controller.js";
 import { OtherSitesController } from "../src/features/external-sites/other-sites-controller.js";
 
-const repoRoot = join(import.meta.dirname, "..");
 const $ = jquery;
 const win = /** @type {any} */ (globalThis.window);
 const doc = win.document;
 
 beforeEach(() => { doc.body.innerHTML = '<div class="movie-list"></div>'; });
 afterEach(() => vi.unstubAllGlobals());
-
-function loadPlugin(relativePath, overrides = {}) {
-    /** @type {Array<{ name: string, handler: (event: any) => void }>} */
-    const settingsEvents = [];
-    const settings = {
-        snapshot: () => overrides.settingsSnapshot || {},
-        addEventListener: (name, handler) => settingsEvents.push({ name, handler }),
-        removeEventListener: vi.fn(),
-    };
-    const runtime = {
-        settings,
-        storageManager: overrides.storageManager || { getSetting: vi.fn(async () => ({})) },
-        utils: overrides.utils || { htmlTo$dom: vi.fn((html) => $(new win.DOMParser().parseFromString(html, "text/html"))) },
-        clog: { log: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
-        ...overrides.runtime,
-    };
-    const context = vm.createContext({
-        window: win, document: doc, $, URL, Date, console,
-        setTimeout, clearTimeout, requestAnimationFrame, cancelAnimationFrame,
-        BasePlugin: class {
-            getRuntimeService(name) { return runtime[name]; }
-            getOptionalDependency(name) { return runtime.optional?.[name]; }
-            getBean(name) { return runtime.optional?.[name]; }
-        },
-        clog: runtime.clog,
-        utils: runtime.utils,
-        storageManager: runtime.storageManager,
-        isDetailPage: overrides.isDetailPage ?? true,
-        isListPage: overrides.isListPage ?? true,
-        r: true, l: false, o: "https://javdb.example/search?q=ABC",
-        show: { error: vi.fn(), info: vi.fn(), ok: vi.fn() },
-        ...overrides.globals,
-    });
-    const source = readTestFile(join(repoRoot, relativePath), "utf8");
-    vm.runInContext(source + "; globalThis.TestPlugin = " + overrides.className + ";", context);
-    return { Plugin: context.TestPlugin, settings, settingsEvents };
-}
 
 function makeAutoPage(autoPage, request = vi.fn(async () => ({ data: "" }))) {
     const settings = { snapshot: () => ({ autoPage }) };

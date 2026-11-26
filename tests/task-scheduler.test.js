@@ -1,35 +1,44 @@
+import { readListItem } from "../src/core/list-item-reader.js";
+import { TaskExecutionService } from "../src/features/discovery/task-execution-service.js";
+import { sleep } from "../src/core/timing.js";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
-import { ActorSourceHealth, isMissingActorSource } from "../src/features/discovery/actor-source-health.js";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { isAbortError } from "../src/core/jhs-error.js";
-import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
-const repoRoot = join(import.meta.dirname, "..");
+const NativeDate = Date;
+const cleanup = [];
+afterEach(() => {
+    for (const dispose of cleanup.splice(0).reverse()) dispose();
+    vi.unstubAllGlobals();
+});
 
 function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https://javdb.com/") {
-    const clock = { now: new Date(initialTime).getTime() };
-    class ClockDate extends Date {
+    const clock = { now: new NativeDate(initialTime).getTime() };
+    class ClockDate extends NativeDate {
         constructor(...args) { super(...(args.length ? args : [ clock.now ])); }
         static now() { return clock.now; }
     }
     const dom = new JSDOM('<body><div id="checkNewVideoMsg"></div><div id="checkBlacklistMsg"></div></body>', { url: pageUrl }), $ = jqueryFactory(dom.window), values = new Map;
+    dom.window.isListPage = true;
+    cleanup.push(() => dom.window.close());
+    for (const [key, value] of Object.entries({
+        Date: ClockDate, window: dom.window, document: dom.window.document, DOMParser: dom.window.DOMParser, $,
+    })) vi.stubGlobal(key, value);
+    const htmlToPage = html => $(new dom.window.DOMParser().parseFromString(html, "text/html"));
     const settings = {
         checkConcurrencyCount: 2, checkRequestSleep: 0,
         checkBlacklist_intervalTime: 12, checkBlacklist_ruleTime: 0,
         checkFavoriteActress_IntervalTime: 24,
         checkNewVideo_intervalTime: 12, checkNewVideo_ruleTime: 0
     }, favorites = [], blacklistItems = [];
-    const storageManager = {
-        setting_key: "setting", _invalidateCache: vi.fn(),
-        getSetting: vi.fn(async (key = null, fallback) => null == key ? { ...settings } : Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : fallback),
-        getFavoriteActressList: vi.fn(async () => favorites), getBlacklist: vi.fn(async () => blacklistItems), getTitleFilterKeyword: vi.fn(async () => []), getBlacklistCarList: vi.fn(async () => []),
+    const settingsService = { snapshot: () => ({ ...settings }), readStoredSnapshot: vi.fn(async () => ({ ...settings })) };
+    const keywordRules = { getTitleKeywords: vi.fn(async () => []) };
+    const state = {
+        getNewVideoDecisions: async () => ({}),
+        getFavoriteActressList: vi.fn(async () => favorites), getBlacklist: vi.fn(async () => blacklistItems), getBlacklistCarList: vi.fn(async () => []),
         addFavoriteActressList: vi.fn(async () => {}), updateFavoriteActress: vi.fn(async () => true), updateBlacklistItem: vi.fn(async update => Object.assign(blacklistItems.find(item => item.starId === update.starId), update)), getCarMap: vi.fn(async () => new Map)
     };
     const localStorage = { getItem: vi.fn(key => values.has(key) ? values.get(key) : null), setItem: vi.fn((key, value) => values.set(key, String(value))), removeItem: vi.fn(key => values.delete(key)) };
@@ -52,64 +61,37 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     }, actressInfo = {
         collection: vi.fn(async (_integrationId, input) => {
             const html = await gmHttp.get(input.pageUrl);
-            vi.stubGlobal("DOMParser", dom.window.DOMParser);
-            try { return new JavDbHostAdapter(dom.window.document, dom.window.location).parseActorCollection(html, input.pageUrl); }
-            finally { vi.unstubAllGlobals(); }
+            return new JavDbHostAdapter(dom.window.document, dom.window.location).parseActorCollection(html, input.pageUrl);
         }),
         movies: vi.fn(async (_integrationId, input) => {
-            const url = `${input.baseUrl}/actors/${input.actorId}?t=d`, html = await gmHttp.get(url), page = $(new JSDOM(html, { url }).window.document);
+            const url = `${input.baseUrl}/actors/${input.actorId}?t=d`, html = await gmHttp.get(url), page = htmlToPage(html);
             return page.find(".movie-list .item").toArray().map(element => {
-                const item = $(element), parsed = context.readListItem(item);
+                const item = $(element), parsed = readListItem(item, $);
                 return { ...parsed, coverUrl: item.find("img").attr("src") || "", score: 0, voteCount: 0 };
             });
         })
     }, beans = {
-        OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com"), getJavBusUrl: vi.fn(async () => "https://www.javbus.com") },
+        OtherSitePlugin: { getJavDbUrl: vi.fn(() => "https://javdb.com"), getJavBusUrl: vi.fn(() => "https://www.javbus.com") },
         NewVideoPlugin: { loadData: vi.fn(async () => {}), resetBtnTip: vi.fn(async () => {}) },
         BlacklistPlugin: { resetBtnTip: vi.fn(async () => {}) }
     };
-    class StorageQueue { async addTask(task) { return task(); } async waitAllFinished() {} }
-    const format = timestamp => {
-        const date = new ClockDate(timestamp), pad = value => String(value).padStart(2, "0");
-        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-    };
-    const context = vm.createContext({
-        ActorSourceHealth, isMissingActorSource, isAbortError, getMovieStateEligibility,
-        console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
-        window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, StorageQueue,
-        T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
-        escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, (/** @type {string} */ c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c)),
-        utils: { sleep: vi.fn(async () => {}), getNowStr: (a = "-", b = ":", timestamp = null) => format(null == timestamp ? clock.now : timestamp), getHourDifference: (left, right) => Math.floor(Math.abs(right.getTime() - left.getTime()) / 36e5), genericSort: items => [ ...items ], htmlTo$dom: html => $(new JSDOM(html, { url: "https://javdb.com/" }).window.document) },
-        clog: { log: vi.fn(), html: vi.fn(), htmlDebug: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() }, i: (target, key, value) => target[key] = value,
-        jhsEventBus, normalizeCarNum: value => String(value || "").toUpperCase(),
-        readListItem: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), title: element.attr("data-title") || "", publishTime: element.attr("data-date") || "" }),
-        setTimeout, clearTimeout
-    });
-    context.globalThis = context;
-    const taskExecutionSource = readFileSync(join(repoRoot, "src/features/discovery/task-execution-service.js"), "utf8")
-        .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
-        .replace(/^export\s+(?=class\s)/gm, "");
-    const taskIntervalsSource = readTestFile(join(repoRoot, "src/features/discovery/task-intervals.js"), "utf8")
-        .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
-        .replace(/^export\s+(?=function\s)/gm, "");
-    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/host-list/parser.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n") + `\n${taskIntervalsSource}\n${taskExecutionSource}`;
-    vm.runInContext(`${source};globalThis.Task=TaskExecutionService`, context);
-    const plugin = new context.Task({
+    const notificationError = vi.fn();
+    const logger = { log: vi.fn(), html: vi.fn(), htmlDebug: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() };
+    const plugin = new TaskExecutionService({
         runtimeServices: {
-            storage, scope: () => activeScope, http, actressInfo, events: jhsEventBus,
+            storage, keywordRules, scope: () => activeScope, http, actressInfo, events: jhsEventBus,
             movie: { externalSiteOrigin: siteId => siteId === "javBusBtn" ? beans.OtherSitePlugin.getJavBusUrl() : beans.OtherSitePlugin.getJavDbUrl() },
-            state: { getNewVideoDecisions: async () => ({}) },
+            state, settings: settingsService,
             hostAdapters: {
                 javdb: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
                 javbus: { getListSelectors: () => ({ boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }) },
             },
-            hostListParser: { parseDetailPage: context.parseDetailPage },
         },
         blacklist: { available: () => Boolean(beans.BlacklistPlugin), parseAndSave: (...args) => beans.BlacklistPlugin.parseAndSaveFilterInfo(...args) },
-        legacyStorage: storageManager, utilities: context.utils, logger: context.clog, jquery: $,
-        window: context.window, notifications: { error: context.show.error },
+        sleep: vi.fn(async () => {}), logger, jquery: $,
+        window: dom.window, notifications: { error: notificationError },
     });
-    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, setScope: value => { activeScope = value; }, document: dom.window.document, $, htmlToPage: context.utils.htmlTo$dom };
+    return { plugin, clock, values, settings, favorites, blacklistItems, state, settingsService, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, setScope: value => { activeScope = value; }, document: dom.window.document, $, htmlToPage };
 }
 
 describe("task scheduler state machine", () => {
@@ -132,17 +114,17 @@ describe("task scheduler state machine", () => {
     it("preflights every page movie before filters or favorite actress replacement", async () => {
         const harness = createHarness();
         harness.plugin.javDbUrl = "https://javdb.com";
-        const page = harness.htmlToPage('<div class="movie-list"><div class="item" data-car="ABC-123" data-date="2026-08-01"></div><div class="item" data-car="STUDIO-NAME" data-title="filtered" data-date="2026-09-01"></div></div>');
+        const page = harness.htmlToPage('<div class="movie-list"><div class="item"><a href="/v/test"><div class="video-title"><strong>ABC-123</strong> </div></a><div class="meta">2026-08-01</div></div><div class="item"><a href="/v/test"><div class="video-title"><strong>STUDIO-NAME</strong> filtered</div></a><div class="meta">2026-09-01</div></div></div>');
         await expect(harness.plugin.parsePage(page, "javdb", "actor", "Actor", ["filtered"], new Set(["STUDIO-NAME"]))).rejects.toMatchObject({ code: "INCOMPLETE_MOVIE_IDENTITY" });
-        expect(harness.storageManager.updateFavoriteActress).not.toHaveBeenCalled();
-        expect(harness.storageManager.getCarMap).not.toHaveBeenCalled();
+        expect(harness.state.updateFavoriteActress).not.toHaveBeenCalled();
+        expect(harness.state.getCarMap).not.toHaveBeenCalled();
     });
 
     it("preserves fallback actor results and dates when any item has an unreliable identity", async () => {
         const harness = createHarness();
         await expect(harness.plugin.parseActorMovies([{ carNum: "HEYZO1234" }, { carNum: "FC2", title: "filtered" }], "actor", "Actor", ["filtered"], new Set(["FC2"]))).rejects.toMatchObject({ code: "INCOMPLETE_MOVIE_IDENTITY" });
-        expect(harness.storageManager.updateFavoriteActress).not.toHaveBeenCalled();
-        expect(harness.storageManager.getCarMap).not.toHaveBeenCalled();
+        expect(harness.state.updateFavoriteActress).not.toHaveBeenCalled();
+        expect(harness.state.getCarMap).not.toHaveBeenCalled();
     });
 
     it("preflights a compatibility blacklist page before any legacy save or success timestamp", async () => {
@@ -150,11 +132,11 @@ describe("task scheduler state machine", () => {
         harness.blacklistItems.push({ starId: "a", name: "A", url: "https://javdb.com/actors/a", createTime: "1", checkTime: "2020-01-01" });
         harness.plugin.taskConfig = { checkConcurrencyCount: 1, checkRequestSleep: 0, checkBlacklist_intervalTime: 12, checkBlacklist_ruleTime: 0 };
         harness.plugin.javDbUrl = "https://javdb.com";
-        harness.gmHttp.get.mockResolvedValue('<div class="movie-list"><div class="item" data-car="ABC-123"></div><div class="item" data-car="STUDIO-NAME"></div></div>');
+        harness.gmHttp.get.mockResolvedValue('<div class="movie-list"><div class="item"><a href="/v/test"><div class="video-title"><strong>ABC-123</strong> </div></a><div class="meta"></div></div><div class="item"><a href="/v/test"><div class="video-title"><strong>STUDIO-NAME</strong> </div></a><div class="meta"></div></div></div>');
         harness.beans.BlacklistPlugin.parseAndSaveFilterInfo = vi.fn(async () => ({ lastPublishTime: "2026-09-01" }));
         await expect(harness.plugin.checkBlacklist(true)).resolves.toMatchObject({ completed: false, parseFailed: 1, success: 0 });
         expect(harness.beans.BlacklistPlugin.parseAndSaveFilterInfo).not.toHaveBeenCalled();
-        expect(harness.storageManager.updateBlacklistItem).not.toHaveBeenCalled();
+        expect(harness.state.updateBlacklistItem).not.toHaveBeenCalled();
         expect(harness.blacklistItems[0].checkTime).toBe("2020-01-01");
         expect(harness.values.has("jhs_time_checkBlacklist")).toBe(false);
     });
@@ -224,7 +206,7 @@ describe("task scheduler state machine", () => {
         const harness = createHarness(), previous = { checkNewVideo_intervalTime: 12 };
         harness.plugin.taskConfig = previous;
         let release;
-        harness.storageManager.getSetting.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+        harness.settingsService.readStoredSnapshot.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
         const refresh = harness.plugin.invalidateConfig(true);
         expect(harness.plugin.taskConfig).toBe(previous);
         release({ ...harness.settings, checkNewVideo_intervalTime: 3 });
@@ -236,14 +218,14 @@ describe("task scheduler state machine", () => {
     it("coalesces a direct load with a newer load so the late old read cannot overwrite settings", async () => {
         const harness = createHarness();
         let releaseOld;
-        harness.storageManager.getSetting.mockImplementationOnce(() => new Promise(resolve => { releaseOld = resolve; }));
+        harness.settingsService.readStoredSnapshot.mockImplementationOnce(() => new Promise(resolve => { releaseOld = resolve; }));
         const oldLoad = harness.plugin.loadConfig();
         harness.settings.checkNewVideo_intervalTime = 3;
         const newLoad = harness.plugin.loadConfig();
         releaseOld({ ...harness.settings, checkNewVideo_intervalTime: 12 });
         await Promise.all([oldLoad, newLoad]);
         expect(harness.plugin.taskConfig.checkNewVideo_intervalTime).toBe(3);
-        expect(harness.storageManager.getSetting).toHaveBeenCalledTimes(2);
+        expect(harness.settingsService.readStoredSnapshot).toHaveBeenCalledTimes(2);
     });
 
     it("reports only current-tab execution as running and cleans active state on failure", async () => {
@@ -387,11 +369,11 @@ describe("task scheduler state machine", () => {
     });
 
     it("records the maximum real publication date before inbox filters", async () => {
-        const harness = createHarness(), page = harness.htmlToPage('<div class="movie-list"><div class="item" data-car="A-1" data-url="/v/1" data-title="normal" data-date="2026-08-01"></div><div class="item" data-car="B-1" data-url="/v/2" data-title="filtered title" data-date="2026-09-03"></div><div class="item" data-car="C-1" data-url="/v/3" data-title="normal" data-date="2026-08-20"></div></div>');
+        const harness = createHarness(), page = harness.htmlToPage('<div class="movie-list"><div class="item"><a href="/v/1"><div class="video-title"><strong>A-1</strong> normal</div></a><div class="meta">2026-08-01</div></div><div class="item"><a href="/v/2"><div class="video-title"><strong>B-1</strong> filtered title</div></a><div class="meta">2026-09-03</div></div><div class="item"><a href="/v/3"><div class="video-title"><strong>C-1</strong> normal</div></a><div class="meta">2026-08-20</div></div></div>');
         harness.plugin.javDbUrl = "https://javdb.com";
-        harness.storageManager.getCarMap.mockResolvedValue(new Map([[ "C-1", {} ]]));
+        harness.state.getCarMap.mockResolvedValue(new Map([[ "C-1", {} ]]));
         await harness.plugin.parsePage(page, "javdb", "actor", "Actor", [ "filtered" ], new Set);
-        expect(harness.storageManager.updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
+        expect(harness.state.updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
             starId: "actor", lastPublishTime: "2026-09-03", newVideoList: [ expect.objectContaining({ carNum: "A-1" }) ]
         }), { scan: true });
     });
@@ -402,7 +384,7 @@ describe("task scheduler state machine", () => {
         empty.gmHttp.get.mockResolvedValue('<div id="actors"></div>');
         await expect(empty.plugin.checkFavoriteActress()).resolves.toMatchObject({ success: 0, pages: 1 });
         expect(empty.values.get("jhs_time_checkFavoriteActress")).toMatch(/^2026-/);
-        expect(empty.storageManager.addFavoriteActressList).not.toHaveBeenCalled();
+        expect(empty.state.addFavoriteActressList).not.toHaveBeenCalled();
 
         const login = createHarness();
         login.plugin.taskConfig = { checkFavoriteActress_IntervalTime: 24 }, login.plugin.javDbUrl = "https://javdb.com";
@@ -528,8 +510,8 @@ describe("background task failure isolation", () => {
 describe("blacklist source resolution", () => {
     it("resolves configured hosts and supported mirrors without reading page text", async () => {
         const harness = createHarness();
-        harness.beans.OtherSitePlugin.getJavDbUrl.mockResolvedValue("https://private-db.example");
-        harness.beans.OtherSitePlugin.getJavBusUrl.mockResolvedValue("https://private-bus.example");
+        harness.beans.OtherSitePlugin.getJavDbUrl.mockReturnValue("https://private-db.example");
+        harness.beans.OtherSitePlugin.getJavBusUrl.mockReturnValue("https://private-bus.example");
         await expect(harness.plugin.resolveBlacklistSite("https://private-db.example/actors/a")).resolves.toBe("javdb");
         await expect(harness.plugin.resolveBlacklistSite("https://private-bus.example/star/a")).resolves.toBe("javbus");
         await expect(harness.plugin.resolveBlacklistSite("https://javdb521.com/actors/a")).resolves.toBe("javdb");

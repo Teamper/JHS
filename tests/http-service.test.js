@@ -244,13 +244,14 @@ describe("HTTP, URL and settings contracts", () => {
         expect(afterPersist).toHaveBeenCalledTimes(2);
     });
 
-    it("proxies legacy network controls through DiagnosticsService", () => {
-        const legacyHttp = {
+    it("uses the bound HTTP service for network diagnostics through DiagnosticsService", () => {
+        const http = {
             getCircuitBreakerStatus: vi.fn(() => ({ "api.example": { state: "open" } })),
             getDomainStats: vi.fn(() => ({ "api.example": { count: 2, errors: 1 } })),
             resetCircuitBreaker: vi.fn(), resetAllCircuitBreakers: vi.fn(), clearDomainStats: vi.fn(),
         };
-        const diagnostics = new DiagnosticsService({ legacyHttp });
+        const diagnostics = new DiagnosticsService();
+        diagnostics.setNetworkController(http);
         expect(diagnostics.getNetworkDiagnostics()).toEqual({
             circuitBreakers: { "api.example": { state: "open" } },
             domainStats: { "api.example": { count: 2, errors: 1 } },
@@ -258,8 +259,8 @@ describe("HTTP, URL and settings contracts", () => {
         diagnostics.resetCircuitBreaker("api.example");
         diagnostics.resetAllCircuitBreakers();
         diagnostics.clearDomainStats();
-        expect(legacyHttp.resetCircuitBreaker).toHaveBeenCalledWith("api.example");
-        expect(legacyHttp.resetAllCircuitBreakers).toHaveBeenCalledOnce();
-        expect(legacyHttp.clearDomainStats).toHaveBeenCalledOnce();
+        expect(http.resetCircuitBreaker).toHaveBeenCalledWith("api.example");
+        expect(http.resetAllCircuitBreakers).toHaveBeenCalledOnce();
+        expect(http.clearDomainStats).toHaveBeenCalledOnce();
     });
 });

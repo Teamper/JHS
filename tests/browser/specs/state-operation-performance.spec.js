@@ -31,18 +31,18 @@ for (const count of process.env.JHS_PERF_STRESS === "1" ? [50000] : [3000, 10000
     // (covered by responsive-sync-performance); quiet-gate timing must not
     // unpredictably start an automatic reconcile halfway through these samples.
     service.deps.store.deps.backgroundWork = { waitForTurn: () => new Promise(() => {}) };
-    const state = window.stateService, storage = window.storageManager, samples = [], stages = [], restore = [];
+    const state = window.stateService, storage = window.__jhsBrowserDiagnostics.detailServices.storage, samples = [], stages = [], restore = [];
     const wrap = (obj, name, label, keys=false) => { const old=obj[name]; obj[name]=async function(...args){const start=performance.now();try{return await old.apply(this,args);}finally{stages.push({stage:label,key:keys?args[0]:undefined,ms:performance.now()-start});}};restore.push(()=>obj[name]=old); };
     for(const name of ["_readDomains","_commit","_notifyCommitted"]) wrap(state,name,"state."+name);
     for(const name of ["read","writeWithoutLock","reconcileWithoutLock","finish"]) wrap(service.deps.store,name,"sync."+name);
-    for(const f of new Set([storage.forage,service.deps.store.forage])) for(const name of ["getItem","setItem","removeItem"]) wrap(f,name,"idb."+name,true);
+    for(const name of ["getItem","setItem","removeItem"]) wrap(storage.port.forage,name,"idb."+name,true);
     let gaps=[], previous=performance.now();const timer=setInterval(()=>{const now=performance.now();gaps.push(now-previous);previous=now;},10);
     try {
       for(let round=0;round<sampleCount;round++) for(const [name,op] of [["favorite",()=>state.toggle("LIB-"+(round*3),"favorite")],["watched",()=>state.toggle("LIB-"+(round*3+1),"watched")],["offline-history",()=>state.appendOfflineHistory({carNum:"LIB-"+(round*3+2),providerId:"123",resource:"magnet:?xt=fixture",status:"submitted"})],["downloaded",()=>state.patch("LIB-"+(round*3+2),{downloaded:true})]]) {
         stages.length=0;gaps=[];previous=performance.now();const start=performance.now();await op();const elapsed=performance.now()-start;await new Promise(resolve=>setTimeout(resolve,20));samples.push({name,round,elapsed,maxTimerGap:Math.max(0,...gaps),stages:[...stages]});
       }
     } finally { clearInterval(timer);restore.reverse().forEach(fn=>fn()); }
-    const journal = await storage.forage.getItem("mutation_journal");
+    const journal = await storage.get("mutation_journal");
     const record=await state.getState("LIB-2");const history=await state.getOfflineHistory();
     const carMap = await state.getCarMap();
     const allSamplesCommitted = Array.from({length:sampleCount},(_,round)=>round).every(round => carMap.get("LIB-"+(round*3))?.stateFlags.favorite && carMap.get("LIB-"+(round*3+1))?.stateFlags.watched && carMap.get("LIB-"+(round*3+2))?.stateFlags.downloaded && history.some(item=>item.carNum==="LIB-"+(round*3+2)));

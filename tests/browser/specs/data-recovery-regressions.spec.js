@@ -11,11 +11,11 @@ test.beforeEach(async ({ page, context }, info) => {
 test("unversioned import retains favorite when another state is changed", async ({ page }) => {
   await injectUserscriptRuntime(page);
   const result = await page.evaluate(async () => {
-    const storage = window.storageManager;
-    await storage.importData({ car_list: [{ carNum: "ABC-123", url: "/v/old", status: "favorite" }] });
-    const favorites = (await storage.getStatusMap()).favorite.size;
-    await window.stateService.patch("ABC-123", { downloaded: true });
-    return { favorites, record: await storage.getCar("ABC-123"), version: await storage.getDataVersion() };
+    const { state, storage, backup } = window.__jhsBrowserDiagnostics.detailServices;
+    await backup.importData({ car_list: [{ carNum: "ABC-123", url: "/v/old", status: "favorite" }] });
+    const favorites = (await state.getCarList()).filter(record => record.stateFlags.favorite).length;
+    await state.patch("ABC-123", { downloaded: true });
+    return { favorites, record: await state.getState("ABC-123"), version: await storage.get("data_version") };
   });
   expect(result).toMatchObject({ favorites: 1, version: CURRENT_DATA_VERSION, record: { stateFlags: { favorite: true, downloaded: true } } });
 });
@@ -23,14 +23,14 @@ test("unversioned import retains favorite when another state is changed", async 
 test("undo cannot transfer a deleted actress's new movie to another actress", async ({ page }) => {
   await injectUserscriptRuntime(page);
   const result = await page.evaluate(async () => {
-    const storage = window.storageManager, state = window.stateService;
-    await storage.importData({ data_version: 3, favorite_actresses: [
+    const { storage, state, backup } = window.__jhsBrowserDiagnostics.detailServices;
+    await backup.importData({ data_version: 3, favorite_actresses: [
       { starId: "actor-A", name: "A", newVideoList: ["XYZ-001"] },
       { starId: "actor-B", name: "B", newVideoList: [] },
     ] });
     const removed = await state.removeFromNewVideoList("XYZ-001");
     await state.removeFavoriteActress("actor-A");
-    return { undo: await state.undoTransaction(removed.transactionId), actresses: await storage.forage.getItem("favorite_actresses") };
+    return { undo: await state.undoTransaction(removed.transactionId), actresses: await storage.get("favorite_actresses") };
   });
   expect(result).toEqual({ undo: { reverted: [], conflicts: ["XYZ-001"] }, actresses: [{ starId: "actor-B", name: "B", newVideoList: [] }] });
 });
@@ -44,12 +44,13 @@ test("restoring an actual migration snapshot normalizes its source version witho
     });
   } });
   const result = await page.evaluate(async () => {
-    const storage = window.storageManager;
-    const snapshot = (await storage._getSnapshots()).find(item => item.kind === "migration-snapshot" && item.targetDataVersion === 2);
-    if (!snapshot) throw new Error("bootstrap did not create the migration snapshot");
-    await window.stateService.patch("ABC-123", { watched: true });
-    await storage.restoreSnapshot(snapshot.id);
-    return { sourceVersion: snapshot.data.data_version, version: await storage.getDataVersion(), record: await storage.getCar("ABC-123") };
+    const { state, storage, backup } = window.__jhsBrowserDiagnostics.detailServices;
+    const entry = (await backup.getSnapshotList()).find(item => item.kind === "migration-snapshot" && item.targetDataVersion === 2);
+    if (!entry) throw new Error("bootstrap did not create the migration snapshot");
+    const snapshot = await backup.getSnapshot(entry.id);
+    await state.patch("ABC-123", { watched: true });
+    await backup.restoreSnapshot(snapshot.id);
+    return { sourceVersion: snapshot.data.data_version, version: await storage.get("data_version"), record: await state.getState("ABC-123") };
   });
   expect(result).toMatchObject({ sourceVersion: 1, version: CURRENT_DATA_VERSION, record: { stateFlags: { favorite: true, watched: false } } });
 });

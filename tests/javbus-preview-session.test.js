@@ -1,6 +1,6 @@
+import { readFileSync } from "node:fs";
 // @vitest-environment jsdom
 import jquery from "jquery";
-import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { JavBusPreviewController } from "../src/features/detail/javbus-preview-controller.js";
@@ -41,7 +41,7 @@ function harness({ pendingSource = null, realLayer = false } = {}) {
     if (realLayer) {
         vi.stubGlobal("jQuery", jquery);
         const script = document.createElement("script"); script.src = "https://example.test/layer.js"; document.body.append(script);
-        window.eval(readTestFile(join(import.meta.dirname, "browser/fixtures/layer-runtime/layer-1.0.9.min.js"), "utf8"));
+        window.eval(readFileSync(join(import.meta.dirname, "browser/fixtures/layer-runtime/layer-1.0.9.min.js"), "utf8"));
         script.remove();
         layer = window.layer;
     }

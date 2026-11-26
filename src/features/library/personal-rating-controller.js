@@ -15,13 +15,12 @@ export class PersonalRatingController {
         this.dialog = options.dialog;
         this.ui = options.ui;
         this.document = /** @type {Document} */ (options.host.document);
-        this.ratings = /** @type {Record<string, any>} */ ({});
+        this.ratings = /** @type {Record<string, any> | null} */ (null);
         /** @type {Map<Element, any>} */ this.items = new Map();
         this.dialogScope = /** @type {LifecycleScope | null} */ (null);
         this.refreshGeneration = 0;
     }
-    async start() {
-        await this.refresh();
+    start() {
         this.scope.assertActive();
         this.scope.addCleanup(this.events.on("personal-rating-changed", () => this.refresh()));
         this.scope.observe(this.document.body, records => {
@@ -29,6 +28,7 @@ export class PersonalRatingController {
         }, { childList: true, subtree: true });
         this.scope.addCleanup(() => { this.dialogScope?.dispose(); for (const item of this.items.values()) item.scope.dispose(); this.items.clear(); });
         this.scan();
+        return this.refresh();
     }
     async refresh() {
         const generation = ++this.refreshGeneration;
@@ -62,7 +62,6 @@ export class PersonalRatingController {
         const carNum = normalizeCarNum(movie.carNum);
         if (!carNum) return;
         const scope = new LifecycleScope(`rating:${movie.carNum}`), release = this.scope.addCleanup(() => scope.dispose());
-        const value = this.ratings[carNum]?.rating || null;
         const view = null;
         const root = this.document.createElement(detail ? "button" : "span");
         if (!view) root.className = "jhs-badge jhs-badge--neutral jhs-rating-badge";
@@ -80,8 +79,8 @@ export class PersonalRatingController {
     }
     /** @param {any} item */
     render(item) {
-        const rating = this.ratings[item.carNum]?.rating || null;
-        if (item.detail) item.root.textContent = `个人评分 · ${rating ? rating + " 星" : "未评分"}`;
+        const rating = this.ratings?.[item.carNum]?.rating || null;
+        if (item.detail) item.root.textContent = this.ratings ? `个人评分 · ${rating ? rating + " 星" : "未评分"}` : "个人评分";
         else if (item.view) item.view.update(rating);
         else { item.root.hidden = !rating; item.root.textContent = rating ? `个人 ${rating} 星` : ""; }
     }

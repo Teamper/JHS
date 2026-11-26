@@ -38,13 +38,13 @@ describe("legacy blocked movie identity collisions", () => {
     it("does not append another canonical movie when a legacy spelling already exists", async () => {
         const a = await syncReplica(memoryDav(), { data: { blacklist_car_list: [input("ABC123")] } });
         const before = structuredClone(a.values.get("blacklist_car_list"));
-        expect(await a.storage.batchSaveBlacklistCarList([input("ABC-123")])).toEqual({ changed: [] });
+        expect(await a.state.batchSaveBlacklistCarList([input("ABC-123")])).toEqual({ changed: [] });
         expect(a.values.get("blacklist_car_list")).toEqual(before);
     });
 
     it("stores one canonical blocked movie when a batch contains different spellings", async () => {
         const a = await syncReplica(memoryDav());
-        expect(await a.storage.batchSaveBlacklistCarList([input("ABC123"), input("abc-123")])).toEqual({ changed: ["ABC-123"] });
+        expect(await a.state.batchSaveBlacklistCarList([input("ABC123"), input("abc-123")])).toEqual({ changed: ["ABC-123"] });
         expect(a.values.get("blacklist_car_list")).toHaveLength(1);
         expect(a.values.get("blacklist_car_list")[0]).toMatchObject({ carNum: "ABC-123", starId: "actor-1", status: "filter" });
         await a.service.check();

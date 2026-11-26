@@ -4,6 +4,8 @@ import jquery from "jquery";
 import { ReviewPanel } from "../src/ui/detail/review-panel.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { KeywordRulesService } from "../src/services/keyword-rules-service.js";
+import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
 import { readReviewKeywords } from "../src/core/review-keywords.js";
 let dom;
 afterEach(() => { dom?.window.close(); vi.unstubAllGlobals(); });
@@ -15,8 +17,9 @@ async function harness() {
     const storage = { get: async key => values.get(key), set: async (key, value) => values.set(key, value), remove: async key => values.delete(key) };
     const settings = new SettingsService(storage); await settings.load();
     const scope = new LifecycleScope("reviews"), list = vi.fn(async () => [{ content: "blocked", createdAt: "today" }]);
-    const panel = new ReviewPanel({ review: { list }, settings, storage, scope: async () => scope });
-    return { $, settings, values, scope, list, panel };
+    const keywordRules = new KeywordRulesService({ storage, coordinator: new StorageMutationCoordinator({ lockManager: null }) });
+    const panel = new ReviewPanel({ review: { list }, settings, keywordRules, scope: async () => scope });
+    return { $, settings, storage, values, scope, list, panel };
 }
 describe("review settings regressions", () => {
     it("reads both keyword sources before waiting and still verifies the merged write before cleanup", async () => {
@@ -47,9 +50,9 @@ describe("review settings regressions", () => {
         expect(values.get("filter_keyword_review")).toEqual(["blocked", "legacy", "one", "two"]);
     });
     it("preserves legacy keywords when the canonical write fails", async () => {
-        const { values, panel } = await harness();
+        const { values, panel, storage } = await harness();
         values.set("review_filter_keyword", ["legacy"]);
-        panel.storage.set = async () => { throw new Error("write failed"); };
+        storage.set = async () => { throw new Error("write failed"); };
         await expect(panel.getKeywords()).rejects.toThrow("write failed");
         expect(values.get("review_filter_keyword")).toEqual(["legacy"]);
         expect(values.get("filter_keyword_review")).toEqual(["blocked"]);

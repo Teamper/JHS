@@ -199,12 +199,11 @@ describe("List FeatureRuntime ownership", () => {
 
     it("invalidates the injected list-data snapshot before a full refresh", async () => {
         const readFilterSources = vi.fn(async () => ({ titleKeywords: [], activity: { entries: [] } }));
-        const legacyStorage = { car_list_key: "car_list", _invalidateCache: vi.fn() };
         const legacyPlugin = {
             captureListRevision: () => "2:0", isCurrentListGeneration: () => true,
             invalidateListRefreshContext: vi.fn(),
         };
-        const controller = new ListController({ legacyPlugin, legacyStorage, readFilterSources, hostAdapter, scope: new LifecycleScope("feature:list") });
+        const controller = new ListController({ legacyPlugin, readFilterSources, hostAdapter, scope: new LifecycleScope("feature:list") });
         controller.filterContextProvider = new ListFilterContextProvider({ readSources: readFilterSources });
         controller.filterListItems = vi.fn(async () => { await controller.filterContextProvider.get(); return true; });
         controller.view = { getActiveFilter: () => "waitCheck", applyVisibility: vi.fn(), dispose: vi.fn() };
@@ -213,7 +212,6 @@ describe("List FeatureRuntime ownership", () => {
         await controller.listRefreshController.request({ full: true, reason: "test" });
 
         expect(readFilterSources).toHaveBeenCalledTimes(2);
-        expect(legacyStorage._invalidateCache).toHaveBeenCalledWith("car_list");
         expect(legacyPlugin.invalidateListRefreshContext).toHaveBeenCalledOnce();
         controller.dispose();
     });

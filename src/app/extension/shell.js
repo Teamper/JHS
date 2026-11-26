@@ -1,4 +1,5 @@
 // @ts-check
+import { getDialogArea } from "../../core/dialog-shell.js";
 import { bootstrapJhs, mountBootstrapError } from "../../app/bootstrap.js";
 import { ExtensionClient } from "../../platform/extension/client.js";
 import { LayerDialogAdapter } from "../../platform/userscript/layer-dialog-adapter.js";
@@ -39,18 +40,16 @@ async function start() {
     const client = new ExtensionClient();
     const vendors = getVendorRuntime();
     /** @type {any} */ let context;
-    const dialogAdapter = new ExtensionDialogAdapter(new LayerDialogAdapter(vendors.layer), {
-        releaseEscClose: id => context?.services?.legacyUtils?.releaseEscClose?.(id),
-        jquery: vendors.$,
-    });
-
     const options = await createRemoteRuntime(client);
     context = await bootstrapJhs({
         ...options,
         location: new URL("https://javdb.com"),
         platform: {
             ...options.platform,
-            dialog: dialogAdapter,
+            createDialog: (/** @type {import("../../core/dialog-esc-controller.js").DialogEscController} */ dialogEsc) => new ExtensionDialogAdapter(new LayerDialogAdapter(vendors.layer, { getDialogArea }), {
+                releaseEscClose: id => dialogEsc.releaseEscClose(id),
+                jquery: vendors.$,
+            }),
             enabledFeatures: [
                 "settings-effects", "settings-entry", "settings", "diagnostics",
                 "library", "new-video", "stats", "privacy",
@@ -58,6 +57,7 @@ async function start() {
             ],
         },
     });
+    /** @type {ExtensionDialogAdapter} */ const dialogAdapter = context.services.dialog;
     context.rootScope.listen(client, "disconnected", () => context.rootScope.dispose());
     /** @type {any} */ (globalThis).__jhsExtensionContext = context;
 

@@ -22,18 +22,18 @@ async function revisionFingerprint(record, revision, parents) {
 }
 
 export class CredentialService extends EventTarget {
-    /** @param {{getValue: (key: string, fallback?: unknown) => unknown, setValue: (key: string, value: unknown) => unknown, removeValue: (key: string) => unknown, listValues?: () => any, listenValue?: (key: string, callback: () => void) => any, unlistenValue?: (listener: any) => void}} storage @param {Storage} [legacyStorage] */
-    constructor(storage, legacyStorage = globalThis.localStorage) {
+    /** @param {{getValue: (key: string, fallback?: unknown) => unknown, setValue: (key: string, value: unknown) => unknown, removeValue: (key: string) => unknown, listValues?: () => any, listenValue?: (key: string, callback: () => void) => any, unlistenValue?: (listener: any) => void}} storage @param {Storage} [legacyPageStorage] */
+    constructor(storage, legacyPageStorage = globalThis.localStorage) {
         super();
         this.storage = storage;
-        this.legacyStorage = legacyStorage;
+        this.legacyPageStorage = legacyPageStorage;
         this.listener = storage.listenValue?.(CREDENTIAL_KEYS.javdbToken, () => { void this.notifyChanged(CREDENTIAL_KEYS.javdbToken); });
         /** @type {Map<string, string>} */ this.cleanupValues = new Map();
         /** @type {Map<string, string>} */ this.cleanupTargets = new Map();
     }
     /** Read the legacy key without replacing shared key material. */
     async installationSecret() {
-        return String(await this.storage.getValue(CREDENTIAL_KEYS.installationSecret, "") || this.legacyStorage?.getItem?.(CREDENTIAL_KEYS.installationSecret) || "x7k9p3");
+        return String(await this.storage.getValue(CREDENTIAL_KEYS.installationSecret, "") || this.legacyPageStorage?.getItem?.(CREDENTIAL_KEYS.installationSecret) || "x7k9p3");
     }
     generateSecret() { return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))); }
 
@@ -41,7 +41,7 @@ export class CredentialService extends EventTarget {
     async decodeLegacy(value, secret) {
         const payload = value.replace(/^AES:/, "");
         let candidate = value.startsWith("AES:");
-        try { candidate ||= /^[A-Za-z0-9+/]+={0,2}$/.test(payload) && atob(payload).length >= 28; } catch {}
+        try { candidate ||= /^[A-Za-z0-9+/]+={0,2}$/.test(payload) && atob(payload).length >= 28; } catch { /* Malformed Base64 can still be a legacy plaintext credential. */ }
         if (!candidate) return value;
         return decryptData(payload, secret || await this.installationSecret());
     }
@@ -214,13 +214,13 @@ export class CredentialService extends EventTarget {
 
     /** @param {any} settings @param {{deferCleanup?: boolean}} [options] */
     async migrateLegacy(settings, options = {}) {
-        const legacySecret = this.legacyStorage?.getItem?.(CREDENTIAL_KEYS.installationSecret) || "";
+        const legacySecret = this.legacyPageStorage?.getItem?.(CREDENTIAL_KEYS.installationSecret) || "";
         const decodeLegacy = (/** @type {string} */ value) => this.decodeLegacy(value, legacySecret);
         const issues = [];
         /** @type {Record<string, string>} */ const settingValues = {};
         /** @type {string[]} */ const pageKeys = [];
         const snapshot = settings?.snapshot?.() || {};
-        const token = this.legacyStorage?.getItem?.(CREDENTIAL_KEYS.javdbToken) || "";
+        const token = this.legacyPageStorage?.getItem?.(CREDENTIAL_KEYS.javdbToken) || "";
         const password = String(snapshot.webDavPassword || "");
         for (const [key, source] of [[CREDENTIAL_KEYS.javdbToken, token], [CREDENTIAL_KEYS.webDavPassword, password]]) {
             let stored;

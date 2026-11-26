@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { StorageManager } from "../src/core/storage.js";
+import { storageFromForage } from "./helpers/atomic-storage.js";
 import { StateService } from "../src/core/state-service.js";
 import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
 
@@ -17,14 +17,11 @@ function fixture(initial = {}) {
     vi.stubGlobal("utils", { getNowStr: () => "2026-10-20 12:00:00" });
     vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn() });
     vi.stubGlobal("show", { info: vi.fn() });
-    StorageManager.instance = null;
-    const storage = new StorageManager(), coordinator = new StorageMutationCoordinator({ lockManager: null }), eventBus = { emit: vi.fn(async () => {}) };
-    const state = new StateService(storage, eventBus, coordinator);
-    storage.mutationCoordinator = coordinator;
-    storage.stateService = state;
+    const storage = storageFromForage(forage), coordinator = new StorageMutationCoordinator({ lockManager: null }), eventBus = { emit: vi.fn(async () => {}) };
+    const state = new StateService(storage, eventBus, coordinator, { logger: globalThis.clog, notifications: globalThis.show });
     return { storage, state, eventBus, data, forage };
 }
-afterEach(() => { StorageManager.instance = null; vi.unstubAllGlobals(); });
+afterEach(() => vi.unstubAllGlobals());
 
 describe("stable identity in new-video undo", () => {
     it("does not restore a removed actress's movie into the next array member", async () => {
@@ -36,10 +33,10 @@ describe("stable identity in new-video undo", () => {
     });
 
     it("restores by stable id after a public delete and re-add changes the index", async () => {
-        const { state, storage, data } = fixture({ favorite_actresses: [{ starId: "a", name: "A", newVideoList: ["ABC-123"] }, { starId: "b", name: "B", newVideoList: [] }] });
+        const { state, data } = fixture({ favorite_actresses: [{ starId: "a", name: "A", newVideoList: ["ABC-123"] }, { starId: "b", name: "B", newVideoList: [] }] });
         const transaction = await state.removeFromNewVideoList("ABC-123");
         await state.removeFavoriteActress("a");
-        await storage.addFavoriteActressList([{ starId: "a", name: "A" }]);
+        await state.addFavoriteActressList([{ starId: "a", name: "A" }]);
         await expect(state.undoTransaction(transaction.transactionId)).resolves.toEqual({ reverted: ["ABC-123"], conflicts: [] });
         expect(data.get("favorite_actresses").map((actor) => [actor.starId, actor.newVideoList || []])).toEqual([["b", []], ["a", ["ABC-123"]]]);
     });
@@ -82,7 +79,7 @@ describe("stable identity in new-video undo", () => {
 
 describe("committed state journal cleanup", () => {
     it("returns success and notifies once when the first journal cleanup fails", async () => {
-        const { state, storage, forage, data, eventBus } = fixture();
+        const { state, forage, data, eventBus } = fixture();
         forage.removeItem.mockRejectedValueOnce(new Error("temporary journal cleanup failure"));
         await expect(state.toggle("ABC-123", "favorite")).resolves.toMatchObject({ changed: ["ABC-123"] });
         expect((await state.getState("ABC-123")).stateFlags.favorite).toBe(true);
@@ -92,7 +89,7 @@ describe("committed state journal cleanup", () => {
         await state.recoverPendingTransaction();
         expect(data.has("mutation_journal")).toBe(false);
         expect(forage.setItem.mock.calls).toHaveLength(writes);
-        expect((await storage.getCar("ABC-123")).stateFlags.favorite).toBe(true);
+        expect((await state.getState("ABC-123")).stateFlags.favorite).toBe(true);
         expect(eventBus.emit.mock.calls.filter(([name]) => name === "car-state-changed")).toHaveLength(1);
     });
 

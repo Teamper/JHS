@@ -1,6 +1,6 @@
 // @ts-check
 
-import { escapeHtml, normalizeCarNum } from "./constants.js";
+import { normalizeCarNum } from "./constants.js";
 import { getMovieStateEligibility } from "./movie-identity.js";
 import { LifecycleScope } from "./lifecycle-scope.js";
 
@@ -65,23 +65,13 @@ export function selectLatestPublishTime(values) {
     return latestValue;
 }
 
-function normalizeDmmCid(/** @type {unknown} */ carNum) {
-    const compact = (normalizeCarNum(carNum) || "").replace(/[-_\s]/g, "").toLowerCase();
-    if (!compact) return [];
-    const candidates = [compact];
-    const match = compact.match(/^([a-z]+)(\d+)$/);
-    if (match) candidates.push(`${match[1]}00${match[2]}`, `${match[1]}0${match[2]}`);
-    return [...new Set(candidates)];
-}
-
 /** 将外部地址规范为可安全写入链接或媒体属性的 HTTP(S) URL。 */
 export function normalizeHttpUrl(/** @type {unknown} */ value, /** @type {string | URL} */ baseUrl = window.location.href) {
     if (!value) return null;
     try {
         const url = new URL(String(value), baseUrl);
         return [ "http:", "https:" ].includes(url.protocol) ? url.href : null;
-    } catch (error) {
-        clog.debug("外部 URL 无效，已忽略", error);
+    } catch {
         return null;
     }
 }
@@ -106,20 +96,11 @@ export function parseCarNumberText(/** @type {unknown} */ text) {
 
 export function buildFallbackCarUrl(/** @type {unknown} */ carNum, /** @type {string} */ baseUrl = "https://javdb.com") { return `${baseUrl}/search?q=${encodeURIComponent(String(carNum ?? ""))}`; }
 
-function linkCommentImageReferences(/** @type {unknown} */ text, /** @type {number} */ imageCount) {
-    /** @type {Record<string, number>} */
-    const chinese = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
-    return String(text).replace(/(?:图|图片)\s*([一二三四五六七八九十]|\d+)/g, ((/** @type {string} */ match, /** @type {string} */ value) => {
-        const index = chinese[value] || Number(value);
-        return index >= 1 && index <= imageCount ? `<button type="button" class="jhs-btn jhs-btn--ghost jhs-comment-image-link" data-image-index="${index - 1}">${escapeHtml(match)}</button>` : match;
-    }));
-}
-
 /** 安全播放媒体，统一处理浏览器播放拒绝并返回是否成功。 */
-export async function safePlay(/** @type {HTMLMediaElement | null | undefined} */ mediaElement, /** @type {{context?: string, notify?: boolean, message?: string, notifyUser?: (message: string) => void, warn?: (message: string, error?: unknown) => void}} */ { context = "视频", notify = !1, message = "当前视频源无法播放", notifyUser = (text) => show.error(text), warn = (text, error) => clog.warn(text, error) } = {}) {
+export async function safePlay(/** @type {HTMLMediaElement | null | undefined} */ mediaElement, /** @type {{context?: string, notify?: boolean, message?: string, notifyUser?: (message: string) => void, warn?: (message: string, error?: unknown) => void}} */ { context = "视频", notify = !1, message = "当前视频源无法播放", notifyUser, warn = console.warn } = {}) {
     if (!mediaElement || "function" != typeof mediaElement.play) {
         warn(`${context}播放失败：媒体元素不可用`);
-        notify && notifyUser(message);
+        notify && notifyUser?.(message);
         return !1;
     }
     try {
@@ -128,7 +109,7 @@ export async function safePlay(/** @type {HTMLMediaElement | null | undefined} *
     } catch (error) {
         warn(`${context}播放失败`, error);
         const name = error && "object" == typeof error && "name" in error ? String(error.name) : "";
-        notify && ![ "NotAllowedError", "AbortError" ].includes(name) && notifyUser(message);
+        notify && ![ "NotAllowedError", "AbortError" ].includes(name) && notifyUser?.(message);
         return !1;
     }
 }

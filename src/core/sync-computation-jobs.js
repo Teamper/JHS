@@ -87,9 +87,9 @@ export async function runSyncJob(job, payload, work) {
         case "project": return projectSyncDataAsync(payload.data, payload.frontiers, work);
         case "materialize": return materializeSyncDataAsync(payload.model, payload.local, payload.undoEligible, work);
         case "equal": return equalSyncValuesAsync(payload.left, payload.right, work);
-        case "verified": return await equalSyncValuesAsync(payload.model, payload.verifiedModel, work)
-            && await equalSyncValuesAsync(payload.data, payload.verifiedData, work)
-            && await equalSyncValuesAsync(payload.eligible, payload.verifiedEligible, work);
+        case "verified": return await equalSyncValuesAsync(payload.model, payload.verified.model, work)
+            && await equalSyncValuesAsync(payload.data, payload.verified.data, work)
+            && await equalSyncValuesAsync(payload.eligible, payload.verified.eligibility, work);
         case "stringify": return stringifySyncDataAsync(payload, work);
         case "parse": return JSON.parse(payload);
         default: throw new TypeError("未知同步计算任务");

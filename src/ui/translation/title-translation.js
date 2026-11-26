@@ -2,7 +2,7 @@
 import { translationErrorLabel } from "../../core/translation-model.js";
 
 /**
- * @param {{root?: any, carNum?: string, translation: import("../../services/translation-service.js").TranslationService, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean}} options
+ * @param {{root?: any, carNum?: string, logger?: Pick<Console, "error">, translation: import("../../services/translation-service.js").TranslationService, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean}} options
  */
 export async function renderTranslatedTitle(options) {
     // Double gate: never create DOM or start a network request when the feature
@@ -30,7 +30,7 @@ export async function renderTranslatedTitle(options) {
     } catch (error) {
         if (options.isActive && !options.isActive()) return;
         if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
-        /** @type {any} */ (globalThis).clog?.error("翻译失败:", error);
+        options.logger?.error("翻译失败:", error);
         translatedNode.addClass("is-error").text(translationErrorLabel(error));
     }
 }

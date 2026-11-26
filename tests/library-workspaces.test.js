@@ -79,10 +79,14 @@ it("saves ratings with roving keyboard focus, clear and failed-write feedback", 
 it("renders rating badges on recommendations and details, refreshes and drops late responses", async () => {
     document.body.innerHTML = '<main><div class="summary"></div><a class="tile-item" href="/v/a"><span class="video-number">ABC-123</span><span class="video-title">标题</span></a></main>';
     const scope = own();
-    let refresh;
-    const state = {getPersonalRatings:vi.fn(async()=>({"ABC-123":{rating:4}})),setPersonalRating:vi.fn(async()=>{})};
+    let refresh, finishInitialRead;
+    const state = {getPersonalRatings:vi.fn(() => new Promise(resolve => { finishInitialRead = resolve; })),setPersonalRating:vi.fn(async()=>{})};
     const host = {document,getCardEnhancementSelectors:()=>({itemSelector:".item"}),readMovieRef:()=>({...movie,stateEligibility:{eligible:true}}),detectRoute:()=>"detail",locateDetailSlots:()=>({summary:document.querySelector(".summary")})};
-    await new PersonalRatingController({host,state,scope,events:{on:(_type,fn)=>{refresh=fn;return ()=>{};}},ui:{jquery},dialog:{}}).start();
+    const initialRead = new PersonalRatingController({host,state,scope,events:{on:(_type,fn)=>{refresh=fn;return ()=>{};}},ui:{jquery},dialog:{}}).start();
+    expect(document.querySelector(".jhs-personal-rating-entry").textContent).toBe("个人评分");
+    expect(document.querySelector(".jhs-rating-badge").hidden).toBe(true);
+    finishInitialRead({"ABC-123":{rating:4}});
+    await initialRead;
     expect(document.querySelector(".jhs-rating-badge").textContent).toBe("个人 4 星");
     expect(document.querySelector(".jhs-personal-rating-entry").textContent).toContain("4 星");
     state.getPersonalRatings.mockResolvedValueOnce({"ABC-123":{rating:1}});
@@ -102,7 +106,7 @@ it("renders rating badges on recommendations and details, refreshes and drops la
 
 it("joins independent ratings into history without writing state flags", async () => {
     const original = [{carNum:"abc-123",stateFlags:{favorite:true}}];
-    const repository = new HistoryRepository({storage:{getCarList:async()=>original},state:{getPersonalRatings:async()=>({"ABC-123":{rating:4},"FC2-0012345":{rating:2,updatedAt:"2026-11-07"}})}});
+    const repository = new HistoryRepository({state:{getCarList:async()=>original,getPersonalRatings:async()=>({"ABC-123":{rating:4},"FC2-0012345":{rating:2,updatedAt:"2026-11-07"}})}});
     const rows = await repository.list();
     expect(rows[0]).toMatchObject({personalRating:4,stateFlags:{favorite:true}});
     expect(rows[1]).toMatchObject({carNum:"FC2-0012345",personalRating:2,stateFlags:{}});

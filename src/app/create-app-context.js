@@ -3,10 +3,16 @@
 import { PORT, REGISTRY, SERVICE } from "../contracts/tokens.js";
 import { BrowserNavigationAdapter } from "../platform/browser/browser-navigation-adapter.js";
 import { BrowserStyleAdapter } from "../platform/browser/browser-style-adapter.js";
-import { IndexedDbStorageAdapter } from "../platform/userscript/indexeddb-storage-adapter.js";
+import { createClipboardWriter, downloadFile } from "../platform/browser/file-actions.js";
+import { isMobileMode } from "../core/dom-actions.js";
+import { createPageDialogs } from "../platform/browser/page-dialogs.js";
+import { getDialogArea } from "../core/dialog-shell.js";
+import { DialogEscController } from "../core/dialog-esc-controller.js";
 import { LayerDialogAdapter } from "../platform/userscript/layer-dialog-adapter.js";
 import { UserscriptHttpAdapter } from "../platform/userscript/userscript-http-adapter.js";
 import { CacheService } from "../services/cache-service.js";
+import { KeywordRulesService } from "../services/keyword-rules-service.js";
+import { PortableBackupService } from "../services/portable-backup-service.js";
 import { ActressInfoService } from "../services/actress-info-service.js";
 import { DiagnosticsService } from "../services/diagnostics-service.js";
 import { ExternalUrlPolicy } from "../services/external-url-policy.js";
@@ -27,12 +33,12 @@ import { SubtitleUploadService } from "../services/subtitle-upload-service.js";
 import { SubtitleService } from "../services/subtitle-service.js";
 import { AccountService } from "../services/account-service.js";
 import { SettingsService } from "../services/settings-service.js";
-import { StorageService } from "../services/storage-service.js";
 import { WebDavService } from "../services/webdav-service.js";
 import { WebDavSyncService } from "../services/webdav-sync-service.js";
 import { WebDavSharedProfile } from "../services/webdav-shared-profile.js";
 import { WebDavSyncStore } from "../core/webdav-sync-store.js";
 import { PersonalPreferencesService } from "../services/personal-preferences-service.js";
+import { StateService } from "../core/state-service.js";
 import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 import { BusImageLayoutService } from "../services/bus-image-layout-service.js";
 import { JavDbWantService } from "../services/javdb-want-service.js";
@@ -41,7 +47,6 @@ import { CredentialService } from "../services/credential-service.js";
 import { Pan123CredentialService } from "../services/pan123-credential-service.js";
 import { ResourceSettingsService } from "../services/resource-settings-service.js";
 import { DomUiService } from "../services/dom-ui-service.js";
-import { LibraryStatsService } from "../services/library-stats-service.js";
 import { CommandRegistry } from "./command-registry.js";
 import { DependencyContainer } from "./dependency-container.js";
 import { FeatureRuntime } from "./feature-runtime.js";
@@ -54,63 +59,65 @@ import { SyncComputation } from "../services/sync-computation-service.js";
 import { createSyncWorker } from "../platform/userscript/sync-worker-factory.js";
 import { BackgroundWork } from "../core/background-work.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
-import { parseDetailPage } from "../integrations/host-list/parser.js";
 
-/** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, gmDeleteValue?: (key: string) => void, legacyHttp?: any, legacyStorage?: any, legacyUtils?: any, copyToClipboard?: (label: string, value: unknown) => Promise<boolean>, eventBus?: any, storageMutationCoordinator?: any, storageForage: any, localStorage: Storage, layer: any, stateService: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
+/** @typedef {{clog: any, show?: {error?: Function, info?: Function, ok?: Function}, loading?: () => {close?: () => void}, showImageViewer?: (source: string | Element, alt?: string, options?: Record<string, any>) => unknown, ImageHoverPreview?: new (config: Record<string, unknown>) => any}} FeedbackRuntime */
+
+/** @param {{createFeedback?: (scope: LifecycleScope) => FeedbackRuntime, vendors?: {$?: (value: any) => any, Tabulator?: any}, gmRequest: (options: Record<string, any>) => any, storage: import("../services/storage-service.js").StorageService, dialogEsc?: DialogEscController, eventBus?: any, storageMutationCoordinator?: StorageMutationCoordinator, localStorage: Storage, layer: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[], platform?: Record<string, any>}} runtime */
 export function createAppContext(runtime) {
-    const diagnostics = new DiagnosticsService({ legacyHttp: runtime.legacyHttp });
+    const diagnostics = new DiagnosticsService();
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
-    const platform = /** @type {any} */ (runtime).platform ?? {};
+    const feedback = runtime.createFeedback?.(rootScope) ?? { clog: console };
+    const platform = runtime.platform ?? {};
     const backgroundWork = platform.backgroundWork ?? new BackgroundWork({ document: runtime.hostAdapter?.document ?? document, window, scope: rootScope });
     const container = new DependencyContainer(diagnostics);
     const navigation = platform.navigation ?? new BrowserNavigationAdapter();
     const httpPort = platform.http ?? new UserscriptHttpAdapter(runtime.gmRequest);
-    const storagePort = platform.storage ?? new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue, runtime.gmDeleteValue);
+    const { storage } = runtime, storagePort = storage.port;
     const mutationCoordinator = runtime.storageMutationCoordinator ?? new StorageMutationCoordinator();
-    const gmRuntime = /** @type {any} */ (runtime);
-    storagePort.gmListValues = gmRuntime.gmListValues;
-    storagePort.gmListenValue = gmRuntime.gmListenValue;
-    storagePort.gmUnlistenValue = gmRuntime.gmUnlistenValue;
-    const dialog = platform.dialog ?? new LayerDialogAdapter(runtime.layer);
+    const dialogEsc = runtime.dialogEsc ?? new DialogEscController({
+        jquery: runtime.vendors?.$ ?? (() => { throw new Error("页面 UI 依赖尚未加载"); }),
+        close: id => runtime.layer.close(id), document,
+    });
+    dialogEsc.logger = feedback.clog;
+    rootScope.addCleanup(() => dialogEsc.dispose());
+    /** @type {import("../contracts/ports.js").DialogPort} */
+    const dialog = platform.createDialog?.(dialogEsc) ?? platform.dialog ?? new LayerDialogAdapter(runtime.layer, { getDialogArea });
     const styles = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
-    const storage = new StorageService(storagePort);
-    if (runtime.legacyStorage) runtime.legacyStorage.atomicStorage = storage;
-    const cache = new CacheService({ diagnostics, storage });
-    runtime.legacyUtils?.setDialogService?.(dialog);
+    const cache = new CacheService({ diagnostics, storage, mutationCoordinator, thirdPartyMutations: platform.thirdPartyMutations });
     const settingsRegistry = new SettingsRegistry();
     registerDefaultSettings(settingsRegistry);
     const validateSetting = (/** @type {string} */ key, /** @type {any} */ value) => settingsRegistry.validateSync(key, value);
-    const settings = platform.settings ?? new SettingsService(storage, { mutationCoordinator, afterPersist: async (_snapshot, changedNames) => {
-        runtime.legacyStorage?.invalidateSettingCache?.();
+    const settings = platform.settings ?? new SettingsService(storage, { mutationCoordinator, logger: feedback.clog, afterPersist: async (_snapshot, changedNames) => {
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     }, normalizers: settingsRegistry.normalizers() });
     const notifications = Object.freeze({
-        error: (/** @type {string} */ message, /** @type {Record<string, unknown>} */ options = {}) => (/** @type {any} */ (globalThis)).show?.error?.(message, options),
-        info: (/** @type {string} */ message) => (/** @type {any} */ (globalThis)).show?.info?.(message),
-        ok: (/** @type {string} */ message, /** @type {Record<string, unknown>} */ options = {}) => (/** @type {any} */ (globalThis)).show?.ok?.(message, options),
-        debug: (/** @type {string} */ message, /** @type {unknown} */ error) => (/** @type {any} */ (globalThis)).clog?.debug?.(message, error),
+        error: (/** @type {string} */ message, /** @type {Record<string, unknown>} */ options = {}) => feedback.show?.error?.(message, options),
+        info: (/** @type {string} */ message) => feedback.show?.info?.(message),
+        ok: (/** @type {string} */ message, /** @type {Record<string, unknown>} */ options = {}) => feedback.show?.ok?.(message, options),
+        debug: (/** @type {string} */ message, /** @type {unknown} */ error) => feedback.clog.debug?.(message, error),
     });
-    const resourceSettings = new ResourceSettingsService({
-        getSetting: async (/** @type {string} */ key, /** @type {unknown} */ fallback) => {
-            const snapshot = settings.snapshot();
-            return Object.prototype.hasOwnProperty.call(snapshot, key) ? snapshot[key] : fallback;
-        },
-        saveSettingItem: (/** @type {string} */ key, /** @type {unknown} */ value) => settings.set(key, value),
-        updateSetting: (/** @type {any} */ mutator) => settings.update(mutator),
-    });
-    const clipboard = { copyText: runtime.copyToClipboard ?? (async () => false) };
+    if (runtime.eventBus && !runtime.eventBus.errorReporter) runtime.eventBus.errorReporter = (/** @type {unknown} */ error) => feedback.clog.error("[JHS] event listener failed:", error);
+    const resourceSettings = new ResourceSettingsService(settings);
+    const clipboard = { copyText: createClipboardWriter(notifications, feedback.clog) };
+    const mobile = () => isMobileMode(settings.snapshot().mobileMode);
+    const pageDialogs = createPageDialogs({ dialog, navigation, esc: dialogEsc, settings, isMobileMode: mobile, logger: feedback.clog });
+    const { ImageHoverPreview } = feedback;
     const domUi = new DomUiService(
-        /** @type {any} */ (globalThis).jQuery ?? /** @type {any} */ (globalThis).$,
-        runtime.legacyUtils,
-        (image, alt, options) => /** @type {any} */ (globalThis).showImageViewer?.(image, alt, options),
-        () => /** @type {any} */ (globalThis).loading?.(),
-        (config) => {
-            const factory = /** @type {any} */ (globalThis).ImageHoverPreview;
-            if (typeof factory !== "function") throw new Error("图片悬浮预览尚未加载");
-            return new factory(config);
+        runtime.vendors?.$,
+        { ...pageDialogs, navigation,
+            isMobileMode: mobile,
+            setupEscClose: dialogEsc.setupEscClose.bind(dialogEsc),
+            releaseEscClose: dialogEsc.releaseEscClose.bind(dialogEsc),
+            download: platform.download ?? ((/** @type {BlobPart | Blob} */ data, /** @type {string} */ filename) => {
+                notifications.info("开始请求下载...");
+                downloadFile(data, filename);
+            }),
         },
-        /** @type {any} */ (globalThis).Tabulator,
+        feedback.showImageViewer,
+        feedback.loading,
+        ImageHoverPreview && (config => new ImageHoverPreview(config)),
+        runtime.vendors?.Tabulator,
     );
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache, settings });
     diagnostics.setNetworkController(http);
@@ -121,25 +128,35 @@ export function createAppContext(runtime) {
     const pan123Credential = new Pan123CredentialService(storage, notifications);
     const webdav = new WebDavService(http, credential, settings);
     mutationCoordinator.diagnostics = diagnostics;
-    if (runtime.stateService) runtime.stateService.computation = new ComputationBudget({ diagnostics });
     const computation = new SyncComputation({ createWorker: platform.createWorker ?? createSyncWorker, diagnostics });
     rootScope.addCleanup(() => computation.dispose());
-    const syncState = platform.syncState ?? new WebDavSyncStore({ computation, forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting, diagnostics, backgroundWork });
+    const syncState = platform.syncState ?? new WebDavSyncStore({
+        computation, storage, coordinator: mutationCoordinator, settings, events: runtime.eventBus,
+        validateSetting, diagnostics, backgroundWork, recoverState: () => state.recoverPendingTransactionWithoutLock(),
+    });
+    const state = platform.state ?? new StateService(storage, runtime.eventBus ?? {}, mutationCoordinator, { sync: syncState, logger: feedback.clog, notifications });
+    if (!platform.state) state.computation = new ComputationBudget({ diagnostics });
     rootScope.addCleanup(() => syncState.dispose());
     for (const type of ["car-state-changed", "offline-history-changed", "actress-changed", "settings-changed"]) {
-        const unsubscribe = runtime.eventBus?.on?.(type, () => syncState.requestReconciliation());
+        const unsubscribe = runtime.eventBus?.on?.(type, (/** @type {any} */ _payload, /** @type {any} */ event) => {
+            if (!platform.state && type === "car-state-changed" && event.originId !== runtime.eventBus.originId) state.clearCommittedListSnapshot();
+            syncState.requestReconciliation();
+        });
         if (unsubscribe) rootScope.addCleanup(unsubscribe);
     }
     mutationCoordinator.observer = syncState;
     mutationCoordinator.beforeMutation = syncState.recoverBeforeMutation;
-    if (runtime.legacyStorage) runtime.legacyStorage.syncState = syncState;
-    storagePort.beforeSet = (/** @type {string} */ key) => syncState.capture(key);
+    storage.beforeWrite = key => syncState.capture(key);
+    const keywordRules = platform.keywordRules ?? new KeywordRulesService({ storage, coordinator: mutationCoordinator, state });
+    const backup = platform.backup ?? new PortableBackupService({
+        storage, coordinator: mutationCoordinator, state, sync: syncState, settings, logger: feedback.clog,
+    });
     const sharedProfile = new WebDavSharedProfile({ credential, storage, origin: globalThis.location?.origin || "", readLegacy: () => settings.runExclusive(() => webdav.readProfileWithoutLock()) });
     webdav.sharedProfile = sharedProfile;
     const preferences = new PersonalPreferencesService(settings, runtime.localStorage, message => notifications.error(message));
     storage.preferences = preferences;
     /** @type {import("../contracts/webdav-sync.js").WebDavSync} */
-    const webdavSync = platform.webdavSync ?? new WebDavSyncService({ computation, diagnostics, backgroundWork, webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
+    const webdavSync = platform.webdavSync ?? new WebDavSyncService({ computation, diagnostics, backgroundWork, webdav, shared: sharedProfile, store: syncState, settings, backup, urlPolicy, preferences, validateSetting });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;
@@ -152,14 +169,12 @@ export function createAppContext(runtime) {
         const remote = event.originId !== runtime.eventBus.originId;
         const localLegacy = event.originId === runtime.eventBus.originId && event.payload?.source === "legacy";
         if (!remote && !localLegacy) return;
-        runtime.legacyStorage?.invalidateSettingCache?.();
         await settings.refresh();
     }));
     if (typeof window !== "undefined") {
         rootScope.listen(window, "pageshow", async () => {
             // BFCache restores the page without re-running bootstrap; re-read
             // settings so any change made in another tab/surface is reflected.
-            runtime.legacyStorage?.invalidateSettingCache?.();
             await settings.refresh();
         });
     }
@@ -182,7 +197,7 @@ export function createAppContext(runtime) {
     rootScope.addCleanup(() => translation.dispose());
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations, javdbLists);
-    const javdbWant = new JavDbWantService({ http, credential, invalidate: id => runtime.legacyStorage?.deleteCachedRequest(`movie-detail:${id}`) });
+    const javdbWant = new JavDbWantService({ http, credential, invalidate: id => cache.deleteThirdPartyCacheEntry(`movie-detail:${id}`) });
     account.want = javdbWant;
     rootScope.addCleanup(bindJavDbWantService(javdbWant));
     rootScope.addCleanup(() => javdbWant.dispose());
@@ -191,27 +206,20 @@ export function createAppContext(runtime) {
     const subtitleUpload = new SubtitleUploadService({ offline, storage, matching: one115Match, events: runtime.eventBus });
     const offlineSubmissionReceipts = platform.receipts ?? new OfflineSubmissionReceiptService(runtime.localStorage);
     const busImageLayout = new BusImageLayoutService();
-    const libraryStats = new LibraryStatsService({ storage: runtime.legacyStorage, state: runtime.stateService });
-    const hostListParser = Object.freeze({ parseDetailPage });
 
     container
-        .register(PORT.navigation, navigation).register(PORT.http, httpPort).register(PORT.storage, storagePort)
-        .register(PORT.dialog, dialog).register(PORT.style, styles)
-        .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
-        .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage)
-        .register(SERVICE.legacyStorage, runtime.legacyStorage).register(SERVICE.legacyUtils, runtime.legacyUtils).register(SERVICE.webdav, webdav)
-        .register(SERVICE.autoBackup, webdavSync)
-        .register(SERVICE.webdavSync, webdavSync)
-        .register(SERVICE.backgroundWork, backgroundWork)
+        .register(PORT.style, styles)
+        .register(SERVICE.clog, feedback.clog).register(SERVICE.http, http).register(SERVICE.storage, storage)
+        .register(SERVICE.settingsTools, Object.freeze({ webdav, webdavSync, cache, backup, resourceSettings, settingsRegistry }))
         .register(SERVICE.credential, credential).register(SERVICE.privacy, privacy).register(SERVICE.mediaLibrary, mediaLibrary)
         .register(SERVICE.javdbLists, javdbLists).register(SERVICE.movieSelection, movieSelection)
-        .register(SERVICE.pan123Credential, pan123Credential)
-          .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.resourceSettings, resourceSettings).register(SERVICE.notifications, notifications).register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
-        .register(SERVICE.state, runtime.stateService).register(SERVICE.storageMutation, runtime.storageMutationCoordinator).register(SERVICE.busImageLayout, busImageLayout).register(SERVICE.events, runtime.eventBus).register(SERVICE.libraryStats, libraryStats)
-        .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
-        .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.one115Match, one115Match).register(SERVICE.offlineSubmissionReceipts, offlineSubmissionReceipts)
-        .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.subtitleUpload, subtitleUpload).register(SERVICE.account, account).register(SERVICE.hostListParser, hostListParser)
-        .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
+        .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.notifications, notifications)
+        .register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.keywordRules, keywordRules).register(SERVICE.profile, profile)
+        .register(SERVICE.state, state).register(SERVICE.storageMutation, mutationCoordinator).register(SERVICE.busImageLayout, busImageLayout).register(SERVICE.events, runtime.eventBus)
+        .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.detailContent, Object.freeze({ review, related })).register(SERVICE.magnet, magnet)
+        .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, Object.freeze({ api: offline, match: one115Match, receipts: offlineSubmissionReceipts, pan123Credential }))
+        .register(SERVICE.translation, translation).register(SERVICE.subtitle, Object.freeze({ search: subtitle, upload: subtitleUpload })).register(SERVICE.account, account)
+        .register(REGISTRY.integration, integrations);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
     if (platform.taskExecution) container.register(SERVICE.taskExecution, platform.taskExecution);
     if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
@@ -225,6 +233,5 @@ export function createAppContext(runtime) {
             void features.reconcileConfiguration(settings.snapshot()).catch(error => diagnostics.recordError(error));
         }
     });
-    container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort: navigation, httpPort, storagePort, dialogPort: dialog, stylePort: styles }), services: Object.freeze({ backgroundWork, diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, webdavSync, autoBackup: webdavSync, privacy, mediaLibrary, javdbLists, movieSelection, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, libraryStats, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, subtitleUpload, account, offline, one115Match, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, feedback, container, ports: Object.freeze({ navigationPort: navigation, httpPort, storagePort, dialogPort: dialog, stylePort: styles }), services: Object.freeze({ backgroundWork, diagnostics, urlPolicy, navigation, http, storage, webdav, webdavSync, privacy, mediaLibrary, javdbLists, movieSelection, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, cache, keywordRules, backup, syncState, profile, state, storageMutation: mutationCoordinator, busImageLayout, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, subtitleUpload, account, offline, one115Match, offlineSubmissionReceipts }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

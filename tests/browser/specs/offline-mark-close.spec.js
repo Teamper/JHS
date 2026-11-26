@@ -41,7 +41,7 @@ for (const [cards, library, filter, suppressBroadcast] of [[40, 1000, "waitCheck
         await frame.evaluate(async suppressBroadcast => {
             const controller = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
             controller.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { window.parent.__offlineSubmitCount++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
-            const store = window.storageManager.syncState;
+            const store = window.__jhsBrowserDiagnostics.detailServices.syncState;
             const channel = window.jhsEventBus.channel, postMessage = channel.postMessage;
             // The initial merge belongs to fixture setup. Only the actual mark follows the case's broadcast policy.
             channel.postMessage = () => {};
@@ -57,8 +57,8 @@ for (const [cards, library, filter, suppressBroadcast] of [[40, 1000, "waitCheck
             const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
             await list.filterContextProvider.get();
             window.__markReads = { rules: 0, historyUi: 0 };
-            const storage = list.getRuntimeService("legacyStorage"), readRules = storage.getTitleFilterKeyword.bind(storage);
-            storage.getTitleFilterKeyword = (...args) => { window.__markReads.rules++; return readRules(...args); };
+            const keywordRules = list.getRuntimeService("keywordRules"), readRules = keywordRules.getTitleKeywords.bind(keywordRules);
+            keywordRules.getTitleKeywords = (...args) => { window.__markReads.rules++; return readRules(...args); };
             const state = window.stateService, readHistory = state.getActivityLog.bind(state);
             state.getActivityLog = (...args) => { window.__markReads.historyUi++; return readHistory(...args); };
         });
@@ -81,7 +81,7 @@ for (const [cards, library, filter, suppressBroadcast] of [[40, 1000, "waitCheck
             timing: window.__markTiming, submits: window.__offlineSubmitCount,
             downloaded: (await window.stateService.getState("ABC-123")).stateFlags.downloaded,
             history: (await window.stateService.getOfflineHistory()).filter(item => item.carNum === "ABC-123").length,
-            journal: await window.storageManager.forage.getItem("mutation_journal"),
+            journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
             reads: window.__markReads, listenerEntered: !!window.__localMarkListenerEntered,
         }));
         expect(result).toMatchObject({ submits: 1, downloaded: true, history: 1, journal: null, reads: { rules: 0, historyUi: 0 }, listenerEntered: true });

@@ -214,7 +214,7 @@ export function mountDetailMedia(root, app, scope, retryDetail, readSessionPrevi
             if (!eligible() || !canUseDmmPreview(preferences)) return;
             try {
                 if (retry) invalidateDmmPreview(movie.carNum, services.storage);
-                const result = await fetchDmmPreviewIfEnabled(movie.carNum, services.storage, services.movie, owner, preferences);
+                const result = await fetchDmmPreviewIfEnabled(movie.carNum, services.storage, services.movie, owner, preferences, app.context.feedback.clog);
                 owner.assertActive();
                 const quality = Z(Object.keys(result.sources || {}), preferences.videoQuality);
                 const preferred = quality ? validHttps(result.sources?.[quality]) : null;

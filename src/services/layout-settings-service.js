@@ -6,9 +6,7 @@ import { C, _, l } from "../core/constants.js";
 /** @param {{ logImageHeightsByRow?: () => void } | null} [imageLayout] @param {unknown} [enableVerticalModel] */
 export async function applyImageMode(imageLayout = null, enableVerticalModel) {
     $("#verticalImgStyle").remove();
-    const vertical = enableVerticalModel === undefined
-        ? await storageManager.getSetting("enableVerticalModel", C)
-        : enableVerticalModel;
+    const vertical = enableVerticalModel === undefined ? C : enableVerticalModel;
     if (vertical === _) {
         let e = "100% 50% !important";
         window.location.pathname === "/tags/fc2" && new URLSearchParams(window.location.search).get("jhs_source") === "123av" && (e = "50% 50% !important");
@@ -66,7 +64,7 @@ export async function applyLayoutFromSettings(snapshot = {}, options = {}) {
     const hostAdapter = options.hostAdapter ?? null;
     const vertical = snapshot.enableVerticalModel === undefined ? C : snapshot.enableVerticalModel;
     await applyImageMode(imageLayout, vertical);
-    const mobile = options.mobile ?? (/** @type {any} */ (globalThis).utils?.isMobileMode?.() ?? false);
+    const mobile = options.mobile ?? false;
     const columns = mobile ? 1 : Number(snapshot.containerColumns ?? 5) || 5;
     const width = mobile ? 100 : Number(snapshot.containerWidth ?? 100) || 100;
     if (l && imageLayout?.logImageHeightsByRow) {

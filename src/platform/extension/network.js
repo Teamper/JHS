@@ -22,12 +22,31 @@ export async function extensionFetch(options, signal, policy) {
             }
             const ruleId = modifications.length ? Math.floor(Math.random() * 1000000000) + 1 : null;
             /** @type {chrome.webRequest.OnHeadersReceivedDetails|undefined} */ let wire;
+            /** @type {(() => void) | undefined} */ let onHeaders;
             /** @param {chrome.webRequest.OnHeadersReceivedDetails} details */
-            const observe = details => { if (details.initiator === chrome.runtime.getURL("").replace(/\/$/, "")) wire = details; return undefined; };
+            const observe = details => {
+                if (details.initiator === chrome.runtime.getURL("").replace(/\/$/, "")) {
+                    wire = details;
+                    onHeaders?.();
+                }
+                return undefined;
+            };
             chrome.webRequest.onHeadersReceived.addListener(observe, { urls: [current.href], types: ["xmlhttprequest"] }, ["responseHeaders"]);
             try {
                 if (ruleId) await chrome.declarativeNetRequest.updateSessionRules({ addRules: [{ id: ruleId, priority: 1, action: { type: "modifyHeaders", requestHeaders: modifications }, condition: { urlFilter: `|${current.href}|`, initiatorDomains: [chrome.runtime.id], resourceTypes: ["xmlhttprequest"] } }] });
                 const response = await fetch(current.href, { method, headers: fetchHeaders, body, signal, credentials: anonymous ? "omit" : "include", redirect: "manual" });
+                // Chromium can resolve an opaque redirect before dispatching its wire headers.
+                if (response.type === "opaqueredirect" && !wire) {
+                    signal.throwIfAborted();
+                    await new Promise((resolve, reject) => {
+                        const abort = () => reject(signal.reason);
+                        signal.addEventListener("abort", abort, { once: true });
+                        onHeaders = () => {
+                            signal.removeEventListener("abort", abort);
+                            resolve(undefined);
+                        };
+                    });
+                }
                 const status = response.status || wire?.statusCode || 0;
                 const responseHeaders = wire?.responseHeaders?.map(item => `${item.name}: ${item.value || ""}`).join("\r\n") || [...response.headers].map(([name, value]) => `${name}: ${value}`).join("\r\n");
                 if ([301, 302, 303, 307, 308].includes(status)) return { status, responseHeaders, response: "", responseText: "", finalUrl: current.href };

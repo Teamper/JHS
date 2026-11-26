@@ -3,7 +3,7 @@ import { createRuntimeLookup } from "./runtime-lookup.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
 
 import { LifecycleScope } from "../core/lifecycle-scope.js";
-import { disabledIdForPlugin, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
+import { parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { ENHANCEMENT_FEATURES, ENHANCEMENT_METADATA } from "../core/enhancement-controls.js";
 
@@ -74,12 +74,6 @@ export class FeatureRuntime {
             return owner && !this.isContributionEnabled(owner, id);
         })) return false;
         return true;
-    }
-
-    /** @param {string} name */
-    isCompatibilityBeanAvailable(name) {
-        const id = disabledIdForPlugin(name), owner = this.contributionOwners.get(id);
-        return !owner || this.isContributionEnabled(owner, id, name);
     }
 
     getFeatureDescriptors() {
@@ -225,13 +219,12 @@ export class FeatureRuntime {
                     return release;
                 },
                 onCapabilityChanged: (/** @type {string} */ id, /** @type {() => void} */ listener) => scope.listen(this.capabilityEvents, id, listener),
-                isCompatibilityBeanAvailable: (/** @type {string} */ name) => this.isCompatibilityBeanAvailable(name),
-                resolveCompatibilityBean: this.runtimeLookup.getBean,
                 registerCompatibilityBean: (/** @type {string} */ name, /** @type {any} */ bean) => {
                     scope.assertActive();
                     return scope.addCleanup(this.runtimeLookup.register(name, bean));
                 },
                 diagnostics: this.diagnostics,
+                backgroundWork: this.backgroundWork,
                 inspect: inspection && ((/** @type {string} */ name, /** @type {unknown} */ value) => {
                     inspection[name] = value;
                     scope.addCleanup(() => { if (inspection[name] === value) delete inspection[name]; });

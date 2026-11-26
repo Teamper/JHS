@@ -1,7 +1,7 @@
+import { storageFromForage } from "./helpers/atomic-storage.js";
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GmHttp } from "../src/core/http.js";
 import { HttpService } from "../src/services/http-service.js";
 import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
 import { UserscriptHttpAdapter } from "../src/platform/userscript/userscript-http-adapter.js";
@@ -21,24 +21,20 @@ afterEach(() => {
 });
 
 describe("stability, lifecycle, UX, and performance regressions", () => {
-    it("recovers GmHttp half-open probe cleanly on non-5xx responses and ignoreNotFound 404", async () => {
-        vi.stubGlobal("clog", { error: vi.fn(), warn: vi.fn() });
-        const http = new GmHttp({
-            utils: { retry: (op) => op() },
-            storageManager: { getSetting: vi.fn(async (_k, fallback) => fallback) },
-        });
-        const breaker = { state: "half-open", failCount: 3, openTime: Date.now() - 120_000, cooldownMs: 60_000, threshold: 3, probing: false };
-        http._circuitBreakers.set("example.test", breaker);
-
-        // 404 without ignoreNotFound should reject without leaving probing stuck = true
-        vi.stubGlobal("GM_xmlhttpRequest", vi.fn((opts) => opts.onload({ status: 404, responseText: "missing", finalUrl: opts.url })));
-        await expect(http.get("https://example.test/a")).rejects.toThrow("missing");
-        expect(http.getCircuitBreakerStatus()["example.test"]).toMatchObject({ state: "closed", probing: false, failCount: 0 });
-
-        // ignoreNotFound 404 on half-open should also record success and close circuit
-        http._circuitBreakers.set("example.test", { ...breaker, state: "half-open", probing: false });
-        await expect(http.gmRequest("GET", "https://example.test/b", {}, {}, {}, false, { ignoreNotFound: true })).resolves.toBeNull();
-        expect(http.getCircuitBreakerStatus()["example.test"]).toMatchObject({ state: "closed", probing: false, failCount: 0 });
+    it("closes a half-open domain on a valid 404 and honors allowed not-found responses", async () => {
+        const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+        const replies = [503, 404, 503, 404];
+        const request = vi.fn(async options => ({status: replies.shift(), finalUrl: options.url}));
+        const service = new HttpService({ request }, new ExternalUrlPolicy());
+        const options = { providerId: "example", url: "https://example.test/a", retryCount: 0, circuitThreshold: 1, circuitCooldownMs: 1_000, urlPolicy: { trustClass: "builtin-public", hosts: ["example.test"] } };
+        await expect(service.request(options)).rejects.toMatchObject({code: "NETWORK_ERROR"});
+        now.mockReturnValue(2_001);
+        await expect(service.request(options)).rejects.toMatchObject({code: "NOT_FOUND"});
+        expect(service.getCircuitBreakerStatus()["example.test"]).toMatchObject({ state: "closed", probing: false, failCount: 0 });
+        await expect(service.request(options)).rejects.toMatchObject({code: "NETWORK_ERROR"});
+        now.mockReturnValue(3_002);
+        await expect(service.request({ ...options, acceptableStatuses: [404] })).resolves.toMatchObject({status: 404});
+        expect(service.getCircuitBreakerStatus()["example.test"]).toMatchObject({ state: "closed", probing: false, failCount: 0 });
     });
 
     it("does not trip HttpService circuit breaker on 4xx client errors", async () => {
@@ -71,34 +67,26 @@ describe("stability, lifecycle, UX, and performance regressions", () => {
             removeItem: async (key) => values.delete(key),
         };
         const coordinator = new StorageMutationCoordinator({ lockManager: null });
-        const sync = new WebDavSyncStore({ forage, coordinator });
+        const commitLockedBatch = vi.fn(async ({ puts }) => {
+            for (const [key, value] of Object.entries(structuredClone(puts))) values.set(key, value);
+            return true;
+        });
+        const storage = storageFromForage(forage, { commitLockedBatch });
+        const sync = new WebDavSyncStore({ storage, coordinator });
         await sync.initialize();
         sync.enabled = true;
         coordinator.observer = { begin() { sync.begin(); }, async finish(ok) { await sync.finish(ok); } };
-        const storage = {
-            car_list_key: "car_list",
-            favorite_actresses_key: "favorite_actresses",
-            forage,
-            syncState: sync,
-            _invalidateCache: vi.fn(),
-            _getCacheGeneration: () => 0,
-            atomicStorage: {
-                commitLockedBatch: vi.fn(async ({ puts }) => {
-                    for (const [k, v] of Object.entries(structuredClone(puts))) values.set(k, v);
-                    return true;
-                }),
-            },
-        };
-        const state = new StateService(storage, { emit: vi.fn() }, coordinator);
+        storage.beforeWrite = key => sync.capture(key);
+        const state = new StateService(storage, { emit: vi.fn() }, coordinator, { sync });
         try {
             const tx = await state.toggle("ABC-123", "favorite");
             forage.setItem.mockClear();
-            storage.atomicStorage.commitLockedBatch.mockClear();
+            commitLockedBatch.mockClear();
             const genBefore = values.get(SYNC_PENDING_KEY).generation;
 
             const undo = await state.undoTransaction(tx.transactionId);
             expect(undo.reverted).toEqual(["ABC-123"]);
-            expect(storage.atomicStorage.commitLockedBatch).toHaveBeenCalledOnce();
+            expect(commitLockedBatch).toHaveBeenCalledOnce();
             expect(forage.setItem.mock.calls.some(([k]) => k === "mutation_journal")).toBe(false);
             expect(values.get(SYNC_PENDING_KEY).generation).toBeGreaterThan(genBefore);
             expect(values.get("car_list")[0].stateFlags.favorite).toBe(false);

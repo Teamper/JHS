@@ -6,7 +6,7 @@ import { ONE115_RENAME_STYLES } from "../../ui/detail/one115-rename-preview.js";
 
 export default defineFeature({
     id: "one-one-five", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list", "detail"], startup: "idle",
-    requires: [PORT.host, PORT.style, SERVICE.dialog, SERVICE.settings, SERVICE.events, SERVICE.offline, SERVICE.one115Match, SERVICE.notifications, SERVICE.domUi, SERVICE.diagnostics],
+    requires: [PORT.host, PORT.style, SERVICE.dialog, SERVICE.settings, SERVICE.events, SERVICE.offline, SERVICE.notifications, SERVICE.domUi],
     contributionRoutes: ["list", "detail"],
     contributes: ["external-bridge.115-match"], providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -18,10 +18,10 @@ export default defineFeature({
         try {
             runtime.scope.addCleanup(deps[PORT.style].register("jhs-115-rename-preview", ONE115_RENAME_STYLES));
             controller = new OneOneFiveMatchController({
-                document, window, route: runtime.route, host: deps[PORT.host], offline: deps[SERVICE.offline], match: deps[SERVICE.one115Match],
+                document, window, route: runtime.route, host: deps[PORT.host], offline: deps[SERVICE.offline].api, match: deps[SERVICE.offline].match,
                 settings: deps[SERVICE.settings], events: deps[SERVICE.events], dialog: deps[SERVICE.dialog],
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], scope: runtime.scope,
-                diagnostics: deps[SERVICE.diagnostics],
+                diagnostics: runtime.diagnostics,
             });
             if (!controller.start()) throw new Error("115 matching controller did not start");
             runtime.scope.addCleanup(() => controller?.dispose());

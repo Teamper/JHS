@@ -34,7 +34,7 @@ for (const [cards, records] of process.env.JHS_PERF_STRESS === "1" ? [[1000, 500
         writeSyncFile: async (name, content) => { const state = await service.deps.store.read(); files.set(name, { content, meta: { ...state.pending, schema: 1, replicaId: state.replicaId } }); },
         deleteSyncFile: async name => files.delete(name),
       });
-      const storage = service.deps.store.forage;
+      const storage = service.deps.store.storage.port.forage;
       await storage.setItem("car_list", Array.from({ length: count }, (_, i) => ({ carNum: "LIB-" + i, names: "Synthetic title " + i, stateFlags: { favorite: true } })));
       await storage.setItem("favorite_actresses", Array.from({ length: count / 100 }, (_, i) => ({ starId: "actor-" + i, name: "Synthetic Actor", newVideoList: Array.from({ length: 100 }, (_, j) => ({ carNum: "NEW-" + (i * 100 + j), names: "New work" })) })));
       await storage.setItem("activity_log", { entries: Array.from({ length: 320 }, (_, i) => ({ id: "log-" + i, type: "mark", commitState: "committed", createdAt: "2026-10-20T00:00:00.000Z", changes: [] })) });

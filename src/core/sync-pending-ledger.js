@@ -6,10 +6,10 @@ export const SYNC_PENDING_KEY = "jhs_webdav_sync_pending_v1";
 
 /** Small local write-ahead intent; never included in portable data or the remote protocol. */
 export class SyncPendingLedger {
-    /** @param {any} forage @param {() => number} [clock] */
-    constructor(forage, clock = () => Date.now()) { this.forage = forage; this.clock = clock; this.initialEpoch = crypto.randomUUID(); }
+    /** @param {any} storage @param {() => number} [clock] */
+    constructor(storage, clock = () => Date.now()) { this.storage = storage; this.clock = clock; this.initialEpoch = crypto.randomUUID(); }
     async read() {
-        const value = await this.forage.getItem(SYNC_PENDING_KEY);
+        const value = await this.storage.get(SYNC_PENDING_KEY);
         const check = value?.check;
         if (check != null && (typeof check !== "object" || Array.isArray(check) || typeof check.checkedRevision !== "string"
             || !Number.isSafeInteger(check.baseMetadataRevision) || check.baseMetadataRevision < 0 || check.baseMetadataRevision > value.metadataRevision
@@ -24,7 +24,7 @@ export class SyncPendingLedger {
         return value || { schema: 1, generation: 0, metadataRevision: 0, epoch: this.initialEpoch, replicaId: "", domains: {}, candidates: {}, localUndoIds: [] };
     }
     /** Caller owns the shared storage lock. @param {any} value */
-    async write(value) { await this.forage.setItem(SYNC_PENDING_KEY, value); return value; }
+    async write(value) { await this.storage.set(SYNC_PENDING_KEY, value); return value; }
     /** Write intent precedes the business write. Candidate floors are verified against recovered business data before use. */
     /** @param {string} domain @param {string | undefined} floor */
     async capture(domain, floor) {

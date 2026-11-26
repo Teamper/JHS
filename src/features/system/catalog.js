@@ -2,18 +2,19 @@
 
 import { parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
 import { defineFeature } from "../../contracts/manifests.js";
-import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
+import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { openSettingsUi, registerSettingsUiOwner } from "../../core/settings-ui-owner.js";
+import { LibraryStatsService } from "../../services/library-stats-service.js";
 import { SettingsEffectsController } from "./settings-effects-controller.js";
 import { SettingsEntryController } from "./settings-entry-controller.js";
 
 export const systemFeatureManifests = Object.freeze([
     defineFeature({
         id: "webdav-sync", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-        requires: [SERVICE.webdavSync, PORT.host], contributes: [], providesCommands: [],
+        requires: [SERVICE.settingsTools, PORT.host], contributes: [], providesCommands: [],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             /** @type {import("../../contracts/webdav-sync.js").WebDavSync} */
-            const service = deps[SERVICE.webdavSync];
+            const service = deps[SERVICE.settingsTools].webdavSync;
             await service.initialize();
             service.start(runtime.scope, deps[PORT.host].document);
             return { activeContributions: [] };
@@ -21,40 +22,42 @@ export const systemFeatureManifests = Object.freeze([
     }),
     defineFeature({
         id: "settings-effects", kind: "system", disableable: false, sites: [], routes: [], startup: "eager",
-        requires: [SERVICE.diagnostics, SERVICE.settings, SERVICE.profile, SERVICE.busImageLayout, SERVICE.clog], optionalRequires: [PORT.host], contributes: [], providesCommands: [],
+        requires: [SERVICE.settings, SERVICE.profile, SERVICE.busImageLayout, SERVICE.clog], optionalRequires: [PORT.host], contributes: [], providesCommands: [],
         activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const controller = new SettingsEffectsController({
                 settings: deps[SERVICE.settings], profile: deps[SERVICE.profile], imageLayout: deps[SERVICE.busImageLayout], hostAdapter: deps[PORT.host],
-                diagnostics: deps[SERVICE.diagnostics], logger: deps[SERVICE.clog], scope: runtime.scope,
+                diagnostics: runtime.diagnostics, logger: deps[SERVICE.clog], scope: runtime.scope,
             });
             controller.start();
             return { activeContributions: [] };
         },
     }),
     defineFeature({
-        id: "settings-entry", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager", optionalRequires: [SERVICE.webdavSync, SERVICE.taskExecution],
-        requires: [PORT.style, PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.cache, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, SERVICE.mediaLibrary, SERVICE.busImageLayout, REGISTRY.settings, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.events, SERVICE.domUi, SERVICE.clog, SERVICE.notifications], contributes: ["settings.core"], providesCommands: [],
+        id: "settings-entry", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager", optionalRequires: [SERVICE.taskExecution],
+        requires: [PORT.style, PORT.host, SERVICE.profile, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.settingsTools, SERVICE.keywordRules, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, SERVICE.mediaLibrary, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clog, SERVICE.notifications], contributes: ["settings.core"], providesCommands: [],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const pageDocument = deps[PORT.host].document;
             const pageWindow = pageDocument.defaultView;
             const { SettingPlugin } = await import("../settings/settings-controller.js");
             const adapter = new SettingPlugin({
                 runtimeServices: {
-                    host: deps[PORT.host], diagnostics: deps[SERVICE.diagnostics], profile: deps[SERVICE.profile], webdav: deps[SERVICE.webdav], webdavSync: deps[SERVICE.webdavSync], autoBackup: deps[SERVICE.webdavSync],
-                    dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], cache: deps[SERVICE.cache],
-                    http: deps[SERVICE.http], offline: deps[SERVICE.offline], magnet: deps[SERVICE.magnet], movie: deps[SERVICE.movie],
+                    ...deps[SERVICE.settingsTools], host: deps[PORT.host], diagnostics: runtime.diagnostics, profile: deps[SERVICE.profile],
+                    dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], keywordRules: deps[SERVICE.keywordRules],
+                    http: deps[SERVICE.http], offline: deps[SERVICE.offline].api, magnet: deps[SERVICE.magnet], movie: deps[SERVICE.movie],
                     state: deps[SERVICE.state], translation: deps[SERVICE.translation], mediaLibrary: deps[SERVICE.mediaLibrary], busImageLayout: deps[SERVICE.busImageLayout],
-                    settingsRegistry: deps[REGISTRY.settings], scope: () => runtime.scope,
+                    scope: () => runtime.scope,
                 },
-                resolveDependency: (/** @type {string} */ name) => runtime.resolveCompatibilityBean(name),
+                readListPage: () => runtime.getCapability?.("list.core"),
+                readNewVideo: () => runtime.getCapability?.("discovery.new-video"),
                 readTask: () => deps[SERVICE.taskExecution] ?? runtime.getCapability?.("discovery.scheduler"),
                 readCoverButtons: () => runtime.getCapability?.("detail.cover-state-actions"),
                 readExternalSites: () => runtime.getCapability?.("detail.external-sites"),
                 readBlacklist: () => runtime.getCapability?.("library.blacklist"),
-                jquery: deps[SERVICE.domUi].jquery, utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
-                logger: deps[SERVICE.clog], legacyStorage: deps[SERVICE.legacyStorage], events: deps[SERVICE.events], domUi: deps[SERVICE.domUi],
+                jquery: deps[SERVICE.domUi].jquery, utilities: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications],
+                logger: deps[SERVICE.clog], events: deps[SERVICE.events], domUi: deps[SERVICE.domUi],
                 document: pageDocument, window: pageWindow, site: runtime.site, route: runtime.route,
             });
+            runtime.onCapabilityChanged("discovery.scheduler", () => adapter.renderTaskStatuses());
             runtime.provideCapability?.("settings.core", adapter);
             const release = runtime.registerCompatibilityBean?.("SettingPlugin", adapter);
             if (release) runtime.scope.addCleanup(release);
@@ -89,7 +92,7 @@ export const systemFeatureManifests = Object.freeze([
     }),
     defineFeature({
         id: "settings", kind: "system", disableable: false, sites: [], routes: [], startup: "on-command",
-        requires: [SERVICE.diagnostics], contributes: [], providesCommands: ["settings.open"],
+        requires: [], contributes: [], providesCommands: ["settings.open"],
         activate: (/** @type {any} */ _deps, /** @type {any} */ runtime) => {
             const adapter = runtime.getCapability?.("settings.core");
             const cleanup = typeof adapter?.openSettingDialog === "function"
@@ -101,8 +104,8 @@ export const systemFeatureManifests = Object.freeze([
     }),
     defineFeature({
         id: "diagnostics", kind: "system", disableable: false, sites: [], routes: [], startup: "on-command",
-        requires: [SERVICE.diagnostics], contributes: [], providesCommands: ["diagnostics.export"],
-        activate: (/** @type {any} */ deps) => ({ commands: { "diagnostics.export": () => deps[SERVICE.diagnostics].exportSnapshot() } }),
+        requires: [], contributes: [], providesCommands: ["diagnostics.export"],
+        activate: (_deps, /** @type {any} */ runtime) => ({ commands: { "diagnostics.export": () => runtime.diagnostics.exportSnapshot() } }),
     }),
     defineFeature({
         id: "responsive-shell", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "idle",
@@ -111,13 +114,17 @@ export const systemFeatureManifests = Object.freeze([
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const id = "responsive-shell.bottom-bar";
             if (!runtime.enabledContributions.includes(id)) return { activeContributions: [] };
-            const { RESPONSIVE_SHELL_CAPABILITIES, ResponsiveShellController } = await import("./responsive-shell-controller.js");
-            const capabilities = {};
-            for (const name of RESPONSIVE_SHELL_CAPABILITIES) Object.defineProperty(capabilities, name, { enumerable: true, get: () => runtime.isCompatibilityBeanAvailable?.(name) === false ? null : runtime.resolveCompatibilityBean(name) ?? null });
+            const { ResponsiveShellController } = await import("./responsive-shell-controller.js");
             const controller = new ResponsiveShellController({
                 jquery: deps[SERVICE.domUi].jquery, window, document,
                 profile: deps[SERVICE.profile], settings: deps[SERVICE.settings], host: deps[PORT.host],
-                state: deps[SERVICE.state], logger: deps[SERVICE.clog], notifications: deps[SERVICE.notifications], capabilities,
+                state: deps[SERVICE.state], logger: deps[SERVICE.clog], notifications: deps[SERVICE.notifications],
+                capabilities: {
+                    get listPage() { return runtime.getCapability("list.core"); },
+                    get listActions() { return runtime.getCapability("list.actions"); },
+                    get settings() { return runtime.getCapability("settings.core"); },
+                    get detailActions() { return runtime.getCapability("detail.page-state-actions"); },
+                },
                 privacyActions: { available: () => runtime.isCommandAvailable("privacy.toggle"), enabled: () => deps[SERVICE.privacy].enabled, toggle: () => runtime.executeCommand("privacy.toggle"), configure: () => runtime.executeCommand("privacy.configure"), bindReveal: (/** @type {HTMLElement} */ button, /** @type {any} */ scope) => runtime.executeCommand("privacy.bind-reveal", button, scope) },
                 mediaActions: { available: () => runtime.isCommandAvailable("media.configure") && !parseDisabledPlugins(deps[SERVICE.settings].snapshot().disabledPlugins).includes("media-library"), configure: () => runtime.executeCommand("media.configure") },
                 openNewVideo: () => runtime.executeCommand("new-video.open"),
@@ -160,18 +167,19 @@ export const systemFeatureManifests = Object.freeze([
     }),
     defineFeature({
         id: "stats", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "idle",
-        requires: [SERVICE.libraryStats, SERVICE.diagnostics, SERVICE.notifications, SERVICE.movie, SERVICE.settings, SERVICE.dialog, SERVICE.events, SERVICE.domUi, PORT.style],
+        requires: [SERVICE.state, SERVICE.notifications, SERVICE.movie, SERVICE.settings, SERVICE.dialog, SERVICE.events, SERVICE.domUi, PORT.style],
         contributes: ["stats.dashboard"], providesCommands: [],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const { StatsController } = await import("./stats-controller.js");
+            const libraryStats = new LibraryStatsService({ state: deps[SERVICE.state] });
             const controller = new StatsController({
                 document,
-                libraryStats: deps[SERVICE.libraryStats], diagnostics: deps[SERVICE.diagnostics], notifications: deps[SERVICE.notifications],
+                libraryStats, diagnostics: runtime.diagnostics, notifications: deps[SERVICE.notifications],
                 movie: deps[SERVICE.movie], settings: deps[SERVICE.settings], dialog: deps[SERVICE.dialog],
                 events: deps[SERVICE.events], ui: deps[SERVICE.domUi], styles: deps[PORT.style], scope: runtime.scope,
                 getPendingNewVideoTotal: async () => {
                     if (!runtime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin")) return 0;
-                    try { return await deps[SERVICE.libraryStats].getPendingNewVideoTotal(); }
+                    try { return await libraryStats.getPendingNewVideoTotal(); }
                     catch (error) {
                         runtime.diagnostics.recordError({ source: "stats-feature", featureId: "stats", contributionId: "stats.dashboard", message: error instanceof Error ? error.message : String(error) });
                         return 0;

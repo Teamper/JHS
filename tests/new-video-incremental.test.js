@@ -1,3 +1,4 @@
+import { storageFromForage } from "./helpers/atomic-storage.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { NewVideoLifecycleController } from "../src/features/discovery/new-video-lifecycle-controller.js";
 import { NewVideoWorkspaceController } from "../src/features/discovery/new-video-workspace-controller.js";
@@ -37,13 +38,9 @@ async function createHarness(count = 9, { durableState = false } = {}) {
         publishTime: "2026-09-09", coverUrl: `https://images.example.test/${index}.jpg`,
     })) }];
     const decisions = {}, bus = new JhsEventBus();
-    const storageManager = {
-        getFavoriteActressList: vi.fn(async () => actresses), getCarMap: vi.fn(async () => new Map()),
-        getSetting: vi.fn(async key => key === "autoRemoveNewVideoMarkAfterBrowse" ? "yes" : key === "checkNewVideo_ruleTime" ? 8760 : {}),
-    };
-    vi.stubGlobal("storageManager", storageManager);
+    const getFavoriteActressList = vi.fn(async () => actresses);
     let state = {
-        getFavoriteActressList: storageManager.getFavoriteActressList, getCarMap: storageManager.getCarMap,
+        getFavoriteActressList, getCarMap: vi.fn(async () => new Map()),
         getNewVideoDecisions: vi.fn(async () => decisions),
         removeFromNewVideoList: vi.fn(async (values, reason) => {
             const keys = values.map(normalizeCarNum), removed = new Set(keys);
@@ -55,26 +52,20 @@ async function createHarness(count = 9, { durableState = false } = {}) {
     };
     if (durableState) {
         const data = new Map([["favorite_actresses", actresses], ["car_list", []]]);
-        Object.assign(storageManager, {
-            favorite_actresses_key: "favorite_actresses", car_list_key: "car_list",
-            forage: {
-                getItem: async key => data.get(key),
-                setItem: async (key, value) => { data.set(key, value); },
-                removeItem: async key => { data.delete(key); },
-            },
-            _invalidateCache() {},
-            getFavoriteActressList: async () => data.get("favorite_actresses"),
-            getCarMap: async () => new Map(data.get("car_list").map(item => [item.carNum, item])),
-        });
-        state = new StateService(storageManager, bus);
+        const forage = {
+            getItem: async key => structuredClone(data.get(key)),
+            setItem: async (key, value) => data.set(key, structuredClone(value)),
+            removeItem: async key => data.delete(key),
+        };
+        state = new StateService(storageFromForage(forage), bus);
     }
-    const settings = { snapshot: () => ({ checkNewVideo_ruleTime: 8760 }) };
+    const settings = { snapshot: vi.fn(() => ({ checkNewVideo_ruleTime: 8760, autoRemoveNewVideoMarkAfterBrowse: "yes" })) };
     const runtimeServices = {
         settings,
         state, movie: { externalSiteOrigin: () => "https://javdb.com" },
         storage: { getLocal: () => null }, actressInfo: { getAvatarSources: () => [] },
     };
-    const plugin = new NewVideoWorkspaceService({ runtimeServices, jquery: $, legacyStorage: storageManager, utilities: globalThis.utils, notifications: globalThis.show, logger: globalThis.clog, events: bus, createImageHoverPreview: config => new dom.window.ImageHoverPreview(config), document: dom.window.document, window: dom.window });
+    const plugin = new NewVideoWorkspaceService({ runtimeServices, jquery: $, utilities: globalThis.utils, notifications: globalThis.show, logger: globalThis.clog, events: bus, createImageHoverPreview: config => new dom.window.ImageHoverPreview(config), document: dom.window.document, window: dom.window });
     plugin.featureNewVideoWorkspaceController = new NewVideoWorkspaceController({ state, settings, movie: runtimeServices.movie });
     const scope = new LifecycleScope("new-video-incremental-test");
     const lifecycle = new NewVideoLifecycleController({ plugin, events: bus, scope, onError: error => { throw error; } });
@@ -83,7 +74,7 @@ async function createHarness(count = 9, { durableState = false } = {}) {
     await plugin.reloadNewVideoWorkspaceData();
     plugin.bindClick();
     $("#new-video-list-container").on("click.test", ".nv-card__link", event => event.preventDefault());
-    const harness = { plugin, dom, $, state, storageManager, scope };
+    const harness = { plugin, dom, $, state, settings, getFavoriteActressList, scope };
     harnesses.push(harness);
     return harness;
 }
@@ -127,18 +118,18 @@ describe("new-video browse removal", () => {
     });
 
     it("keeps the page, both scroll containers, retained card/image nodes and selection while filling the gap", async () => {
-        const { plugin, $, state, dom, storageManager } = await createHarness();
+        const { plugin, $, state, dom, getFavoriteActressList } = await createHarness();
         plugin.nvCurrentPage = 2, plugin.nvRenderPage();
         const grid = $("#nv-grid")[0], retained = $('.nv-card[data-car="ABC-006"]')[0], image = $(retained).find("img")[0];
         $(retained).find(".nv-select").prop("checked", true).trigger("change");
         $('.nv-card[data-car="ABC-005"] .nv-card__link')[0].focus();
         $("#new-video-list-container").scrollTop(180), $(".newVideoToolBox").scrollTop(90);
         const reload = vi.spyOn(plugin, "reloadNewVideoWorkspaceData");
-        storageManager.getFavoriteActressList.mockClear();
+        getFavoriteActressList.mockClear();
         await state.removeFromNewVideoList(["abc_005"], "browse");
         await plugin.flushWorkspaceReload();
         expect(reload).not.toHaveBeenCalled();
-        expect(storageManager.getFavoriteActressList).toHaveBeenCalledOnce();
+        expect(getFavoriteActressList).toHaveBeenCalledOnce();
         expect($("#nv-grid")[0]).toBe(grid);
         expect(visibleKeys($)).toEqual(["ABC-004", "ABC-006", "ABC-007"]);
         expect($('.nv-card[data-car="ABC-006"]')[0]).toBe(retained);
@@ -202,14 +193,14 @@ describe("new-video browse removal", () => {
     });
 
     it("does not remove a clicked card when persistence fails or automatic removal is disabled", async () => {
-        const { plugin, $, state, storageManager } = await createHarness();
+        const { plugin, $, state, getFavoriteActressList } = await createHarness();
         state.removeFromNewVideoList.mockRejectedValueOnce(new Error("storage failed"));
         $('.nv-card[data-car="ABC-002"] .nv-card__link').trigger("click");
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(visibleKeys($)).toEqual(["ABC-001", "ABC-002", "ABC-003"]);
         expect(plugin.nvAllItemsMap.has("ABC-002")).toBe(true);
         state.removeFromNewVideoList.mockClear();
-        storageManager.getSetting.mockImplementation(async key => key === "autoRemoveNewVideoMarkAfterBrowse" ? "no" : {});
+        plugin.runtimeServices.settings.snapshot.mockReturnValue({ checkNewVideo_ruleTime: 8760, autoRemoveNewVideoMarkAfterBrowse: "no" });
         $('.nv-card[data-car="ABC-002"] .nv-card__link').trigger("click");
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(state.removeFromNewVideoList).not.toHaveBeenCalled();

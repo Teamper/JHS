@@ -36,8 +36,8 @@ async function seedLegacyRecords(page, carNums) {
 
 async function readStateDomains(page) {
   return page.evaluate(async () => {
-    const storage = window.storageManager.forage;
-    return Object.fromEntries(await Promise.all(["car_list", "favorite_actresses", "new_video_decisions", "activity_log"].map(async key => [key, await storage.getItem(key)])));
+    const storage = window.__jhsBrowserDiagnostics.detailServices.storage;
+    return Object.fromEntries(await Promise.all(["car_list", "favorite_actresses", "new_video_decisions", "activity_log"].map(async key => [key, await storage.get(key)])));
   });
 }
 

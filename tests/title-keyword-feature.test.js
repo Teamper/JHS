@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { KeywordRulesService } from "../src/services/keyword-rules-service.js";
+import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { TitleKeywordController } from "../src/features/library/title-keyword-controller.js";
 
-function setup({ site = "javdb", route = "detail", initial = {}, selection = "Movie title" } = {}) {
+function setup({ site = "javdb", route = "detail", initial = {}, selection = "Movie title", saveKeyword } = {}) {
     const host = document.createElement("main");
     host.innerHTML = '<div class="title"><strong>Detail title</strong></div>';
     document.body.append(host);
@@ -18,12 +20,12 @@ function setup({ site = "javdb", route = "detail", initial = {}, selection = "Mo
     Object.defineProperty(window, "getSelection", { configurable: true, value: () => ({ toString: () => selection }) });
     const confirm = vi.fn(), closePage = vi.fn(async () => true), emitted = vi.fn(async () => undefined), add = vi.fn(async () => undefined);
     const scope = new LifecycleScope("test:title-keyword");
-    const diagnostics = { recordError: vi.fn() };
+    const diagnostics = { recordError: vi.fn() }, notifications = { error: vi.fn() };
     const ui = { confirm, jquery: value => ({ value }), closePage };
     const controller = new TitleKeywordController({
-        document, window, site, route, settings, saveKeyword: add, events: { emit: emitted }, ui, scope, diagnostics,
+        document, window, site, route, settings, saveKeyword: saveKeyword ?? add, events: { emit: emitted }, ui, notifications, scope, diagnostics,
     });
-    return { controller, scope, settings, host, confirm, closePage, emitted, add, diagnostics };
+    return { controller, scope, settings, host, confirm, closePage, emitted, add, diagnostics, notifications };
 }
 
 async function acceptAndDrain(confirm) {
@@ -60,6 +62,21 @@ describe("Library Feature title keyword controller", () => {
         expect(test.closePage).toHaveBeenCalledWith({ root: { value: title } });
         expect(test.diagnostics.recordError).not.toHaveBeenCalled();
         test.controller.dispose();
+        test.scope.dispose();
+    });
+
+    it("keeps the dialog open and explains when the selected title keyword already exists", async () => {
+        const set = vi.fn();
+        const rules = new KeywordRulesService({
+            storage: { get: async () => ["Movie title"], set },
+            coordinator: new StorageMutationCoordinator({ lockManager: null }),
+        });
+        const test = setup({ saveKeyword: value => rules.saveTitleKeywords(value) });
+        const title = test.host.querySelector(".title strong");
+        await test.controller.addKeyword("Movie title", title);
+        expect(test.notifications.error).toHaveBeenCalledWith("Movie title 标题关键词已存在");
+        expect(test.closePage).not.toHaveBeenCalled();
+        expect(set).not.toHaveBeenCalled();
         test.scope.dispose();
     });
 

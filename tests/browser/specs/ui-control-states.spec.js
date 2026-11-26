@@ -187,9 +187,9 @@ test("Windows classic scrollbars preserve page position through nested Layer and
 test("native backup file selection cleans temporary inputs and preview cancellation never writes", async ({ page, context }) => {
     await boot(page, context, "dark");
     await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), storage = plugin.getFormDependencies().legacyStorage;
+        const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), backup = plugin.getFormDependencies().backup;
         window.__pickerWrites = 0;
-        storage.importData = storage.createSnapshot = async () => { window.__pickerWrites++; };
+        backup.importData = backup.createSnapshot = async () => { window.__pickerWrites++; };
         return plugin.openSettingDialog("data-tools-panel");
     });
     await expect(page.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");

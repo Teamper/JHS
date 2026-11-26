@@ -33,7 +33,8 @@ export function isCloudflareChallenge(body, status = 0) {
     const text = body.toLowerCase(), hasTitle = /<title[^>]*>\s*just a moment(?:\.\.\.)?\s*<\/title>/i.test(body);
     const hasForm = /id=["']challenge-form["']/i.test(body), hasChallenge = text.includes("cf-chl-") || text.includes("cf_chl_opt");
     const hasPlatform = text.includes("/cdn-cgi/challenge-platform/") || text.includes("challenge-platform");
-    return hasTitle || hasForm && (hasChallenge || hasPlatform) || [403, 429, 503].includes(status) && hasChallenge && hasPlatform;
+    const blockedPage = status === 403 && /<title[^>]*>\s*attention required!\s*\|\s*cloudflare\s*<\/title>/i.test(body);
+    return hasTitle || blockedPage || hasForm && (hasChallenge || hasPlatform) || [403, 429, 503].includes(status) && hasChallenge && hasPlatform;
 }
 
 /** @param {number} delayMs @param {AbortSignal | undefined} signal */
@@ -75,8 +76,9 @@ export class HttpService {
         this.settings = options.settings ?? null;
         /** @type {Map<string, {promise: Promise<any>, controller: AbortController, consumers: number, refresh: boolean}>} */
         this.inflight = new Map();
-        /** @type {Map<string, {state: "closed" | "open" | "half-open", failCount: number, openTime: number, cooldownMs: number, threshold: number, probing: boolean}>} */
+        /** @type {Map<string, {state: "closed" | "open" | "half-open", failCount: number, openTime: number, cooldownMs: number, threshold: number, probing: boolean, connectionFailuresOnly: boolean}>} */
         this.circuitBreakers = new Map();
+        this.connectionGeneration = 0;
         /** @type {Map<string, {count: number, errors: number, lastUsed: number}>} */
         this.domainStats = new Map();
     }
@@ -148,6 +150,7 @@ export class HttpService {
         // Advisory/detail reads must not prevent a user from authenticating or submitting.
         const circuitKey = ["account-mutation", "account-read"].includes(options.circuitGroup) ? `${domain}#${options.circuitGroup}` : domain;
         const state = this.ensureCircuit(circuitKey, options);
+        const connection = this.connectionGeneration;
         let ownsProbe = false;
         let finalError = null;
         for (let attempt = 0; attempt <= retryCount; attempt += 1) {
@@ -188,8 +191,16 @@ export class HttpService {
                 catch (abortError) { finalError = JhsError.from(abortError, options.providerId); break; }
             }
         }
-        if (finalError && ["NETWORK_ERROR", "TIMEOUT", "CF_BLOCKED"].includes(finalError.code)) this.recordBreakerFailure(circuitKey, options);
-        if (ownsProbe) state.probing = false;
+        if (finalError && ["NETWORK_ERROR", "TIMEOUT", "CF_BLOCKED"].includes(finalError.code)) {
+            const connectionFailure = finalError.code !== "CF_BLOCKED" && !finalError.details?.status;
+            if (!connectionFailure || connection === this.connectionGeneration) this.recordBreakerFailure(circuitKey, options, connectionFailure);
+        }
+        if (ownsProbe) {
+            state.probing = false;
+            // A valid client-error response proves the domain is reachable.
+            const status = Number(finalError?.details?.status);
+            if (state.state === "half-open" && status >= 400 && status < 500 && finalError?.code !== "CF_BLOCKED") state.state = "closed";
+        }
         this.diagnostics?.recordError(finalError);
         throw finalError;
     }
@@ -198,7 +209,7 @@ export class HttpService {
     ensureCircuit(domain, options = {}) {
         let state = this.circuitBreakers.get(domain);
         if (!state) {
-            state = { state: "closed", failCount: 0, openTime: 0, cooldownMs: Math.max(1000, Number(options.circuitCooldownMs ?? 60_000) || 60_000), threshold: Math.max(1, Number(options.circuitThreshold ?? 3) || 3), probing: false };
+            state = { state: "closed", failCount: 0, openTime: 0, cooldownMs: Math.max(1000, Number(options.circuitCooldownMs ?? 60_000) || 60_000), threshold: Math.max(1, Number(options.circuitThreshold ?? 3) || 3), probing: false, connectionFailuresOnly: false };
             this.circuitBreakers.set(domain, state);
         } else {
             if (options.circuitCooldownMs != null) state.cooldownMs = Math.max(1000, Number(options.circuitCooldownMs) || 60_000);
@@ -228,9 +239,10 @@ export class HttpService {
         const stats = this.domainStats.get(domain) ?? { count: 0, errors: 0, lastUsed: 0 };
         stats.count += 1, stats.errors += error ? 1 : 0, stats.lastUsed = Date.now(), this.domainStats.set(domain, stats);
     }
-    /** @param {string} domain @param {Record<string, any>} options */
-    recordBreakerFailure(domain, options = {}) {
+    /** @param {string} domain @param {Record<string, any>} options @param {boolean} [connectionFailure] */
+    recordBreakerFailure(domain, options = {}, connectionFailure = false) {
         const state = this.ensureCircuit(domain, options);
+        state.connectionFailuresOnly = connectionFailure && (state.failCount === 0 || state.connectionFailuresOnly);
         state.failCount += 1;
         if (state.state === "half-open" || state.failCount >= state.threshold) state.state = "open", state.openTime = Date.now(), state.probing = false;
     }
@@ -243,6 +255,12 @@ export class HttpService {
     getDomainStats() { return Object.fromEntries([...this.domainStats].map(([domain, stats]) => [domain, { ...stats }])); }
     /** @param {string} domain */
     resetCircuitBreaker(domain) { this.circuitBreakers.delete(domain); }
+    resetConnectionFailures() {
+        this.connectionGeneration += 1;
+        for (const [domain, state] of this.circuitBreakers) {
+            if (state.failCount && state.connectionFailuresOnly) this.resetCircuitBreaker(domain);
+        }
+    }
     resetAllCircuitBreakers() { this.circuitBreakers.clear(); }
     clearDomainStats() { this.domainStats.clear(); }
 

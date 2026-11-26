@@ -20,7 +20,7 @@ for (const [entry, screenshotUnavailable] of [["owned", false], ["card", false],
         await page.goto(entry === "card" ? "https://javdb.com/tags/fc2" : detailsUrl.href);
         await injectUserscriptRuntime(page, {
             hostStyles: true, realFeedback: true,
-            settingOverrides: { themeMode: info.project.name === "mobile" ? "dark" : "light", enableLoadReview: "no", enableLoadRelated: "no", enableLoadOtherSite: "no", enableLoadScreenShot: "yes", translateTitle: "no" },
+            settingOverrides: { themeMode: info.project.name === "mobile" ? "dark" : "light", needClosePage: "no", enableLoadReview: "no", enableLoadRelated: "no", enableLoadOtherSite: "no", enableLoadScreenShot: "yes", translateTitle: "no" },
             beforeUserscriptInjection: async host => {
                 await injectRealLayer(host);
                 await host.evaluate(({ search, entry, screenshotUnavailable }) => {

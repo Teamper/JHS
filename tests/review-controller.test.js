@@ -16,7 +16,7 @@ function createHarness({ site = "javdb", pathname = "/v/movie-123", reviewEnable
         currentSettings = { ...currentSettings, [key]: value };
         settings.dispatchEvent(new dom.window.CustomEvent("settings.changed", { detail: { names: [key] } }));
     };
-    const storage = { get: vi.fn(async () => []), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+    const keywordRules = { getReviewKeywords: async () => [] };
     const list = vi.fn(reviewList), resolve = vi.fn(movieResolve);
     const copied = vi.fn(async () => true), errors = [], notices = [];
     const scope = new LifecycleScope("detail-review-test");
@@ -26,12 +26,12 @@ function createHarness({ site = "javdb", pathname = "/v/movie-123", reviewEnable
             site, location: dom.window.location, locateDetailSlots: () => ({ reviews: target }),
             readMovieRef: () => ({ carNum: "ABC-123" }),
         },
-        route: "detail", review: { list }, movie: { resolve }, settings, storage,
+        route: "detail", review: { list }, movie: { resolve }, settings, keywordRules,
         ui: { jquery: value => $(value), formatDate: value => `date:${value}`, confirm: (_event, _message, callback) => callback() },
         clipboard: { copyText: copied }, notifications: { error: message => notices.push(message), ok: message => notices.push(message) },
         diagnostics: { recordError: error => errors.push(error) }, scope,
     });
-    return { dom, $, target, settings, storage, list, resolve, copied, errors, notices, scope, controller };
+    return { dom, $, target, settings, list, resolve, copied, errors, notices, scope, controller };
 }
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));

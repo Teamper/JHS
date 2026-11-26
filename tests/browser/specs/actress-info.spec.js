@@ -83,8 +83,7 @@ test("uses stored actressProfile without network lookup, strips actor-page badge
         newVideoList: [{ carNum: "XYZ-202", title: "Beta", publishTime: "2026-10-02" }],
       },
     ];
-    await window.storageManager.forage.setItem(window.storageManager.favorite_actresses_key, actresses);
-    window.storageManager._invalidateCache(window.storageManager.favorite_actresses_key);
+    await window.__jhsBrowserDiagnostics.detailServices.storage.set("favorite_actresses", actresses);
   });
 
   // 1. Detail page renders stored actressProfile without requesting ja.wikipedia.org

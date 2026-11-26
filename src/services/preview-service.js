@@ -80,24 +80,25 @@ export function canUseCardPreview(settings) {
 
 class DmmPreviewParser {
     /** @param {string | null} e @param {any} storage @param {any} movie @param {any} scope */
-    constructor(e, storage, movie, scope) {
+    constructor(e, storage, movie, scope, /** @type {Pick<Console, "debug" | "warn" | "error">} */ logger = console) {
+        this.logger = logger;
         /** @type {string} */
         this.carNum = e || "", this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
     }
     _checkCache() {
         const cached = pruneDmmCache(parseJsonMap(this.storage.getLocal(ee)));
-        return cached[this.carNum] ? (clog.debug("缓存中存在预览视频信息", cached[this.carNum]), cached[this.carNum]) : null;
+        return cached[this.carNum] ? (this.logger.debug("缓存中存在预览视频信息", cached[this.carNum]), cached[this.carNum]) : null;
     }
     /** @param {Record<string, string>} e */
     _updateCache(e) {
         const cached = pruneDmmCache(parseJsonMap(this.storage.getLocal(ee)));
-        cached[this.carNum] = { ...e, time: Date.now() }, clog.debug("成功解析出预览视频并已缓存:", e), this.storage.setLocal(ee, JSON.stringify(cached));
+        cached[this.carNum] = { ...e, time: Date.now() }, this.logger.debug("成功解析出预览视频并已缓存:", e), this.storage.setLocal(ee, JSON.stringify(cached));
     }
     async _fetchRemote() {
         const result = await this.movie.preview("dmm", { carNum: this.carNum }, { scope: this.scope });
         if (this.scope?.disposed) return null;
         if (!result.sources) {
-            clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
+            this.logger.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
             return null;
         }
         const cacheKey = "jhs_other_site_dmm", cache = pruneDmmCache(parseJsonMap(this.storage.getLocal(cacheKey)));
@@ -107,14 +108,14 @@ class DmmPreviewParser {
     }
     async fetchVideo() {
         const carNum = normalizeCarNum(this.carNum);
-        if (!carNum) return clog.warn("跳过 DMM 解析：番号不可用"), null;
+        if (!carNum) return this.logger.warn("跳过 DMM 解析：番号不可用"), null;
         this.carNum = carNum;
         const e = this._checkCache();
         if (e) return e;
         try {
             const e = this.carNum.toLowerCase();
-            if (e.startsWith("heyzo") || /^(n\d+|\d+(-\d+)*)$/.test(e) || /^n\d+$/.test(e)) return clog.debug("无码番号类型，取消 DMM 解析"), null;
-            if (this.carNum.includes("VR-")) return clog.debug("VR 类型，取消 DMM 解析"), null;
+            if (e.startsWith("heyzo") || /^(n\d+|\d+(-\d+)*)$/.test(e) || /^n\d+$/.test(e)) return this.logger.debug("无码番号类型，取消 DMM 解析"), null;
+            if (this.carNum.includes("VR-")) return this.logger.debug("VR 类型，取消 DMM 解析"), null;
             const sources = await this._fetchRemote();
             if (!sources) return null;
             return this._updateCache(sources), sources;
@@ -123,7 +124,7 @@ class DmmPreviewParser {
             this.lastError = n instanceof ProviderError ? n : new ProviderError("dmm", error?.code || "PARSE_ERROR", error?.message || String(n), {
                 cause: n,
                 retryable: error?.retryable === true
-            }), clog.error("DMM API 搜索失败:", this.lastError);
+            }), this.logger.error("DMM API 搜索失败:", this.lastError);
             return null;
         }
     }
@@ -143,14 +144,14 @@ export function invalidateDmmPreview(carNum, storage) {
 }
 
 /** Deduplicate resolution with consumer-owned cancellation. @param {string | null} carNum @param {any} storage @param {any} movie @param {any} scope @returns {Promise<PreviewResult>} */
-export async function fetchDmmPreview(carNum, storage, movie, scope) {
+export async function fetchDmmPreview(carNum, storage, movie, scope, /** @type {Pick<Console, "debug" | "warn" | "error">} */ logger = console) {
     const key = normalizeCarNum(carNum) || "";
     let requests = pendingByStorage.get(storage);
     if (!requests) pendingByStorage.set(storage, requests = new Map());
     let entry = requests.get(key);
     if (!entry) {
         const requestScope = new LifecycleScope("preview-resolver");
-        const parser = new DmmPreviewParser(key, storage, movie, requestScope);
+        const parser = new DmmPreviewParser(key, storage, movie, requestScope, logger);
         entry = {scope:requestScope, consumers:0, promise:null};
         entry.promise = Promise.resolve().then(() => parser.fetchVideo()).then(sources => ({sources,error:parser.lastError})).finally(() => {
             if (requests.get(key) === entry) requests.delete(key);
@@ -168,7 +169,7 @@ export async function fetchDmmPreview(carNum, storage, movie, scope) {
 
 /** DMM 子开关门禁：关闭时直接返回无源结果，不发起任何 DMM 请求。 */
 /** @param {string | null} carNum @param {any} storage @param {any} movie @param {any} scope @param {Record<string, any>} settings @returns {Promise<PreviewResult>} */
-export async function fetchDmmPreviewIfEnabled(carNum, storage, movie, scope, settings) {
+export async function fetchDmmPreviewIfEnabled(carNum, storage, movie, scope, settings, /** @type {Pick<Console, "debug" | "warn" | "error">} */ logger = console) {
     if (!isDmmEnabled(settings)) return { sources: null, error: null };
-    return fetchDmmPreview(carNum, storage, movie, scope);
+    return fetchDmmPreview(carNum, storage, movie, scope, logger);
 }

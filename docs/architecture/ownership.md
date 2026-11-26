@@ -1,40 +1,28 @@
-# JHS 7.0 代码职责 Ownership
+# JHS 7.0 运行时与代码职责
 
-Ownership 描述的是唯一职责归属，不是人员归属。本表对应 `develop` 当前实现；6.5 冻结决策由 [ADR](adr/README.md) 保留。新增行为必须进入对应 Owner；跨层调用只通过 contracts 中的契约。
+共享业务位于 `src/core`、`src/services`、`src/integrations` 和 `src/contracts`。应用入口装配服务和平台端口，Feature 管理贡献、命令和实例生命周期，View 用宿主 DOM 或原生控件渲染。平台和应用依赖共享模块，共享模块通过契约接收存储、网络、导航和界面能力。旧插件名仅由 `runtimeLookup` 提供给外部兼容入口，内部 Feature 通过能力与命令协作。功能和路由对应 [Feature Matrix](feature-matrix.md)。
 
-| 职责 | Owner |
+| 入口 | 装配和生命周期 | 存储及外部依赖 |
+| --- | --- | --- |
+| Userscript | `src/main.js` → `bootstrapJhs` → `createAppContext` | `JAV-JHS/appData`、GM 请求和加密凭证，站点 DOM 由 HostAdapter 读写 |
+| Chrome / Edge 扩展 | `src/app/extension` 的 content 和工作台经类型化 RPC 调用 offscreen domain，service worker 协调网络、任务和恢复 | 扩展来源的 IndexedDB，平台网络适配器和同一套状态、同步与备份服务 |
+| Expo / React Native | `apps/mobile` 经 `@jhs/core` 和 `@jhs/parsers` 复用状态、备份、同步与公开页面解析 | SQLite 原生事务、Keychain / Keystore 和原生会话，AppState 管理同步前后台 |
+| Android WebView | `scripts/build-android-web.mjs` 打包 `src/app/mobile`，Capacitor 注册 `src/platform/android` 端口 | 专用 WebView 的 IndexedDB、原生 HTTPS 请求和系统文件选择；`apps/android` 为独立样片预览 |
+
+`packages/shared-core` 导出 Expo 消费的核心实现。`packages/shared-parsers` 用可注入的 DOM 解析器共享站点解析，浏览器用宿主 DOM，Expo 用 Cheerio。共享模块不导入 Expo、Capacitor 或扩展应用入口。入口适配器负责处理会话、生命周期和系统权限。
+
+| 职责 | 归属 |
 | --- | --- |
-| 应用装配、运行时实例生命周期 | App Composition Root |
-| Feature 激活、Contribution 启停、Command owner | FeatureRuntime |
-| 旧名称查询与兼容能力连接 | CompatibilityBeanRegistry / `compat/`；业务执行仍由 FeatureRuntime 负责 |
-| Movie identity | MovieIdentityService |
-| JavDB/JavBus 当前页面 selector 与读取 | 对应 HostAdapter |
-| JavDB/JavBus 远程协议与解析 | 对应 Integration |
-| Review/Related/Magnet/Screenshot/Offline 业务 | 对应 Service |
-| Review/Related 等渲染 | 对应 Panel/View |
-| Hosted 详情布局 | HostedDetailSurface |
-| FC2/123AV 自有详情布局 | OwnedDetailSurface |
-| FC2 工作区加载、打开和资源释放 | Fc2WorkspaceService / FC2 Workspace Feature |
-| History 跨页选择 | HistorySelectionModel |
-| List 快速筛选键、硬屏蔽判定与匹配规则 | List Filters Feature |
-| 外部 URL 信任与 redirect 复验 | ExternalUrlPolicy |
-| 请求合并、缓存与取消 | HttpService / CacheService / LifecycleScope |
-| 设置 snapshot 与本 runtime 事件 | SettingsService |
-| 设置同步语义校验与依赖注入 | SettingsRegistry / `app/settings-catalog.js` / `app/settings-sync-validation.js`；下载及最终合并复用描述符校验，核心模型不依赖设置界面 |
-| 双向同步与不可变快照传输、保留和恢复 | WebDavSyncService / WebDAV Sync System Feature |
-| 字段版本、删除代、影子和远端应用恢复日志 | WebDavSyncStore / `core/webdav-sync-model.js`；业务锁内落地，成功写入按触及领域补账，完整核对修复遗漏 |
-| 已提交远端应用的设置刷新与界面通知 | WebDavSyncStore；StorageMutationCoordinator 的 `afterRelease` 只安排锁外任务，通知成功后按日志标识确认，禁止在业务锁或设置写入队列内等待刷新 |
-| 持久化发布期限、清理退避和生命周期 | WebDavSyncStore 保存期限与进度；`services/webdav-sync-scheduling.js` 计算调度；WebDavSyncService 负责网络锁、请求取消及独立清理重试 |
-| 同步公共接口、外部快照校验与多页轮询 | `contracts/webdav-sync.d.ts` / `core/webdav-sync-validation.js` / WebDavSyncService；Feature 不访问服务内部依赖，同源共享检查窗口 |
-| 手动备份与同步的安全下载 | WebDavClient；逐跳检查目标，跨域后持续匿名，只有全程同源的 404 可判定文件缺失，其他方法继续限制在原目标范围 |
-| 跨站加密连接与旧连接候选仲裁 | WebDavSharedProfile / CredentialService / GM 存储 |
-| 旧页面偏好的 SettingsService 桥接 | PersonalPreferencesService |
-| 响应式 profile 与设置副作用 | ProfileService / Settings Effects Feature |
-| 共用弹窗语义、焦点与清理 | DialogService / `core/dialog-shell.js`；已有独立焦点管理的调用者声明焦点所有权 |
-| 浮层定位、键盘与锚点生命周期 | OwnedPopover |
-| 嵌套界面的宿主页滚动锁 | `core/page-scroll-lock.js`；每个界面释放自身持有的锁 |
-| 诊断数据和脱敏导出 | DiagnosticsService |
+| 依赖装配、贡献启停与命令 | `createAppContext`、`FeatureRuntime`、`CommandRegistry` |
+| 番号身份、原生页面与外部协议 | `movie-identity`、HostAdapter、Integration 和 Provider |
+| 作品标记、演员、黑名单、评分与崩溃恢复 | `StateService`、领域仓库与 `StorageMutationCoordinator` |
+| 生命周期、请求取消、缓存与 URL 信任 | `LifecycleScope`、`HttpService`、`CacheService`、`ExternalUrlPolicy` |
+| 设置、规则和备份 | `SettingsService`、`KeywordRulesService`、`PortableBackupService` |
+| 连接凭证与跨站连接配置 | `CredentialService`、`WebDavSharedProfile` 和平台加密存储 |
+| WebDAV 合并、同步计算和传输 | `WebDavSyncStore`、`SyncComputation`、`WebDavSyncService` |
+| 宿主详情、独立详情、弹窗和浮层 | `HostedDetailSurface`、`OwnedDetailSurface`、`DialogService`、`OwnedPopover` |
+| 响应式布局和诊断 | `ProfileService`、Settings Effects Feature、`DiagnosticsService` |
 
-判断缺陷归属时先确定表中 Owner，再由 Owner 调用下层契约；不得把行为放入“当前碰巧能拿到数据”的 Feature。
+作品与设置写入各自由 StateService 和 SettingsService 管理。StorageService 封装平台存储端口，原子导入和状态修改共用业务锁。端口提供原生事务时，业务变更和对应的同步回执一起提交。来自旧版本的提交日志在启动或下一次写入前恢复。可移植备份只包含业务数据，密钥和设备偏好由所属平台保存。见 [存储与迁移](adr/009-storage-migration.md)、[WebDAV 同步](adr/013-webdav-sync-recovery.md) 和 [原子保存与计算](adr/014-atomic-state-and-sync-computation.md)。
 
-多端同步的合并、锁、恢复与保留约束见 [ADR-013](adr/013-webdav-sync-recovery.md)。
+跨端验证使用 `npm run check`、`npm run check:browser`、`npm run check:visual`、`npm run build:extension`、`npm run check:mobile` 和 `npm run build:android:web`。扩展重启由已安装的 Edge 或 Chrome 验证。真实设备、账号授权和外部服务各自保留验收记录。见 [开发与发布](../development.md)。

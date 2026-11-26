@@ -1,4 +1,5 @@
 // @ts-check
+import { getNowStr } from "../../core/ui-date-time.js";
 import { App } from "@capacitor/app";
 import { bootstrapJhs } from "../bootstrap.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
@@ -77,22 +78,25 @@ async function start() {
     await installAndroidPorts(nativeHttp, open);
     const host = new JavDbHostAdapter(document, new URL(origin));
     host.getWebAccountContext = () => ({ origin, accountUrl: origin + "/users/profile" });
+    /** @type {(message: string) => void} */
+    let reportDownloadError = message => { status.textContent = message; };
     const context = await bootstrapJhs({
         location: new URL(origin), bundledStyles: true,
         platform: {
             javdbHost: host, http: nativeHttp, navigation: { open, assign: open, replace: open },
+            download: (/** @type {BlobPart | Blob} */ data, /** @type {string} */ filename) => {
+                void saveFile(data, filename).catch(error => { if (error.code !== "ABORTED") reportDownloadError(error.message); });
+            },
             createWorker: () => new Worker("sync-worker.js"), googleTranslationOnly: true,
             enabledFeatures: ["settings-entry", "settings-effects", "settings", "diagnostics", "library", "new-video", "movie-lists",
                 "enhancement-settings", "personal-ratings", "privacy"],
         },
     });
+    if (!context) throw new Error("移动端运行时启动失败");
     const services = context.services;
     const privacy = services.privacy;
     const events = context.container.resolveDeclared([SERVICE.events])[SERVICE.events];
-    const legacyUtils = services.legacyUtils;
-    legacyUtils.download = (/** @type {BlobPart|Blob} */ data, /** @type {string} */ filename) => { void saveFile(data, filename).catch(error => {
-        if (error.code !== "ABORTED") services.notifications.error(error.message);
-    }); };
+    reportDownloadError = services.notifications.error;
     await services.webdavSync.initialize();
     services.webdavSync.start(context.rootScope, document, () => foreground && !document.hidden);
     const taskWindow = new Proxy(window, {
@@ -105,7 +109,7 @@ async function start() {
     });
     const catalog = new CatalogClient(services.http);
     const scan = new NewVideoScanController({
-        state: services.state, readTitleKeywords: () => services.legacyStorage.getTitleFilterKeyword(),
+        state: services.state, readTitleKeywords: () => services.keywordRules.getTitleKeywords(),
         actressInfo: {
             collection: services.actressInfo.collection.bind(services.actressInfo),
             movies: async (/** @type {string} */ _provider, /** @type {{actorId: string}} */ { actorId },
@@ -115,14 +119,14 @@ async function start() {
             },
         },
         preserveNewVideo: true,
-        sourceHealth: new ActorSourceHealth(services.storage), scope: context.rootScope, logger: globals.clog,
-        getTimestamp: () => legacyUtils.getNowStr(), onNewItems() {},
+        sourceHealth: new ActorSourceHealth(services.storage), scope: context.rootScope, logger: context.feedback.clog,
+        getTimestamp: getNowStr, onNewItems() {},
     });
     const tasks = new TaskExecutionService({
         runtimeServices: { ...services, events, scope: () => context.rootScope, runWithoutPage: true,
             hostAdapters: { javdb: host, javbus: context.container.resolveDeclared([PORT.javbusHost])[PORT.javbusHost] } },
-        getNewVideoScanner: () => scan, legacyStorage: services.legacyStorage, utilities: legacyUtils,
-        logger: globals.clog, jquery: services.domUi.jquery, window: taskWindow, notifications: services.notifications,
+        getNewVideoScanner: () => scan,
+        logger: context.feedback.clog, jquery: services.domUi.jquery, window: taskWindow, notifications: services.notifications,
     });
     context.rootScope.addCleanup(() => { tasks.dispose(); scan.dispose(); });
     const offlineTasks = new OfflineTaskQueryService({ offline: services.offline, settings: services.settings, storage: services.storage,
@@ -136,7 +140,7 @@ async function start() {
         openGallery: (/** @type {{urls:string[],initialIndex:number}} */ options) => android.openGallery(options),
         context, services, events, tasks, offline, offlineTasks, open, external,
         catalog,
-        recentWorks: createRecentWorks(services.legacyStorage.forage),
+        recentWorks: createRecentWorks(services.storage),
         async readCatalog(/** @type {string} */ path, /** @type {Record<string,string>} */ params,
             /** @type {LifecycleScope} */ owner, /** @type {HTMLElement} */ feedback, /** @type {() => unknown} */ retry) {
             if (loginPending === "javdb") return null;
@@ -342,7 +346,7 @@ async function start() {
     };
     const stateHandle = await App.addListener("appStateChange", ({ isActive }) => {
         foreground = isActive;
-        if (isActive) { services.webdavSync.schedule(0, true); wake(); }
+        if (isActive) { services.webdavSync.schedule?.(0, true); wake(); }
         else {
             privacy.reveal(false);
             services.webdavSync.cancel();
@@ -354,7 +358,7 @@ async function start() {
     context.rootScope.listen(document, "visibilitychange", wake);
     const clock = window.setInterval(wake, 60_000);
     context.rootScope.addCleanup(() => window.clearInterval(clock));
-    context.rootScope.listen(document, "click", (/** @type {MouseEvent} */ event) => {
+    context.rootScope.listen(document, "click", event => {
         const anchor = event.target instanceof Element ? /** @type {HTMLAnchorElement|null} */ (event.target.closest("a[href]")) : null;
         if (!anchor || event.defaultPrevented || anchor.hasAttribute("download")) return;
         const url = new URL(anchor.href);

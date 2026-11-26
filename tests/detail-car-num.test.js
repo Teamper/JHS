@@ -1,25 +1,16 @@
-import { prepareDialogOptions } from "../src/core/dialog-shell.js";
-import { JHS_Z_INDEX } from "../src/core/theme.js";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
+import { assertPageInfoContract, normalizeCarNum as normalize, firstValidCarNum as first } from "../src/core/constants.js";
+import { fetchDmmPreview } from "../src/services/preview-service.js";
+import { createPageDialogs } from "../src/platform/browser/page-dialogs.js";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ScreenshotController } from "../src/features/detail/screenshot-controller.js";
+import { ScreenshotService } from "../src/services/screenshot-service.js";
+import { HttpService } from "../src/services/http-service.js";
+import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
 import { normalizeJavStoreAssetUrl } from "../src/integrations/javstore/parser.js";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
-
-const repoRoot = join(import.meta.dirname, "..");
-
-function loadCarNumHelpers() {
-    const source = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = source.indexOf("function normalizeCarNum"), end = source.indexOf("let M =", start);
-    const context = vm.createContext({});
-    vm.runInContext(`${source.slice(start, end)}; globalThis.normalize = normalizeCarNum; globalThis.first = firstValidCarNum; globalThis.assertContract = assertPageInfoContract;`, context);
-    return context;
-}
 
 function getPageInfo({ url, javdb = false, javbus = false, copyCarNum = null, fallbackCarNum = null } = {}) {
     const dom = new JSDOM("<!doctype html><html><body></body></html>", { url });
@@ -63,38 +54,13 @@ function getPageInfo({ url, javdb = false, javbus = false, copyCarNum = null, fa
 }
 
 function loadUtils(url = "https://javdb.example/search?q=ABF-142") {
-    const layer = { open: vi.fn() }, openTab = vi.fn(), location = new URL(url), context = vm.createContext({
-        console,
-        URL,
-        window: { location, innerWidth: 1440, innerHeight: 900 },
-        document: {},
-        layer,
-        GM_openInTab: openTab,
-        prepareDialogOptions,
-        JHS_Z_INDEX,
-        normalizeCarNum: loadCarNumHelpers().normalize,
-        i: (target, key, value) => (target[key] = value)
+    const layer = { open: vi.fn() }, openTab = vi.fn();
+    const utils = createPageDialogs({
+        window: { location: new URL(url), innerWidth: 1440, innerHeight: 900 },
+        dialog: layer, navigation: { open: openTab }, settings: { snapshot: () => ({}) },
+        esc: { setupEscClose: vi.fn(), releaseEscClose: vi.fn() }, logger: console,
     });
-    const source = readTestFile(join(repoRoot, "src/core/utils.js"), "utf8");
-    vm.runInContext(`${source}; globalThis.TestUtils = Utils;`, context);
-    return { utils: new context.TestUtils(), layer, openTab };
-}
-
-function loadDmmParser() {
-    const warn = vi.fn(), error = vi.fn(), request = vi.fn(), storage = new Map(), context = vm.createContext({
-        console,
-        URLSearchParams,
-        L: [],
-        normalizeCarNum: loadCarNumHelpers().normalize,
-        clog: { warn, error, debug: vi.fn() },
-        gmHttp: { get: request },
-        localStorage: { getItem: (key) => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
-        $: () => ({ attr: vi.fn().mockReturnThis(), css: vi.fn().mockReturnThis(), append: vi.fn().mockReturnThis() }),
-        show: { error: vi.fn() }
-    });
-    const source = readTestFile(join(repoRoot, "src/services/preview-service.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
-    vm.runInContext(`${source.slice(start, end)}; globalThis.TestDmmParser = DmmPreviewParser;`, context);
-    return { Parser: context.TestDmmParser, warn, error, request };
+    return { utils, layer, openTab };
 }
 
 function createScreenshotController(overrides = {}) {
@@ -112,7 +78,6 @@ function createScreenshotController(overrides = {}) {
 
 describe("detail car number propagation", () => {
     it("normalizes invalid values and keeps candidate priority", () => {
-        const { normalize, first } = loadCarNumHelpers();
         expect(normalize(" ABF-142 ")).toBe("ABF-142");
         expect(normalize("ipx_001")).toBe("IPX-001");
         expect(normalize("ABC123")).toBe("ABC-123");
@@ -121,6 +86,9 @@ describe("detail car number propagation", () => {
         expect(normalize(null)).toBeNull();
         expect(first(" ", "ABF-142", "IPX-001")).toBe("ABF-142");
         expect(first(undefined, "null", "")).toBeNull();
+        expect(() => assertPageInfoContract("ABC-123")).toThrow(TypeError);
+        const detail = { carNum: null };
+        expect(assertPageInfoContract(detail)).toBe(detail);
     });
 
     it("returns the complete JavDB contract for normal and iframe detail pages", () => {
@@ -174,11 +142,11 @@ describe("detail car number propagation", () => {
     });
 
     it("skips DMM locally when the car number is unavailable", async () => {
-        const { Parser, warn, error, request } = loadDmmParser();
-        await expect(new Parser(undefined, false).fetchVideo()).resolves.toBeNull();
-        expect(warn).toHaveBeenCalledWith("跳过 DMM 解析：番号不可用");
-        expect(error).not.toHaveBeenCalled();
-        expect(request).not.toHaveBeenCalled();
+        const logger = { warn: vi.fn(), error: vi.fn(), debug: vi.fn() }, preview = vi.fn();
+        await expect(fetchDmmPreview(undefined, {}, { preview }, undefined, logger)).resolves.toEqual({ sources: null, error: null });
+        expect(logger.warn).toHaveBeenCalledWith("跳过 DMM 解析：番号不可用");
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(preview).not.toHaveBeenCalled();
     });
 
     it("rejects an unavailable screenshot number before calling ScreenshotService", async () => {
@@ -195,48 +163,31 @@ describe("detail car number propagation", () => {
         expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" }, settings: { enableLoadScreenShot: "yes" }, allowWhenDisabled: false });
     });
 
-    it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {
+    it("normalizes a legacy JavStore URL before reusing the loaded image in the detail tile", async () => {
         const { controller, dom } = createScreenshotController(), container = dom.window.document.createElement("a");
-        expect(controller.renderImage(container, "缩略图", "http://img.javstore.net/legacy.jpg")).toBe(true);
+        const service = new ScreenshotService({ getAvailable: async () => [] }, {
+            list: () => [{ id: "javstore" }],
+            getAdapter: () => ({ getImages: async () => [{ url: "http://img.javstore.net/legacy.jpg" }] }),
+        });
+        const preview = await service.resolvePreview({ carNum: "ABC-123" }, {
+            loadImage: async url => Object.assign(dom.window.document.createElement("img"), { src: url }),
+        });
+        expect(controller.renderImage(container, "缩略图", preview.image)).toBe(true);
+        expect(container.querySelector("img")).toBe(preview.image);
         expect(container.querySelector("img")?.src).toBe("https://img.javstore.net/legacy.jpg");
     });
 });
 
-describe("source regression contracts", () => {
-    it("keeps detail consumers on the strict getPageInfo object contract", () => {
-        for (const file of [
-            "src/features/detail/detail-page-actions-controller.js",
-            "src/features/detail/javdb-preview-controller.js"
-        ]) {
-            const source = readTestFile(join(repoRoot, file), "utf8");
-            expect(source).toContain("getPageInfo()");
-            expect(source).not.toContain("getPageInfo()?.carNum");
-        }
-        const screenshot = readTestFile(join(repoRoot, "src/features/detail/screenshot-controller.js"), "utf8");
-        expect(screenshot).toContain("this.hostAdapter.readMovieRef?.()?.carNum");
-        const translate = readTestFile(join(repoRoot, "src/features/translation/translation-controller.js"), "utf8");
-        expect(translate).toContain("this.translateTitle(sourceText, {cacheAlias:carNum");
-        expect(translate).toContain("this.translation.translateDetailed(text,request)");
-        expect(translate).toContain("this.hostAdapter?.readMovieRef?.()?.carNum");
-        expect(translate).not.toContain("getPageInfo()?.carNum");
-    });
+describe("detail request error handling", () => {
 
-    it("routes detail state-action dialogs through the declared DialogService", () => {
-        const source = readTestFile(join(repoRoot, "src/features/detail/detail-page-actions-controller.js"), "utf8");
-        expect(source).toContain("this.dialog.open(");
-        expect(source).not.toContain("layer.open");
-    });
-
-    it("treats opted-in HTTP 404 responses as neutral results before retry accounting", () => {
-        const source = readTestFile(join(repoRoot, "src/core/http.js"), "utf8");
-        expect(source).toMatch(/404 === e\.status && requestOptions\.ignoreNotFound[\s\S]{0,80}a\(null\)/);
-        expect(source.indexOf("404 === e.status && requestOptions.ignoreNotFound")).toBeLessThan(source.indexOf("this._isCloudflareChallenge(e.responseText, e.status)"));
-    });
-
-    it("uses readable non-shadowing variables for actress profile links", () => {
-        const source = readTestFile(join(repoRoot, "src/features/discovery/new-video-workspace-service.js"), "utf8");
-        expect(source).toContain("const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl)");
-        expect(source).toContain("noteText = isPaused");
-        expect(source).not.toContain("`${c}/actors/${e.starId}?t=d`");
+    it("treats opted-in HTTP 404 responses as neutral results without a retry", async () => {
+        const request = vi.fn(async () => ({ status: 404, data: "<title>Page not found</title> incidental challenge-platform" }));
+        const http = new HttpService({ request }, new ExternalUrlPolicy());
+        await expect(http.request({
+            providerId: "av123", url: "https://123av.com/cn/missing", retryCount: 3, acceptableStatuses: [404],
+            urlPolicy: { trustClass: "builtin-public", hosts: ["123av.com"] },
+        })).resolves.toMatchObject({ status: 404 });
+        expect(request).toHaveBeenCalledOnce();
+        expect(http.getCircuitBreakerStatus()["123av.com"]?.failCount ?? 0).toBe(0);
     });
 });

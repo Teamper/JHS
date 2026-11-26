@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CURRENT_DATA_VERSION, StorageManager, LifecycleScope } from '@jhs/core';
+import { CURRENT_DATA_VERSION, LifecycleScope } from '@jhs/core';
 import { initialSchema } from '../src/data/sqlite/schema.ts';
 import { applyLegacySnapshot, migrationKey } from '../src/platform/migration/v28Migration.ts';
 import { sampleLibrary, sampleMovies } from '../src/data/models/samples.ts';
@@ -82,10 +82,10 @@ test('shared state, backup import and export round-trip through mobile storage',
     const old = await workspace.previewBackup(JSON.stringify({ data_version: 1, car_list: [{ carNum: 'JHS-002', names: '旧片库', status: 'favorite' }] }));
     await workspace.restoreBackup(old.incoming);
     assert.equal((await workspace.state.getState('JHS-002')).stateFlags.favorite, true);
-    assert.ok((await workspace.storage.getSnapshotList()).length);
+    assert.ok((await workspace.backupService.getSnapshotList()).length);
     await workspace.restoreBackup(exported);
     assert.equal((await workspace.state.getState(movie.carNum)).remark, '试记');
-  } finally { StorageManager.instance = null; db.close(); }
+  } finally { db.close(); }
 });
 
 test('collections compose with flags and search, and a batched removal is one editable undo', async () => {
@@ -109,7 +109,7 @@ test('collections compose with flags and search, and a batched removal is one ed
     assert.equal((await list()).count, 0);
     assert.equal((await workspace.state.undoTransaction(removed.transactionId!)).reverted.length, 2);
     assert.equal((await list()).count, 2);
-  } finally { StorageManager.instance = null; db.close(); }
+  } finally { db.close(); }
 });
 
 test('an unavailable actor leaves queued works intact while other scans commit and abort stops late reads', async () => {
@@ -175,7 +175,7 @@ test('an unavailable actor leaves queued works intact while other scans commit a
     release.resolve();
     await Promise.all([barrier, write]);
     assert.deepEqual(await workspace.queue(), queue);
-  } finally { scope.dispose(); StorageManager.instance = null; db.close(); }
+  } finally { scope.dispose(); db.close(); }
 });
 
 test('continue browsing re-evaluates the rule domains without deleting its history', async () => {
@@ -193,11 +193,10 @@ test('continue browsing re-evaluates the rule domains without deleting its histo
     assert.equal((await workspace.recent()).filter(movie => visibleWork(afterRestore, movie)).length, 2);
     await store.setItem('filter_keyword_title', ['走进']);
     await store.setItem('blacklist', [{ starId: 'sample-1', name: '另一个显示名' }]);
-    workspace.storage._invalidateCache();
     const afterRules = await workspace.visibility();
     assert.equal((await workspace.recent()).filter(movie => visibleWork(afterRules, movie)).length, 0);
     assert.equal((await workspace.recent()).length, 2);
-  } finally { StorageManager.instance = null; db.close(); }
+  } finally { db.close(); }
 });
 
 test('undoing a follow decision publishes a follow change with the restored queue', async () => {
@@ -212,7 +211,7 @@ test('undoing a follow decision publishes a follow change with the restored queu
     assert.ok(observed.includes('follow'));
     assert.equal((await workspace.queue()).find(item => item.movie.carNum === movie.carNum)?.status, 'pending');
     remove();
-  } finally { StorageManager.instance = null; db.close(); }
+  } finally { db.close(); }
 });
 
 test('10,000 works support indexed search and one-row state mutations', async t => {
@@ -268,7 +267,7 @@ test('10,000 works support indexed search and one-row state mutations', async t 
     assert.equal((await workspace.state.getState(movie.carNum)).remark, '局部写入第29次');
     assert.equal((await store.queryMovies({ text: '事务失败文本', flags: [], sort: 'code' })).items.length, 0);
     assert.equal((await store.queryMovies({ text: '局部写入第29次', flags: [], sort: 'code' })).items[0]?.carNum, 'JHS-2050');
-  } finally { StorageManager.instance = null; db.close(); }
+  } finally { db.close(); }
 });
 
 function reportLatency(test: { diagnostic: (text: string) => void }, label: string, durations: number[]) {

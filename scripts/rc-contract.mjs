@@ -1,11 +1,12 @@
-import { createHash } from "node:crypto";
+import { readMetadataField, replaceMetadataFields, runtimeBuildMarker, sha256 } from "./delivery-artifact.mjs";
 
 export const RC_NAME = "JHS RC 7.0";
 export const RC_NAMESPACE = "https://github.com/Teamper/JHS/rc/7.0";
 export const RC_CHANNEL = "https://raw.githubusercontent.com/Teamper/JHS/rc-channel/";
 export const RC_SCRIPT = "JHS-7.0.rc.user.js";
 export const RC_META = "JHS-7.0.rc.meta.js";
-export const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+export const RC_ARTIFACT_FILES = Object.freeze([RC_SCRIPT, RC_META, "release-manifest.json", "SHA256SUMS"]);
+export { sha256 };
 export function rcNumber(version) {
     const match = /^7\.0\.0-rc\.([1-9]\d*)$/.exec(version);
     if (!match || !Number.isSafeInteger(Number(match[1]))) throw new Error("RC version must be 7.0.0-rc.N (positive integer)");
@@ -38,28 +39,21 @@ export function createRcTransforms(version, sourceSha) {
     rcNumber(version);
     if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new Error("RC requires a full clean source SHA");
     return {
-        transformMetadata: metadata => metadata.replace(/\r\n/g, "\n")
-            .replace(/^\/\/ @name\s+.+$/m, `// @name         ${RC_NAME}`)
-            .replace(/^\/\/ @namespace\s+.+$/m, `// @namespace    ${RC_NAMESPACE}`)
-            .replace(/^\/\/ @version\s+.+$/m, `// @version      ${version}`)
-            .replace(/^\/\/ @description\s+.+$/m, `// @description  JHS 7.0 RC build ${sourceSha}`)
-            .replace(/^\/\/ @updateURL\s+.+$/m, `// @updateURL    ${RC_CHANNEL}${RC_META}`)
-            .replace(/^\/\/ @downloadURL\s+.+$/m, `// @downloadURL  ${RC_CHANNEL}${RC_SCRIPT}`),
-        transformBundle: bundle => `document.documentElement?.setAttribute("data-jhs-rc-build", ${JSON.stringify(`${version}|${sourceSha}`)});\n${bundle}`,
+        transformMetadata: metadata => replaceMetadataFields(metadata.replaceAll("\r\n", "\n"), {
+            name: RC_NAME, namespace: RC_NAMESPACE, version, description: `JHS 7.0 RC build ${sourceSha}`,
+            updateURL: RC_CHANNEL + RC_META, downloadURL: RC_CHANNEL + RC_SCRIPT,
+        }),
+        transformBundle: bundle => `${runtimeBuildMarker("rc", version, sourceSha)}\n${bundle}`,
     };
 }
 export function readRcIdentity(source) {
     const header = source.match(/^\/\/ ==UserScript==\n[\s\S]*?^\/\/ ==\/UserScript==/m)?.[0];
     if (!header || source.includes("\r")) throw new Error("RC metadata must use LF");
-    const field = key => {
-        const matches = [...header.matchAll(new RegExp(`^// @${key}\\s+(.+)$`, "gm"))];
-        if (matches.length !== 1) throw new Error(`Invalid RC @${key}`);
-        return matches[0][1];
-    };
+    const field = key => readMetadataField(header, key, "RC");
     const version = field("version"), sourceSha = field("description").match(/^JHS 7\.0 RC build ([a-f0-9]{40})$/)?.[1];
     rcNumber(version);
     if (!sourceSha || field("name") !== RC_NAME || field("namespace") !== RC_NAMESPACE || field("updateURL") !== RC_CHANNEL + RC_META || field("downloadURL") !== RC_CHANNEL + RC_SCRIPT) throw new Error("Invalid RC identity or update channel");
-    if (!source.includes(`document.documentElement?.setAttribute("data-jhs-rc-build", ${JSON.stringify(`${version}|${sourceSha}`)});`) || source.includes("data-jhs-dev-build")) throw new Error("Invalid RC runtime marker");
+    if (!source.includes(runtimeBuildMarker("rc", version, sourceSha)) || source.includes("data-jhs-dev-build")) throw new Error("Invalid RC runtime marker");
     return { version, sourceSha, buildId: sourceSha };
 }
 export function rcFiles(source) {

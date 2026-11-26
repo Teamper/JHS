@@ -263,7 +263,7 @@ export async function showSettings(root, app, route, scope) {
         const dialog = sheet(root, "导入本地备份", scope);
         dialog.append(el("p", "导入会应用备份中的作品库与偏好。"), button("确认导入", () => app.run(scope, async () => {
             dialog.close();
-            await s.legacyStorage.importData(parsed, { signal: scope.signal, assertActive: () => scope.assertActive() });
+            await s.backup.importData(parsed, { signal: scope.signal, assertActive: () => scope.assertActive() });
             await s.settings.refresh();
             feedback.textContent = "备份已导入";
         }), "primary"));
@@ -271,7 +271,7 @@ export async function showSettings(root, app, route, scope) {
     });
     const backup = el("div", null, "actions");
     backup.append(button("导出备份", () => app.run(scope, async () => {
-        const data = await s.legacyStorage.exportData();
+        const data = await s.backup.exportData();
         scope.assertActive();
         await saveFile(JSON.stringify(data), "JHS-备份.json", "application/json");
     }), "quiet-action"), button("导入备份", () => files.click(), "quiet-action"));

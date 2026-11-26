@@ -11,7 +11,7 @@ const HIGHLIGHT_CLASS = "jhs-favorite-actress-highlight";
 
 /** Own JavDB actress decoration and collection events while preserving the 6.5.1 storage contract. */
 export class FavoriteActressesController {
-    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, jquery: any, state: any, settings: any, styles: any, events?: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, isDetailPage: boolean}} options */
+    /** @param {{document: Document, location: {href: string, pathname: string}, hostAdapter: any, jquery: any, state: any, settings: any, styles: any, events?: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, diagnostics: any, logger?: Pick<Console, "error" | "log">, isDetailPage: boolean}} options */
     constructor(options) {
         this.document = options.document;
         this.location = options.location;
@@ -25,6 +25,7 @@ export class FavoriteActressesController {
         this.highlightGeneration = 0;
         this.scope = options.scope;
         this.diagnostics = options.diagnostics;
+        this.logger = options.logger ?? console;
         this.isDetailPage = options.isDetailPage;
         this.highlightedAnchors = new Map();
         this.avatarStyles = new Map();
@@ -261,7 +262,7 @@ export class FavoriteActressesController {
 
     /** @param {"log"|"error"} level @param {string} message */
     log(level, message) {
-        try { /** @type {any} */ (globalThis).clog?.[level]?.(message); }
+        try { this.logger[level](message); }
         catch { /* Logging cannot change a committed actress mutation. */ }
     }
 

@@ -31,13 +31,31 @@ describe("build-time static resource packing", () => {
         expect(register(`const data=${JSON.stringify('function run(){return "' + css + '"}')};`).size).toBe(0);
     });
 
-    it("does not touch tagged/interpolated templates, property keys, scripts or runtime values", () => {
-        const source = `const plain=${JSON.stringify(css)};const tagged=String.raw\`${css}\`;const dynamic=\`${html}\${runtimeValue}\`;const keys={[${JSON.stringify(css)}]:1};keys[${JSON.stringify(css)}]=2;const script=${JSON.stringify('<script>' + 'run();'.repeat(80) + '</script>')};`;
+    it("does not touch tagged templates, property keys, scripts or runtime values", () => {
+        const source = `const plain=${JSON.stringify(css)};const tagged=String.raw\`${css}\`;const dynamic=\`label=\${runtimeValue}\`;const keys={[${JSON.stringify(css)}]:1};keys[${JSON.stringify(css)}]=2;const script=${JSON.stringify('<script>' + 'run();'.repeat(80) + '</script>')};`;
         const registry = register(source), replaced = replaceResourceLiterals(source, registry);
         expect(replaced.replacements).toHaveLength(1);
         expect(structure(replaced.code, replaced)).toEqual(structure(source));
         expect(replaced.code).toContain(`String.raw\`${css}\``);
         expect(replaced.code).toContain("${runtimeValue}");
+    });
+
+    it("packs reviewed template fragments while preserving nested expressions and string coercion", async () => {
+        const source = `const title = { toString() { calls.push("title"); return "fixture"; } };
+            function show(value) { calls.push("show"); return value; }
+            globalThis.value = \`${html}\${title}\${show(\`${css}\${title}\`)}${html}\`;
+            try { globalThis.invalid = \`${html}\${Symbol("x")}\${show("unreachable")}\`; } catch (error) { globalThis.error = error.name; }`;
+        const registry = register(source);
+        const replaced = replaceResourceLiterals(source, registry);
+        expect(replaced.replacements.filter(item => item.template).length).toBeGreaterThan(2);
+        const packed = await packStaticResources(source, registry);
+        const original = { calls: [] }, candidate = { calls: [], atob };
+        vm.runInNewContext(source, original);
+        vm.runInNewContext(packed.code, candidate);
+        expect(candidate.value).toBe(original.value);
+        expect(candidate.calls).toEqual(["title", "title", "show"]);
+        expect(candidate.error).toBe("TypeError");
+        expect(candidate.invalid).toBeUndefined();
     });
 
     it("registers adjacent static HTML concatenations without evaluating code", () => {

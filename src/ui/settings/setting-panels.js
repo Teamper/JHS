@@ -1,4 +1,5 @@
 // @ts-check
+import { getNowStr } from "../../core/ui-date-time.js";
 import { parseBooleanSetting } from "../../core/feature-helpers.js";
 
 import { getIcon } from "../../core/icons.js";
@@ -14,7 +15,7 @@ import { formatUiDateTime } from "../../core/ui-date-time.js";
 /** @typedef {{ state?: string, cooldownMs?: number, openTime?: number, failCount?: number }} CircuitBreakerRecord */
 /** @typedef {{ count: number, errors: number, lastUsed?: number }} DomainStatsRecord */
 /** @typedef {{ message: string, count: number }} HealthIssue */
-/** @typedef {{ jquery: (value: any) => any, legacyStorage: any, utilities: any, notifications: any, logger: any, domUi: any, window: Window, root?: any, draftSettings?: any, scope?: LifecycleScope, isActive?: () => boolean }} SettingsUiDependencies */
+/** @typedef {{ jquery: (value: any) => any, backup: any, settings: {snapshot: () => Record<string, any>}, utilities: any, notifications: any, logger: any, domUi: any, window: Window, root?: any, draftSettings?: any, scope?: LifecycleScope, isActive?: () => boolean }} SettingsUiDependencies */
 
 /** Restrict panel selectors to the settings instance that requested them. @param {SettingsUiDependencies} dependencies */
 function panelQuery(dependencies) {
@@ -40,8 +41,9 @@ function finishCommittedDataChange(dependencies, message) {
 /** Render the network/external requests panel: circuit breaker status, domain stats. */
 /** @param {DiagnosticsHandle} diagnostics @param {SettingsUiDependencies} dependencies */
 export async function renderNetworkPanel(diagnostics, dependencies) {
-    const { legacyStorage: storageManager, notifications: show } = dependencies, $ = panelQuery(dependencies);
-    const network = diagnostics.getNetworkDiagnostics(), e = /** @type {Record<string, CircuitBreakerRecord>} */ (network.circuitBreakers), t = /** @type {Record<string, DomainStatsRecord>} */ (network.domainStats), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
+    const { settings, notifications: show } = dependencies, $ = panelQuery(dependencies);
+    const { circuitBreakerThreshold = 3, circuitBreakerCooldown = 6e4 } = settings.snapshot();
+    const network = diagnostics.getNetworkDiagnostics(), e = /** @type {Record<string, CircuitBreakerRecord>} */ (network.circuitBreakers), t = /** @type {Record<string, DomainStatsRecord>} */ (network.domainStats), n = Number(circuitBreakerThreshold), a = Number(circuitBreakerCooldown);
     if (dependencies.isActive?.() === false) return;
     // 仅首次水合：切换面板后重渲染不得覆盖用户尚未保存的编辑
     $("#circuitBreakerThreshold").each(((/** @type {number} */ _i, /** @type {HTMLInputElement} */ element) => {
@@ -80,7 +82,7 @@ export async function renderNetworkPanel(diagnostics, dependencies) {
 /** Render the snapshot list as a Tabulator table with restore/download/delete actions. */
 /** @param {SettingsUiDependencies} dependencies */
 export async function renderSnapshotPanel(dependencies) {
-    const { legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies, $ = panelQuery(dependencies);
+    const { backup, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies, $ = panelQuery(dependencies);
     const loading = () => {
         const handle = domUi.loading(), release = dependencies.scope?.addCleanup(() => handle.close());
         return { close: () => release ? release() : handle.close() };
@@ -97,7 +99,7 @@ export async function renderSnapshotPanel(dependencies) {
     const generation = ++state.generation;
     const currentState = state;
     const active = () => dependencies.isActive?.() !== false && host.isConnected && currentState.generation === generation;
-    const e = await storageManager.getSnapshotList(), t = {
+    const e = await backup.getSnapshotList(), t = {
         "manual": "手动创建",
         "auto-import": "导入前自动",
         "auto-repair": "修复前自动",
@@ -131,7 +133,7 @@ export async function renderSnapshotPanel(dependencies) {
                                 if (!active()) return;
                                 let e = loading();
                                 try {
-                                    await storageManager.restoreSnapshot(i.id);
+                                    await backup.restoreSnapshot(i.id);
                                 } catch (t) {
                                     if (!active()) return;
                                     try { clog.error(t); } catch { /* preserve the restore error */ }
@@ -144,7 +146,7 @@ export async function renderSnapshotPanel(dependencies) {
                             if (!active()) return;
                             let t = loading();
                             try {
-                                const e = await storageManager.getSnapshot(i.id);
+                                const e = await backup.getSnapshot(i.id);
                                 if (!active()) return;
                                 if (!e) throw new Error("恢复点不存在");
                                 utils.download(JSON.stringify(e.data), `snapshot_${String(i.name || "snapshot").replace(/[\\/:*?"<>|]/g, "_")}.json`), show.ok("已下载恢复点");
@@ -152,7 +154,7 @@ export async function renderSnapshotPanel(dependencies) {
                         })), s && s.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                             utils.q(e, `删除恢复点“${escapeHtml(i.name)}”？此操作无法撤销`, (async () => {
                                 if (!active()) return;
-                                try { await storageManager.deleteSnapshot(i.id); }
+                                try { await backup.deleteSnapshot(i.id); }
                                 catch (t) {
                                     try { clog.error(t); } catch { /* preserve the deletion error */ }
                                     try { show.error("恢复点删除失败，请重试"); } catch { /* preserve the deletion error */ }
@@ -180,7 +182,7 @@ export async function renderSnapshotPanel(dependencies) {
 /** @param {any} e @param {any} t @param {any} n @param {DialogHandle} dialog @param {SettingsUiDependencies} dependencies */
 export function showDiffPreview(e, t, n = null, dialog, dependencies) {
     if (dependencies.isActive?.() === false) return;
-    const { legacyStorage: storageManager, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
+    const { backup, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
     const loading = () => domUi.loading();
     /** @type {Record<string, string>} */
     const dataNames = { setting: "设置", car_list: "鉴定记录", favorite_actresses: "收藏演员", blacklist: "黑名单演员", blacklist_car_list: "屏蔽影片", filter_keyword_title: "影片屏蔽词", filter_keyword_review: "评论屏蔽词", highlighted_tags: "高亮标签", data_version: "数据版本" };
@@ -233,7 +235,7 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
             try {
                 if (scope.disposed || dependencies.isActive?.() === false) return;
                 if (!n && !t) return;
-                await storageManager.importData(n || t, { signal: scope.signal, assertActive: () => {
+                await backup.importData(n || t, { signal: scope.signal, assertActive: () => {
                     scope.assertActive();
                     if (dependencies.isActive?.() === false) throw new DOMException("导入已取消", "AbortError");
                 } });
@@ -253,7 +255,7 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
 /** Render the plugin management panel: categorized plugin list, timing, errors, cache stats. */
 /** @param {DiagnosticsHandle} diagnostics @param {any} settings @param {SettingsUiDependencies} dependencies */
 export async function renderPluginMgmtPanel(diagnostics, settings, dependencies) {
-    const { legacyStorage: storageManager, notifications: show, logger: clog } = dependencies, $ = panelQuery(dependencies);
+    const { notifications: show, logger: clog } = dependencies, $ = panelQuery(dependencies);
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(settings.snapshot().disabledPlugins ?? "[]");
     if (dependencies.isActive?.() === false) return;
@@ -377,19 +379,20 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
     } else {
         $("#plugin-error-log").text("暂无错误记录");
     }
-    const cacheStats = storageManager.getCacheHitStats();
-    $("#cache-hit-stats").html(`<div class="jhs-inline-metrics"><span>命中: <strong>${cacheStats.hits}</strong></span><span>未命中: <strong>${cacheStats.misses}</strong></span><span>总计: <strong>${cacheStats.total}</strong></span><span>命中率: <strong>${cacheStats.rate}</strong></span></div>`);
+    const { cacheHits: hits, cacheMisses: misses } = diagnosticSnapshot;
+    const total = hits + misses, rate = total ? (hits / total * 100).toFixed(1) + "%" : "N/A";
+    $("#cache-hit-stats").html(`<div class="jhs-inline-metrics"><span>命中: <strong>${hits}</strong></span><span>未命中: <strong>${misses}</strong></span><span>总计: <strong>${total}</strong></span><span>命中率: <strong>${rate}</strong></span></div>`);
 }
 
 /** Render the data health check panel with totals and issue breakdown. */
 /** @param {SettingsUiDependencies} dependencies */
 export async function renderDataHealthPanel(dependencies) {
-    const { legacyStorage: storageManager, logger: clog } = dependencies, $ = panelQuery(dependencies);
+    const { backup, logger: clog } = dependencies, $ = panelQuery(dependencies);
     const e = $("#health-data-display");
     if (!e.length) return;
     e.text("体检中…");
     try {
-        const t = await storageManager.inspectDataHealth(), n = t.fixable.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), a = t.readonly.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), i = (/** @type {HealthIssue[]} */ t) => t.length ? t.map((e => `<li><strong>${escapeHtml(e.message)}</strong>：${e.count}</li>`)).join("") : "<li>无</li>";
+        const t = await backup.inspectDataHealth(), n = t.fixable.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), a = t.readonly.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), i = (/** @type {HealthIssue[]} */ t) => t.length ? t.map((e => `<li><strong>${escapeHtml(e.message)}</strong>：${e.count}</li>`)).join("") : "<li>无</li>";
         if (dependencies.isActive?.() === false || !e[0]?.isConnected) return;
         e.html(`
                 <div class="jhs-summary-grid">
@@ -412,9 +415,9 @@ export async function renderDataHealthPanel(dependencies) {
 /** Repair data health issues after auto-backing up current data. */
 /** @param {SettingsUiDependencies} dependencies */
 export async function repairDataHealthWithBackup(dependencies) {
-    const { legacyStorage: storageManager, utilities: utils, notifications: show } = dependencies;
-    const e = JSON.stringify(await storageManager.exportData()), t = `health-backup-${utils.getNowStr("_", "_")}.json`;
+    const { backup, utilities: utils, notifications: show } = dependencies;
+    const e = JSON.stringify(await backup.exportData()), t = `health-backup-${getNowStr("_", "_")}.json`;
     utils.download(e, t);
-    const n = await storageManager.repairDataHealth();
+    const n = await backup.repairDataHealth();
     show.ok(`已修复 ${n.fixedGroups} 组，备份已下载`), await renderDataHealthPanel(dependencies);
 }

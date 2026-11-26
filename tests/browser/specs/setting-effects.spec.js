@@ -124,7 +124,7 @@ test("Library Feature owns the blacklist workspace filter and actor deletion flo
   await injectUserscriptRuntime(page, { settingOverrides: { enableCheckBlacklist: "no", enableCheckFavoriteActress: "no", enableCheckNewVideo: "no" } });
   const starId = "feature-blacklist-workspace-actor";
   await page.evaluate(async ({ starId }) => {
-    await window.unsafeWindow.storageManager.addBlacklistItem({
+    await window.stateService.addBlacklistItem({
       starId, name: "Synthetic Workspace Actor", allName: ["Workspace Alias"], role: "actor", movieType: "censored",
       url: "https://javdb.com/actors/workspace-actor?t=censored", createTime: "2026-09-27", lastPublishTime: "2026-09-20",
     });
@@ -144,7 +144,7 @@ test("Library Feature owns the blacklist workspace filter and actor deletion flo
   const row = page.locator(".tabulator-row", { hasText: "Synthetic Workspace Actor" });
   await row.locator(".delete-btn").click();
   await page.locator(".layui-layer-btn").getByText("解除屏蔽", { exact: true }).last().click();
-  await expect.poll(() => page.evaluate(async ({ starId }) => (await window.unsafeWindow.storageManager.getBlacklist()).some(item => item.starId === starId), { starId })).toBe(false);
+  await expect.poll(() => page.evaluate(async ({ starId }) => (await window.stateService.getBlacklist()).some(item => item.starId === starId), { starId })).toBe(false);
   await expect(page.locator(".tabulator-row", { hasText: "Synthetic Workspace Actor" })).toHaveCount(0);
 });
 
@@ -203,8 +203,8 @@ test("actor blacklist confirmation renders escaped names and stores the current 
   expect(renderedPrompt.message).toContain("当前不是第一页");
   await dialog.locator(".layui-layer-btn").getByText("屏蔽", { exact: true }).click();
   await expect.poll(() => page.evaluate(async () => {
-    const actors = await window.unsafeWindow.storageManager.getBlacklist();
-    const cars = await window.unsafeWindow.storageManager.getBlacklistCarList();
+    const actors = await window.stateService.getBlacklist();
+    const cars = await window.stateService.getBlacklistCarList();
     return {
       actor: actors.find((item) => item.starId === "feature-blacklist-add"),
       car: cars.find((item) => item.carNum === "BLACKLIST-ENTRY-001"),

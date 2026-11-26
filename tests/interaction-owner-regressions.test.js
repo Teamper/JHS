@@ -24,7 +24,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.body.repla
 function settingsHarness() {
     const options=[], registry=new SettingsRegistry(); registerDefaultSettings(registry);
     const settings=new SettingsService({get:async()=>({}),set:async()=>{}});
-    const plugin=new SettingPlugin({runtimeServices:{settings, settingsRegistry:registry,dialog:{open:vi.fn(value=>{options.push(value);return options.length;}),close:vi.fn(id=>options[id-1]?.end())}},capabilities:{},jquery,utilities:{getDialogArea:()=>["700px","600px"],trapFocus:vi.fn(()=>vi.fn()),setupEscClose:vi.fn(),releaseEscClose:vi.fn()},notifications:{},logger:{},legacyStorage:{},events:{on:vi.fn(()=>vi.fn())},document,window});
+    const plugin=new SettingPlugin({runtimeServices:{settings, settingsRegistry:registry,dialog:{open:vi.fn(value=>{options.push(value);return options.length;}),close:vi.fn(id=>options[id-1]?.end())}},capabilities:{},jquery,utilities:{getDialogArea:()=>["700px","600px"],trapFocus:vi.fn(()=>vi.fn()),setupEscClose:vi.fn(),releaseEscClose:vi.fn()},notifications:{},logger:{},events:{on:vi.fn(()=>vi.fn())},document,window});
     plugin.renderTaskStatuses=plugin.bindClick=vi.fn(); plugin.activateSettingPanel=vi.fn();
     plugin.hydrateSettingForm=plugin.loadResourceSettings=vi.fn(async()=>{});
     plugin.hydrateLiveSettings=vi.fn(()=>({dispose:vi.fn()}));
@@ -65,7 +65,7 @@ describe("settings instance and management",()=>{
         document.body.innerHTML='<div id="plugin-mgmt-list"></div><span id="pm-total"></span><span id="pm-enabled"></span><span id="pm-disabled"></span>';
         let stored={disabledPlugins:'["future.contribution"]'};
         const write=vi.fn(async(_key,value)=>{stored={...value};}), settings=new SettingsService({get:async()=>stored,set:write});await settings.load();
-        const deps={jquery,legacyStorage:{getSetting:async()=>stored.disabledPlugins,getCacheHitStats:()=>({})},notifications:{ok:vi.fn(),error:vi.fn()},logger:{error:vi.fn()},domUi:{},window};
+        const deps={jquery,notifications:{ok:vi.fn(),error:vi.fn()},logger:{error:vi.fn()},domUi:{},window};
         const diagnostics={exportSnapshot:()=>({contributionDescriptors:[{id:"list.auto-page",disableable:true},{id:"discovery.new-video",disableable:true}],activeFeatures:[],errors:[]})};
         await renderPluginMgmtPanel(diagnostics,settings,deps);
         jquery('[data-plugin="AutoPagePlugin"]').prop("checked",false).trigger("change");jquery('[data-plugin="NewVideoPlugin"]').prop("checked",false).trigger("change");
@@ -77,7 +77,7 @@ describe("settings instance and management",()=>{
         document.body.innerHTML='<div id="plugin-mgmt-list"></div>';
         const settings=new SettingsService({get:async()=>({disabledPlugins:"[]"}),set:vi.fn()});await settings.load();
         const session=new FullSettingsSession(settings);
-        const deps={jquery,draftSettings:session,legacyStorage:{getCacheHitStats:()=>({})},notifications:{ok:vi.fn()},logger:{error:vi.fn()},domUi:{},window};
+        const deps={jquery,draftSettings:session,notifications:{ok:vi.fn()},logger:{error:vi.fn()},domUi:{},window};
         const diagnostics={exportSnapshot:()=>({contributionDescriptors:[{id:"list.auto-page",disableable:true}],activeFeatures:[],errors:[]})};
         await renderPluginMgmtPanel(diagnostics,session,deps);
         const toggle=document.querySelector('.pm-toggle');
@@ -140,7 +140,7 @@ describe("batch partial completion",()=>{
 });
 
 function backupDependencies(scope) {
-    const closeLoading=vi.fn();return {jquery,document,window,scope,isActive:()=>!scope.disposed,legacyStorage:{exportData:vi.fn(async()=>({})),diffData:vi.fn(async()=>({}))},utilities:{isMobileMode:()=>false,getResponsiveArea:()=>[],getNowStr:()=>"2026-10-15"},notifications:{ok:vi.fn(),error:vi.fn()},logger:{error:vi.fn()},domUi:{loading:()=>({close:closeLoading})},closeLoading};
+    const closeLoading=vi.fn();return {jquery,document,window,scope,isActive:()=>!scope.disposed,backup:{exportData:vi.fn(async()=>({})),diffData:vi.fn(async()=>({}))},utilities:{isMobileMode:()=>false,getResponsiveArea:()=>[],getNowStr:()=>"2026-10-15"},notifications:{ok:vi.fn(),error:vi.fn()},logger:{error:vi.fn()},domUi:{loading:()=>({close:closeLoading})},closeLoading};
 }
 describe("backup window ownership",()=>{
     it.each([true,false])("formats missing backup dates as absent instead of current time (mobile=%s)", mobile => {
@@ -160,9 +160,9 @@ describe("backup window ownership",()=>{
         scope.dispose();
     });
     it("destroys the snapshot table and discards pending snapshot lists when its owner closes",async()=>{
-        document.body.innerHTML='<div id="snapshot-list"></div>';const scope=new LifecycleScope("snapshot-owner"),deps=backupDependencies(scope),destroy=vi.fn();deps.legacyStorage.getSnapshotList=vi.fn(async()=>[{id:"id-1"}]);deps.domUi.tableConstructor=class {destroy=destroy;};
+        document.body.innerHTML='<div id="snapshot-list"></div>';const scope=new LifecycleScope("snapshot-owner"),deps=backupDependencies(scope),destroy=vi.fn();deps.backup.getSnapshotList=vi.fn(async()=>[{id:"id-1"}]);deps.domUi.tableConstructor=class {destroy=destroy;};
         await renderSnapshotPanel(deps);scope.dispose();expect(destroy).toHaveBeenCalledOnce();
-        const nextScope=new LifecycleScope("snapshot-next"),nextDeps=backupDependencies(nextScope),pending=deferred(),construct=vi.fn();nextDeps.legacyStorage.getSnapshotList=()=>pending.promise;nextDeps.domUi.tableConstructor=construct;
+        const nextScope=new LifecycleScope("snapshot-next"),nextDeps=backupDependencies(nextScope),pending=deferred(),construct=vi.fn();nextDeps.backup.getSnapshotList=()=>pending.promise;nextDeps.domUi.tableConstructor=construct;
         const loading=renderSnapshotPanel(nextDeps);nextScope.dispose();pending.resolve([]);await loading;expect(construct).not.toHaveBeenCalled();
     });
     it("does not revive a closed settings window when the backup list finishes loading",async()=>{
@@ -180,10 +180,10 @@ describe("backup window ownership",()=>{
     });
     it("cancels before atomic commit when the import preview closes",async()=>{
         const scope=new LifecycleScope("settings-test"),deps=backupDependencies(scope),pending=deferred();let committed=false,options;
-        deps.legacyStorage.createSnapshot=vi.fn();
-        deps.legacyStorage.importData=vi.fn(async (_data,guard)=>{await pending.promise;guard.assertActive();committed=true;});
+        deps.backup.createSnapshot=vi.fn();
+        deps.backup.importData=vi.fn(async (_data,guard)=>{await pending.promise;guard.assertActive();committed=true;});
         showDiffPreview({summary:{added:1},stores:{setting:{status:"modified",oldCount:1,newCount:1,added:[],removed:[],modified:[1]}}},{setting:{}},null,{open:value=>{options=value;return 1;},close:()=>options.end()},deps);
-        const action=options.btn2(1);await options.btn2(1);expect(deps.legacyStorage.importData).toHaveBeenCalledOnce();options.end();pending.resolve();await action;
-        expect(committed).toBe(false);expect(deps.legacyStorage.createSnapshot).not.toHaveBeenCalled();expect(deps.closeLoading).toHaveBeenCalledOnce();scope.dispose();
+        const action=options.btn2(1);await options.btn2(1);expect(deps.backup.importData).toHaveBeenCalledOnce();options.end();pending.resolve();await action;
+        expect(committed).toBe(false);expect(deps.backup.createSnapshot).not.toHaveBeenCalled();expect(deps.closeLoading).toHaveBeenCalledOnce();scope.dispose();
     });;
 });

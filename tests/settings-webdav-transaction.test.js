@@ -5,7 +5,8 @@ import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { WebDavService } from "../src/services/webdav-service.js";
 import { LayerDialogAdapter } from "../src/platform/userscript/layer-dialog-adapter.js";
-import { Utils } from "../src/core/utils.js";
+import { createPageDialogs } from "../src/platform/browser/page-dialogs.js";
+import { DialogEscController } from "../src/core/dialog-esc-controller.js";
 import { loadSettingForm, saveSettingForm } from "../src/features/settings/setting-forms.js";
 import { buildSettingDialogHtml, injectNetworkPanel } from "../src/ui/settings/setting-templates.js";
 
@@ -29,7 +30,7 @@ async function fixture() {
     };
     const webdav = new WebDavService({}, credential, settings, "https://javdb.com");
     const utilities = { q: vi.fn((_position, _message, accept) => accept()) };
-    const dependencies = { jquery: $, document, settings, webdav, utilities, movie: { externalSiteOrigin: () => "https://example.test", providerOrigin: () => "https://example.test" }, legacyStorage: { getReviewFilterKeywordList: async () => [], getTitleFilterKeyword: async () => [] }, events: { emit: vi.fn() }, logger: { error: vi.fn() } };
+    const dependencies = { jquery: $, document, settings, webdav, utilities, movie: { externalSiteOrigin: () => "https://example.test", providerOrigin: () => "https://example.test" }, keywordRules: { getReviewKeywords: async () => [], getTitleKeywords: async () => [] }, events: { emit: vi.fn() }, logger: { error: vi.fn() } };
     document.body.innerHTML = buildSettingDialogHtml();
     const root = $(document.body);
     injectNetworkPanel($, root);
@@ -160,17 +161,15 @@ describe("full settings WebDAV save transaction", () => {
             close: vi.fn(() => { dialogOptions.end(); document.getElementById("layui-layer7")?.remove(); }),
         };
         vi.stubGlobal("$", $); vi.stubGlobal("layer", layer);
-        const utilities = Object.create(Utils.prototype);
-        Object.assign(utilities, { layerIndexStack: [], iframeEscBindings: new Map(), isMobileMode: () => false });
-        utilities.setDialogService(new LayerDialogAdapter(layer));
-        test.dependencies.utilities = utilities;
+        const esc = new DialogEscController({ jquery: $, document, close: id => layer.close(id) });
+        test.dependencies.utilities = createPageDialogs({ dialog: new LayerDialogAdapter(layer), esc, settings: { snapshot: () => ({}) }, isMobileMode: () => false, logger: console });
         editProfileAndOrdinaryField(test.root);
         const save = saveSettingForm(test.dependencies, test.root);
         await vi.waitFor(() => expect(layer.confirm).toHaveBeenCalledOnce());
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         await expect(save).resolves.toEqual({ canceled: true });
         expect(layer.close).toHaveBeenCalledExactlyOnceWith(7);
-        expect(utilities.layerIndexStack).toEqual([]);
+        expect(esc.layerIndexStack).toEqual([]);
         expect(test.credential.set).not.toHaveBeenCalled();
         expect(test.storage.set).not.toHaveBeenCalled();
         expect(test.stored.setting).toEqual(test.initial);

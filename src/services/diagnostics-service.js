@@ -32,8 +32,7 @@ function sanitize(value, key = "") {
 }
 
 export class DiagnosticsService {
-    /** @param {{legacyHttp?: any}} [options] */
-    constructor(options = {}) {
+    constructor() {
         this.startedAt = performance.now();
         this.activeFeatures = new Set();
         this.activeContributions = new Set();
@@ -47,7 +46,6 @@ export class DiagnosticsService {
         this.browserMetadata = null;
         /** @type {{id: string, disableable: boolean}[]} */ this.contributionDescriptors = [];
         /** @type {any[]} */ this.featureDescriptors = [];
-        this.legacyHttp = options.legacyHttp ?? null;
         this.networkController = null;
         /** @type {{longTasks: number, blockingMs: number, longFrames: number, interactions: number[]} | null} */ this.performanceCapture = null;
         this.performanceRecording = false;
@@ -137,16 +135,16 @@ export class DiagnosticsService {
     /** @param {any} controller */
     setNetworkController(controller) { this.networkController = controller; }
     getNetworkDiagnostics() {
-        const controller = this.networkController ?? this.legacyHttp;
+        const controller = this.networkController;
         return Object.freeze({
             circuitBreakers: controller?.getCircuitBreakerStatus?.() ?? {},
             domainStats: controller?.getDomainStats?.() ?? {},
         });
     }
     /** @param {string} domain */
-    resetCircuitBreaker(domain) { (this.networkController ?? this.legacyHttp)?.resetCircuitBreaker?.(domain); }
-    resetAllCircuitBreakers() { (this.networkController ?? this.legacyHttp)?.resetAllCircuitBreakers?.(); }
-    clearDomainStats() { (this.networkController ?? this.legacyHttp)?.clearDomainStats?.(); }
+    resetCircuitBreaker(domain) { this.networkController?.resetCircuitBreaker?.(domain); }
+    resetAllCircuitBreakers() { this.networkController?.resetAllCircuitBreakers?.(); }
+    clearDomainStats() { this.networkController?.clearDomainStats?.(); }
 
     exportSnapshot() {
         const scopes = [...this.scopes.values()];

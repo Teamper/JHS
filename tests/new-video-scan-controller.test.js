@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { StorageManager } from "../src/core/storage.js";
+import { StateService } from "../src/core/state-service.js";
+import { storageFromForage } from "./helpers/atomic-storage.js";
 import { normalizePortableData } from "../src/core/migration.js";
 import { emptySyncModel, materializeSyncData, projectSyncData, validateSyncState, versionSyncDiff } from "../src/core/webdav-sync-model.js";
 import { CACHE_TTL } from "../src/core/cache-policy.js";
@@ -224,17 +225,14 @@ describe("NewVideoScanController", () => {
             { starId: "normal", name: "Other", newVideoList: ["NORMAL-004"] },
         ];
         let decisions = {};
-        const state = Object.create(StorageManager.prototype);
-        Object.assign(state, {
-            favorite_actresses_key: "favorite_actresses",
-            _actressLock: Promise.resolve(),
-            getFavoriteActressList: async () => favoriteActresses,
-            getBlacklistCarList: async () => [],
-            getCarMap: async () => new Map(),
-            getNewVideoDecisions: async () => decisions,
-            _setItemAndInvalidate: async (_key, value) => { favoriteActresses = value; },
-            stateService: state,
+        const storage = storageFromForage({
+            getItem: async key => key === "favorite_actresses" ? structuredClone(favoriteActresses) : key === "new_video_decisions" ? structuredClone(decisions) : null,
+            setItem: async (key, value) => {
+                if (key === "favorite_actresses") favoriteActresses = value;
+                if (key === "new_video_decisions") decisions = value;
+            },
         });
+        const state = new StateService(storage, {});
         vi.stubGlobal("utils", { getNowStr: () => "2026-11-18 10:00:00" });
         try {
             const { actress } = await state.rebindFavoriteActress({ fromStarId: "old", toStarId: "new" });

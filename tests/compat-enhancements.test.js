@@ -37,14 +37,4 @@ describe("compatibility enhancement Feature", () => {
     it("retains the 6.5.1 disable ID mapping after removing its legacy executor", () => {
         expect(migrateDisabledPlugins(["CompatibilityEnhancementsPlugin", "unknown-setting"])).toEqual(["compatibility.enhancements", "unknown-setting"]);
     });
-
-    it("keeps 115 concurrency and cache lifetime settings unchanged", async () => {
-        const { readTestFile } = await import("./helpers/read-test-file.js");
-        const { join } = await import("node:path");
-        const source = readTestFile(join(import.meta.dirname, "../src/features/external-bridge/one-one-five-match-controller.js"), "utf8");
-        expect(source).toContain("mapLimit(cards, this.concurrency");
-        expect(source).toContain("snapshot().oneOneFiveConcurrency");
-        expect(source).toContain("snapshot().oneOneFiveCacheMinutes");
-        expect(source).toContain('rootMargin: "200px"');
-    });
 });

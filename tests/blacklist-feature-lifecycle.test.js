@@ -36,7 +36,7 @@ function createRuntime(dom, { register = vi.fn(() => vi.fn()) } = {}) {
         [SERVICE.domUi]: ui, [SERVICE.notifications]: { error: vi.fn(), info: vi.fn(), ok: vi.fn() },
         [SERVICE.events]: { on: vi.fn(() => vi.fn()), emit: vi.fn(async () => {}) },
         [SERVICE.dialog]: dialog, [SERVICE.clog]: { error: vi.fn(), warn: vi.fn() },
-        [SERVICE.legacyStorage]: {}, [SERVICE.profile]: {},
+        [SERVICE.keywordRules]: {}, [SERVICE.profile]: {},
     };
     return { scope, runtime, dependencies, dialog, diagnostics, ui, register };
 }

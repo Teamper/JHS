@@ -34,7 +34,7 @@ async function createHarness() {
     const plugin = new SettingPlugin({
         runtimeServices: { settings, settingsRegistry: registry, host: { getListSelectors: () => ({}) } },
         capabilities: {}, jquery: jq, utilities: {}, notifications, logger,
-        legacyStorage: {}, events: {}, document: dom.window.document, window: dom.window,
+        events: {}, document: dom.window.document, window: dom.window,
     });
     plugin._settingScope = scope;
     plugin.openSettingDialog = vi.fn(async () => {});

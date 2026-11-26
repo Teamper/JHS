@@ -39,8 +39,8 @@ export function loadScreenshotImage(document, url, signal, timeout) {
     });
 }
 
-/** @param {any} host @param {HTMLImageElement} loadedImage @param {string} alt @param {any} scope @param {() => void} onError */
-function renderImage(host, loadedImage, alt, scope, onError) {
+/** @param {any} host @param {HTMLImageElement} loadedImage @param {string} alt @param {any} scope @param {() => void} onError @param {((source: Element, options: Record<string, unknown>) => unknown) | undefined} openImageViewer */
+function renderImage(host, loadedImage, alt, scope, onError, openImageViewer) {
     const jq = /** @type {any} */ (globalThis).$;
     const image = jq(loadedImage).attr("alt", alt).addClass("jhs-fc2-gallery__image");
     image.one("error", () => { if (host[0]?.contains(image[0])) onError(); });
@@ -48,7 +48,7 @@ function renderImage(host, loadedImage, alt, scope, onError) {
     replaceResult(host, button);
     host.off("click.jhsScreenshot").on("click.jhsScreenshot", ".jhs-fc2-screenshot-thumbnail", (/** @type {any} */ event) => {
         event.preventDefault(); event.stopPropagation();
-        /** @type {any} */ (globalThis).showImageViewer(image[0], "", {
+        openImageViewer?.(image[0], {
             imageKind: "contact-sheet", owner: button[0], trigger: button[0], scope,
             ...(alt === CANDIDATE_SCREENSHOT_LABEL ? { caption: alt } : {}),
         });
@@ -58,7 +58,7 @@ function renderImage(host, loadedImage, alt, scope, onError) {
 
 /**
  * 唯一截图视图：设置解析、provider 过滤、manual/auto 策略全部来自 ScreenshotService。
- * @param {{target: any, carNum: string, title?: string, screenshot: import("../../services/screenshot-service.js").ScreenshotService, settings: Record<string, any>, scope?: LifecycleScope, isActive?: () => boolean, providerId?: string, isDuplicate?: (url: string) => boolean, refreshCache?: boolean, renderImage?: (image: HTMLImageElement, alt: string) => boolean, renderError?: (error: unknown) => void, renderLoading?: (retry: boolean) => void}} options
+ * @param {{target: any, carNum: string, title?: string, screenshot: import("../../services/screenshot-service.js").ScreenshotService, settings: Record<string, any>, scope?: LifecycleScope, isActive?: () => boolean, providerId?: string, isDuplicate?: (url: string) => boolean, refreshCache?: boolean, openImageViewer?: (source: Element, options: Record<string, unknown>) => unknown, logger?: Pick<Console, "error">, renderImage?: (image: HTMLImageElement, alt: string) => boolean, renderError?: (error: unknown) => void, renderLoading?: (retry: boolean) => void}} options
  */
 export async function renderScreenshotPanel(options) {
     const jq = /** @type {any} */ (globalThis).$;
@@ -97,7 +97,7 @@ export async function renderScreenshotPanel(options) {
             if (options.isDuplicate?.(preview.url)) return resultHost.empty(), null;
             const candidate = preview.match === "candidate";
             const alt = candidate ? CANDIDATE_SCREENSHOT_LABEL : "缩略图";
-            const rendered = options.renderImage ? options.renderImage(preview.image, alt) : renderImage(resultHost, preview.image, alt, options.scope, showError);
+            const rendered = options.renderImage ? options.renderImage(preview.image, alt) : renderImage(resultHost, preview.image, alt, options.scope, showError, options.openImageViewer);
             if (!rendered) { replaceResult(resultHost, createPanelEmpty("暂无缩略图")); return null; }
             const source = enabledProviders.find(provider => provider.id === preview.providerId);
             const label = candidate ? [alt, source?.name].filter(Boolean).join(" · ") : source ? `来源 ${source.name}` : "";
@@ -106,7 +106,7 @@ export async function renderScreenshotPanel(options) {
         } catch (error) {
             if (!isActive() || resultHost.data("jhs-screenshot-request") !== request) return null;
             showError(error);
-            try { /** @type {any} */ (globalThis).clog?.error("缩略图加载失败", error); } catch { /* keep the retry available */ }
+            try { (options.logger ?? console).error("缩略图加载失败", error); } catch { /* keep the retry available */ }
             return null;
         } finally {
             release();

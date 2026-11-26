@@ -1,3 +1,4 @@
+import { getNowStr } from "../src/core/ui-date-time.js";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/core/credential-crypto.js", () => ({
@@ -11,8 +12,8 @@ import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSet
 function createDependencies(overrides = {}) {
     return {
         document: globalThis.document ?? {},
-        legacyStorage: {
-            getSetting: vi.fn(async () => ({ webDavUrl: "https://dav.example", webDavUsername: "user", webDavPassword: "encrypted" })),
+        settings: { snapshot: () => ({ webDavUrl: "https://dav.example", webDavUsername: "user", webDavPassword: "encrypted" }) },
+        backup: {
             exportData: vi.fn(async () => ({ records: [1] })),
         },
         utilities: { getNowStr: vi.fn(() => "2026_08_28") },
@@ -29,8 +30,7 @@ describe("backup loading lifecycle", () => {
     it("shows loading before exporting and keeps it until upload completes", async () => {
         const close = vi.fn(), loading = vi.fn(() => ({ close })), exportData = vi.fn(async () => ({ records: [1] })), backup = vi.fn(async () => {});
         const dependencies = createDependencies({
-            legacyStorage: {
-                getSetting: vi.fn(async () => ({ webDavUrl: "https://dav.example", webDavUsername: "user", webDavPassword: "encrypted" })),
+            backup: {
                 exportData,
             },
             domUi: { loading, tableConstructor: null },
@@ -46,7 +46,7 @@ describe("backup loading lifecycle", () => {
             onStage({ stage: "上传", result: "success", durationMs: 8, bytes: content.length, timeoutMs: 10_000 });
         });
         const dependencies = createDependencies({
-            legacyStorage: { exportData: async () => ({ records: ["private-record"] }) },
+            backup: { exportData: async () => ({ records: ["private-record"] }) },
             utilities: { getNowStr: () => "2026_09_25" },
             notifications: { ok: vi.fn(), error: vi.fn() },
             logger: { log, warn, error: vi.fn() },
@@ -140,7 +140,7 @@ describe("backup loading lifecycle", () => {
         const close = vi.fn(), preview = vi.fn();
         const dependencies = createDependencies({
             document: { createElement: vi.fn(() => input), body: { appendChild: vi.fn() } },
-            legacyStorage: { exportData: vi.fn(async () => ({ records: [] })), diffData: vi.fn(async () => diff) },
+            backup: { exportData: vi.fn(async () => ({ records: [] })), diffData: vi.fn(async () => diff) },
             domUi: { loading: vi.fn(() => ({ close })), tableConstructor: null },
             window: { performance: globalThis.performance, setTimeout: vi.fn(), clearTimeout: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), FileReader: FakeFileReader },
         });
@@ -157,12 +157,12 @@ describe("backup loading lifecycle", () => {
     it("exports data through injected storage and download services", async () => {
         const download = vi.fn(), ok = vi.fn();
         const dependencies = createDependencies({
-            legacyStorage: { exportData: vi.fn(async () => ({ records: [1] })) },
+            backup: { exportData: vi.fn(async () => ({ records: [1] })) },
             utilities: { getNowStr: vi.fn(() => "2026_09_27"), download },
             notifications: { ok, error: vi.fn() },
         });
         await exportSettingData(dependencies);
-        expect(download).toHaveBeenCalledWith(JSON.stringify({ records: [1] }), "2026_09_27.json");
+        expect(download).toHaveBeenCalledWith(JSON.stringify({ records: [1] }), getNowStr("_", "_") + ".json");
         expect(ok).toHaveBeenCalledWith("已导出数据");
     });
 });

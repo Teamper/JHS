@@ -5,7 +5,7 @@ import { DependencyContainer } from "../src/app/dependency-container.js";
 import { FeatureRuntime } from "../src/app/feature-runtime.js";
 import { systemFeatureManifests } from "../src/features/system/catalog.js";
 import { openSettingsUi } from "../src/core/settings-ui-owner.js";
-import { PORT, REGISTRY, SERVICE } from "../src/contracts/tokens.js";
+import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { SettingPlugin } from "../src/features/settings/settings-controller.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 
@@ -17,7 +17,6 @@ describe("Settings system Feature UI ownership", () => {
         const commands = new CommandRegistry();
         const runtime = new FeatureRuntime({
             container: new DependencyContainer()
-                .register(SERVICE.diagnostics, new DiagnosticsService())
                 .register(SERVICE.profile, { current: () => "regular" }),
             commands,
             diagnostics: new DiagnosticsService(),
@@ -44,7 +43,6 @@ describe("Settings system Feature UI ownership", () => {
         const commands = new CommandRegistry();
         const runtime = new FeatureRuntime({
             container: new DependencyContainer()
-                .register(SERVICE.diagnostics, new DiagnosticsService())
                 .register(SERVICE.profile, { current: () => "regular" }),
             commands,
             diagnostics: new DiagnosticsService(),
@@ -65,26 +63,23 @@ describe("Settings system Feature UI ownership", () => {
         const closeQuickSettings = vi.fn(), activateFeatureSurface = vi.fn(), releaseStyle = vi.fn(), registerStyle = vi.fn(() => releaseStyle), diagnostics = new DiagnosticsService(), commands = new CommandRegistry();
         const runtime = new FeatureRuntime({
             container: new DependencyContainer()
-                .register(SERVICE.diagnostics, diagnostics)
                 .register(PORT.style, { register: registerStyle })
                 .register(PORT.host, { document: dom.window.document })
                 .register(SERVICE.profile, { current: () => "regular" })
-                .register(SERVICE.webdav, {})
+                .register(SERVICE.settingsTools, { webdav: {}, cache: {}, resourceSettings: {}, settingsRegistry: {}, backup: {} })
                 .register(SERVICE.dialog, {})
                 .register(SERVICE.storage, {})
                 .register(SERVICE.settings, {})
-                .register(SERVICE.cache, {})
                 .register(SERVICE.http, {})
-                .register(SERVICE.offline, {})
+                .register(SERVICE.offline, { api: {} })
                 .register(SERVICE.magnet, {})
                 .register(SERVICE.movie, {})
                 .register(SERVICE.state, {})
                 .register(SERVICE.translation, {})
                 .register(SERVICE.mediaLibrary, {})
                 .register(SERVICE.busImageLayout, {})
-                .register(REGISTRY.settings, {})
-                .register(SERVICE.legacyStorage, {})
-                .register(SERVICE.legacyUtils, {})
+                .register(SERVICE.keywordRules, {})
+
                 .register(SERVICE.events, {})
                 .register(SERVICE.domUi, { jquery: vi.fn() })
                 .register(SERVICE.clog, { lowZIndex: vi.fn(), error: vi.fn() })

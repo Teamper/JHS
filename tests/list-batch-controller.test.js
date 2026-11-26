@@ -69,6 +69,7 @@ describe("ListBatchController", () => {
         const { state, ui } = setup(rows + '<div class="item"><a href="/v/unknown"><div class="video-title"><strong>FC2</strong> Unknown</div></a></div>');
         const result = await controller.run({ kind: "search" }, "favorite", { confirm: false, filter: "all" });
         expect(result).toEqual({ matched: 76, updated: 76, skipped: 1 });
+        expect(state.patch.mock.calls.map(([keys]) => keys.length)).toEqual([75, 1]);
         expect(state.patch.mock.calls.flatMap(([keys]) => keys)).toEqual(Array.from({ length: 76 }, (_, index) => `ABC-${100 + index}`));
         expect(state.patch.mock.calls.flatMap(([, , options]) => options.records).every((record) => record.stateEligibility?.eligible === true)).toBe(true);
         expect(ui.setProgress).toHaveBeenLastCalledWith(expect.anything(), expect.stringContaining("跳过 1 项"));
@@ -91,6 +92,19 @@ describe("ListBatchController", () => {
         await expect(controller.run({ kind: "search" }, "favorite", { confirm: false })).resolves.toEqual({ matched: 1, updated: 1 });
 
         expect(state.patch).toHaveBeenCalledOnce();
+    });
+
+    it("asks for filter-aware confirmation before scanning or writing", async () => {
+        const { ui, state, createEvaluationContext } = setup();
+        ui.confirm.mockResolvedValue(false);
+        await controller.run({ kind: "search" }, "favorite", { filter: "all" });
+        await controller.run({ kind: "search" }, "favorite", { filter: "favorite" });
+        expect(ui.confirm.mock.calls.map(([message]) => message)).toEqual([
+            "将处理当前搜索全部分页的所有影片，包括屏蔽项。",
+            expect.stringMatching(/^将处理当前搜索全部分页中符合「.+」筛选的影片。$/),
+        ]);
+        expect(createEvaluationContext).not.toHaveBeenCalled();
+        expect(state.patch).not.toHaveBeenCalled();
     });
 
     it("scans the frozen filter and writes matching records through the injected StateService", async () => {

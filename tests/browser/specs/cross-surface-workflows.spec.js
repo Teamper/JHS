@@ -72,10 +72,10 @@ test("FC2 dialog offline marking keeps movie identity across surfaces", async ({
       getCandidates: async () => [{ provider: { id: "fixture", name: "Fixture", isEnabled: async () => true, submit: async (_resource, info) => { window.__offlineContext = info; } }, availability: { authState: "ready" } }],
       updateAvailability() {},
     };
-    window.utils.q = (_event, _message, confirm) => confirm();
   });
   await dialog.locator(".jhs-offline-btn").click();
   await expect.poll(() => page.evaluate(() => window.__offlineContext?.carNum)).toBe("FC2-PPV-4959150");
+  await page.getByRole("button", { name: "标记已下载", exact: true }).click();
   await expect.poll(() => page.evaluate(async () => (await window.stateService.getState("FC2-PPV-4959150"))?.stateFlags?.downloaded)).toBe(true);
   await expect.poll(() => page.evaluate(async () => Boolean((await window.stateService.getState("ABC-001"))?.stateFlags?.downloaded))).toBe(false);
   await expect(dialog).toHaveCount(0);
@@ -99,13 +99,13 @@ test("FC2 magnet result offline action preserves the dialog movie identity", asy
       getCandidates: async () => [{ provider: { id: "fixture", name: "Fixture", isEnabled: async () => true, submit: async (_resource, info) => { window.__hubOfflineContext = info; } }, availability: { authState: "ready" } }],
       updateAvailability() {},
     };
-    window.utils.q = (_event, _message, confirm) => confirm();
   });
   await dialog.locator('[data-jhs-action="magnet-hub"]').click();
   const resultButton = dialog.locator(".magnet-result .jhs-offline-btn");
   await expect(resultButton).toBeVisible();
   await resultButton.click();
   await expect.poll(() => page.evaluate(() => window.__hubOfflineContext?.carNum)).toBe("FC2-PPV-4959150");
+  await page.getByRole("button", { name: "标记已下载", exact: true }).click();
   await expect.poll(() => page.evaluate(async () => (await window.stateService.getState("FC2-PPV-4959150"))?.stateFlags?.downloaded)).toBe(true);
   await expect.poll(() => page.evaluate(async () => Boolean((await window.stateService.getState("ABC-001"))?.stateFlags?.downloaded))).toBe(false);
 });

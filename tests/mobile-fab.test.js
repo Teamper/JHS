@@ -1,11 +1,7 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { join } from "node:path";
-import vm from "node:vm";
+import { ResponsiveShellController } from "../src/features/system/responsive-shell-controller.js";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
-import { OwnedPopover, closeOwnedPopover } from "../src/core/owned-popover.js";
-import { getIcon } from "../src/core/icons.js";
 
 function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDetailPage = false, openNewVideo = null, history } = {}) {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
@@ -19,23 +15,14 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
         readMovieRef: vi.fn(() => ({ carNum: "ABC-123" })),
         locateListRoot: vi.fn(() => dom.window.document.querySelector(".movie-list, .masonry")),
     };
-    const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, localStorage: dom.window.localStorage, getIcon, OwnedPopover, closeOwnedPopover,
-        PRIMARY_QUICK_FILTERS: [ "all", "waitCheck", "favorite", "hasDown", "hasWatch" ],
-        SECONDARY_QUICK_FILTERS: [ "blockedItems", "undownloaded", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d" ],
-        QUICK_FILTER_LABELS: labels, normalizeQuickFilterKey: value => labels[value] ? value : "waitCheck",
-        r: true, l: false, m: "屏蔽", v: "收藏", y: "下载", k: "观看", normalizeStateFlags: value => value || {},
-        storageManager: {}, stateService: {}, show: { info: vi.fn() }, utils: {}, clog: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() }, setTimeout, clearTimeout
-    });
-    const source = readTestFile(join(import.meta.dirname, "../src/features/system/responsive-shell-controller.js"), "utf8");
-    vm.runInContext(`${source};globalThis.TestMobilePlugin=ResponsiveShellController`, context);
     let hasMagnetFilter = false;
-    const plugin = new context.TestMobilePlugin({
+    const plugin = new ResponsiveShellController({
         jquery: $, window: dom.window, document: dom.window.document,
         profile: { current: () => "compact" }, settings, host,
         state: { getState: vi.fn(async () => null) },
         logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), openDialog: vi.fn() },
-        notifications: { error: vi.fn() }, capabilities: beans,
+        notifications: { error: vi.fn() },
+        capabilities: { listPage: beans.ListPagePlugin, listActions: beans.ListPageButtonPlugin, settings: beans.SettingPlugin, detailActions: beans.DetailPageButtonPlugin },
         blacklist: { available: () => Boolean(beans.BlacklistPlugin), open: async () => beans.BlacklistPlugin?.openBlacklistDialog?.() },
         openNewVideo, history, newVideoAvailable: () => Boolean(beans.NewVideoPlugin),
         magnetActions: { filterAvailable: () => hasMagnetFilter, hubAvailable: () => Boolean(beans.MagnetHubPlugin) },

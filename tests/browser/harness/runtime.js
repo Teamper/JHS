@@ -256,8 +256,10 @@ export async function injectUserscriptRuntime(page, options = {}) {
   }
   try {
     await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]), null, { timeout: 15_000 });
-    markPhase("startup-ready");
+    const readyAt = performance.now();
+    bootstrapPhases["startup-ready"] = readyAt - phaseStartedAt;
     await page.evaluate((phases) => { window.__jhsBrowserDiagnostics.bootstrapPhases = { ...(window.__jhsBrowserDiagnostics.bootstrapPhases || {}), harness: phases }; }, bootstrapPhases);
+    return { readyAt };
   } catch (error) {
     const state = await page.evaluate(() => {
       const snapshot = window.__jhsBrowserDiagnostics?.diagnostics?.exportSnapshot?.();

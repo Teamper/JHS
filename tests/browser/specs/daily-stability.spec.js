@@ -40,13 +40,13 @@ for (const theme of ["light", "dark"]) test(`actor source exceptions expose a sa
     await page.evaluate(async () => {
             await window.__jhsBrowserDiagnostics.activateFeature("new-video");
         const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
-        const baseActors = await window.storageManager.getFavoriteActressList();
+        const baseActors = await window.stateService.getFavoriteActressList();
         const extra = [
             { ...baseActors[0], starId: "unavail-2", name: "善場まみ" },
             { ...baseActors[0], starId: "unavail-3", name: "池内遥" },
         ];
         const allActors = [...baseActors, ...extra.filter(item => !baseActors.some(existing => existing.starId === item.starId))];
-        window.storageManager.getFavoriteActressList = async () => allActors;
+        window.stateService.getFavoriteActressList = async () => allActors;
         for (const actor of [allActors[0], ...extra]) {
             plugin.getRuntimeService("sourceHealth").unavailable("https://javdb.com", { starId: actor.starId, name: actor.name });
         }
@@ -84,7 +84,7 @@ test("a closed actor retry cannot move focus in a later workspace", async ({ pag
     await boot(page, context, "light");
     await page.evaluate(async () => {
             await window.__jhsBrowserDiagnostics.activateFeature("new-video");
-        const plugin = window.__jhsBrowserDiagnostics.features.newVideo, actors = await window.storageManager.getFavoriteActressList();
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo, actors = await window.stateService.getFavoriteActressList();
         plugin.getRuntimeService("sourceHealth").unavailable("https://javdb.com", actors[0]);
         const run = plugin.runManualTask.bind(plugin);
         plugin.runManualTask = async (...args) => { try { return await run(...args); } finally { window.actorRetryFinished = true; } };
@@ -146,7 +146,7 @@ test("unavailable actor source panel supports profile inspection, rebind search,
     await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"] && typeof window.__jhsBrowserDiagnostics.features.newVideo?.getRuntimeService === "function"));
     await page.evaluate(async () => {
             await window.__jhsBrowserDiagnostics.activateFeature("new-video");
-        const plugin = window.__jhsBrowserDiagnostics.features.newVideo, actors = await window.storageManager.getFavoriteActressList();
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo, actors = await window.stateService.getFavoriteActressList();
         const health = plugin.getRuntimeService("sourceHealth");
         health.unavailable("https://javdb.com", actors[0]);
         health.unavailable("https://javdb.com", actors[1]);
@@ -174,6 +174,6 @@ test("unavailable actor source panel supports profile inspection, rebind search,
     await root.locator('[data-source-remove="missing-actor"]').click();
     await page.getByRole("button", { name: "移除记录" }).click();
     await expect(healthPanel).toHaveCount(0);
-    const saved = await page.evaluate(() => window.storageManager.getFavoriteActressList());
+    const saved = await page.evaluate(() => window.stateService.getFavoriteActressList());
     expect(saved.map(a => a.starId)).toEqual(["merged-actor"]);
 });

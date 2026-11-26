@@ -80,7 +80,7 @@ export const d = "filter", h = "favorite", g = "hasDown", p = "hasWatch", m = "�
     canSelect: !0
 } ];
 
-/** 在 Composition Root 中一次性建立旧模块仍使用的站点兼容快照。 */
+/** 在 Composition Root 中一次性建立旧模块仍使用的站点兼容快照。 @param {Location | URL} [locationLike] */
 export function initializeRuntimeConstants(locationLike = window.location) {
     const detected = detectSite(locationLike);
     o = locationLike.href;

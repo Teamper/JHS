@@ -43,6 +43,7 @@ export function buildFeedbackCss() {
 
     .js-tooltip { position:fixed; display:none; max-width:min(var(--jhs-tooltip-max-width),calc(100vw - var(--jhs-space-4))); padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface-2); color:var(--jhs-text); box-shadow:var(--jhs-shadow-md); font-family:var(--jhs-font); font-size:var(--jhs-font-size-sm); line-height:var(--jhs-line-height-ui); white-space:normal; overflow-wrap:anywhere; pointer-events:auto; z-index:var(--jhs-z-tooltip); }
     .js-tooltip.is-active { display:block!important; }
+    @media (pointer:coarse) { .js-tooltip { pointer-events:none; } }
 
     body[data-jhs-debug-visible="true"]::after { content:""; display:block; height:calc(var(--jhs-touch-target) + var(--jhs-space-4)); pointer-events:none; }
     .console-logger-container { pointer-events:none; position:fixed; bottom:0; right:0; display:flex; flex-direction:column; align-items:flex-end; width:fit-content; font-family:var(--jhs-font); color:var(--jhs-text); z-index:var(--jhs-z-debug); }

@@ -4,7 +4,7 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { AutoPageController } from "../src/features/list/auto-page-controller.js";
 import { ListSortController } from "../src/features/list/list-sort-controller.js";
 import { ListPaginationController } from "../src/features/list/list-pagination-controller.js";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { ListView } from "../src/features/list/list-view.js";
@@ -64,7 +64,7 @@ describe("continuous browsing work bounds", () => {
         const handlers = new Map(), events = { on: (name, handler) => { handlers.set(name, handler); return () => {}; } };
         const scope = { addCleanup() {} }, settings = { snapshot: () => ({}), addEventListener() {} };
         const historyRefresh = vi.fn(async () => {});
-        const list = new ListPageCompatibilityService({ runtimeServices: { scope: () => scope, settings, events }, refreshHistory: historyRefresh });
+        const list = new ListPageService({ runtimeServices: { scope: () => scope, settings, events }, refreshHistory: historyRefresh });
         await list.handle({ scope, featureOwnsStartup: true });
         list.getIndexedItems = vi.fn(() => ["matched-card"]);
         list.invalidateListRefreshContext = vi.fn(); list.requestListRefresh = vi.fn(async () => true);

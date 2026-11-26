@@ -26,16 +26,13 @@ function escapeConfirmationLabel(value) {
 
 /** 统一详情页四状态按钮、确认、持久化和精确关闭行为。 */
 export class DetailStateController {
-    /** @param {import("./state-service.js").StateService} stateService @param {{readState?: (carNum: string) => Promise<any>, confirm?: (event: MouseEvent | null, message: string, accept: () => any, options?: {confirmText?: string, cancelText?: string}) => any, closePage?: (options: any) => Promise<any>, reportError?: (message: string) => any, logError?: (...args: any[]) => any, jquery?: (value: any) => any}} [ui] */
-    constructor(stateService, ui = {}) {
+    /** @param {import("./state-service.js").StateService} stateService @param {{readState?: (carNum: string) => Promise<any>, confirm: (event: MouseEvent | null, message: string, accept: () => any, options?: {confirmText?: string, cancelText?: string}) => any, closePage: (options: any) => Promise<any>, reportError: (message: string) => any, logError?: (...args: any[]) => any, jquery: (value: any) => any}} ui */
+    constructor(stateService, ui) {
         this.stateService = stateService;
         this.ui = {
-            readState: ui.readState ?? ((carNum) => storageManager.getCar(carNum)),
-            confirm: ui.confirm ?? ((event, message, accept, options) => utils.q(event, message, accept, undefined, options)),
-            closePage: ui.closePage ?? ((options) => utils.closePage(options)),
-            reportError: ui.reportError ?? ((message) => show.error(message)),
-            logError: ui.logError ?? ((...args) => clog.error(...args)),
-            jquery: ui.jquery ?? ((value) => $(value)),
+            ...ui,
+            readState: ui.readState ?? ((carNum) => stateService.getState(carNum)),
+            logError: ui.logError ?? console.error,
         };
     }
     /** @param {{root?: any, closeRoot?: any, layerIndex?: number | null, carNum: unknown, getRecord?: any, activityType?: string, selectors?: Partial<Record<DetailStateFlag, string>>, isActive?: () => boolean, scope?: {disposed: boolean}}} options */

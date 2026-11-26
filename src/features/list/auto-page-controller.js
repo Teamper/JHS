@@ -27,7 +27,7 @@ export class AutoPageController {
         this.scope = options.scope;
         this.document = options.document ?? options.hostAdapter?.document ?? globalThis.document;
         this.window = options.window ?? options.hostAdapter?.location?.window ?? globalThis.window;
-        this.logger = options.logger ?? /** @type {any} */ (globalThis).clog ?? console;
+        this.logger = options.logger ?? console;
         this.preloadDistance = 500;
         this.pagePositionsDirty = true;
         /** @type {Set<object>} */ this.hiddenPages = new Set();

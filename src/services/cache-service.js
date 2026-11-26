@@ -1,5 +1,8 @@
 // @ts-check
 
+import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
+
+export const THIRD_PARTY_CACHE_KEY = "third_party_ttl_cache";
 const PUBLIC_CACHE_MAX_ENTRIES = 500, PUBLIC_CACHE_MAX_AGE_MS = 30 * 864e5, PUBLIC_PRUNE_INTERVAL = 64, L1_CACHE_MAX_ENTRIES = 250;
 
 /** @param {string} value @returns {Promise<string>} */
@@ -9,11 +12,13 @@ async function digestKey(value) {
 }
 
 export class CacheService {
-    /** @param {{namespaceVersion?: number, diagnostics?: import("./diagnostics-service.js").DiagnosticsService, storage?: import("./storage-service.js").StorageService}} [options] */
+    /** @param {{namespaceVersion?: number, diagnostics?: import("./diagnostics-service.js").DiagnosticsService, storage?: import("./storage-service.js").StorageService, mutationCoordinator?: StorageMutationCoordinator, thirdPartyMutations?: {clear: () => Promise<void>, delete: (key: string) => Promise<void>}}} [options] */
     constructor(options = {}) {
         this.namespaceVersion = options.namespaceVersion ?? 2;
         this.diagnostics = options.diagnostics ?? null;
         this.storage = options.storage ?? null;
+        this.mutationCoordinator = options.mutationCoordinator ?? new StorageMutationCoordinator();
+        this.thirdPartyMutations = options.thirdPartyMutations;
         /** @type {Map<string, {value: unknown, expiresAt: number, negative: boolean}>} */
         this.publicCache = new Map();
         /** @type {Map<string, Map<string, {value: unknown, expiresAt: number, negative: boolean}>>} */
@@ -29,6 +34,27 @@ export class CacheService {
         this.prunePromise = null;
         /** @type {Map<string, {expiresAt: number, lastUsed: number, writeId?: string}>} */
         this.publicMetadataIndex = new Map();
+    }
+
+    async getThirdPartyCache() { return await this.storage?.get(THIRD_PARTY_CACHE_KEY) || {}; }
+
+    async clearThirdPartyCache() {
+        if (this.thirdPartyMutations) return this.thirdPartyMutations.clear();
+        return this.mutationCoordinator.runExclusive(async () => { await this.storage?.remove(THIRD_PARTY_CACHE_KEY); });
+    }
+
+    /** @param {string} key */
+    async deleteThirdPartyCacheEntry(key) {
+        if (this.thirdPartyMutations) return this.thirdPartyMutations.delete(key);
+        const { storage } = this;
+        if (!storage) return;
+        return this.mutationCoordinator.runExclusive(async () => {
+            const entries = await this.getThirdPartyCache();
+            if (!Object.hasOwn(entries, key)) return;
+            const next = { ...entries };
+            delete next[key];
+            await storage.set(THIRD_PARTY_CACHE_KEY, next);
+        });
     }
 
     /** @param {Map<string, {value: unknown, expiresAt: number, negative: boolean}> | null} store @param {string} cacheKey @param {{value: unknown, expiresAt: number, negative: boolean}} entry */

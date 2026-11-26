@@ -1,61 +1,48 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
-
-const repoRoot = join(import.meta.dirname, "..");
-
-function loadMigration() {
-    const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = constants.indexOf("function normalizeCarNum"), end = constants.indexOf("function assertPageInfoContract", start), state = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), migration = readTestFile(join(repoRoot, "src/core/migration.js"), "utf8"), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", CURRENT_DATA_VERSION: 2, Date, Object, Array, Map, Set, JSON, formatUiDateTime: () => "2026-08-22 00:00:00" });
-    vm.runInContext(`${constants.slice(start, end)}\n${state}\n${migration}; globalThis.api = { run: runDataMigrations, repair: repairNewVideoTombstones, validate: validatePortableData };`, context);
-    return context.api;
-}
+import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
+import { runDataMigrations, repairNewVideoTombstones, validatePortableData } from "../src/core/migration.js";
+import { storageFromForage } from "./helpers/atomic-storage.js";
 
 function fakeStorage(version, initial = {}) {
-    const data = new Map([["data_version", version], ...Object.entries(initial)]), snapshots = [], storage = {
-        car_list_key: "car_list", favorite_actresses_key: "favorite_actresses",
-        forage: { getItem: vi.fn(async key => data.get(key)), setItem: vi.fn(async (key, value) => data.set(key, value)) },
-        getDataVersion: async () => data.get("data_version") || 0,
-        setDataVersion: vi.fn(async value => data.set("data_version", value)),
-        _setItemAndInvalidate: vi.fn(async (key, value) => data.set(key, value)),
-        _getSnapshots: async () => snapshots, _saveSnapshots: vi.fn(async value => { snapshots.splice(0, snapshots.length, ...value); }),
-        _exportPortableDataWithoutLock: async () => Object.fromEntries(data),
-        merge_table_name: vi.fn(), clean_no_url_blacklist: vi.fn(), async_merge_other: vi.fn(), merge_blacklist: vi.fn(), merge_favoriteActress: vi.fn(), merge_tow_car_list_table: vi.fn()
+    const data = new Map([["data_version", version], ...Object.entries(initial)]);
+    const forage = {
+        getItem: async key => structuredClone(data.get(key)),
+        setItem: vi.fn(async (key, value) => data.set(key, structuredClone(value))),
+        removeItem: async key => data.delete(key),
+        keys: async () => [...data.keys()],
     };
-    return { storage, data, snapshots };
+    return { storage: storageFromForage(forage), data, forage };
 }
 
 describe("data migration v2", () => {
     it("rejects future data before every write", async () => {
-        const { run } = loadMigration(), { storage } = fakeStorage(3);
-        await expect(run(storage)).rejects.toThrow("数据来自更新版本");
-        expect(storage.setDataVersion).not.toHaveBeenCalled();
-        expect(storage._setItemAndInvalidate).not.toHaveBeenCalled();
+        const { storage, forage } = fakeStorage(CURRENT_DATA_VERSION + 1);
+        await expect(runDataMigrations(storage)).rejects.toThrow("数据来自更新版本");
+        expect(forage.setItem).not.toHaveBeenCalled();
     });
 
     it("migrates v1 records, creates one identified snapshot and reports collisions", async () => {
-        const { run } = loadMigration(), { storage, data, snapshots } = fakeStorage(1, { car_list: [{ carNum: "abc-123", status: "favorite" }, { carNum: "ABC123", status: "hasDown" }], favorite_actresses: [] });
-        await expect(run(storage)).resolves.toBe(2);
+        const { storage, data } = fakeStorage(1, { car_list: [{ carNum: "abc-123", status: "favorite" }, { carNum: "ABC123", status: "hasDown" }], favorite_actresses: [] });
+        await expect(runDataMigrations(storage)).resolves.toBe(CURRENT_DATA_VERSION);
         expect(data.get("car_list")).toHaveLength(1);
         expect(data.get("car_list")[0].stateFlags).toMatchObject({ favorite: true, downloaded: true });
-        expect(snapshots).toHaveLength(1);
-        expect(snapshots[0]).toMatchObject({ kind: "migration-snapshot", targetDataVersion: 2, appVersion: "6.4.0" });
+        const v2Snapshots = () => data.get("snapshots").filter(snapshot => snapshot.targetDataVersion === 2);
+        expect(v2Snapshots()).toHaveLength(1);
+        expect(v2Snapshots()[0]).toMatchObject({ kind: "migration-snapshot", targetDataVersion: 2, appVersion: "6.4.0" });
         expect(data.get("data_health_warnings")[0].type).toBe("canonical-collision");
-        await run(storage);
-        expect(snapshots).toHaveLength(1);
+        const snapshots = structuredClone(data.get("snapshots"));
+        await runDataMigrations(storage);
+        expect(data.get("snapshots")).toEqual(snapshots);
     });
 
     it("validates every portable domain before import writes begin", () => {
-        const { validate } = loadMigration();
-        expect(() => validate({ data_version: 2, car_list: {} })).toThrow("car_list 必须为数组");
-        expect(() => validate({ data_version: 2, activity_log: [] })).toThrow("activity_log 必须为对象");
-        expect(() => validate({ data_version: 3, car_list: [] })).toThrow("数据来自更新版本");
-        expect(validate({ data_version: 2, car_list: [], new_video_decisions: {} })).toBe(2);
+        expect(() => validatePortableData({ data_version: 2, car_list: {} })).toThrow("car_list 必须为数组");
+        expect(() => validatePortableData({ data_version: 2, activity_log: [] })).toThrow("activity_log 必须为对象");
+        expect(() => validatePortableData({ data_version: CURRENT_DATA_VERSION + 1, car_list: [] })).toThrow("数据来自更新版本");
+        expect(validatePortableData({ data_version: 2, car_list: [], new_video_decisions: {} })).toBe(2);
     });
 
     it("migrates only tombstones with committed new-video removal evidence", async () => {
-        const { repair } = loadMigration();
         const { storage, data } = fakeStorage(2, {
             car_list: [
                 { carNum: "ABC-1", url: "", names: "", status: "", stateFlags: { favorite: false, downloaded: false, watched: false, blocked: false } },
@@ -64,11 +51,11 @@ describe("data migration v2", () => {
             new_video_decisions: {},
             activity_log: { entries: [{ id: "remove-1", type: "new-video-remove", commitState: "committed", createdAt: "2026-08-22T00:00:00.000Z", changes: [{ carNum: "ABC-1", undoState: "pending" }] }] },
         });
-        await expect(repair(storage)).resolves.toEqual(["ABC-1"]);
+        await expect(repairNewVideoTombstones(storage)).resolves.toEqual(["ABC-1"]);
         expect(data.get("car_list")).toHaveLength(1);
         expect(data.get("car_list")[0].carNum).toBe("ABC-2");
         expect(data.get("new_video_decisions")["ABC-1"]).toMatchObject({ action: "dismissed" });
-        await expect(repair(storage)).resolves.toEqual([]);
+        await expect(repairNewVideoTombstones(storage)).resolves.toEqual([]);
         expect(data.get("car_list")).toHaveLength(1);
     });
 });

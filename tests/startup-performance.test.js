@@ -1,125 +1,48 @@
-import { ActorSourceHealth, isMissingActorSource } from "../src/features/discovery/actor-source-health.js";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
-import { describe, expect, it, vi } from "vitest";
+import { TaskExecutionService } from "../src/features/discovery/task-execution-service.js";
+import { StorageQueue } from "../src/core/storage-queue.js";
+import { sleep } from "../src/core/timing.js";
+import { SettingsService } from "../src/services/settings-service.js";
+import { HttpService } from "../src/services/http-service.js";
+import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
+import { UserscriptHttpAdapter } from "../src/platform/userscript/userscript-http-adapter.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRuntimeLookup } from "../src/app/runtime-lookup.js";
-import { isAbortError } from "../src/core/jhs-error.js";
-import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
-const repoRoot = join(import.meta.dirname, "..");
-
-function loadStorageManager(forage) {
-  const context = vm.createContext({
-    console,
-    localforage: {
-      INDEXEDDB: "indexeddb",
-      createInstance: () => forage
-    },
-    i: (target, key, value) => (target[key] = value)
-  });
-  const source = `${readTestFile(join(repoRoot, "src/core/storage.js"), "utf8")}\nglobalThis.TestStorageManager = StorageManager;`;
-  vm.runInContext(source, context);
-  return new context.TestStorageManager();
-}
+afterEach(() => vi.useRealTimers());
 
 function loadTaskPlugin(gmHttp, overrides = {}) {
-  const defaultUtils = { sleep: vi.fn(async () => {}), getNowStr: vi.fn(() => "2026-08-11 20:00:00") };
-  const legacyStorage = overrides.storageManager || { getSetting: vi.fn(async () => ({})) };
-  const runtimeStorage = { getLocal: vi.fn(() => null), setLocal: vi.fn(), removeLocal: vi.fn() };
-  const movie = { externalSiteOrigin: vi.fn(() => "https://javdb.example") };
-  const context = vm.createContext({
-    ActorSourceHealth, isMissingActorSource, isAbortError, console,
-    URL,
-    gmHttp,
-    i: (target, key, value) => (target[key] = value),
-    T: "javdb",
-    I: "javbus",
-    D: "censored",
-    A: "uncensored",
-    _: "yes",
-    l: false,
-    escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] || character)),
-    normalizeCarNum: value => String(value || "").toUpperCase(), getMovieStateEligibility,
-    readListItem: () => ({}),
-    StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
-    clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
-    show: { info: vi.fn(), error: vi.fn() },
-    utils: { ...defaultUtils, ...overrides.utils },
-    storageManager: legacyStorage,
-    selectLatestPublishTime: values => values.filter(Boolean).sort().at(-1) || "",
-    $: () => ({ text: vi.fn() })
-  });
-  const parsers = ["src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
-  const taskSource = readFileSync(join(repoRoot, "src/features/discovery/task-execution-service.js"), "utf8")
-    .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
-    .replace(/^export\s+(?=class\s)/gm, "");
-  const source = `${parsers}\n${taskSource}\nglobalThis.TestTaskPlugin = TaskExecutionService;`;
-  vm.runInContext(source, context);
-  const task = new context.TestTaskPlugin({
-    runtimeServices: {
-      storage: runtimeStorage, http: { request: vi.fn() }, actressInfo: {}, movie, state: {}, events: {}, scope: async () => null,
-      hostAdapters: {
-        javdb: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
-        javbus: { getListSelectors: () => ({ boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }) },
-      },
-      hostListParser: { parseDetailPage: context.parseDetailPage },
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 7, 11, 20));
+  const settings = { snapshot: () => ({}), readStoredSnapshot: async () => ({}) };
+  const runtimeServices = {
+    storage: { getLocal: vi.fn(() => null), setLocal: vi.fn(), removeLocal: vi.fn() },
+    keywordRules: { getTitleKeywords: async () => [] },
+    http: { request: vi.fn() },
+    actressInfo: { collection: async (_integrationId, input) => gmHttp.get(input.pageUrl) },
+    movie: { externalSiteOrigin: () => "https://javdb.example" },
+    state: { getNewVideoDecisions: async () => ({}), ...overrides.state },
+    settings, events: {}, scope: async () => null,
+    hostAdapters: {
+      javdb: { getListSelectors: () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
+      javbus: { getListSelectors: () => ({ boxSelector: ".masonry", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }) },
     },
-    legacyStorage,
-    utilities: { ...defaultUtils, ...overrides.utils },
-    logger: context.clog,
-    jquery: context.$,
+  };
+  return new TaskExecutionService({
+    runtimeServices, sleep: vi.fn(async () => {}),
+    logger: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
+    jquery: () => ({ text: vi.fn() }),
     window: { location: new URL("https://javdb.com/"), navigator: {}, isListPage: true },
-    notifications: context.show,
+    notifications: { info: vi.fn(), error: vi.fn() },
   });
-  task.getRuntimeService = name => name === "actressInfo" ? {
-    collection: async (_integrationId, input) => gmHttp.get(input.pageUrl)
-  } : name === "scope" ? async () => null
-    : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" }
-      : name === "hostAdapters" ? {
-        javdb: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
-        javbus: { getListSelectors: () => ({ boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }) },
-      }
-        : name === "hostListParser" ? { parseDetailPage: context.parseDetailPage } : null;
-  return task;
-}
-
-function loadStorageQueue() {
-  const context = vm.createContext({ clog: { error: vi.fn() } });
-  const queueSource = readTestFile(join(repoRoot, "src/core/storage-queue.js"), "utf8");
-  vm.runInContext(`${queueSource}\nglobalThis.TestStorageQueue = StorageQueue;`, context);
-  return { Queue: context.TestStorageQueue, error: context.clog.error };
 }
 
 function loadHttpManager(requestHandler) {
-  class TestUtils {
-    async retry(action, attempts = 3) {
-      let lastError;
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        try { return await action(); } catch (error) {
-          if (error?._cfBlocked || error?._circuitBroken) throw error;
-          lastError = error;
-        }
-      }
-      throw lastError;
-    }
-  }
-  class TestStorage {
-    async getSetting(_key, fallback) { return fallback; }
-  }
-  const context = {
-    console,
-    URL,
-    URLSearchParams,
-    clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
-    GM_xmlhttpRequest: requestHandler
-  };
-  context.window = context;
-  context.unsafeWindow = context;
-  vm.runInContext(`${readTestFile(join(repoRoot, "src/core/http.js"), "utf8")};globalThis.TestGmHttp=GmHttp`, vm.createContext(context));
-  return new context.TestGmHttp({ utils: new TestUtils(), storageManager: new TestStorage() });
+  return new HttpService(new UserscriptHttpAdapter(requestHandler), new ExternalUrlPolicy());
 }
+
+const requestOptions = (url) => ({
+  url, providerId: "fixture", urlPolicy: { trustClass: "builtin-public", hosts: [new URL(url).hostname] }, retryCount: 0,
+});
 
 it("releases lookup aliases only while they still refer to the registered instance", () => {
   const lookup = createRuntimeLookup(), bean = {}, replacement = {};
@@ -133,33 +56,32 @@ it("releases lookup aliases only while they still refer to the registered instan
   expect(lookup.getBean("StableAlias")).toBe(replacement);
 });
 
-describe("storage read coalescing", () => {
-  it("uses one IndexedDB read for concurrent cache misses", async () => {
-    const getItem = vi.fn(async (key) => key === "setting" ? { theme: "dark" } : []);
-    const storage = loadStorageManager({ getItem, setItem: vi.fn() });
-
-    const [first, second] = await Promise.all([storage.getSetting(), storage.getSetting()]);
-
-    expect(getItem).toHaveBeenCalledTimes(1);
+describe("settings snapshot reads", () => {
+  it("serves concurrent consumers from one persisted settings load", async () => {
+    const get = vi.fn(async () => ({ theme: "dark" }));
+    const settings = new SettingsService({ get, set: vi.fn() });
+    await settings.load();
+    const [first, second] = await Promise.all([settings.snapshot(), settings.snapshot()]);
+    expect(get).toHaveBeenCalledOnce();
     expect(first).toEqual({ theme: "dark" });
     expect(second).toEqual({ theme: "dark" });
   });
 
-  it("does not let an invalidated pending read repopulate the cache", async () => {
-    let resolveFirst;
-    const firstRead = new Promise((resolve) => { resolveFirst = resolve; });
-    const getItem = vi.fn()
-      .mockReturnValueOnce(firstRead)
-      .mockResolvedValueOnce({ generation: "new" });
-    const storage = loadStorageManager({ getItem, setItem: vi.fn() });
-
-    const pending = storage.getSetting();
-    storage._invalidateCache(storage.setting_key);
-    resolveFirst({ generation: "old" });
-    await expect(pending).resolves.toEqual({ generation: "old" });
-    expect(storage.cacheSettingObj).toBeNull();
-    await expect(storage.getSetting()).resolves.toEqual({ generation: "new" });
-    expect(getItem).toHaveBeenCalledTimes(2);
+  it("retains the newer value after a pending settings read and queued write", async () => {
+    let release, started;
+    const reading = new Promise(resolve => { started = resolve; });
+    const get = vi.fn().mockImplementationOnce(() => new Promise(resolve => { release = resolve; started(); })).mockResolvedValue({ theme: "old" });
+    const set = vi.fn(async () => {});
+    const settings = new SettingsService({ get, set });
+    const pending = settings.load();
+    await reading;
+    const update = settings.set("theme", "new");
+    release({ theme: "old" });
+    await expect(pending).resolves.toEqual({ theme: "old" });
+    await update;
+    expect(set).toHaveBeenCalledExactlyOnceWith("setting", { theme: "new" });
+    expect(settings.snapshot()).toEqual({ theme: "new" });
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -175,8 +97,7 @@ describe("blocked network task termination", () => {
   });
 
   it("propagates queue failures while allowing later tasks to run", async () => {
-    const { Queue, error } = loadStorageQueue();
-    const queue = new Queue(), events = [];
+    const error = vi.fn(), queue = new StorageQueue({ error }), events = [];
     const failed = queue.addTask(async () => { events.push("failed"); throw new Error("write failed"); });
     const succeeded = queue.addTask(async () => { events.push("succeeded"); return 42; });
 
@@ -188,7 +109,7 @@ describe("blocked network task termination", () => {
   });
 
   it("treats an empty valid movie container as a successful empty result", async () => {
-    const updateFavoriteActress = vi.fn(async () => true), task = loadTaskPlugin({ get: vi.fn() }, { storageManager: { updateFavoriteActress } });
+    const updateFavoriteActress = vi.fn(async () => true), task = loadTaskPlugin({ get: vi.fn() }, { state: { updateFavoriteActress } });
     task.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" });
     const dom = { find: (selector) => ({
       length: selector === ".movie-list" ? 1 : 0,
@@ -202,7 +123,7 @@ describe("blocked network task termination", () => {
   });
 
   it("rejects a structurally invalid empty page without advancing actress state", async () => {
-    const updateFavoriteActress = vi.fn(), task = loadTaskPlugin({ get: vi.fn() }, { storageManager: { updateFavoriteActress } });
+    const updateFavoriteActress = vi.fn(), task = loadTaskPlugin({ get: vi.fn() }, { state: { updateFavoriteActress } });
     task.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" });
     const dom = { find: () => ({ length: 0, first() { return this; }, text: () => "", attr: () => undefined }) };
 
@@ -212,10 +133,10 @@ describe("blocked network task termination", () => {
 
   it("does not count a dismissed decision as fresh on a later actor scan", async () => {
     const updateFavoriteActress = vi.fn(async () => true), task = loadTaskPlugin({ get: vi.fn() }, {
-      storageManager: { getCarMap: vi.fn(async () => new Map()), updateFavoriteActress }
+      state: { getCarMap: vi.fn(async () => new Map()), updateFavoriteActress }
     });
     task.getRuntimeService = name => name === "state" ? {
-      getNewVideoDecisions: vi.fn(async () => ({ "A-1": { action: "dismissed" } }))
+      ...task.runtimeServices.state, getNewVideoDecisions: vi.fn(async () => ({ "A-1": { action: "dismissed" } }))
     } : name === "scope" ? async () => null : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" } : null;
 
     await expect(task.parseActorMovies([
@@ -228,7 +149,7 @@ describe("blocked network task termination", () => {
 
   it("does not count an empty actor scan when the saved actor disappeared", async () => {
     const updateFavoriteActress = vi.fn(async () => false);
-    const task = loadTaskPlugin({ get: vi.fn() }, { storageManager: { updateFavoriteActress } });
+    const task = loadTaskPlugin({ get: vi.fn() }, { state: { updateFavoriteActress } });
 
     await expect(task.parseActorMovies([], "removed", "Actor", [], new Set())).rejects.toThrow("演员记录已不存在");
     expect(updateFavoriteActress).toHaveBeenCalledOnce();
@@ -237,9 +158,9 @@ describe("blocked network task termination", () => {
   it("keeps a saved fallback scan when its optional notice and warning both fail", async () => {
     const updateFavoriteActress = vi.fn(async () => true);
     const task = loadTaskPlugin({ get: vi.fn() }, {
-      storageManager: { getCarMap: vi.fn(async () => new Map()), updateFavoriteActress },
+      state: { getCarMap: vi.fn(async () => new Map()), updateFavoriteActress },
     });
-    task.getRuntimeService = name => name === "state" ? { getNewVideoDecisions: async () => ({}) } : null;
+    task.getRuntimeService = name => task.runtimeServices[name];
     task.logger.html = () => { throw new Error("notice unavailable"); };
     task.logger.warn = () => { throw new Error("warning unavailable"); };
 
@@ -278,10 +199,7 @@ describe("HTTP Cloudflare handling", () => {
     }));
     const http = loadHttpManager(request);
 
-    let error;
-    try { await http.get("https://javdb.example/actors/1"); } catch (caught) { error = caught; }
-
-    expect(error?._cfBlocked).toBe(true);
+    await expect(http.request(requestOptions("https://javdb.example/actors/1"))).rejects.toMatchObject({ code: "CF_BLOCKED" });
     expect(request).toHaveBeenCalledTimes(1);
     expect(http.getCircuitBreakerStatus()["javdb.example"].failCount).toBe(1);
   });
@@ -289,11 +207,11 @@ describe("HTTP Cloudflare handling", () => {
   it("allows one half-open probe and closes the breaker on success", async () => {
     const request = vi.fn((options) => options.onload({ status: 200, finalUrl: options.url, responseText: "{}" }));
     const http = loadHttpManager(request);
-    http._circuitBreakers.set("javdb.example", {
+    http.circuitBreakers.set("javdb.example", {
       state: "half-open", failCount: 0, openTime: 0, cooldownMs: 60000, threshold: 3, probing: false
     });
 
-    await expect(http.get("https://javdb.example/actors/1")).resolves.toEqual({});
+    await expect(http.request(requestOptions("https://javdb.example/actors/1"))).resolves.toMatchObject({ status: 200 });
 
     expect(request).toHaveBeenCalledTimes(1);
     expect(http.getCircuitBreakerStatus()["javdb.example"]).toMatchObject({ state: "closed", probing: false, failCount: 0 });
@@ -307,11 +225,11 @@ describe("HTTP Cloudflare handling", () => {
     }));
     const http = loadHttpManager(request);
 
-    await expect(http.post(
-      "https://yun.123pan.com/resolve",
-      { urls: "magnet:test" },
-      { Authorization: "Bearer token" }
-    )).resolves.toEqual({ code: 0 });
+    await expect(http.request({
+      ...requestOptions("https://yun.123pan.com/resolve"), method: "POST",
+      body: JSON.stringify({ urls: "magnet:test" }),
+      headers: { Authorization: "Bearer token", "Content-Type": "application/json" }
+    })).resolves.toMatchObject({ data: '{"code":0}' });
 
     expect(request).toHaveBeenCalledTimes(1);
     expect(request.mock.calls[0][0]).toMatchObject({

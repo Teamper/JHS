@@ -68,7 +68,7 @@ test("FC2 JavDB want remains committed after cache and success-notice failures",
     credential.get = async () => "synthetic-javdb-token";
     credential.readEntry = async () => { const value = await credential.get(); return { exists: !!value, value, revision: value ? "fixture-saved-account" : null }; };
     window.credentialService = credential;
-    window.storageManager.deleteCachedRequest = async () => {
+    fc2.getRuntimeService("want").deps.invalidate = async () => {
       window.__fc2PostCommitProbe.cacheFailures += 1;
       throw new Error("synthetic cache failure");
     };

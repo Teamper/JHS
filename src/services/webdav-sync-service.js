@@ -25,13 +25,19 @@ export class WebDavSyncService extends EventTarget {
         this.locks = dependencies.locks === undefined ? globalThis.navigator?.locks : dependencies.locks;
         this.running = false; this.suspended = false; this.rerun = false; this.timer = 0; this.message = ""; this.nextDueAt = 0; this.scheduleGeneration = 0;
         this.needsReconcile = true; this.waitingForBackground = false; this.manualRequested = false;
+        this.storePreparedAtStartup = false;
         /** @type {LifecycleScope | null} */ this.operation = null;
         /** @type {LifecycleScope | null} */ this.owner = null;
         /** @type {(EventTarget & {hidden: boolean}) | null} */ this.document = null;
     }
+    async initializeStoreWithoutLock() {
+        await this.deps.store.initializeWithoutLock();
+        this.storePreparedAtStartup = true;
+    }
     async initialize() {
         await this.deps.preferences?.migrate();
-        await this.deps.store.initialize();
+        if (this.storePreparedAtStartup) this.storePreparedAtStartup = false;
+        else await this.deps.store.initialize();
     }
     /** @param {LifecycleScope} scope @param {EventTarget & {hidden: boolean}} document @param {() => boolean} [canRun] */
     start(scope, document, canRun) {
@@ -337,7 +343,7 @@ export class WebDavSyncService extends EventTarget {
         const client = this.deps.webdav.createClient(profile, { scope });
         const envelope = await this.readEnvelope(client, file, scope);
         if (scope) await this.assertConnectionCurrent(scope, revision);
-        await this.deps.storage.importDataWithGuard({ data_version: CURRENT_DATA_VERSION }, {
+        await this.deps.backup.importDataWithGuard({ data_version: CURRENT_DATA_VERSION }, {
             assertActive: () => this.assertConnectionCurrent(scope ?? { assertActive() {} }, revision),
             prepareData: async () => {
                 const local = await this.deps.store.readData(), restored = materializeSyncData(envelope.state, local);

@@ -1,4 +1,4 @@
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
@@ -52,18 +52,27 @@ try {
         return response.value;
     }, { method, args });
     await Promise.all([call("state.patch", [["ABC-123"], { favorite: true }]), call("state.patch", [["DEF-456"], { downloaded: true }])]);
-    assert.equal((await call("legacy.getCarList")).length, 2, "concurrent mutations preserved");
+    assert.equal((await call("state.getCarList")).length, 2, "concurrent mutations preserved");
     await page.evaluate(() => globalThis.__jhsExtensionContext.services.settings.patch({ themeMode: "dark", enableCheckNewVideo: "no", enableCheckBlacklist: "no", enableCheckFavoriteActress: "no" }));
     assert.equal((await call("settings.read")).themeMode, "dark");
     await assert.rejects(call("settings.commit", [{ themeMode: { before: "light", exists: true, value: "auto" } }]), /其他页面修改/);
     await call("credential.set", ["jhs_extension_fixture_credential", "fixture-secret"]);
     assert.equal(await call("credential.get", ["jhs_extension_fixture_credential"]), "fixture-secret");
-    const backup = await call("legacy.exportData");
+    await page.evaluate(async () => {
+        const { keywordRules } = globalThis.__jhsExtensionContext.services;
+        await keywordRules.saveTitleKeywords(["fixture title"]);
+        await keywordRules.addReviewKeyword("fixture review");
+    });
+    assert.deepEqual(await call("keywords.getTitleKeywords"), ["fixture title"]);
+    assert.deepEqual(await call("keywords.getReviewKeywords"), ["fixture review"]);
+    const backup = await call("backup.exportData");
+    assert.deepEqual(backup.filter_keyword_title, ["fixture title"]);
+    assert.deepEqual(backup.filter_keyword_review, ["fixture review"]);
     assert.ok(!JSON.stringify(backup).includes("fixture-secret"), "portable backup excludes credentials");
-    await assert.rejects(call("legacy.importData", [{ ...backup, data_version: 999999 }]), /版本/);
-    assert.equal((await call("legacy.getCarList")).length, 2, "future import preserved existing data");
-    await call("legacy.createSnapshot", ["fixture migration", "import"]);
-    await call("legacy.importData", [backup]);
+    await assert.rejects(call("backup.importData", [{ ...backup, data_version: 999999 }]), /版本/);
+    assert.equal((await call("state.getCarList")).length, 2, "future import preserved existing data");
+    await call("backup.createSnapshot", ["fixture migration", "import"]);
+    await call("backup.importData", [backup]);
     await call("receipts.restore", ["jhs_offline_receipt_v1:fixture", null]);
     await call("receipts.write", ["jhs_offline_receipt_v1:fixture", "pending", { attemptId: "one" }, null]);
     await assert.rejects(call("receipts.write", ["jhs_offline_receipt_v1:fixture", "pending", { attemptId: "two" }, null]), /其他页面/);
@@ -84,8 +93,7 @@ try {
         await services.webdav.saveProfile({ url, username: "synthetic", password: "synthetic-password" });
     }, dav.url);
     await call("sync.check");
-    const syncStatus = await call("sync.getStatus");
-    assert.ok(syncStatus.lastSuccessAt, `isolated DAV sync completed ${syncStatus.message}`);
+    await expect.poll(async () => (await call("sync.getStatus")).lastSuccessAt, { message: "isolated DAV sync completed", timeout: 10_000 }).toBeGreaterThan(0);
     assert.ok(dav.files.size > 0, "DAV received encrypted replica snapshot");
     await call("sync.pause", [true]);
     await page.reload();
@@ -105,7 +113,7 @@ try {
     await page.reload();
     await page.waitForFunction(() => !!globalThis.__jhsExtensionContext);
     await page.evaluate(() => chrome.offscreen.closeDocument());
-    assert.equal((await call("legacy.getCarList")).length, 2, "offscreen restart preserved data");
+    assert.equal((await call("state.getCarList")).length, 2, "offscreen restart preserved data");
     assert.equal((await call("receipts.read", ["jhs_offline_receipt_v1:fixture", 86400000])).state, "pending", "unknown submission remains pending after restart");
     assert.equal(await call("credential.get", ["jhs_extension_fixture_credential"]), "fixture-secret", "offscreen restart preserved credential");
     const cloud = await call("tasks.offline", [true]);
@@ -115,7 +123,7 @@ try {
     const workerSession = await context.newCDPSession(page);
     await workerSession.send("ServiceWorker.enable");
     await workerSession.send("ServiceWorker.stopAllWorkers");
-    assert.equal((await call("legacy.getCarList")).length, 2, "service worker restart preserved data");
+    assert.equal((await call("state.getCarList")).length, 2, "service worker restart preserved data");
     await page.reload();
     await page.waitForFunction(() => !!globalThis.__jhsExtensionContext);
     for (const name of ["新作", "演员与黑名单", "后台任务", "数据统计"]) {
@@ -209,7 +217,7 @@ try {
         await restartPage.goto(`chrome-extension://${id}/manager.html`);
         await restartPage.waitForFunction(() => !!globalThis.__jhsExtensionContext);
         const persisted = await restartPage.evaluate(async () => {
-            const response = await chrome.runtime.sendMessage({ channel: "jhs-extension-v1", target: "background", id: crypto.randomUUID(), method: "legacy.getCarList", args: [] });
+            const response = await chrome.runtime.sendMessage({ channel: "jhs-extension-v1", target: "background", id: crypto.randomUUID(), method: "state.getCarList", args: [] });
             const receipt = await chrome.runtime.sendMessage({ channel: "jhs-extension-v1", target: "background", id: crypto.randomUUID(), method: "receipts.read", args: ["jhs_offline_receipt_v1:fixture", 86400000] });
             return { records: response.value, receipt: receipt.value };
         });

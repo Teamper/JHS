@@ -1,3 +1,5 @@
+import { StorageService } from "../../src/services/storage-service.js";
+
 /** In-memory implementation of the optional atomic port for business-domain tests. */
 export function memoryAtomicStorage(values, { beforeWrite = async () => {} } = {}) {
     return {
@@ -16,4 +18,15 @@ export function memoryAtomicStorage(values, { beforeWrite = async () => {} } = {
             for (const key of deletes) values.delete(key);
         },
     };
+}
+
+/** Adapt the in-memory localforage backend at the same boundary as the IndexedDB adapter. */
+export function storageFromForage(forage, atomic = {}) {
+    return new StorageService({
+        get: key => forage.getItem(key),
+        set: (key, value) => forage.setItem(key, value),
+        remove: key => forage.removeItem(key),
+        keys: () => forage.keys(),
+        ...atomic,
+    });
 }

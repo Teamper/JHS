@@ -4,9 +4,8 @@ import { I, T } from "../../core/constants.js";
 import { A, B, D, P } from "../../core/constants.js";
 import { readCleanActorElementText } from "../../core/actress-measurements.js";
 import { selectLatestPublishTime } from "../../core/feature-helpers.js";
-import { readListItem } from "../../core/list-item-reader.js";
+import { parseHostListPage, readListItem } from "../../core/list-item-reader.js";
 import { assertMovieStateEligible } from "../../core/movie-identity.js";
-import { parseDetailPage } from "./parser.js";
 
 const LIST_SELECTORS = Object.freeze({
     javdb: Object.freeze({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }),
@@ -65,7 +64,7 @@ export function parseBlacklistFilterPage(options) {
     if (site !== T && site !== I) throw new Error(`未知黑名单来源站点: ${site}`);
     const selectors = LIST_SELECTORS[/** @type {"javdb" | "javbus"} */ (site)];
     const page = input?.jquery ? input : jquery(input || document);
-    const pageState = parseDetailPage(page, {
+    const pageState = parseHostListPage(page, {
         boxSelector: site === I ? `${selectors.boxSelector}, #waterfall` : selectors.boxSelector,
         requestDomItemSelector: selectors.requestDomItemSelector,
     });

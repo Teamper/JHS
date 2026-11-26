@@ -1,4 +1,5 @@
 // @ts-check
+import { formatUiDateTime } from "../../core/ui-date-time.js";
 
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { createLatestSettingWriter } from "../settings/setting-binding-controller.js";
@@ -6,16 +7,17 @@ import { getIcon } from "../../core/icons.js";
 import { createPanelLoading } from "./primitives.js";
 
 export class RelatedPanel {
-    /** @param {{related: any, settings: any, scope: () => Promise<any>, jquery?: (value: any) => any, formatDate?: (value: any) => string, document?: Document, notifications?: any, diagnostics?: any}} dependencies */
+    /** @param {{related: any, settings: any, scope: () => Promise<any>, jquery?: (value: any) => any, formatDate?: (value: any) => string, document?: Document, notifications?: any, diagnostics?: any, logger?: Pick<Console, "error">}} dependencies */
     constructor(dependencies) {
         this.related = dependencies.related;
         this.settings = dependencies.settings;
         this.scope = dependencies.scope;
         this.jquery = dependencies.jquery ?? /** @type {any} */ (globalThis).$;
-        this.formatDate = dependencies.formatDate ?? ((value) => /** @type {any} */ (globalThis).utils.formatDate(value));
+        this.formatDate = dependencies.formatDate ?? formatUiDateTime;
         this.document = dependencies.document ?? document;
         this.notifications = dependencies.notifications ?? null;
-        this.diagnostics = dependencies.diagnostics ?? null;
+        this.diagnostics = dependencies.diagnostics;
+        this.logger = dependencies.logger ?? console;
     }
 
     /** @param {any} target @param {string} movieId @param {{ownedSection?: any, isActive?: () => boolean, ownCleanup?: (cleanup: () => void) => unknown, awaitInitialLoad?: boolean}} [options] */
@@ -56,9 +58,8 @@ export class RelatedPanel {
         });
         const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadRelated", fallback: "no", apply: value => { void applyExpanded(value); }, onError: error => {
             this.diagnostics?.recordError?.({ source: "detail-related-panel", message: error instanceof Error ? error.message : String(error) });
-            if (!this.diagnostics) /** @type {any} */ (globalThis).clog?.error("相关清单展开设置保存失败，已恢复", error);
-            if (this.notifications?.error) this.notifications.error("相关清单展开设置保存失败，已恢复原设置");
-            else /** @type {any} */ (globalThis).show?.error?.("相关清单展开设置保存失败，已恢复原设置");
+            if (!this.diagnostics) this.logger.error("相关清单展开设置保存失败，已恢复", error);
+            this.notifications?.error("相关清单展开设置保存失败，已恢复原设置");
         } });
         toggle.on("click", (/** @type {any} */ event) => {
             event.preventDefault(); event.stopPropagation();
@@ -99,7 +100,7 @@ export class RelatedPanel {
             if (generation === state.generation) state.loading = false;
             if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
             this.diagnostics?.recordError?.({ source: "detail-related-panel", message: error instanceof Error ? error.message : String(error) });
-            if (!this.diagnostics) /** @type {any} */ (globalThis).clog?.error("获取清单失败:", error);
+            if (!this.diagnostics) this.logger.error("获取清单失败:", error);
             this.renderRetry(container, () => void this.fetch(state));
         } finally { release(); if (generation === state.generation) { state.loading = false; state.panel.attr("aria-busy", "false"); } if (state.requestScope === scope) state.requestScope = null; }
     }
@@ -127,7 +128,7 @@ export class RelatedPanel {
             } catch (error) {
                 if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
                 this.diagnostics?.recordError?.({ source: "detail-related-panel", message: error instanceof Error ? error.message : String(error) });
-                if (!this.diagnostics) /** @type {any} */ (globalThis).clog?.error("加载更多清单失败:", error);
+                if (!this.diagnostics) this.logger.error("加载更多清单失败:", error);
                 button.text("加载失败，请重试").prop("disabled", false);
             } finally { release(); if (generation === state.generation) { state.loading = false; state.panel.attr("aria-busy", "false"); } button.attr("aria-busy", "false"); if (state.requestScope === scope) state.requestScope = null; }
         });

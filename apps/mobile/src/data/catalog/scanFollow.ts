@@ -21,7 +21,7 @@ async function readHealth(database: Workspace['database']) {
 }
 
 export async function scanFollow(workspace: Workspace, catalog: CatalogSource, scope: LifecycleScope, force: boolean) {
-  const { state, storage, events } = workspace;
+  const { state, keywordRules, events } = workspace;
   const settings = workspace.settings.snapshot();
   const failures: { id: string; error: unknown }[] = [];
   let cache = sources.get(workspace);
@@ -35,7 +35,7 @@ export async function scanFollow(workspace: Workspace, catalog: CatalogSource, s
   const scanner = new NewVideoScanController({
     scope, sourceHealth, allowHidden: true, preserveNewVideo: true,
     getTimestamp: () => new Date().toISOString(),
-    readTitleKeywords: () => storage.getTitleFilterKeyword(),
+    readTitleKeywords: () => keywordRules.getTitleKeywords(),
     state: {
       getFavoriteActressList: () => state.getFavoriteActressList(),
       getBlacklistCarList: () => state.getBlacklistCarList(),

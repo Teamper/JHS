@@ -7,7 +7,7 @@ import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function createController({ html, url, setting = "yes", lookup = vi.fn(async () => null), lookupAny = undefined, profileUrl = vi.fn(() => "https://profiles.example/actor"), state = undefined }) {
+function createController({ html, url, setting = "yes", lookup = vi.fn(async () => null), lookupAny = undefined, profileUrl = vi.fn(() => "https://profiles.example/actor"), state = undefined, logger }) {
     document.body.innerHTML = html;
     if (typeof globalThis.requestIdleCallback !== "function") vi.stubGlobal("requestIdleCallback", vi.fn(() => 1));
     if (typeof globalThis.cancelIdleCallback !== "function") vi.stubGlobal("cancelIdleCallback", vi.fn());
@@ -17,7 +17,7 @@ function createController({ html, url, setting = "yes", lookup = vi.fn(async () 
     const scope = new LifecycleScope("identity.actress-info");
     const service = lookupAny ? { lookup, lookupAny, profileUrl } : { lookup, profileUrl };
     const diagnostics = { recordError: vi.fn() };
-    const controller = new ActressInfoController({ document, location: new URL(url), hostAdapter: new JavDbHostAdapter(document, new URL(url)), service, settings, state, scope, diagnostics });
+    const controller = new ActressInfoController({ document, location: new URL(url), hostAdapter: new JavDbHostAdapter(document, new URL(url)), service, settings, state, scope, diagnostics, logger });
     return { controller, scope, settings, service, diagnostics, lookup, lookupAny, profileUrl };
 }
 
@@ -156,7 +156,6 @@ describe("Actress info Feature", () => {
 
     it("queries lookupAny in [favorite, dom, blacklist] order, strips actor-page badges, and filters abort/not-found noise logs", async () => {
         const clogError = vi.fn();
-        vi.stubGlobal("clog", { error: clogError });
         const lookupAny = vi.fn(async () => ({
             info: { url: "javascript:alert(1)", birthday: "1996年3月4日", age: "30岁", height: "160cm", weight: "", threeSizeText: "", braSize: "C" },
             matchedName: "Fav Name",
@@ -170,6 +169,7 @@ describe("Actress info Feature", () => {
             url: "https://javdb.com/actors/actor1",
             lookupAny,
             state,
+            logger: { error: clogError },
         });
         await loaded.controller.mount();
         expect(lookupAny).toHaveBeenCalledWith(["Fav Name", "Fav Alias", "DOM Name", "DOM Alias", "Black Name", "Black Alias"], { scope: expect.any(LifecycleScope) });

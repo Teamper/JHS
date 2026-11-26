@@ -23,7 +23,7 @@ async function fixture(mode, request) {
     const adapter = createJavStoreAdapter(createIntegrationRequestFacade(http, manifest));
     const screenshot = new ScreenshotService({get:()=>null, getAvailable:async()=>[]}, {list:()=>[manifest], getAdapter:()=>adapter});
     const scope = new LifecycleScope("feature-test"); cleanups.push(()=>scope.dispose());
-    const service = new Fc2WorkspaceService({runtimeServices:{settings,screenshot,scope:()=>scope,logger:{error:vi.fn()}}});
+    const service = new Fc2WorkspaceService({runtimeServices:{settings,screenshot,scope:()=>scope,ui:{openImageViewer:vi.fn()},logger:{error:vi.fn()}}});
     const root = jquery('<main class="jhs-fc2-workspace"><div data-jhs-role="screenshot"></div></main>').appendTo(document.body);
     const context = createFc2DetailContext(root,{carNum:"FC2-1234567"}); cleanups.push(()=>context.destroy());
     service.bindFc2FeatureLifecycle(context); service.loadFc2Screenshot(context);

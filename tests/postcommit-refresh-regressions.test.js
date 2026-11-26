@@ -1,16 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
-import { StorageManager } from "../src/core/storage.js";
+import { StateService } from "../src/core/state-service.js";
+import { storageFromForage } from "./helpers/atomic-storage.js";
 import { ListItemIndex } from "../src/features/list/list-item-index.js";
 import { JhsEventBus } from "../src/core/event-bus.js";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 import { ListNavigationController } from "../src/features/list/list-navigation-controller.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("postcommit list freshness", () => {
     it("serializes duplicate scoped refreshes and repairs an index miss without evaluating all cards", async () => {
-        const list = new ListPageCompatibilityService(), card = {}, calls = [];
+        const list = new ListPageService(), card = {}, calls = [];
         let finish;
         list.invalidateListRefreshContext = vi.fn();
         list.rebuildItemIndex = vi.fn();
@@ -59,20 +60,18 @@ describe("postcommit list freshness", () => {
         dom.window.close();
     });
 
-    it.each(["getCarMap", "getStatusMap", "getBlacklistMap"])("does not let an old %s read refill a newer generation", async method => {
-        const key = method === "getBlacklistMap" ? "blacklist" : "car_list";
+    it.each([["getCarMap", "ABC-1"], ["getBlacklistMap", "actor"]])("does not reuse a completed old %s read", async (method, id) => {
         let release;
         const old = [{ carNum: "ABC-1", starId: "actor", status: "favorite", stateFlags: { downloaded: false } }];
         const latest = [{ carNum: "ABC-1", starId: "actor", status: "downloaded", stateFlags: { downloaded: true } }];
-        vi.stubGlobal("localforage", { createInstance: () => ({ getItem: vi.fn().mockImplementationOnce(() => new Promise(resolve => { release = resolve; })).mockResolvedValue(latest) }) });
-        StorageManager.instance = null;
-        const storage = new StorageManager(), first = storage[method]();
-        storage._invalidateCache(key);
-        const fresh = await storage[method]();
+        const getItem = vi.fn().mockImplementationOnce(() => new Promise(resolve => { release = resolve; })).mockResolvedValue(latest);
+        const state = new StateService(storageFromForage({ getItem }), {});
+        const first = state[method]();
+        const fresh = await state[method]();
         release(old);
-        await first;
-        expect(await storage[method]()).toBe(fresh);
-        StorageManager.instance = null;
+        expect((await first).get(id)).toEqual(old[0]);
+        expect(fresh.get(id)).toEqual(latest[0]);
+        expect((await state[method]()).get(id)).toEqual(latest[0]);
     });
 
     it("broadcasts a committed notice before waiting for a slow local listener", async () => {

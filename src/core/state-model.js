@@ -15,7 +15,7 @@ export function createEmptyStateFlags() {
 
 /** 仅供迁移和兼容边界读取旧单值状态。 */
 function stateFlagsFromLegacyStatus(/** @type {unknown} */ status) {
-    const flags = createEmptyStateFlags(), flag = typeof status === "string" ? LEGACY_STATUS_TO_FLAG[status] : undefined;
+    const flags = createEmptyStateFlags(), flag = legacyActionToFlag(status);
     if (flag) flags[flag] = !0;
     return flags;
 }
@@ -41,7 +41,7 @@ export function hasAnyState(/** @type {Partial<StateFlags> | null | undefined} *
 }
 
 export function legacyActionToFlag(/** @type {unknown} */ actionType) {
-    return typeof actionType === "string" ? LEGACY_STATUS_TO_FLAG[actionType] || null : null;
+    return typeof actionType === "string" && Object.hasOwn(LEGACY_STATUS_TO_FLAG, actionType) ? LEGACY_STATUS_TO_FLAG[actionType] : null;
 }
 
 export function mergeCanonicalCarRecords(/** @type {Record<string, any>[]} */ records) {

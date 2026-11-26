@@ -10,7 +10,7 @@ function createDependencies(storage, noticeFailure = new Error("toast unavailabl
     const timers = [];
     const window = { setTimeout: vi.fn((callback, delay) => { timers.push({ callback, delay }); return timers.length; }), location: { reload: vi.fn() } };
     const utilities = { getResponsiveArea: () => ["700px", "auto"], q: vi.fn((_event, _message, confirm) => { utilities.confirmPromise = confirm(); }) };
-    return { jquery, legacyStorage: storage, utilities, notifications, logger, domUi: { loading: () => ({ close }) }, window, timers, close };
+    return { jquery, backup: storage, utilities, notifications, logger, domUi: { loading: () => ({ close }) }, window, timers, close };
 }
 
 function installSnapshotTable(deps) {

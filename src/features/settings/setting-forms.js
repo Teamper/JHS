@@ -185,7 +185,7 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#javDbUrl").val(movie.externalSiteOrigin("javDbBtn", e));
     root.find("#javBusUrl").val(movie.externalSiteOrigin("javBusBtn", e));
     root.find("#supJavUrl").val(movie.externalSiteOrigin("supJavBtn", e));
-    let g = await dependencies.legacyStorage.getReviewFilterKeywordList(), p = await dependencies.legacyStorage.getTitleFilterKeyword();
+    let g = await dependencies.keywordRules.getReviewKeywords(), p = await dependencies.keywordRules.getTitleKeywords();
     if (dependencies.isActive?.() === false) return;
     // “重试加载”会重跑本函数：先清空标签容器并解绑旧事件，否则关键词显示两份、添加事件翻倍
     [ "#reviewKeywordContainer", "#filterKeywordContainer" ].forEach((/** @type {string} */ container) => {
@@ -264,7 +264,7 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
     const registry = dependencies.settingsRegistry;
     if (!registry) return;
     const descriptors = registry.list({ surfaces: [ "quick" ] });
-    const binding = bindSettingRows(host, descriptors, { settings: dependencies.settings });
+    const binding = bindSettingRows(host, descriptors, { settings: dependencies.settings, onWriteError: () => dependencies.notifications.error("设置保存失败，已恢复原设置") });
     host.data("jhsQuickSettingBinding", binding);
     host.find("#moreBtn")
         .off(".jhsQuickSetting")
@@ -391,7 +391,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
                     const text = dependencies.jquery(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
                     return text;
                 }).filter(Boolean)) ];
-                await dependencies.legacyStorage.saveReviewFilterKeyword(submitted?.review ?? reviewKeywords);
+                await dependencies.keywordRules.saveReviewKeywords(submitted?.review ?? reviewKeywords);
                 if (draft) draft.commitKeywords(submitted, "review"); else root.data("jhsDirtyReviewKeywords", false);
             } catch (error) {
                 keywordErrors.push(error);
@@ -403,7 +403,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
                     const text = dependencies.jquery(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
                     return text;
                 }).filter(Boolean)) ];
-                await dependencies.legacyStorage.saveTitleFilterKeyword(submitted?.title ?? titleKeywords);
+                await dependencies.keywordRules.saveTitleKeywords(submitted?.title ?? titleKeywords);
                 if (draft) draft.commitKeywords(submitted, "title"); else root.data("jhsDirtyTitleKeywords", false);
             } catch (error) {
                 keywordErrors.push(error);

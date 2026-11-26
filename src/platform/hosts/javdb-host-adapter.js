@@ -94,6 +94,7 @@ export class JavDbHostAdapter {
         this.document = documentRuntime;
         this.location = locationRuntime;
         this.blacklistParser = blacklistParser;
+        /** @type {((message: string) => void) | undefined} */ this.reportListIssue = undefined;
         /** @type {WeakMap<Element, {container: Element, replacedNodes: Array<{node: Element, anchor: Comment}>}>} */ this.externalFc2CatalogMounts = new WeakMap();
     }
     /** 解析当前搜索条件第一页：删除 page 查询参数，保留其余搜索条件；非法 URL 原样返回。 */
@@ -317,7 +318,7 @@ export class JavDbHostAdapter {
         if (root && root.getAttribute("data-jhs-primary-list") !== "true") root.setAttribute("data-jhs-primary-list", "true");
         if (!root && this.document.querySelectorAll('.movie-list').length > 1 && !this.reportedAmbiguousList) {
             this.reportedAmbiguousList = true;
-            (/** @type {any} */ (globalThis)).clog?.warn?.("JHS：无法唯一确定正式影片列表，已跳过列表增强");
+            this.reportListIssue?.("JHS：无法唯一确定正式影片列表，已跳过列表增强");
         }
         return root;
     }

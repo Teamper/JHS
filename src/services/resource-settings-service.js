@@ -51,28 +51,25 @@ export function normalizeCloudSetting(key, value) {
 }
 
 export class ResourceSettingsService {
-    constructor(/** @type {any} */ storage = storageManager) { this.storage = storage; }
-    async getArray(/** @type {string} */ key) { const value = await this.storage.getSetting(key, "[]"); if (Array.isArray(value)) return value; try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
-    async saveArray(/** @type {string} */ key, /** @type {any[]} */ value) { if (!Array.isArray(value)) throw new TypeError("配置必须是数组"); await this.storage.saveSettingItem(key, JSON.stringify(value)); return value; }
+    /** @param {Pick<import("./settings-service.js").SettingsService, "snapshot" | "set" | "update" | "patch">} settings */
+    constructor(settings) { this.settings = settings; }
+
+    getArray(/** @type {string} */ key) { return readResourceArray(this.settings.snapshot()[key]); }
+
+    async saveArray(/** @type {string} */ key, /** @type {any[]} */ value) {
+        if (!Array.isArray(value)) throw new TypeError("配置必须是数组");
+        await this.settings.set(key, JSON.stringify(value));
+        return value;
+    }
+
     async updateArray(/** @type {string} */ key, /** @type {(list: any[]) => any[]} */ updater) {
-        if (typeof this.storage.updateSetting === "function") {
-            /** @type {any[] | undefined} */
-            let result;
-            await this.storage.updateSetting((/** @type {Record<string, any>} */ draft) => {
-                const raw = draft[key];
-                let list;
-                if (Array.isArray(raw)) list = raw;
-                else { try { const parsed = JSON.parse(raw || "[]"); list = Array.isArray(parsed) ? parsed : []; } catch { list = []; } }
-                result = updater(list);
-                if (!Array.isArray(result)) throw new TypeError("配置必须是数组");
-                draft[key] = JSON.stringify(result);
-            });
-            return result;
-        }
-        const current = await this.getArray(key);
-        const next = updater(current);
-        await this.saveArray(key, next);
-        return next;
+        /** @type {any[] | undefined} */ let result;
+        await this.settings.update(draft => {
+            result = updater(readResourceArray(draft[key]));
+            if (!Array.isArray(result)) throw new TypeError("配置必须是数组");
+            draft[key] = JSON.stringify(result);
+        });
+        return result;
     }
     getMagnetSources() { return this.getArray("customMagnetSources"); }
     saveMagnetSources(/** @type {ResourceRecord[]} */ value) { value.forEach(validateCustomMagnetSource); return this.saveArray("customMagnetSources", value); }
@@ -80,44 +77,39 @@ export class ResourceSettingsService {
     saveMagnetTagRules(/** @type {ResourceRecord[]} */ value) { value.forEach(validateRule); return this.saveArray("magnetTagRules", value); }
     getMagnetFilterRules() { return this.getArray("magnetFilterRules"); }
     saveMagnetFilterRules(/** @type {ResourceRecord[]} */ value) { value.forEach(validateRule); return this.saveArray("magnetFilterRules", value); }
-    async getBuiltInSources() { return await this.getArray("magnetBuiltInSources"); }
+    getBuiltInSources() { return this.getArray("magnetBuiltInSources"); }
     saveBuiltInSources(/** @type {ResourceRecord[]} */ value) { value.forEach((source => { if (!MAGNET_SOURCE_IDS.includes(source.id)) throw new TypeError("未知的内置磁力源"); if (source.baseUrl) validateHttpsBaseUrl(source.baseUrl); if (source.priority != null && (!Number.isFinite(Number(source.priority)) || Number(source.priority) < 1)) throw new TypeError("来源优先级无效"); })); return this.saveArray("magnetBuiltInSources", value); }
-    async getScreenshotSettings() { return { mode: await this.storage.getSetting("screenshotMode", "auto"), providers: await this.getArray("screenshotProviders") }; }
-    async saveScreenshotMode(/** @type {string} */ mode) { await this.storage.saveSettingItem("screenshotMode", mode); return mode; }
-    async saveScreenshotProviders(/** @type {ResourceRecord[]} */ providers) { return this.saveArray("screenshotProviders", providers); }
-    async saveScreenshotSettings(/** @type {ResourceRecord} */ value) {
-        if (typeof this.storage.patch === "function") return this.storage.patch({ screenshotMode: value.mode, screenshotProviders: JSON.stringify(value.providers) });
-        await this.saveScreenshotMode(value.mode);
-        await this.saveScreenshotProviders(value.providers);
-        return value;
+    getScreenshotSettings() {
+        const { screenshotMode = "auto", screenshotProviders } = this.settings.snapshot();
+        return { mode: screenshotMode, providers: readResourceArray(screenshotProviders) };
     }
-    async getCloudSettings() {
+    async saveScreenshotMode(/** @type {string} */ mode) { await this.settings.set("screenshotMode", mode); return mode; }
+    async saveScreenshotProviders(/** @type {ResourceRecord[]} */ providers) { return this.saveArray("screenshotProviders", providers); }
+    saveScreenshotSettings(/** @type {ResourceRecord} */ value) {
+        return this.settings.patch({ screenshotMode: value.mode, screenshotProviders: JSON.stringify(value.providers) });
+    }
+    getCloudSettings() {
+        const settings = this.settings.snapshot();
         return {
-            enable123Offline: parseBooleanSetting(await this.storage.getSetting("enable123Offline", true), true),
-            enable115Offline: parseBooleanSetting(await this.storage.getSetting("enable115Offline", false), false),
-            enable115Match: parseBooleanSetting(await this.storage.getSetting("enable115Match", false), false),
-            enable115LoginRedirect: parseBooleanSetting(await this.storage.getSetting("enable115LoginRedirect", false), false),
-            providerMode: normalizeCloudSetting("offlineProviderMode", await this.storage.getSetting("offlineProviderMode", "ask")),
-            concurrency: parseFiniteNumberSetting(await this.storage.getSetting("oneOneFiveConcurrency", 4), 4, { min: 1, max: 10 }),
-            cacheMinutes: parseFiniteNumberSetting(await this.storage.getSetting("oneOneFiveCacheMinutes", 60), 60, { min: 1, max: 1440 })
+            enable123Offline: parseBooleanSetting(settings.enable123Offline, true),
+            enable115Offline: parseBooleanSetting(settings.enable115Offline),
+            enable115Match: parseBooleanSetting(settings.enable115Match),
+            enable115LoginRedirect: parseBooleanSetting(settings.enable115LoginRedirect),
+            providerMode: normalizeCloudSetting("offlineProviderMode", settings.offlineProviderMode),
+            concurrency: parseFiniteNumberSetting(settings.oneOneFiveConcurrency, 4, { min: 1, max: 10 }),
+            cacheMinutes: parseFiniteNumberSetting(settings.oneOneFiveCacheMinutes, 60, { min: 1, max: 1440 })
         };
     }
     async saveCloudSetting(/** @type {string} */ key, /** @type {unknown} */ value) {
-        /** @type {Record<string, string>} */
-        const keyMap = { enable123Offline: "enable123Offline", enable115Offline: "enable115Offline", enable115Match: "enable115Match", enable115LoginRedirect: "enable115LoginRedirect", offlineProviderMode: "offlineProviderMode", oneOneFiveConcurrency: "oneOneFiveConcurrency", oneOneFiveCacheMinutes: "oneOneFiveCacheMinutes" };
-        const storageKey = keyMap[key];
-        if (!storageKey) throw new TypeError(`未知云盘设置: ${key}`);
         const normalized = normalizeCloudSetting(key, value);
-        await this.storage.saveSettingItem(storageKey, normalized);
+        await this.settings.set(key, normalized);
         return normalized;
     }
-    async saveCloudSettings(/** @type {ResourceRecord} */ value) {
+    saveCloudSettings(/** @type {ResourceRecord} */ value) {
         const normalized = { enable123Offline: normalizeCloudSetting("enable123Offline", value.enable123Offline), enable115Offline: normalizeCloudSetting("enable115Offline", value.enable115Offline), enable115Match: normalizeCloudSetting("enable115Match", value.enable115Match), enable115LoginRedirect: normalizeCloudSetting("enable115LoginRedirect", value.enable115LoginRedirect), offlineProviderMode: normalizeCloudSetting("offlineProviderMode", value.providerMode || "ask"), oneOneFiveConcurrency: normalizeCloudSetting("oneOneFiveConcurrency", value.concurrency), oneOneFiveCacheMinutes: normalizeCloudSetting("oneOneFiveCacheMinutes", value.cacheMinutes) };
-        if (typeof this.storage.patch === "function") return this.storage.patch(normalized);
-        for (const [key, item] of Object.entries(normalized)) await this.storage.saveSettingItem(key, item);
-        return normalized;
+        return this.settings.patch(normalized);
     }
-    async exportConfig() { return { customMagnetSources: await this.getMagnetSources(), magnetTagRules: await this.getMagnetTagRules(), magnetFilterRules: await this.getMagnetFilterRules(), magnetBuiltInSources: await this.getBuiltInSources(), screenshot: await this.getScreenshotSettings() }; }
+    exportConfig() { return { customMagnetSources: this.getMagnetSources(), magnetTagRules: this.getMagnetTagRules(), magnetFilterRules: this.getMagnetFilterRules(), magnetBuiltInSources: this.getBuiltInSources(), screenshot: this.getScreenshotSettings() }; }
     async importConfig(/** @type {string} */ text) {
         /** @type {ResourceRecord} */ let value; try { value = JSON.parse(text); } catch (error) { throw new TypeError(`配置格式错误：${error instanceof Error ? error.message : String(error)}`); }
         if (!value || "object" !== typeof value || Array.isArray(value)) throw new TypeError("配置格式错误：根节点必须是对象");
@@ -130,4 +122,14 @@ export class ResourceSettingsService {
         for (const operation of operations) await operation();
         return value;
     }
+}
+
+/** @param {unknown} value @returns {any[]} */
+function readResourceArray(value) {
+    if (Array.isArray(value)) return value;
+    if (typeof value !== "string") return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
 }

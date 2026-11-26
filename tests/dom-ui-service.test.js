@@ -19,7 +19,7 @@ describe("DomUiService", () => {
         expect(() => ui.jquery({})).toThrow("页面 UI 依赖尚未加载");
     });
 
-    it("keeps confirmation and close-page behavior behind an injected legacy UI boundary", async () => {
+    it("keeps confirmation and close-page behavior behind an injected page dialog", async () => {
         const position = { clientX: 10, clientY: 20 }, confirm = vi.fn(), closePage = vi.fn(async () => true);
         const ui = new DomUiService(value => value, { q: confirm, closePage });
         const accepted = vi.fn();
@@ -41,24 +41,22 @@ describe("DomUiService", () => {
     });
 
     it("keeps responsive dialog sizing behind the UI capability", () => {
-        const getDialogArea = vi.fn(() => ["900px", "700px"]);
-        const ui = new DomUiService(undefined, { getDialogArea });
-        expect(ui.getDialogArea("lg")).toEqual(["900px", "700px"]);
-        expect(getDialogArea).toHaveBeenCalledWith("lg");
+        const ui = new DomUiService(undefined);
+        expect(ui.getDialogArea("lg", { innerWidth: 964, innerHeight: 764 })).toEqual(["900px", "700px"]);
     });
 
-    it("formats dates through the injected utility boundary", () => {
-        const formatDate = vi.fn(value => `formatted:${value}`), ui = new DomUiService(undefined, { formatDate });
-        expect(ui.formatDate("2026-09-26")).toBe("formatted:2026-09-26");
-        expect(formatDate).toHaveBeenCalledWith("2026-09-26");
+    it("formats a local date through the shared formatter", () => {
+        const ui = new DomUiService(undefined);
+        expect(ui.formatDate(new Date(2026, 8, 26))).toBe("2026-09-26 00:00:00");
     });
 
-    it("keeps page navigation and visibility checks behind the injected UI capability", () => {
-        const openPage = vi.fn(), isHidden = vi.fn(() => true), ui = new DomUiService(undefined, { openPage, isHidden });
+    it("forwards navigation and identifies an unpainted element", () => {
+        const openPage = vi.fn(), ui = new DomUiService(undefined, { openPage });
         ui.openPage("https://example.test/movie", "ABC-1", false, { ctrlKey: true });
-        expect(ui.isHidden({})).toBe(true);
+        const { window } = new JSDOM("<div hidden></div>");
+        expect(ui.isHidden(window.document.querySelector("div"))).toBe(true);
+        window.close();
         expect(openPage).toHaveBeenCalledWith("https://example.test/movie", "ABC-1", false, { ctrlKey: true });
-        expect(isHidden).toHaveBeenCalledOnce();
     });
 
     it("starts loading feedback through an explicit UI capability", () => {

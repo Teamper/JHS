@@ -2,11 +2,12 @@
 
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
+import { ResourceSettingsService } from "../../services/resource-settings-service.js";
 
 export default defineFeature({
     id: "external-bridge", kind: "feature", disableable: true,
     sites: ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], routes: [], startup: "eager",
-    requires: [PORT.style, SERVICE.notifications, SERVICE.pan123Credential, SERVICE.storage, SERVICE.http, SERVICE.magnet, SERVICE.resourceSettings, SERVICE.clipboard, SERVICE.domUi, SERVICE.diagnostics, SERVICE.dialog, SERVICE.offline, SERVICE.offlineSubmissionReceipts, SERVICE.state, SERVICE.settings, SERVICE.events],
+    requires: [PORT.style, SERVICE.notifications, SERVICE.clog, SERVICE.storage, SERVICE.http, SERVICE.magnet, SERVICE.clipboard, SERVICE.domUi, SERVICE.dialog, SERVICE.offline, SERVICE.state, SERVICE.settings, SERVICE.events],
     optionalRequires: [PORT.host],
     contributionAvailability: {
         "external-bridge.offline": { sites: ["javdb", "javbus"], routes: ["detail", "list"] },
@@ -25,11 +26,12 @@ export default defineFeature({
                 const { UnifiedOfflineController } = await import("./unified-offline-controller.js");
                 controller = new UnifiedOfflineController({
                     document, window, route: runtime.route, site: runtime.site, hostAdapter: deps[PORT.host],
-                    offline: deps[SERVICE.offline], submissionReceipts: deps[SERVICE.offlineSubmissionReceipts], dialog: deps[SERVICE.dialog], state: deps[SERVICE.state], settings: deps[SERVICE.settings],
-                    styles: deps[PORT.style], events: deps[SERVICE.events], pan123Credential: deps[SERVICE.pan123Credential],
-                    ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: deps[SERVICE.diagnostics], scope: runtime.scope,
+                    offline: deps[SERVICE.offline].api, submissionReceipts: deps[SERVICE.offline].receipts, dialog: deps[SERVICE.dialog], state: deps[SERVICE.state], settings: deps[SERVICE.settings],
+                    styles: deps[PORT.style], events: deps[SERVICE.events], pan123Credential: deps[SERVICE.offline].pan123Credential,
+                    ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope: runtime.scope,
                 });
                 if (controller.start()) {
+                    runtime.provideCapability?.("external-bridge.offline", controller);
                     const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("UnifiedOfflinePlugin", controller);
                     if (typeof releaseCompatibilityBean === "function") runtime.scope.addCleanup(releaseCompatibilityBean);
                     activeContributions.push("external-bridge.offline");
@@ -47,7 +49,7 @@ export default defineFeature({
                 const controller = new MagnetHubController({
                     storage: deps[SERVICE.storage], http: deps[SERVICE.http], magnet: deps[SERVICE.magnet],
                     scope: runtime.scope, site: runtime.site, jquery: deps[SERVICE.domUi].jquery,
-                    clipboard: deps[SERVICE.clipboard], diagnostics: deps[SERVICE.diagnostics], resourceSettings: deps[SERVICE.resourceSettings],
+                    clipboard: deps[SERVICE.clipboard], diagnostics: runtime.diagnostics, resourceSettings: new ResourceSettingsService(deps[SERVICE.settings]),
                 });
                 const removeStyle = deps[PORT.style].register("jhs-detail-external-magnets-feature", MAGNET_HUB_STYLES);
                 let styleRemoved = false;
@@ -71,7 +73,7 @@ export default defineFeature({
         }
         if (runtime.enabledContributions.includes("external-bridge.123pan")) {
             try {
-                deps[SERVICE.pan123Credential].startTokenSync(runtime.scope);
+                deps[SERVICE.offline].pan123Credential.startTokenSync(runtime.scope);
                 activeContributions.push("external-bridge.123pan");
             } catch (error) {
                 runtime.diagnostics.recordError({ source: "external-bridge-feature", featureId: "external-bridge", contributionId: "external-bridge.123pan", message: error instanceof Error ? error.message : String(error) });
@@ -80,7 +82,8 @@ export default defineFeature({
         if (runtime.enabledContributions.includes("external-bridge.javtrailers")) {
             try {
                 const { JavTrailersController } = await import("./javtrailers-controller.js");
-                const controller = new JavTrailersController({ scope: runtime.scope });
+                const logger = deps[SERVICE.clog];
+                const controller = new JavTrailersController({ scope: runtime.scope, warnPlayback: logger.warn.bind(logger) });
                 if (controller.start()) activeContributions.push("external-bridge.javtrailers");
             } catch (error) {
                 runtime.diagnostics.recordError({ source: "external-bridge-feature", featureId: "external-bridge", contributionId: "external-bridge.javtrailers", message: error instanceof Error ? error.message : String(error) });

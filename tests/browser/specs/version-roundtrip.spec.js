@@ -93,8 +93,8 @@ test("6.5.1 upgrades to 7.0 while the older client preserves and refuses the new
     const devPage = await openRuntime({ userscriptPath: devUserscriptPath, version: "7.0-dev" });
     const recovered = await devPage.evaluate(async () => ({
       state: await window.stateService.getState("ABC-123"),
-      journal: await window.storageManager.forage.getItem("mutation_journal"),
-      dataVersion: await window.storageManager.getDataVersion(),
+      journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
+      dataVersion: await window.__jhsBrowserDiagnostics.detailServices.storage.get("data_version"),
     }));
     expect(recovered.state?.stateFlags).toMatchObject({ favorite: true, blocked: false });
     expect(recovered.journal).toBeNull();
@@ -106,15 +106,15 @@ test("6.5.1 upgrades to 7.0 while the older client preserves and refuses the new
         type: "synthetic-v7-roundtrip",
         record: { carNum: "XYZ-456", url: "https://javdb.com/v/synthetic-xyz-456", names: "synthetic dev fixture" },
       });
-      await window.storageManager.addFavoriteActressList([{ starId: "synthetic-dev-star", name: "Synthetic Dev Star" }]);
+      await window.stateService.addFavoriteActressList([{ starId: "synthetic-dev-star", name: "Synthetic Dev Star" }]);
       await window.credentialService.set("jhs_webdav_password", "synthetic-webdav-secret-updated");
-      await window.storageManager.importData({
+      await window.__jhsBrowserDiagnostics.detailServices.backup.importData({
         data_version: 3,
         setting: { defaultQuickFilterTab: "all" },
         filter_keyword_title: ["SYNTHETIC-IMPORT"],
       });
-      const snapshot = (await window.storageManager.getSnapshotList()).find((item) => item.source === "auto-import");
-      const backup = await window.storageManager.getSnapshot(snapshot.id);
+      const snapshot = (await window.__jhsBrowserDiagnostics.detailServices.backup.getSnapshotList()).find((item) => item.source === "auto-import");
+      const backup = await window.__jhsBrowserDiagnostics.detailServices.backup.getSnapshot(snapshot.id);
       if (backup.data.setting.defaultQuickFilterTab !== "recent7d"
         || !backup.data.car_list.some((item) => item.carNum === "XYZ-456")
         || !backup.data.favorite_actresses.some((item) => item.starId === "synthetic-dev-star")) {
@@ -131,15 +131,15 @@ test("6.5.1 upgrades to 7.0 while the older client preserves and refuses the new
     await incompatible.close();
     const rollbackPage = await openRuntime({ userscriptPath: devUserscriptPath, version: "7.0-dev" });
     const readBack = await rollbackPage.evaluate(async () => ({
-      setting: await window.storageManager.getSetting("defaultQuickFilterTab"),
-      releaseRecord: await window.storageManager.getCar("ABC-123"),
-      devRecord: await window.storageManager.getCar("XYZ-456"),
-      actresses: await window.storageManager.getFavoriteActressList(),
-      titleKeywords: await window.storageManager.getTitleFilterKeyword(),
+      setting: await window.settingsService.snapshot().defaultQuickFilterTab,
+      releaseRecord: await window.stateService.getState("ABC-123"),
+      devRecord: await window.stateService.getState("XYZ-456"),
+      actresses: await window.stateService.getFavoriteActressList(),
+      titleKeywords: await window.__jhsBrowserDiagnostics.detailServices.keywordRules.getTitleKeywords(),
       credential: await window.credentialService.get("jhs_webdav_password"),
       credentialSchema: (await window.GM_getValue("jhs_webdav_password"))?.schema,
-      dataVersion: await window.storageManager.getDataVersion(),
-      journal: await window.storageManager.forage.getItem("mutation_journal"),
+      dataVersion: await window.__jhsBrowserDiagnostics.detailServices.storage.get("data_version"),
+      journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
     }));
 
     expect(readBack.setting).toBe("all");
@@ -152,25 +152,25 @@ test("6.5.1 upgrades to 7.0 while the older client preserves and refuses the new
     expect(readBack.dataVersion).toBe(CURRENT_DATA_VERSION);
     expect(readBack.journal).toBeNull();
     const continued = await rollbackPage.evaluate(async (restoreId) => {
-      await window.storageManager.restoreSnapshot(restoreId);
+      await window.__jhsBrowserDiagnostics.detailServices.backup.restoreSnapshot(restoreId);
       const restored = {
-        setting: await window.storageManager.getSetting("defaultQuickFilterTab"),
-        titleKeywords: await window.storageManager.getTitleFilterKeyword(),
-        actresses: await window.storageManager.getFavoriteActressList(),
+        setting: await window.settingsService.snapshot().defaultQuickFilterTab,
+        titleKeywords: await window.__jhsBrowserDiagnostics.detailServices.keywordRules.getTitleKeywords(),
+        actresses: await window.stateService.getFavoriteActressList(),
       };
-      await window.storageManager.saveSettingItem("defaultQuickFilterTab", "favorite");
-      await window.storageManager.saveCar({
-        carNum: "BACK-789", url: "https://javdb.com/v/synthetic-back-789", names: "synthetic rollback fixture", actionType: "favorite",
+      await window.settingsService.set("defaultQuickFilterTab", "favorite");
+      await window.stateService.patch("BACK-789", { favorite: true }, {
+        record: { url: "https://javdb.com/v/synthetic-back-789", names: "synthetic rollback fixture" },
       });
-      await window.storageManager.addFavoriteActressList([{ starId: "synthetic-return-star", name: "Synthetic Return Star" }]);
+      await window.stateService.addFavoriteActressList([{ starId: "synthetic-return-star", name: "Synthetic Return Star" }]);
       return {
         restored,
-        setting: await window.storageManager.getSetting("defaultQuickFilterTab"),
-        backRecord: await window.storageManager.getCar("BACK-789"),
-        actresses: await window.storageManager.getFavoriteActressList(),
+        setting: await window.settingsService.snapshot().defaultQuickFilterTab,
+        backRecord: await window.stateService.getState("BACK-789"),
+        actresses: await window.stateService.getFavoriteActressList(),
         credential: await window.credentialService.get("jhs_webdav_password"),
-        dataVersion: await window.storageManager.getDataVersion(),
-        journal: await window.storageManager.forage.getItem("mutation_journal"),
+        dataVersion: await window.__jhsBrowserDiagnostics.detailServices.storage.get("data_version"),
+        journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
       };
     }, snapshotId);
     expect(continued.restored.setting).toBe("recent7d");
@@ -203,19 +203,18 @@ for (const scenario of [
     await devPage.goto("https://javdb.com/search_advanced", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(devPage, { userscriptPath: devUserscriptPath, version: "7.0-dev", preserveStorage: false });
     const before = await devPage.evaluate(async discovery => {
-      await window.storageManager.saveCar({
-        carNum: "REC-123", url: "https://javdb.com/v/synthetic-rec-123", names: "synthetic recovery fixture", actionType: "hasDown",
+      await window.stateService.patch("REC-123", { downloaded: true }, {
+        record: { url: "https://javdb.com/v/synthetic-rec-123", names: "synthetic recovery fixture" },
       });
-      const forage = window.storageManager.forage;
+      const storage = window.__jhsBrowserDiagnostics.detailServices.storage, forage = storage.port.forage;
       const carNum = discovery ? "REC-123" : "UNTOUCHED-456";
       const actresses = [{ starId: "recovery-fixture", name: "Recovery fixture", actressType: "censored", newVideoList: [{ carNum, title: "Recovery fixture", publishTime: "2026-10-24" }] }];
       const decisions = { [carNum]: { action: "snoozed", until: "2099-01-01T00:00:00.000Z" } };
       await forage.setItem("favorite_actresses", actresses);
       await forage.setItem("new_video_decisions", decisions);
-      window.storageManager._invalidateCache();
       // Exercise the retained journal fallback when native atomic storage is
       // unavailable. Native transaction abort/retry is covered by atomic-state.
-      window.storageManager.atomicStorage = null;
+      storage.port.commitLockedBatch = undefined;
       const persist = forage.setItem.bind(forage);
       forage.setItem = (key, value) => {
         if (key === "activity_log" && value?.entries?.some((entry) => entry.type === "interrupted-v7")) {
@@ -229,8 +228,8 @@ for (const scenario of [
     }, scenario.discovery);
     await devPage.waitForFunction(() => window.__jhsCrashProbe === "paused-after-car-list");
     const interrupted = await devPage.evaluate(async () => ({
-      journal: await window.storageManager.forage.getItem("mutation_journal"),
-      car: await window.storageManager.forage.getItem("car_list"),
+      journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
+      car: await window.__jhsBrowserDiagnostics.detailServices.storage.get("car_list"),
     }));
     expect(interrupted.journal).toMatchObject({ schema: 2, dataVersion: CURRENT_DATA_VERSION, state: "prepared", touchedDomains: scenario.touchedDomains });
     expect(Object.keys(interrupted.journal.before)).toEqual(scenario.touchedDomains);
@@ -246,12 +245,12 @@ for (const scenario of [
     await recoveryPage.goto("https://javdb.com/search_advanced", {waitUntil:"domcontentloaded"});
     await injectUserscriptRuntime(recoveryPage,{userscriptPath:devUserscriptPath,version:"7.0-dev",preserveStorage:true});
     const recovered = await recoveryPage.evaluate(async () => ({
-      car: await window.storageManager.getCar("REC-123"),
-      journal: await window.storageManager.forage.getItem("mutation_journal"),
-      activity: await window.storageManager.forage.getItem("activity_log"),
-      conflicts: await window.storageManager.forage.getItem("mutation_journal_conflicts"),
-      actresses: await window.storageManager.forage.getItem("favorite_actresses"),
-      decisions: await window.storageManager.forage.getItem("new_video_decisions"),
+      car: await window.stateService.getState("REC-123"),
+      journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
+      activity: await window.__jhsBrowserDiagnostics.detailServices.storage.get("activity_log"),
+      conflicts: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal_conflicts"),
+      actresses: await window.__jhsBrowserDiagnostics.detailServices.storage.get("favorite_actresses"),
+      decisions: await window.__jhsBrowserDiagnostics.detailServices.storage.get("new_video_decisions"),
     }));
     expect(recovered.car?.stateFlags).toMatchObject({ downloaded: true, favorite: false });
     expect(recovered.journal).toBeNull();
@@ -261,8 +260,8 @@ for (const scenario of [
     expect(recovered.decisions).toEqual(before.decisions);
     await recoveryPage.evaluate(() => window.stateService.patch("REC-123", { watched: true }, { type: "post-rollback-v7" }));
     const continued = await recoveryPage.evaluate(async () => ({
-      car: await window.storageManager.getCar("REC-123"),
-      journal: await window.storageManager.forage.getItem("mutation_journal"),
+      car: await window.stateService.getState("REC-123"),
+      journal: await window.__jhsBrowserDiagnostics.detailServices.storage.get("mutation_journal"),
     }));
     expect(continued.car?.stateFlags).toMatchObject({ downloaded: true, favorite: false, watched: true });
     expect(continued.journal).toBeNull();

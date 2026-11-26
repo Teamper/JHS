@@ -13,9 +13,11 @@ describe("Dev delivery identity", () => {
         expect(() => readDevIdentity('// @version 7.0.0-dev.202610261234\n// @description JHS 7.0 migration build 50fe94aea60d')).toThrow();
     });
     it("detects a changed bundle body even when all identity metadata still matches", async () => {
-        const { output } = await buildUserscript({ outputPaths: [], ...createDevTransforms("7.0.0-dev.202610261234", "50fe94aea60d.dirty") });
+        const { output } = await buildUserscript({ outputPaths: [], ...createDevTransforms("7.0.0-dev.202610261234", "50fe94aea60d.dirty"), packStaticResources: true });
         const parent = resolve(repoRoot, "output"); await mkdir(parent, { recursive: true });
         const folder = await mkdtemp(resolve(parent, "delivery-check-")), file = resolve(folder, "candidate.user.js");
+        await writeFile(file, output);
+        await expect(verifyDevDelivery(file)).resolves.toMatchObject({ bytes: Buffer.byteLength(output) });
         await writeFile(file, output + "\n/* body changed */");
         await expect(verifyDevDelivery(file)).rejects.toThrow("交付与当前源码不一致");
     }, 15000);

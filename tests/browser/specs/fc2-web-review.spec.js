@@ -85,6 +85,10 @@ for (const entry of ["card", "owned"]) {
         await expect(watched).toHaveAttribute("aria-pressed", "true");
         await expect(want).toHaveAttribute("aria-pressed", "false");
         await expect(local).toHaveAttribute("aria-pressed", "false");
+        if (info.project.name === "mobile") {
+            await watched.focus();
+            await expect(page.getByRole("tooltip")).toHaveCSS("pointer-events", "none");
+        }
         await local.click();
         await expect(local).toHaveAttribute("aria-pressed", "true");
         await watched.click();

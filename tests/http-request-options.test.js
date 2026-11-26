@@ -1,79 +1,45 @@
-import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
-import { describe, expect, it } from "vitest";
-
-const httpSource = readTestFile(join(import.meta.dirname, "../src/core/http.js"), "utf8");
-
-function loadHttp(onRequest = null) {
-    const context = vm.createContext({
-        URL,
-        URLSearchParams,
-        console,
-        unsafeWindow: {},
-        window: {},
-        clog: { warn() {}, error() {} },
-        storageManager: { getSetting: async (key, fallback) => fallback },
-        utils: { retry: async (operation) => operation() },
-        GM_xmlhttpRequest: (options) => onRequest?.(options)
-    });
-    vm.runInContext(`${httpSource};globalThis.TestGmHttp=GmHttp`, context);
-    return new context.TestGmHttp({ utils: context.utils, storageManager: context.storageManager });
-}
+import { describe, expect, it, vi } from "vitest";
+import { HttpService, isCloudflareChallenge } from "../src/services/http-service.js";
+import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
+import { UserscriptHttpAdapter } from "../src/platform/userscript/userscript-http-adapter.js";
 
 describe("HTTP Cloudflare detection", () => {
-    const gmHttp = loadHttp();
-
-    it("does not block isolated challenge-platform on HTTP 200", () => {
-        expect(gmHttp._isCloudflareChallenge("ordinary page challenge-platform", 200)).toBe(false);
-    });
-
-    it("does not block isolated cf-chl- on HTTP 200", () => {
-        expect(gmHttp._isCloudflareChallenge("ordinary page cf-chl-token", 200)).toBe(false);
-    });
-
-    it("blocks a Just a moment title", () => {
-        expect(gmHttp._isCloudflareChallenge("<title>Just a moment...</title>", 200)).toBe(true);
-    });
-
-    it("blocks a complete challenge response on blocked status", () => {
-        expect(gmHttp._isCloudflareChallenge("cf-chl-token /cdn-cgi/challenge-platform/", 403)).toBe(true);
+    it.each([
+        ["ordinary page challenge-platform", 200, false],
+        ["ordinary page cf-chl-token", 200, false],
+        ["<title>Just a moment...</title>", 200, true],
+        ["cf-chl-token /cdn-cgi/challenge-platform/", 403, true],
+    ])("classifies %s with status %s", (html, status, blocked) => {
+        expect(isCloudflareChallenge(html, status)).toBe(blocked);
     });
 
     it("does not classify the normal 123AV listing fixture as a challenge", () => {
-        const html = readTestFile(join(import.meta.dirname, "fixtures/123av-cards.html"), "utf8");
-        expect(gmHttp._isCloudflareChallenge(html, 200)).toBe(false);
+        const html = readFileSync(new URL("./fixtures/123av-cards.html", import.meta.url), "utf8");
+        expect(isCloudflareChallenge(html, 200)).toBe(false);
     });
 });
 
 describe("GM request cookie partition", () => {
     it("adds the partition only when explicitly requested", async () => {
-        const requests = [];
-        const gmHttp = loadHttp((options) => {
-            requests.push(options);
-            options.onload({ status: 200, responseText: "ok", finalUrl: options.url });
-        });
-        await gmHttp.get("https://123av.com/cn/makers/fc2", {}, {}, false, {
-            cookiePartitionTopLevelSite: "https://123av.com"
-        });
-        await gmHttp.get("https://javdb.com/");
-        expect(requests[0].cookiePartition).toEqual({ topLevelSite: "https://123av.com" });
-        expect(requests[1]).not.toHaveProperty("cookiePartition");
+        const request = vi.fn(options => options.onload({ status: 200, responseText: "ok", finalUrl: options.url }));
+        const adapter = new UserscriptHttpAdapter(request);
+        await adapter.request({ url: "https://123av.com/cn/makers/fc2", requestOptions: { cookiePartition: { topLevelSite: "https://123av.com" } } });
+        await adapter.request({ url: "https://javdb.com/" });
+        expect(request.mock.calls[0][0].cookiePartition).toEqual({ topLevelSite: "https://123av.com" });
+        expect(request.mock.calls[1][0]).not.toHaveProperty("cookiePartition");
     });
 
     it("preserves diagnostics and records one failure for a blocked response", async () => {
-        const gmHttp = loadHttp((options) => options.onload({
-            status: 403,
-            responseText: "cf-chl-token /cdn-cgi/challenge-platform/",
-            finalUrl: options.url
-        }));
-        await expect(gmHttp.get("https://123av.com/cn/makers/fc2")).rejects.toMatchObject({
-            _cfBlocked: true,
-            status: 403,
-            requestUrl: "https://123av.com/cn/makers/fc2",
-            cfDiagnostics: { status: 403, contentLength: 41 }
+        const body = "cf-chl-token /cdn-cgi/challenge-platform/";
+        const adapter = new UserscriptHttpAdapter(options => {
+            options.onload({ status: 403, responseText: body, finalUrl: options.url });
         });
-        expect(gmHttp.getCircuitBreakerStatus()["123av.com"].failCount).toBe(1);
+        const http = new HttpService(adapter, new ExternalUrlPolicy());
+        await expect(http.request({
+            providerId: "av123", url: "https://123av.com/cn/makers/fc2", retryCount: 0,
+            urlPolicy: { trustClass: "builtin-public", hosts: ["123av.com"] },
+        })).rejects.toMatchObject({ code: "CF_BLOCKED", details: { status: 403, domain: "123av.com", contentLength: body.length } });
+        expect(http.getCircuitBreakerStatus()["123av.com"].failCount).toBe(1);
     });
 });

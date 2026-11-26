@@ -1,14 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { join } from "node:path";
 import { CommandRegistry } from "../src/app/command-registry.js";
 import { DependencyContainer } from "../src/app/dependency-container.js";
 import { FeatureRuntime } from "../src/app/feature-runtime.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { defineFeature } from "../src/contracts/manifests.js";
-
-const newVideo = readTestFile(join(process.cwd(), "src/features/discovery/new-video-workspace-service.js"), "utf8");
-const coverButtons = readTestFile(join(process.cwd(), "src/features/list/cover-button-controller.js"), "utf8");
 
 describe("capability availability (无死按钮)", () => {
     it("CommandRegistry tracks owner availability", () => {
@@ -21,19 +16,6 @@ describe("capability availability (无死按钮)", () => {
         disabledRuntime.register(defineFeature({ id: "disabled-feature", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "on-command", requires: [], contributes: [], providesCommands: [ "disabled.open" ], activate: () => ({ commands: { "disabled.open": () => "no" } }) }));
         expect(disabledRuntime.commands.isAvailable("disabled.open")).toBe(false);
         expect(commands.isAvailable("unknown.open")).toBe(false);
-    });
-
-    it("card screenshot action uses the injected ScreenshotService capability", () => {
-        expect(coverButtons).toContain("this.screenshot.resolve(");
-        expect(coverButtons).toContain("this.screenshotAvailable === true");
-        expect(coverButtons).not.toContain("ScreenShotPlugin");
-    });
-
-    it("new-video edit dialog is scoped to its layer root", () => {
-        expect(newVideo).toContain("this.isEditorCurrent(editor)");
-        expect(newVideo).toContain('editor.root.find("#edit-actress-avatar")');
-        expect(newVideo).not.toContain('this.jquery("#edit-actress-avatar")');
-        expect(newVideo).not.toContain('this.jquery("#edit-actress-name")');
     });
 
 });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 
 describe("List Feature event ownership", () => {
     afterEach(() => vi.unstubAllGlobals());
@@ -9,7 +9,7 @@ describe("List Feature event ownership", () => {
         const cleanup = [], scope = { addCleanup: vi.fn(fn => cleanup.push(fn)) };
         const settings = { snapshot: () => ({ hoverBigImg: "no" }), addEventListener: vi.fn(), removeEventListener: vi.fn() };
         const events = { on: vi.fn(() => () => {}) };
-        const list = new ListPageCompatibilityService({ runtimeServices: { scope: () => scope, settings, events } });
+        const list = new ListPageService({ runtimeServices: { scope: () => scope, settings, events } });
 
         await list.handle({ scope, featureOwnsStartup: true });
 
@@ -22,7 +22,7 @@ describe("List Feature event ownership", () => {
     it("reports a failed quick-filter refresh through the injected logger without a global logger", async () => {
         vi.stubGlobal("clog", undefined);
         const logger = { error: vi.fn() };
-        const list = new ListPageCompatibilityService({ runtimeServices: { logger } });
+        const list = new ListPageService({ runtimeServices: { logger } });
         const failure = new Error("refresh failed");
         list.requestListRefresh = vi.fn(() => Promise.reject(failure));
         list.reconcileListItems = vi.fn();

@@ -14,7 +14,7 @@ export class SyncComputation {
         /** @type {Map<number, {revision: any, resolve: (value: any) => void, reject: (error: any) => void}>} */ this.pending = new Map();
         this.sequence = 0;
         this.generation = 0;
-        /** @type {{key: number, proofKey: string, model: any, data: any, eligible: any} | null} */ this.verified = null;
+        /** @type {{key: number, proofKey: string, snapshot: any} | null} */ this.verified = null;
         /** @type {string | null} */ this.reconcileKey = null;
         this.disabled = false;
         this.disposed = false;
@@ -77,8 +77,14 @@ export class SyncComputation {
     run(job, payload, { signal, revision, work } = {}) {
         const generation = this.generation;
         const assertActive = () => { if (this.disposed || generation !== this.generation || signal?.aborted) throw new DOMException("同步计算已取消", "AbortError"); };
+        const cooperative = async () => {
+            const result = await runSyncJob(job, payload, work ?? new ComputationBudget({ signal, diagnostics: this.options.diagnostics }));
+            assertActive();
+            return result;
+        };
         const execute = async () => {
             assertActive();
+            if (this.disabled) return cooperative();
             try {
                 const worker = await this.ensureWorker(); assertActive();
                 const id = ++this.sequence;
@@ -89,8 +95,7 @@ export class SyncComputation {
                 }
                 if (job === "verified") {
                     const cached = this.verified;
-                    const reusable = cached && cached.proofKey === payload.proofKey && cached.model === payload.verifiedModel
-                        && cached.data === payload.verifiedData && cached.eligible === payload.verifiedEligible;
+                    const reusable = cached && cached.proofKey === payload.proofKey && cached.snapshot === payload.verified;
                     requestPayload = reusable
                         ? { cacheKey: cached.key, data: payload.data, eligible: payload.eligible }
                         : { ...payload, cacheKey: id };
@@ -102,15 +107,13 @@ export class SyncComputation {
                 });
                 assertActive();
                 if (job === "reconcile") this.reconcileKey = payload.proofKey ?? null;
-                if (job === "verified" && result === true) this.verified = { key: requestPayload.cacheKey, proofKey: payload.proofKey, model: payload.verifiedModel, data: payload.verifiedData, eligible: payload.verifiedEligible };
+                if (job === "verified" && result === true) this.verified = { key: requestPayload.cacheKey, proofKey: payload.proofKey, snapshot: payload.verified };
                 return job === "reconcile" ? decodeReconciliation(payload.state, result) : result;
             } catch (error) {
                 assertActive();
                 if (/** @type {any} */ (error)?.code !== "SYNC_WORKER_UNAVAILABLE") throw error;
                 this.disable();
-                const result = await runSyncJob(job, payload, work ?? new ComputationBudget({ signal, diagnostics: this.options.diagnostics }));
-                assertActive();
-                return result;
+                return cooperative();
             }
         };
         const operation = this.tail.then(execute, execute);

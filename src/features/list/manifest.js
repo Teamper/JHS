@@ -6,7 +6,7 @@ import { mountContribution } from "../../core/feature-helpers.js";
 
 export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.clog, SERVICE.state, SERVICE.settings, SERVICE.storageMutation, SERVICE.notifications, SERVICE.dialog, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clipboard, SERVICE.navigation, SERVICE.screenshot, SERVICE.movie],
+    requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.keywordRules, SERVICE.clog, SERVICE.state, SERVICE.settings, SERVICE.storageMutation, SERVICE.notifications, SERVICE.dialog, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clipboard, SERVICE.screenshot, SERVICE.movie],
     contributionAvailability: {
         "detail.fc2-navigation": { sites: ["javdb"], routes: ["list"] },
         "list.fold-category": { sites: ["javdb"] },
@@ -27,7 +27,7 @@ export default defineFeature({
             { JavBusImageLayoutController },
             { CoverButtonController },
             { ListBatchUi, LIST_BATCH_UI_STYLES },
-            { ListPageCompatibilityService },
+            { ListPageService },
             { LifecycleScope },
             { readListItem },
         ] = await Promise.all([
@@ -40,7 +40,7 @@ export default defineFeature({
             import("./javbus-image-layout-controller.js"),
             import("./cover-button-controller.js"),
             import("./list-batch-ui.js"),
-            import("./list-compatibility-service.js"),
+            import("./list-page-service.js"),
             import("../../core/lifecycle-scope.js"),
             import("../../core/list-item-reader.js"),
         ]);
@@ -48,21 +48,23 @@ export default defineFeature({
         /** @type {import("./list-controller.js").ListController | null} */ let controller = null;
         /** @type {import("./list-actions-controller.js").ListActionsController | null} */ let listActionsController = null;
         /** @type {import("./cover-button-controller.js").CoverButtonController | null} */ let coverButtonController = null;
-        /** @type {import("./list-compatibility-service.js").ListPageCompatibilityService | null} */ let listCompatibilityService = null;
+        /** @type {import("./list-page-service.js").ListPageService | null} */ let listCompatibilityService = null;
         /** @type {Record<string, any>} */ const listControllers = {};
         if (runtime.enabledContributions.includes("list.core")) {
-            listCompatibilityService = new ListPageCompatibilityService({
+            listCompatibilityService = new ListPageService({
                 controllers: listControllers,
                 readTranslation: () => runtime.getCapability?.("external-bridge.translation"),
                 runtimeServices: {
                     host: deps[PORT.host], translation: deps[SERVICE.translation], http: deps[SERVICE.http], diagnostics: runtime.diagnostics,
-                    storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage],
+                    storage: deps[SERVICE.storage], keywordRules: deps[SERVICE.keywordRules],
                     state: deps[SERVICE.state], settings: deps[SERVICE.settings],
                     busImageLayout: deps[SERVICE.busImageLayout], events: deps[SERVICE.events], scope: () => Promise.resolve(runtime.scope),
-                    jquery: deps[SERVICE.domUi].jquery, utils: deps[SERVICE.legacyUtils], logger: deps[SERVICE.clog],
+                    jquery: deps[SERVICE.domUi].jquery, logger: deps[SERVICE.clog],
+                    ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications],
                 },
                 refreshHistory: () => runtime.isCommandAvailable("library.history.refresh") ? runtime.executeCommand("library.history.refresh") : Promise.resolve(),
             });
+            runtime.provideCapability?.("list.core", listCompatibilityService);
             const release = runtime.registerCompatibilityBean?.("ListPagePlugin", listCompatibilityService);
             if (release) runtime.scope.addCleanup(release);
         }
@@ -76,8 +78,8 @@ export default defineFeature({
                 const coverButtons = new CoverButtonController({
                     document, window, list, settings: deps[SERVICE.settings], state: deps[SERVICE.state], screenshot: deps[SERVICE.screenshot],
                     storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], scope: coverScope, ui: deps[SERVICE.domUi],
-                    clipboard: deps[SERVICE.clipboard], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics,
-                    navigation: deps[SERVICE.navigation], screenshotAvailable: runtime.isContributionEnabled("detail", "detail.screenshot", "ScreenShotPlugin"),
+                    clipboard: deps[SERVICE.clipboard], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, logger: deps[SERVICE.clog],
+                    navigation: deps[SERVICE.domUi].navigation, screenshotAvailable: runtime.isContributionEnabled("detail", "detail.screenshot", "ScreenShotPlugin"),
                     isJavBus: runtime.site === "javbus",
                 });
                 coverButtonController = coverButtons;
@@ -120,18 +122,18 @@ export default defineFeature({
                     return { carMap, activity };
                 }
                 const [titleKeywords, blacklistMap, blacklistCars, carMap, activity, favoriteActresses] = await Promise.all([
-                    deps[SERVICE.legacyStorage].getTitleFilterKeyword(), deps[SERVICE.legacyStorage].getBlacklistMap(),
+                    deps[SERVICE.keywordRules].getTitleKeywords(), deps[SERVICE.state].getBlacklistMap(),
                     deps[SERVICE.state].getBlacklistCarList(), deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getListActivity(),
-                    deps[SERVICE.state].getFavoriteActressList?.() ?? deps[SERVICE.legacyStorage]?.getFavoriteActressList?.() ?? [],
+                    deps[SERVICE.state].getFavoriteActressList(),
                 ]);
                 return { titleKeywords, blacklistMap, blacklistCars, settings: deps[SERVICE.settings].snapshot(), carMap, activity, favoriteActresses, favoriteActressesEnabled: isFavoriteActressesFeatureEnabled() };
             };
             controller = new ListController({
                 legacyPlugin, controllers: listControllers, hostAdapter: deps[PORT.host], scope: runtime.scope, styles: deps[PORT.style],
-                state: deps[SERVICE.state], storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage], readFilterSources,
+                state: deps[SERVICE.state], storage: deps[SERVICE.storage], readFilterSources,
                 isFavoriteActressesFeatureEnabled,
                 readCardIdentity: (item) => readListItem(deps[SERVICE.domUi].jquery(item)), http: deps[SERVICE.http],
-                batchUi, settings: deps[SERVICE.settings], navigation: deps[SERVICE.navigation], sortController,
+                batchUi, settings: deps[SERVICE.settings], navigation: deps[SERVICE.domUi].navigation, sortController,
                 events: deps[SERVICE.events], coverButtons: coverButtonController, busImageLayout: deps[SERVICE.busImageLayout], logger: deps[SERVICE.clog],
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, window,
             });
@@ -202,6 +204,8 @@ export default defineFeature({
             });
             try {
                 if (await listActionsController.start()) {
+                    const releaseCapability = runtime.provideCapability?.("list.actions", listActionsController);
+                    if (releaseCapability) scope.addCleanup(releaseCapability);
                     const releaseCompatibility = runtime.registerCompatibilityBean?.("ListPageButtonPlugin", listActionsController);
                     if (typeof releaseCompatibility === "function") listActionsController.setCompatibilityRelease(scope.addCleanup(releaseCompatibility));
                     activeContributions.push("list.actions");

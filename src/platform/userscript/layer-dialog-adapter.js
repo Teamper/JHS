@@ -7,8 +7,8 @@ import { JHS_Z_INDEX } from "../../core/theme.js";
 /** @typedef {import("../../contracts/ports.js").DialogPort} DialogPort */
 /** @implements {DialogPort} */
 export class LayerDialogAdapter {
-    /** @param {{open: (options: Record<string, unknown>) => number, close: (id: number) => void, confirm: (message: string, options: Record<string, unknown>, yes: (id: number) => void, no?: (id: number) => void) => number, alert: (message: string, options?: Record<string, unknown>) => number}} layerRuntime */
-    constructor(layerRuntime) { this.layer = layerRuntime; }
+    /** @param {{open: (options: Record<string, unknown>) => number, close: (id: number) => void, confirm: (message: string, options: Record<string, unknown>, yes: (id: number) => void, no?: (id: number) => void) => number, alert: (message: string, options?: Record<string, unknown>) => number}} layerRuntime @param {any} [utilities] */
+    constructor(layerRuntime, utilities) { this.layer = layerRuntime; this.utilities = utilities; }
     /** @param {Record<string, unknown>} options */
     open(options) { return this.layer.open(this.withDefaultLayer(options)); }
     /** @param {number} id */
@@ -36,6 +36,6 @@ export class LayerDialogAdapter {
         }
         /** @type {Record<string, unknown>} */ const value = { zIndex: baseZ, ...options };
         if (options.ui === false) { const { ui: _ignored, ...plain } = value; return plain; }
-        return prepareDialogOptions(value, /** @type {any} */ (globalThis).utils);
+        return prepareDialogOptions(value, this.utilities);
     }
 }

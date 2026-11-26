@@ -82,7 +82,7 @@ function confirmAction(app, message, title = "确认操作") {
 export async function renderLibraryView(host, app) {
     const version = app.nextVersion();
     const [records, ratings, actresses] = await Promise.all([
-        app.client.call("legacy.getCarList"),
+        app.client.call("state.getCarList"),
         app.client.call("state.getPersonalRatings").catch(() => ({})),
         app.client.call("state.getFavoriteActressList").catch(() => []),
     ]);
@@ -1047,7 +1047,7 @@ export async function renderBackupView(host, app) {
         el("p", "导出全部作品状态、收藏演员、黑名单、个人评分及普通设置（不包含加密凭证）。", "jhs-ext-muted"),
         actionButton("导出数据", async () => {
             await app.run(async () => {
-                const data = await app.client.call("legacy.exportData");
+                const data = await app.client.call("backup.exportData");
                 const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
                 const anchor = el("a");
                 anchor.href = url;
@@ -1073,8 +1073,8 @@ export async function renderBackupView(host, app) {
             if (!file) return;
             const data = JSON.parse(await file.text());
             if (!await confirmAction(app, "导入会应用备份中的数据，并在写入前自动建立本地恢复点。是否继续？", "确认导入备份")) return;
-            await app.client.call("legacy.createSnapshot", ["扩展导入前", "import"]);
-            await app.client.call("legacy.importData", [data]);
+            await app.client.call("backup.createSnapshot", ["扩展导入前", "import"]);
+            await app.client.call("backup.importData", [data]);
             await app.navigate("library");
         });
     });
@@ -1191,7 +1191,7 @@ export async function renderSidePanelCurrentView(host, app) {
     lookupBox.append(lookupInput, lookupBtn);
 
     if (response?.mode === "list" && Array.isArray(response.items)) {
-        const allRecords = await app.client.call("legacy.getCarList").catch(() => []);
+        const allRecords = await app.client.call("state.getCarList").catch(() => []);
         if (!app.isCurrentVersion(version)) return;
         const recordMap = new Map((allRecords || []).map((/** @type {any} */ r) => [normalizeCarNum(r.carNum), r]));
         const items = response.items.map((/** @type {any} */ item) => {
@@ -1363,7 +1363,7 @@ export async function renderSidePanelCurrentView(host, app) {
 export async function renderSidePanelSearchView(host, app) {
     const version = app.nextVersion();
     const [records, actresses] = await Promise.all([
-        app.client.call("legacy.getCarList").catch(() => []),
+        app.client.call("state.getCarList").catch(() => []),
         app.client.call("state.getFavoriteActressList").catch(() => []),
     ]);
     if (!app.isCurrentVersion(version)) return;

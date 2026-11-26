@@ -1,70 +1,39 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { join } from "node:path";
-import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
-import { getIcon } from "../src/core/icons.js";
-import { assertMovieStateEligible, getMovieStateEligibility, normalizeMovieCarNum } from "../src/core/movie-identity.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ListPageService } from "../src/features/list/list-page-service.js";
+import { createIndexedMap } from "../src/core/storage-index.js";
+import { initializeRuntimeConstants } from "../src/core/constants.js";
 
-const repoRoot = join(import.meta.dirname, "..");
+const windows = [], services = [];
+afterEach(() => {
+    for (const service of services.splice(0)) clearTimeout(service.recountFrame);
+    windows.splice(0).forEach(window => window.close());
+    vi.unstubAllGlobals();
+});
 
-/** 以真实 ListPagePlugin + 热播卡片结构验证筛选判定链路（复现 v6.5 热播筛选回归）。 */
 function loadRealListPage({ carList = [] } = {}) {
-    const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/advanced_search?handlePlayback=1&period=daily" }), $ = jqueryFactory(dom.window);
-    dom.window.isListPage = true;
-    let contextRef = null;
-    const storageManager = {
-        getSetting: vi.fn(async (key, fallback) => fallback),
-        getTitleFilterKeyword: vi.fn(async () => []),
-        getBlacklistMap: vi.fn(async () => new Map()),
-        getBlacklistCarList: vi.fn(async () => []),
-        getCarMap: vi.fn(async () => contextRef?.__testCarMap ?? new Map()),
-    };
-    class BasePlugin {
-        getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }; }
-        getRuntimeService(name) {
-            if (name === "translation") return { translate: vi.fn(async () => "译文") };
-            if (name === "settings") return { snapshot: () => ({ translateTitle: "no", hoverBigImg: "no" }) };
-            if (name === "state") return { getActivityLog: async () => ({ entries: [] }) };
-            return async () => undefined;
-        }
+    const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/rankings/playback?p=daily&t=high_score" }), $ = jqueryFactory(dom.window);
+    windows.push(dom.window);
+    for (const name of ["window", "document", "Node", "Element", "HTMLElement", "localStorage", "MutationObserver"]) {
+        vi.stubGlobal(name, name === "window" ? dom.window : dom.window[name]);
     }
-    const context = vm.createContext({
-        console, getIcon, assertMovieStateEligible, getMovieStateEligibility, normalizeMovieCarNum, window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver,
-        IntersectionObserver: undefined, localStorage: dom.window.localStorage, URLSearchParams, URL, fetch, $, BasePlugin,
-        storageManager, utils: { time: vi.fn(() => "t") }, clog: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn(), html: vi.fn() }, show: { error: vi.fn() },
-        isHitShowPage: () => true, mapLimit: vi.fn(async (items, limit, mapper) => Promise.all(items.map(mapper))), i: (target, key, value) => (target[key] = value),
-        setTimeout, clearTimeout,
-    });
-    const source = [
-        readTestFile(join(repoRoot, "src/core/site-context.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"),
-        "initializeRuntimeConstants(window.location);",
-        readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/core/favorite-actress-highlight.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/core/list-filters.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-evaluator.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-refresh-coordinator.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/core/list-item-reader.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/core/storage-index.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-cover-image-controller.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/features/list/list-compatibility-service.js"), "utf8"),
-        "normalizeMovieCarNum = normalizeCarNum;",
-        `globalThis.__testCarMap = createIndexedMap(${JSON.stringify(carList)}, "carNum");`,
-        "globalThis.TestListPagePlugin=ListPageCompatibilityService;",
-    ].join("\n");
-    vm.runInContext(source, context);
-    contextRef = context;
-    const plugin = new context.TestListPagePlugin({ runtimeServices: {
+    vi.stubGlobal("$", $);
+    dom.window.isListPage = true;
+    initializeRuntimeConstants(dom.window.location);
+    const plugin = new ListPageService({ runtimeServices: {
         host: { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }) },
-        legacyStorage: storageManager,
+        keywordRules: { getTitleKeywords: async () => [] },
         settings: { snapshot: () => ({ translateTitle: "no", hoverBigImg: "no" }) },
-        state: { getActivityLog: async () => ({ entries: [] }) },
+        state: {
+            getBlacklistMap: async () => new Map(), getBlacklistCarList: async () => [],
+            getCarMap: async () => createIndexedMap(carList, "carNum"),
+            getFavoriteActressList: async () => [], getActivityLog: async () => ({ entries: [] }),
+        },
         translation: { translate: vi.fn(async () => "译文") },
     } });
-    return { dom, plugin, $, storageManager };
+    services.push(plugin);
+    return { dom, plugin, $ };
 }
 
 /** markDataListHtml 的同构卡片（热播页真实 DOM 结构）。 */

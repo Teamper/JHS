@@ -1,6 +1,15 @@
 // @ts-check
 import { JhsError, JHS_ERROR_CODES } from "../core/jhs-error.js";
 export const CHANNEL = "jhs-extension-v1";
+export const EXTENSION_STATE_METHODS = Object.freeze([
+    "addBlacklistItem", "addFavoriteActressList", "appendOfflineHistory", "batchSaveBlacklistCarList",
+    "batchUpdateFavoriteActressProfiles", "clearPersonalRating", "confirmOfflineSubmission",
+    "getActivityLog", "getBlacklist", "getBlacklistCarList", "getBlacklistMap", "getCarList", "getCarMap",
+    "getFavoriteActressList", "getListActivity", "getNewVideoDecisions", "getOfflineHistory",
+    "getPersonalRatings", "getState", "patch", "rebindFavoriteActress", "remove", "removeBlacklistActor",
+    "removeFavoriteActress", "removeFromNewVideoList", "removeOfflineHistory", "setCollectionMembership",
+    "setNewVideoDecision", "setPersonalRating", "toggle", "undoTransaction", "updateBlacklistItem", "updateFavoriteActress",
+]);
 
 // Chrome messaging uses JSON. Preserve the values used by existing service contracts.
 /** @param {any} value @returns {any} */

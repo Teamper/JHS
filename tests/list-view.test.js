@@ -3,7 +3,7 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { ListView } from "../src/features/list/list-view.js";
 import { ListController } from "../src/features/list/list-controller.js";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
@@ -208,7 +208,7 @@ describe("ListView", () => {
         dom.window.document.addEventListener("click", hostClick);
         if (binding === "ListView") view.bindCardVideoPlayback(root);
         else {
-            const service = Object.assign(new ListPageCompatibilityService({ controllers: { contextMenu: {} } }), {
+            const service = Object.assign(new ListPageService({ controllers: { contextMenu: {} } }), {
                 listView: null,
                 getSelector: () => ({ boxSelector: ".movie-list" }), bindMovieDetailNavigation: vi.fn(),
             });

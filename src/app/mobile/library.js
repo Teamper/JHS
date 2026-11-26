@@ -19,11 +19,11 @@ const catalogRankings = [["movies", "影片排行"], ["playback", "热播"], ["t
 const rankingsWithCategory = ["movies", "top"];
 const rankingsWithPeriod = ["movies", "playback"];
 
-/** @param {any} storage */
+/** @param {Pick<import("../../services/storage-service.js").StorageService, "get"|"set">} storage */
 export function createRecentWorks(storage) {
     let write = Promise.resolve();
     async function read() {
-        const value = await storage.getItem(recentKey);
+        const value = await storage.get(recentKey);
         return Array.isArray(value) ? value : [];
     }
     return {
@@ -37,7 +37,7 @@ export function createRecentWorks(storage) {
             write = write.then(async () => {
                 const previous = await read();
                 const latest = { id, carNum, title, url, coverUrl };
-                await storage.setItem(recentKey, [latest, ...previous.filter(item => item.id !== id)].slice(0, 8));
+                await storage.set(recentKey, [latest, ...previous.filter(item => item.id !== id)].slice(0, 8));
             }).catch(() => {});
         },
     };
@@ -267,9 +267,9 @@ async function showResults(root, app, state, path, params, scope, actors = false
     let filterRevision = 0;
     const refreshFilters = async (drawResults = true) => {
         const revision = ++filterRevision;
-        const storage = app.services.legacyStorage, state = app.services.state;
+        const { keywordRules, state } = app.services;
         const [titleKeywords, blacklist, works, carMap, favorites, activity] = await Promise.all([
-            storage.getTitleFilterKeyword(), storage.getBlacklistMap(), storage.getBlacklistCarList(),
+            keywordRules.getTitleKeywords(), state.getBlacklistMap(), state.getBlacklistCarList(),
             state.getCarMap(), state.getFavoriteActressList(), state.getActivityLog(),
         ]);
         if (scope.disposed || revision !== filterRevision) return;
@@ -659,7 +659,7 @@ export async function showLibrary(root, app, state, scope) {
         return true;
     };
     const reload = async () => {
-        const latest = await Promise.all([app.services.legacyStorage.getCarList(), app.services.state.getPersonalRatings()]);
+        const latest = await Promise.all([app.services.state.getCarList(), app.services.state.getPersonalRatings()]);
         if (scope.disposed) return;
         [records, ratings] = latest;
         render();

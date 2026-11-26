@@ -1,6 +1,6 @@
 # JHS 7.0 Feature Matrix
 
-本矩阵对应 `develop` 当前的 [Feature catalog](../../src/features/catalog.js) 与各 manifest；6.5 冻结决策保留在 [ADR](adr/README.md)。独立启停单位以 Contribution ID 为准。FeatureRuntime 在注册时校验 Feature ID 与 Contribution owner 唯一性，旧 Plugin 名通过 `LEGACY_PLUGIN_CONTRIBUTION_MAP` 迁移。
+此表按 7.0 的 Feature catalog 列出装配和启动时机。Contribution ID 决定独立启停粒度。FeatureRuntime 在注册时核对各 ID 的归属，启动时将旧 Plugin 名迁移到 Contribution ID。没有贡献的 Feature 可以只提供命令或系统能力。见 [Feature catalog](../../src/features/catalog.js) 和 [ADR](adr/README.md)。
 
 `all` 表示 Feature manifest 未限制该字段；Contribution catalog 仍会进一步限定站点、路由和 Surface。下表按 catalog 顺序列出，修改 manifest 时应同步核对。
 
@@ -15,6 +15,14 @@
 | `diagnostics` | system | all | all | on-command | — |
 | `responsive-shell` | system | javdb, javbus | all | idle | `responsive-shell.bottom-bar` |
 | `stats` | system | javdb, javbus | all | idle | `stats.dashboard` |
+| `enhancement-settings` | system | javdb, javbus | all | on-command | — |
+| `translation-tools` | feature | javdb, javbus | all | eager | — |
+| `media-library` | feature | javdb, javbus | all | eager | — |
+| `personal-ratings` | feature | javdb, javbus | all | eager | — |
+| `movie-selection` | feature | javdb, javbus | list | eager | — |
+| `movie-lists` | feature | javdb, javbus | all | eager | — |
+| `privacy` | feature | javdb, javbus | all | eager | — |
+| `subtitle-workspace` | feature | javdb, javbus | list, detail, owned-detail | on-command | — |
 | `detail` | feature | javdb, javbus | detail, owned-detail | eager | `detail.javdb-native`, `detail.workspace`, `detail.page-state-actions`, `detail.shortcuts`, `detail.javdb-preview`, `detail.javbus-preview`, `detail.reviews`, `detail.related`, `detail.native-magnets`, `detail.screenshot` |
 | `fc2-workspace` | feature | javdb | list, detail, owned-detail | eager | `detail.fc2-owned` |
 | `list` | feature | javdb, javbus | list | eager | `list.core`, `list.auto-page`, `detail.fc2-navigation`, `list.fold-category`, `list.actions`, `detail.javbus-images`, `detail.cover-state-actions` |
@@ -25,7 +33,7 @@
 | `ranking` | feature | javdb | list | eager | `discovery.top250` |
 | `new-video` | feature | javdb | all | idle | `discovery.new-video` |
 | `scheduler` | feature | javdb, javbus | list | idle | `discovery.scheduler` |
-| `translation` | feature | javdb, javbus | list, detail | eager | `external-bridge.translation` |
+| `translation` | feature | javdb, javbus | all | eager | `external-bridge.translation` |
 | `external-bridge` | feature | javdb, javbus, 123pan, javtrailers, subtitlecat | all | eager | `external-bridge.offline`, `external-bridge.123pan`, `external-bridge.javtrailers`, `external-bridge.subtitle`, `detail.external-magnets` |
 | `fc2-catalog` | feature | javdb | all | idle | `detail.fc2-lookup` |
 | `one-one-five` | feature | javdb, javbus | list, detail | idle | `external-bridge.115-match` |
@@ -57,4 +65,4 @@ JavDB 页面先按路径及该页面自己的参数识别语义（`src/core/site
 | FC2 Owned Detail | `list` / `detail` / `owned-detail` | Vitest owned-surface contract + browser fixture | 弹窗与独立工作区分别验证；第三方资源可能变化 |
 | Compact / landscape | profile-driven | Edge/Chromium fixture viewport matrix | 设备字体和浏览器 UI 可能不同 |
 
-性能与请求预算由 `performance-budget.json` 固化；架构债务位置由 `architecture-baseline.json` 固化。自动检查与登录实站验收分开记录，fixture 通过不能证明实站通过。develop 验证使用独立 Dev 产物并保留正式产物；正式发布以同一提交上的完整门禁结果和正式构建产物为准。
+性能与请求预算由 `performance-budget.json` 管理，模块边界由 `npm run check:architecture` 校验。自动检查使用同一个独立 Dev 产物。正式发布验收另行记录登录实站结果和正式构建产物。

@@ -26,7 +26,8 @@ describe("Library Feature history ownership", () => {
                 .register(SERVICE.state, state)
                 .register(SERVICE.settings, { snapshot: () => ({}) })
                 .register(SERVICE.movie, {})
-                .register(SERVICE.legacyStorage, {})
+                .register(SERVICE.keywordRules, {})
+
                 .register(SERVICE.domUi, domUi)
                 .register(SERVICE.events, { emit: vi.fn(), on: vi.fn(() => () => {}) })
                 .register(SERVICE.profile, profile)

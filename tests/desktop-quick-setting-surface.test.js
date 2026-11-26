@@ -33,11 +33,7 @@ function createHarness({ searchHidden = false } = {}) {
     vi.stubGlobal("window", dom.window);
     vi.stubGlobal("document", dom.window.document);
     vi.stubGlobal("Element", dom.window.Element);
-    vi.stubGlobal("storageManager", {
-        getSetting: async () => ({}),
-        getReviewFilterKeywordList: async () => [],
-        getTitleFilterKeyword: async () => [],
-    });
+    const keywordRules = { getReviewKeywords: async () => [], getTitleKeywords: async () => [] };
     vi.stubGlobal("utils", {
         loopDetector(condition, callback) { if (condition()) callback(); },
         isMobileMode: () => false,
@@ -55,6 +51,7 @@ function createHarness({ searchHidden = false } = {}) {
         runtimeServices: {
             settingsRegistry: registry,
             settings,
+            keywordRules,
             profile: { current: () => "regular" },
             scope: async () => ({ listen() { return () => {}; }, addCleanup() {} }),
             host: { getListSelectors: () => ({ itemSelector: ".movie-list .item" }) },
@@ -66,7 +63,6 @@ function createHarness({ searchHidden = false } = {}) {
         utilities: globalThis.utils,
         notifications: globalThis.show,
         logger: globalThis.clog,
-        legacyStorage: globalThis.storageManager,
         events: {},
         document: dom.window.document,
         window: dom.window,

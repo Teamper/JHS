@@ -19,6 +19,7 @@ export class RemoteSettings extends EventTarget {
     }
     async load() { return this.accept(await this.client.call("settings.read")); }
     refresh() { return this.load(); }
+    readStoredSnapshot() { return this.client.call("settings.readStoredSnapshot"); }
     waitForIdle() { return this.writeChain; }
     /** @param {(draft: Record<string, any>) => any} mutator */
     update(mutator) {

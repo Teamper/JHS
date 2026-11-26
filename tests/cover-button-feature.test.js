@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { CoverButtonController } from "../src/features/list/cover-button-controller.js";
-import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
+import { ListPageService } from "../src/features/list/list-page-service.js";
 
 function createSettings(initial) {
     let values = { ...initial };
@@ -278,7 +278,7 @@ describe("native list card actions Feature", () => {
         const listScope = new LifecycleScope("list"), coverScope = new LifecycleScope("cover");
         const request = vi.fn(async () => ({ data: "<main></main>" })), resolveScope = vi.fn(async () => listScope);
         vi.stubGlobal("utils", { htmlTo$dom: jqueryFactory });
-        const list = new ListPageCompatibilityService({ runtimeServices: { legacyStorage: { getSetting: async () => "yes" }, scope: resolveScope, http: { request }, logger: { debug() {} } } });
+        const list = new ListPageService({ runtimeServices: { settings: { readStoredSnapshot: async () => ({ enableSaveActressCarInfo: "yes" }) }, scope: resolveScope, http: { request }, logger: { debug() {} } } });
         await list.getCoverButtonCapability().parseActressName("https://javdb.com/v/abc-123", coverScope);
         expect(request.mock.calls[0][1]).toBe(coverScope); expect(resolveScope).not.toHaveBeenCalled();
         await list.getCoverButtonCapability().parseActressName("https://javdb.com/v/abc-123");
@@ -288,9 +288,9 @@ describe("native list card actions Feature", () => {
 
     it("does not start the actor GET if its cover scope expires while the setting loads", async () => {
         const coverScope = new LifecycleScope("cover"), request = vi.fn(); let finish;
-        const list = new ListPageCompatibilityService({ runtimeServices: { legacyStorage: { getSetting: () => new Promise(resolve => { finish = resolve; }) }, http: { request }, logger: { debug() {} } } });
+        const list = new ListPageService({ runtimeServices: { settings: { readStoredSnapshot: () => new Promise(resolve => { finish = resolve; }) }, http: { request }, logger: { debug() {} } } });
         const pending = list.getCoverButtonCapability().parseActressName("https://javdb.com/v/abc-123", coverScope);
-        coverScope.dispose(); finish("yes");
+        coverScope.dispose(); finish({ enableSaveActressCarInfo: "yes" });
         await expect(pending).rejects.toMatchObject({ name: "AbortError" }); expect(request).not.toHaveBeenCalled();
     });
 

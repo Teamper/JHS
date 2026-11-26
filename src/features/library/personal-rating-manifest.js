@@ -10,7 +10,9 @@ export default defineFeature({
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         runtime.scope.addCleanup(deps[PORT.style].register("jhs-personal-ratings", PERSONAL_RATING_STYLES));
         const controller = new PersonalRatingController({ host: deps[PORT.host], state: deps[SERVICE.state], events: deps[SERVICE.events], dialog: deps[SERVICE.dialog], ui: deps[SERVICE.domUi], scope: runtime.scope });
-        await controller.start();
+        void controller.start().catch(error => {
+            if (!runtime.scope.disposed) runtime.diagnostics.recordError({ source: "personal-ratings", message: error instanceof Error ? error.message : String(error) });
+        });
         return { commands: { "library.rating.open": (/** @type {any[]} */ movies) => controller.open(movies) } };
     },
 });

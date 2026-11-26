@@ -1,18 +1,27 @@
 // @vitest-environment jsdom
 import jquery from "jquery";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ScreenshotService } from "../src/services/screenshot-service.js";
 import { renderScreenshotPanel } from "../src/ui/detail/screenshot-panel.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
-/** 真实 ScreenshotService 策略 + 可替换 resolve。 */
-function createService(resolve) {
-    const service = new ScreenshotService(null, null);
-    service.resolve = resolve ?? vi.fn(async () => []);
-    return service;
+function createService(getImages) {
+    return new ScreenshotService({ getAvailable: async () => [] }, {
+        list: () => [{ id: "javstore" }],
+        getAdapter: () => ({ getImages }),
+    });
 }
 
-beforeEach(() => { globalThis.$ = jquery; globalThis.showImageViewer = vi.fn(); globalThis.clog = { error: vi.fn() }; document.body.innerHTML = '<div id="target"></div>'; });
+beforeEach(() => {
+    globalThis.$ = jquery; globalThis.clog = { error: vi.fn() };
+    document.body.innerHTML = '<div id="target"></div>';
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(function (url) {
+        this.setAttribute("src", url);
+        Object.defineProperty(this, "naturalWidth", { value: 900, configurable: true });
+        queueMicrotask(() => this.dispatchEvent(new Event("load")));
+    });
+});
+afterEach(() => vi.restoreAllMocks());
 
 it("ignores a replaced image error and makes the current failed image retryable", async () => {
     const host = jquery("#target"), screenshot = createService(vi.fn().mockResolvedValueOnce([{url:"https://img.javstore.net/old.jpg"}]).mockResolvedValueOnce([{url:"https://img.javstore.net/current.jpg"}]));
@@ -34,7 +43,7 @@ it("keeps keyboard focus during retry, refreshes the source once and focuses its
     const host = jquery("#target"), screenshot = createService(resolve);
     await renderScreenshotPanel({target:host, carNum:"ABC-123", screenshot, settings:{}});
     const retry = host.find("button")[0]; retry.focus(); retry.click(); retry.click();
-    expect(resolve).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
     expect(resolve.mock.calls[1][1].refreshCache).toBe(true);
     expect(document.activeElement).toBe(retry);
     finish([{url:"https://img.javstore.net/recovered.jpg"}]);
@@ -45,11 +54,12 @@ it("keeps keyboard focus during retry, refreshes the source once and focuses its
 it("renders a service-owned screenshot without legacy plugin access", async () => {
     const screenshot = createService(vi.fn(async () => [{ url: "https://img.javstore.net/test.jpg" }]));
     const host = jquery("#target");
-    await renderScreenshotPanel({ target: host, carNum: "ABC-123", screenshot, settings: {} });
+    const openImageViewer = vi.fn();
+    await renderScreenshotPanel({ target: host, carNum: "ABC-123", screenshot, settings: {}, openImageViewer });
     expect(document.querySelector("#target img")?.getAttribute("src")).toBe("https://img.javstore.net/test.jpg");
     expect(host.attr("aria-busy")).toBe("false");
     host.find('.jhs-fc2-screenshot-thumbnail').trigger('click');
-    expect(globalThis.showImageViewer).toHaveBeenCalledWith(document.querySelector('#target img'),'',expect.objectContaining({imageKind:'contact-sheet',owner:document.querySelector('#target button'),trigger:document.querySelector('#target button')}));
+    expect(openImageViewer).toHaveBeenCalledWith(document.querySelector('#target img'),expect.objectContaining({imageKind:'contact-sheet',owner:document.querySelector('#target button'),trigger:document.querySelector('#target button')}));
 });
 
 it("keeps the current request busy when an older screenshot response arrives", async () => {
@@ -57,7 +67,10 @@ it("keeps the current request busy when an older screenshot response arrives", a
     let finishOld, finishCurrent;
     const screenshot = createService(vi.fn().mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; })).mockImplementationOnce(() => new Promise(resolve => { finishCurrent = resolve; })));
     const options = { target: host, carNum: "ABC-123", screenshot, settings: {} };
-    const old = renderScreenshotPanel(options), current = renderScreenshotPanel(options);
+    const old = renderScreenshotPanel(options);
+    await vi.waitFor(() => expect(finishOld).toBeTypeOf("function"));
+    const current = renderScreenshotPanel(options);
+    await vi.waitFor(() => expect(finishCurrent).toBeTypeOf("function"));
     expect(host.attr("aria-busy")).toBe("true");
     finishOld([{ url: "https://img.javstore.net/old.jpg" }]); await old;
     expect(host.attr("aria-busy")).toBe("true"); expect(host.text()).toBe("加载中…");
@@ -70,6 +83,7 @@ it("clears busy on cancellation and ignores a late failed screenshot", async () 
     let fail;
     const screenshot = createService(vi.fn(() => new Promise((resolve, reject) => { fail = reject; })));
     const pending = renderScreenshotPanel({ target: host, carNum: "ABC-123", screenshot, settings: {}, scope });
+    await vi.waitFor(() => expect(fail).toBeTypeOf("function"));
     expect(host.attr("aria-busy")).toBe("true"); scope.dispose();
     expect(host.attr("aria-busy")).toBe("false");
     fail(new Error("late")); await pending;
@@ -119,7 +133,7 @@ it("lets the screenshot service select the enabled automatic source", async () =
     const resolve = vi.fn(async () => [ { url: "https://img.javstore.net/test.jpg", providerId: "javstore" } ]);
     const screenshot = createService(resolve);
     await renderScreenshotPanel({ target: jquery("#target"), carNum: "ABC-123", screenshot, settings: {} });
-    expect(resolve).toHaveBeenCalledWith({ carNum: "ABC-123" }, { scope: undefined, settings: {} });
+    expect(resolve).toHaveBeenCalledWith({ carNum: "ABC-123" }, expect.objectContaining({ scope: expect.any(LifecycleScope), settings: {} }));
 });
 
 it("skips a screenshot that duplicates a gallery image", async () => {

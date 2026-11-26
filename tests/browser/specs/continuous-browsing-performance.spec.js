@@ -78,7 +78,7 @@ test("JavDB no-change sync spans two foreground poll intervals", async ({ contex
             writeSyncFile: async (name, content) => { const state = await service.deps.store.read(); files.set(name, { content, meta: { ...state.pending, schema: 1, replicaId: state.replicaId } }); },
             deleteSyncFile: async name => files.delete(name),
         });
-        const storage = service.deps.store.forage;
+        const storage = service.deps.store.storage.port.forage;
         await storage.setItem("car_list", Array.from({ length: 10000 }, (_, index) => ({ carNum: `SYNC-${index}`, stateFlags: { favorite: true } })));
         await service.check();
         if (service.message) throw new Error(service.message);

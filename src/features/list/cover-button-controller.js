@@ -39,7 +39,7 @@ const COVER_MENU_STYLES = `
             `;
 
 export class CoverButtonController {
-    /** @param {{document: Document, window: Window & typeof globalThis, list: any, settings: any, state: any, screenshot: any, storage: any, movie: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, ui: any, clipboard: any, notifications: any, diagnostics: any, navigation: any, screenshotAvailable: boolean, isJavBus: boolean}} options */
+    /** @param {{document: Document, window: Window & typeof globalThis, list: any, settings: any, state: any, screenshot: any, storage: any, movie: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, ui: any, clipboard: any, notifications: any, diagnostics: any, logger?: Pick<Console, "debug" | "warn" | "error">, navigation: any, screenshotAvailable: boolean, isJavBus: boolean}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -54,6 +54,7 @@ export class CoverButtonController {
         this.clipboard = options.clipboard;
         this.notifications = options.notifications;
         this.diagnostics = options.diagnostics;
+        this.logger = options.logger;
         this.navigation = options.navigation;
         this.screenshotAvailable = options.screenshotAvailable;
         this.isJavBus = options.isJavBus;
@@ -369,7 +370,7 @@ export class CoverButtonController {
         image.addClass("loading"); image.after('<div class="loading-spinner" role="status" aria-label="加载预览视频"><span class="loading-animation"></span></div>');
         let refreshed = false;
         const attempt = async () => {
-            const result = await fetchDmmPreviewIfEnabled(carNum,this.storage,this.movie,session.scope,this.settings.snapshot());
+            const result = await fetchDmmPreviewIfEnabled(carNum,this.storage,this.movie,session.scope,this.settings.snapshot(), this.logger);
             if (!alive()) return;
             if (!result.sources) return fallback();
             const quality = Z(Object.keys(result.sources),this.settings.snapshot().videoQuality);

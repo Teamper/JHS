@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { readTestFile } from "./helpers/read-test-file.js";
-import { join } from "node:path";
 import { BlacklistWorkspaceController } from "../src/features/library/blacklist-workspace-controller.js";
-
-const source = readTestFile(join(process.cwd(), "src/features/library/blacklist-workspace-controller.js"), "utf8");
-const tableSource = readTestFile(join(process.cwd(), "src/ui/table/create-jhs-table.js"), "utf8");
 
 function createWorkspace() {
     const dom = new JSDOM('<body><input id="searchValue"><select id="dataType"><option value=""></option><option value="actor">actor</option><option value="actress">actress</option></select><select id="statusType"><option value=""></option><option value="normal">normal</option><option value="stop">stop</option></select><select id="urlType"><option value=""></option><option value="hasT">hasT</option><option value="noT">noT</option></select><div id="table-container"></div></body>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
@@ -66,21 +61,39 @@ describe("Blacklist workspace combined filters", () => {
         expect(link.getAttribute("aria-disabled")).toBe("true");
         dom.window.close();
     });
-});
 
-describe("blacklist filter and pagination contracts", () => {
-    it("silently resets each select and reloads once", () => {
-        const start = source.indexOf('.on("click.jhsBlacklist", "#cleanQueryBtn"'), end = source.indexOf('.on("input.jhsBlacklist", "#searchValue"', start), reset = source.slice(start, end);
-        expect(reset.match(/setSelectValue/g)).toHaveLength(1);
-        expect(reset).toContain('for (const selector of ["#dataType", "#statusType", "#urlType"])');
-        expect(reset).toContain('search.val("")');
-        expect(reset.match(/reloadTable\(generation\)/g)).toHaveLength(1);
-    });
-
-    it("does not expose Tabulator's blank all-page option", () => {
-        expect(source).toContain("paginationSizeSelector: [20, 50, 100, 1000]");
-        expect(source).not.toContain("paginationSizeSelector: [20, 50, 100, 1000, true]");
-        expect(tableSource).toContain('all: "全部"');
-        expect(source).not.toContain("99999");
+    it("resets only the dialog filters, reloads once and gives the table four page sizes", async () => {
+        const { controller, $, dom } = createWorkspace();
+        const host = $(dom.window.document.body);
+        const layer = $('<section><div class="layui-layer-content"><div></div></div></section>');
+        layer.find(".layui-layer-content > div").append(host.children().clone(), '<button id="cleanQueryBtn">重置</button>');
+        host.append(layer);
+        const table = { setData: vi.fn() };
+        const attach = vi.fn(function () { return table; });
+        dom.window.Tabulator = attach;
+        vi.stubGlobal("$", $);
+        controller.debounce = callback => callback;
+        const selectValue = vi.spyOn(controller.ui, "setSelectValue");
+        await controller.mountDialog(layer, controller.dialogGeneration);
+        selectValue.mockClear();
+        const root = controller.blacklistRoot;
+        host.children("#searchValue").val("unrelated");
+        root.find("#searchValue").val("Alpha");
+        root.find("#dataType").val("actor");
+        root.find("#statusType").val("stop");
+        root.find("#urlType").val("hasT");
+        root.find("#cleanQueryBtn").trigger("click");
+        await vi.waitFor(() => expect(table.setData).toHaveBeenCalledOnce());
+        expect(host.children("#searchValue").val()).toBe("unrelated");
+        expect(root.find("#searchValue").val()).toBe("");
+        expect(selectValue.mock.calls.slice(0, 3).map(([select, value, notify]) => [select.attr("id"), value, notify]))
+            .toEqual([["dataType", "", false], ["statusType", "", false], ["urlType", "", false]]);
+        expect(root.find("#dataType,#statusType,#urlType").map((_i, select) => select.value).get()).toEqual(["", "", ""]);
+        expect(attach).toHaveBeenCalledOnce();
+        expect(attach).toHaveBeenCalledWith(root.find("#table-container")[0], expect.objectContaining({
+            paginationSizeSelector: [20, 50, 100, 1000],
+            langs: expect.objectContaining({ "zh-cn": expect.objectContaining({ pagination: expect.objectContaining({ all: "全部" }) }) }),
+        }));
+        dom.window.close();
     });
 });

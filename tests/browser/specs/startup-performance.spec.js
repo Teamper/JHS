@@ -3,8 +3,11 @@ import budget from "../../../performance-budget.json" with { type: "json" };
 import { readFile } from "node:fs/promises";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
+// Trace snapshots add work while startup is being measured. Functional specs retain tracing.
+test.use({ trace: "off" });
+
 const SAMPLE_COUNT = Math.max(1, Number.parseInt(process.env.JHS_STARTUP_SAMPLES || "30", 10) || 30);
-const BOOTSTRAP_PHASES = ["legacy-runtime", "pre-settings", "context", "settings-load", "settings-migration", "logger", "theme-ui", "registry", "data-prepare", "feature-runtime", "feature-ready-signal", "first-ready", "total"];
+const BOOTSTRAP_PHASES = ["storage", "pre-settings", "context", "settings-load", "settings-migration", "logger", "theme-ui", "registry", "data-prepare", "feature-runtime", "feature-ready-signal", "first-ready", "total"];
 const REQUIRED_BOOTSTRAP_PHASES = process.env.JHS_STARTUP_BUNDLE
   ? BOOTSTRAP_PHASES.filter((phase) => phase !== "feature-ready-signal")
   : BOOTSTRAP_PHASES;
@@ -39,8 +42,9 @@ for (const [label, url] of [
       // 保持启动基准只测核心引导；评论默认开启的请求不纳入启动预算。
       // Reading, encoding, transport and decoding all remain inside the timed interval.
       const userscriptSource = process.env.JHS_STARTUP_BUNDLE ? await readFile(process.env.JHS_STARTUP_BUNDLE, "utf8") : undefined;
-      await injectUserscriptRuntime(page, { userscriptSource, userscriptTransport: "base64", settingOverrides: { enableLoadReview: "no" }, preserveStorage: !cold && index >= 0 });
-      const elapsed = performance.now() - startedAt;
+      const { readyAt } = await injectUserscriptRuntime(page, { userscriptSource, userscriptTransport: "base64", settingOverrides: { enableLoadReview: "no" }, preserveStorage: !cold && index >= 0 });
+      // Stop at observed readiness before publishing the harness diagnostics.
+      const elapsed = readyAt - startedAt;
       await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]))).toBe(true);
       if (index < 0) { await page.close(); continue; }
       samples.push(elapsed);

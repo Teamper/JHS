@@ -1,6 +1,6 @@
-import { memoryAtomicStorage } from "./atomic-storage.js";
+import { storageFromForage, memoryAtomicStorage } from "./atomic-storage.js";
 import { vi } from "vitest";
-import { StorageManager } from "../../src/core/storage.js";
+import { PortableBackupService } from "../../src/services/portable-backup-service.js";
 import { StateService } from "../../src/core/state-service.js";
 import { StorageMutationCoordinator } from "../../src/core/storage-mutation-coordinator.js";
 import { WebDavSyncStore } from "../../src/core/webdav-sync-store.js";
@@ -36,19 +36,14 @@ export async function syncReplica(remote, options = {}) {
     vi.stubGlobal("window", { location: { href: "https://javdb.com/", origin: "https://javdb.com" } });
     vi.stubGlobal("utils", { getNowStr: () => new Date(now).toISOString() });
     vi.stubGlobal("clog", { log: vi.fn(), error: vi.fn() });
-    StorageManager.instance = null;
-    const storage = new StorageManager();
-    storage.atomicStorage = memoryAtomicStorage(values);
-    const coordinator = new StorageMutationCoordinator({ lockManager: null });
-    storage.mutationCoordinator = coordinator;
-    const events = { emit: vi.fn(async () => {}) };
-    const state = new StateService(storage, events, coordinator);
-    storage.stateService = state;
-    let store;
-    const settings = new SettingsService({ get: key => forage.getItem(key), set: async (key, value) => { await store?.capture(key); await forage.setItem(key, value); } }, { mutationCoordinator: coordinator });
+    const storage = storageFromForage(forage, memoryAtomicStorage(values));
+    const coordinator = new StorageMutationCoordinator({ lockManager: null }), events = { emit: vi.fn(async () => {}) };
+    const settings = new SettingsService(storage, { mutationCoordinator: coordinator });
     await settings.load();
-    store = new WebDavSyncStore({ forage, coordinator, storage, settings, events, clock: () => now, validateSetting });
-    storage.syncState = store; store.enabled = true;
+    const store = new WebDavSyncStore({ storage, coordinator, settings, events, clock: () => now, validateSetting, recoverState: () => state.recoverPendingTransactionWithoutLock() });
+    const state = new StateService(storage, events, coordinator, { sync: store });
+    storage.beforeWrite = key => store.capture(key);
+    store.enabled = true;
     coordinator.observer = store; coordinator.beforeMutation = store.recoverBeforeMutation;
     const shared = Object.assign(new EventTarget(), {
         profile: options.profile ?? { url: "https://dav.example/dav", username: "user", password: "synthetic" }, revision: "one", isPaused: false,
@@ -58,7 +53,8 @@ export async function syncReplica(remote, options = {}) {
     let held = false;
     const locks = { request: vi.fn(async (_name, _options, callback) => { if (held) return callback(null); held = true; try { return await callback({}); } finally { held = false; } }) };
     const webdav = { createClient: vi.fn(() => remote.client) };
-    const service = new WebDavSyncService({ store, shared, webdav, settings, storage, events, clock: () => now, locks: options.locks === undefined ? locks : options.locks, window: { setTimeout: () => 0, clearTimeout: () => {} }, validateSetting });
+    const backup = new PortableBackupService({ storage, coordinator, state, sync: store, settings });
+    const service = new WebDavSyncService({ store, shared, webdav, settings, backup, events, clock: () => now, locks: options.locks === undefined ? locks : options.locks, window: { setTimeout: () => 0, clearTimeout: () => {} }, validateSetting });
     await store.initialize();
-    return { values, forage, coordinator, storage, state, settings, store, shared, webdav, service, locks, advance: ms => { now += ms; }, restart: () => syncReplica(remote, { ...options, values }) };
+    return { values, forage, coordinator, storage, backup, state, settings, store, shared, webdav, service, locks, advance: ms => { now += ms; }, restart: () => syncReplica(remote, { ...options, values }) };
 }
