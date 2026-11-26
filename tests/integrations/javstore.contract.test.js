@@ -27,15 +27,19 @@ it("loads normalized images through the declared HTTP boundary", async () => {
 
 it("continues through candidates after missing or invalid details", async () => {
     const notFound = Object.assign(new Error("missing"), { code: "NOT_FOUND" });
+    const parse = html => new DOMParser().parseFromString(html, "text/html");
     const request = vi.fn()
-        .mockResolvedValueOnce({ data: '<a href="/first-pn.html">ABC-123</a><a href="/second-pn.html">ABC-123</a><a href="/third-pn.html">ABC-123</a>', finalUrl: "https://javstore.net/search?q=ABC-123" })
+        .mockResolvedValueOnce({ data: parse('<a href="/first-pn.html">ABC-123</a><a href="/second-pn.html">ABC-123</a><a href="/third-pn.html">ABC-123</a>'), finalUrl: "https://javstore.net/search?q=ABC-123" })
         .mockRejectedValueOnce(notFound)
-        .mockResolvedValueOnce({ data: "<html></html>", finalUrl: "https://javstore.net/second-pn.html" })
-        .mockResolvedValueOnce({ data: '<a href="/preview.th.jpg">CLICK HERE!</a>', finalUrl: "https://javstore.net/third-pn.html" });
+        .mockResolvedValueOnce({ data: parse('<main><article><img src="/ordinary-photo.jpg"></article></main>'), finalUrl: "https://javstore.net/second-pn.html" })
+        .mockResolvedValueOnce({ data: parse('<a href="/preview.th.jpg">CLICK HERE!</a>'), finalUrl: "https://javstore.net/third-pn.html" });
     await expect(createJavStoreAdapter({ request }).getImages({ carNum: "ABC-123" })).resolves.toEqual([
         { url: "https://javstore.net/preview.jpg", providerId: "javstore" },
     ]);
-    expect(request).toHaveBeenCalledTimes(4);
+    expect(request.mock.calls.map(([options]) => options.url)).toEqual([
+        "https://javstore.net/search?q=ABC-123", "https://javstore.net/first-pn.html",
+        "https://javstore.net/second-pn.html", "https://javstore.net/third-pn.html",
+    ]);
 });
 
 it.each(["FC2-4995326", "FC2-PPV-4995326"])("uses the full FC2 query to find the exact article for %s", async carNum => {

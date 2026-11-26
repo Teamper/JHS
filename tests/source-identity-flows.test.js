@@ -55,6 +55,8 @@ describe("source movie identity safety", () => {
         document.body.innerHTML = '<main class="video-detail"><a title="复制番号" data-clipboard-text="ABC-123"></a></main>';
         const host = new JavDbHostAdapter(document, { href: "https://javdb.com/v/test?jhsCarNum=XYZ-999" });
         expect(host.readMovieRef()).toMatchObject({ carNum: "ABC-123", stateEligibility: { eligible: false, reason: "conflicting" } });
+        document.querySelector("a").remove();
+        expect(host.readMovieRef().stateEligibility.eligible).toBe(false);
     });
     it("ignores recommendation card identities when checking detail evidence", () => {
         document.body.innerHTML = '<main class="video-detail"><a title="复制番号" data-clipboard-text="ABC-123"></a><section class="movie-list"><div class="item"><div class="video-title"><strong>REC-1</strong></div></div></section></main>';

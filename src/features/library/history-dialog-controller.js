@@ -147,7 +147,7 @@ export class HistoryDialogController {
             const origin = new URL(value).origin;
             if (origin === movie.externalSiteOrigin("javDbBtn", settings)) return PRODUCT_NAMES.javdb;
             if (origin === movie.externalSiteOrigin("javBusBtn", settings)) return PRODUCT_NAMES.javbus;
-        } catch {}
+        } catch { /* Use the legacy site-name lookup for unparseable URLs. */ }
         return value.includes("javdb") ? PRODUCT_NAMES.javdb : value.includes("javbus") ? PRODUCT_NAMES.javbus : value.includes("123av") ? PRODUCT_NAMES.av123 : "其他";
     }
     get historyRepository() {

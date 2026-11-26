@@ -1247,9 +1247,9 @@ export class NewVideoWorkspaceService {
                 }
                 if (!this.isEditorCurrent(editor)) return false;
                 try { this.notifications.ok("已更新演员信息"); }
-                catch (error) { try { this.logger.warn("演员信息已更新，但成功提示显示失败", error); } catch {} }
+                catch (error) { try { this.logger.warn("演员信息已更新，但成功提示显示失败", error); } catch { /* A logger failure leaves the completed edit successful. */ } }
                 try { dialog.close(id); }
-                catch (error) { try { this.logger.warn("演员信息已更新，但编辑弹窗关闭失败", error); } catch {} }
+                catch (error) { try { this.logger.warn("演员信息已更新，但编辑弹窗关闭失败", error); } catch { /* A logger failure leaves the completed edit successful. */ } }
                 return false;
             },
         });

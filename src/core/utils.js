@@ -204,7 +204,7 @@ export class Utils {
         let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
         try {
             if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
-        } catch {}
+        } catch { /* Cross-origin frames can block access to their host layer. */ }
         const root = options?.root;
         if (null === layerIndex && root) {
             const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
@@ -222,7 +222,7 @@ export class Utils {
         if (null !== layerIndex && window.parent && window.parent !== window) try {
             const parentUtils = /** @type {any} */ (globalThis).unsafeWindow?.parent?.utils;
             if (parentUtils && parentUtils !== this && "function" == typeof parentUtils.closePage) return !!await parentUtils.closePage({ layerIndex });
-        } catch {}
+        } catch { /* Use the layer API if the parent helper is inaccessible. */ }
         const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
         if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), !0;
         window.close();

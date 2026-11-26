@@ -214,7 +214,7 @@ export class JavDbPreviewController {
     }
     /** @param {HTMLVideoElement} video @param {number} time */
     seekVideo(video, time) {
-        const seek = () => { try { video.currentTime = Math.max(0, Math.min(time || 0, Number.isFinite(video.duration) ? video.duration : Infinity)); } catch {} };
+        const seek = () => { try { video.currentTime = Math.max(0, Math.min(time || 0, Number.isFinite(video.duration) ? video.duration : Infinity)); } catch { /* Media metadata can arrive after the first seek attempt. */ } };
         seek();
         const session = this.previewSession;
         session?.seekCleanups?.get(video)?.();

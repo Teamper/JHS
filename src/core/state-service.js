@@ -383,7 +383,7 @@ export class StateService {
         // not turn that successful mutation into a failed non-idempotent toggle.
         let handedOff = true;
         try { await this.storage.syncState?.recordCommittedActivity?.(activity, pendingLog.entries); }
-        catch (error) { handedOff = false; try { clog.warn("[状态] 已提交，同步待处理证明待恢复", error); } catch {} }
+        catch (error) { handedOff = false; try { clog.warn("[状态] 已提交，同步待处理证明待恢复", error); } catch { /* A logger failure leaves the journal available for recovery. */ } }
         try { if (handedOff) await this.storage.forage.removeItem("mutation_journal"); }
         catch (error) {
             try { clog.warn("[状态] 已提交，事务日志待清理", error); } catch { /* Keep the durable result. */ }
@@ -405,7 +405,7 @@ export class StateService {
         activity.commitState = "committed";
         // Post-commit bookkeeping cannot turn a durable toggle into a retry.
         for (const receipt of [sync, backup]) {
-            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch {} }
+            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed toggle intact. */ } }
         }
         try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
         if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
@@ -421,7 +421,7 @@ export class StateService {
         const backup = await this.storage.backupChanges?.prepareCommittedMutation?.(reverted);
         if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts, ...backup?.puts }, deletes: [] })) return false;
         for (const receipt of [sync, backup]) {
-            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch {} }
+            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed undo intact. */ } }
         }
         try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
         this._listSnapshot = null;

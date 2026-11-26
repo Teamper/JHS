@@ -41,7 +41,7 @@ export class CredentialService extends EventTarget {
     async decodeLegacy(value, secret) {
         const payload = value.replace(/^AES:/, "");
         let candidate = value.startsWith("AES:");
-        try { candidate ||= /^[A-Za-z0-9+/]+={0,2}$/.test(payload) && atob(payload).length >= 28; } catch {}
+        try { candidate ||= /^[A-Za-z0-9+/]+={0,2}$/.test(payload) && atob(payload).length >= 28; } catch { /* Malformed Base64 can still be a legacy plaintext credential. */ }
         if (!candidate) return value;
         return decryptData(payload, secret || await this.installationSecret());
     }

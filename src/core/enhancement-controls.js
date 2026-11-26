@@ -27,7 +27,7 @@ export const ENHANCEMENT_METADATA = Object.freeze({
 /** Preserve the previous shared translation owner only on the first upgrade. @param {Record<string, any>} draft */
 export function initializeEnhancementControls(draft) {
     let previous;
-    try { previous = typeof draft.disabledPlugins === "string" ? JSON.parse(draft.disabledPlugins) : draft.disabledPlugins; } catch {}
+    try { previous = typeof draft.disabledPlugins === "string" ? JSON.parse(draft.disabledPlugins) : draft.disabledPlugins; } catch { /* Malformed legacy settings fall through to the default controls. */ }
     if (Array.isArray(previous) && previous.includes("media-library")) {
         draft.enableMediaLibrary = false;
         draft.disabledPlugins = JSON.stringify(previous.filter(id => id !== "media-library"));

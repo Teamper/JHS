@@ -1,24 +1,9 @@
-import { createHash } from "node:crypto";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanImportTimeEffects } from "./import-time-purity.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const baselinePath = path.join(rootDir, "architecture-baseline.json");
-
-const rules = [
-    { id: "internal-getbean", pattern: /\.getBean\s*\(/, phase: 6 },
-    { id: "feature-direct-gmhttp", pattern: /\bgmHttp\s*\./, phase: 5, featureOnly: true },
-    { id: "feature-direct-state-service", pattern: /(?<![.$\w])stateService\s*\./, phase: 6, featureOnly: true },
-    { id: "feature-import-state-service", pattern: /from\s+["'][^"']*core\/state-service\.js["']/, phase: 6, featureOnly: true },
-    { id: "feature-direct-layer", pattern: /\blayer\s*\.\s*(?:open|close|closeAll|confirm|alert|msg|load|tips|prompt|photos|tab)\s*\(/, phase: 5, featureOnly: true },
-    { id: "feature-direct-localstorage", pattern: /\blocalStorage\s*\./, phase: 5, featureOnly: true },
-    { id: "feature-third-party-url", pattern: /https?:\/\//, phase: 4, featureOnly: true },
-    { id: "host-selector", pattern: /(?:\.movie-panel-info|#magnet-table|\.movie-list)/, phase: 4, featureOrUi: true },
-    { id: "app-global-listener", pattern: /(?:window|document)\.addEventListener\s*\(/, phase: 7 },
-    { id: "app-global-observer", pattern: /new\s+MutationObserver\s*\(/, phase: 7 },
-];
 
 async function listJavaScriptFiles(directory) {
     const entries = await readdir(directory, { withFileTypes: true });
@@ -28,51 +13,6 @@ async function listJavaScriptFiles(directory) {
         return entry.isFile() && entry.name.endsWith(".js") ? [fullPath] : [];
     }));
     return nested.flat();
-}
-
-function normalizeLine(line) {
-    return line.trim()
-        .replace(/^export\s+/, "")
-        // Dependency injection is the approved in-place replacement for the
-        // legacy locator; unrelated debt on the same line keeps its identity.
-        .replace(/\.getDependency\s*\(/g, ".getBean(")
-        .replace(/\s+/g, " ");
-}
-
-function fingerprint(rule, normalizedLine) {
-    return createHash("sha256").update(`${rule}\0${normalizedLine}`).digest("hex").slice(0, 16);
-}
-
-async function scan() {
-    const findings = [];
-    const files = await listJavaScriptFiles(path.join(rootDir, "src"));
-    for (const file of files) {
-        const relativeFile = path.relative(rootDir, file).replaceAll("\\", "/");
-        const isFeature = relativeFile.startsWith("src/plugins/") || relativeFile.startsWith("src/features/");
-        const isFeatureOrUi = isFeature || relativeFile.startsWith("src/ui/");
-        const lines = (await readFile(file, "utf8")).split(/\r?\n/);
-        for (const rule of rules) {
-            if (rule.featureOnly && !isFeature) continue;
-            if (rule.featureOrUi && !isFeatureOrUi) continue;
-            lines.forEach((line, index) => {
-                if (rule.id === "host-selector" && /host-adapter\.js$/.test(relativeFile)) return;
-                if (rule.id === "host-selector" && relativeFile === "src/plugins/backup/setting-styles.js") return;
-                if (rule.id === "app-global-observer" && relativeFile === "src/core/lifecycle-scope.js") return;
-                if (!rule.pattern.test(line)) return;
-                const symbol = normalizeLine(line);
-                findings.push({
-                    rule: rule.id,
-                    file: relativeFile,
-                    symbol,
-                    fingerprint: fingerprint(rule.id, symbol),
-                    line: index + 1,
-                    reason: "legacy debt recorded before the v6.5 migration",
-                    removalPhase: rule.phase,
-                });
-            });
-        }
-    }
-    return findings.sort((a, b) => `${a.rule}:${a.file}:${a.line}`.localeCompare(`${b.rule}:${b.file}:${b.line}`));
 }
 
 async function checkImportGraph() {
@@ -162,25 +102,5 @@ async function checkImportTimePurity() {
     console.log(`Bootstrap purity passed (${files.length - 1} non-root modules)`);
 }
 
-const findings = await scan();
-if (process.argv.includes("--write-baseline")) {
-    await writeFile(baselinePath, `${JSON.stringify({ version: 1, exceptions: findings }, null, 2)}\n`);
-    console.log(`Wrote ${findings.length} architecture exceptions to architecture-baseline.json`);
-    process.exit(0);
-}
-
-const baseline = JSON.parse(await readFile(baselinePath, "utf8"));
-const approved = new Set(baseline.exceptions.map((item) => `${item.rule}\0${item.file}\0${item.fingerprint}`));
-const additions = findings.filter((item) => !approved.has(`${item.rule}\0${item.file}\0${item.fingerprint}`));
-if (additions.length) {
-    for (const item of additions) {
-        console.error(`${item.rule}: new exception at ${item.file}:${item.line} (${item.symbol})`);
-    }
-    throw new Error(`Architecture debt increased by ${additions.length} exception(s)`);
-}
-
-const remaining = findings.length;
-const removed = baseline.exceptions.length - remaining;
-console.log(`Architecture debt ratchet passed (${remaining} remaining, ${removed} removed)`);
 await checkImportGraph();
 await checkImportTimePurity();

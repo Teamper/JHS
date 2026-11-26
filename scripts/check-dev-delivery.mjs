@@ -3,14 +3,9 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildUserscript, repoRoot } from "./build.mjs";
-import { createDevTransforms } from "./dev-metadata.mjs";
+import { createDevTransforms, readDevIdentity } from "./dev-metadata.mjs";
 
-export function readDevIdentity(source) {
-    const version = source.match(/^\/\/ @version\s+(7\.0\.0-dev\.\d{12})\s*$/m)?.[1];
-    const buildId = source.match(/^\/\/ @description\s+JHS 7\.0 migration build ([a-f0-9]{12}(?:\.dirty)?)\s*$/m)?.[1];
-    if (!version || !buildId || !source.includes(JSON.stringify(`${version}|${buildId}`))) throw new Error("交付文件缺少有效 Dev 身份");
-    return { version, buildId };
-}
+export { readDevIdentity };
 export async function verifyDevDelivery(path) {
     const bytes = await readFile(path), source = bytes.toString("utf8");
     const identity = readDevIdentity(source);

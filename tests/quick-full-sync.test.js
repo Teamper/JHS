@@ -69,8 +69,7 @@ describe("Quick ↔ Full settings share one key", () => {
         expect(preview.is(":checked")).toBe(false);
         expect(dmm.is(":checked")).toBe(true);
         dmm.prop("checked", false).trigger("change");
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(settings.snapshot().enableLoadPreviewVideo).toBe("no");
+        await vi.waitFor(() => expect(settings.snapshot().enableLoadPreviewVideo).toBe("no"));
         expect(settings.snapshot().enablePreviewVideo).toBe("no");
     });
 

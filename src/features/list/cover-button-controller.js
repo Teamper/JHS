@@ -219,7 +219,7 @@ export class CoverButtonController {
                 const owner = trigger.closest(".item")[0];
                 menu.data("jhsCardOwner", owner);
                 /** @type {Record<string, boolean>} */ let flags = {};
-                try { flags = JSON.parse(owner?.getAttribute?.("data-jhs-flags") || "{}"); } catch {}
+                try { flags = JSON.parse(owner?.getAttribute?.("data-jhs-flags") || "{}"); } catch { /* Malformed card data leaves the action flags unset. */ }
                 menu.find(".filterBtn").attr("aria-pressed", String(!!flags.blocked));
                 menu.find(".favoriteBtn").attr("aria-pressed", String(!!flags.favorite));
                 menu.find(".hasDownBtn").attr("aria-pressed", String(!!flags.downloaded));

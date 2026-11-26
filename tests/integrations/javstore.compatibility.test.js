@@ -13,7 +13,9 @@ it("unions legacy and main grid candidates in DOM order with safe URLs and consi
     const expected = ["https://javstore.net/legacy-ABC-123-pn.html?from=search", "https://javstore.net/grid-first.html", "https://javstore.net/abc_123-final.html"];
     expect(parseJavStoreSearch(html, "ABC-123")).toEqual(expected);
     const $ = jquery;
-    expect(parseJavStoreSearch($(new DOMParser().parseFromString(html, "text/html")), "ABC-123")).toEqual(expected);
+    const document = new DOMParser().parseFromString(html, "text/html");
+    expect(parseJavStoreSearch(document, "ABC-123")).toEqual(expected);
+    expect(parseJavStoreSearch($(document), "ABC-123")).toEqual(expected);
 });
 
 it.each([
@@ -46,9 +48,16 @@ it("uses a unique verified main-content small preview unchanged, without followi
     expect(request.mock.calls.map(([options]) => options.url)).toEqual(["https://javstore.net/search?q=ABC-123", "https://javstore.net/ABC-123.html"]);
 });
 
-it("keeps explicit CLICK HERE links first with both legacy punctuation forms", () => {
+it.each([
+    ["/preferred.th.jpg", "https://javstore.net/preferred.jpg"],
+    ["/ABC-123.th.jpg", "https://javstore.net/ABC-123.jpg"],
+    ["http://img.javstore.net/ABC-123.th.jpg", "https://img.javstore.net/ABC-123.jpg"],
+    ["http://outside.test/ABC-123.th.jpg", "http://outside.test/ABC-123.jpg"],
+])("prefers explicit CLICK HERE links and normalizes %s", (href, expected) => {
     for (const label of ["CLICK HERE!", "CLICK HERE"]) {
-        expect(parseJavStorePreview(`<main><img src="/ABC-123_s.jpg"><a href="/preferred.th.jpg">${label}</a></main>`, "https://javstore.net/detail.html", "ABC-123")).toBe("https://javstore.net/preferred.jpg");
+        const html = `<main><img src="/ABC-123_s.jpg"><a href="${href}">${label}</a></main>`;
+        const document = new DOMParser().parseFromString(html, "text/html");
+        expect(parseJavStorePreview(document, "https://javstore.net/ABC-123-pn.html", "ABC-123")).toBe(expected);
     }
 });
 

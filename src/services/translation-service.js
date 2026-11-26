@@ -171,7 +171,7 @@ export class TranslationService extends EventTarget {
                     migrated.push(key), changed = !0;
                 }
                 if (generation === this.cacheGeneration && (this.prune() || changed)) void this.persistNow(generation).then((() => Promise.all(migrated.map((key => storage.remove(key)))))).catch((() => {}));
-            } catch {}
+            } catch { /* Translations still work with an empty in-memory cache. */ }
         })();
     }
     prune() {
@@ -200,7 +200,7 @@ export class TranslationService extends EventTarget {
         this.cancelAll();
         this.cacheGeneration += 1, null !== this.persistTimer && clearTimeout(this.persistTimer), this.persistTimer = null,
         this.memoryCache.clear(), this.legacyCache = {}, this.storage?.removeLocal?.("jhs_translate");
-        if (this.storage) { const storage = this.storage; try { const keys = /** @type {string[]} */ (await storage.keys()); await storage.remove(CACHE_KEY), await Promise.all(keys.filter((key => key.startsWith(V1_PREFIX))).map((key => storage.remove(key)))); } catch {} }
+        if (this.storage) { const storage = this.storage; try { const keys = /** @type {string[]} */ (await storage.keys()); await storage.remove(CACHE_KEY), await Promise.all(keys.filter((key => key.startsWith(V1_PREFIX))).map((key => storage.remove(key)))); } catch { /* A persistent cache failure leaves the in-memory cache cleared. */ } }
         this.hydrationPromise = Promise.resolve();
     }
     async inspectCache() { return await this.hydrate(), this.prune(), { version: 2, size: this.memoryCache.size, entries: Object.fromEntries(this.memoryCache) }; }
