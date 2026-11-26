@@ -1,18 +1,21 @@
 import {injectRealLayer} from "./real-layer.js";
 import {fulfillHostFixtures,injectUserscriptRuntime} from "./runtime.js";
+import {ACTRESS_PROFILE_BACKFILL_KEY,createActressProfileBackfillState} from "../../../src/core/actress-profile-backfill-state.js";
 const image="https://images.example.test/ui-cover.svg";
 export async function seed(page){
-  await page.evaluate(async image=>{
+  await page.evaluate(async ({image,backfillKey,backfillState})=>{
     const forage=window.localforage.createInstance({driver:window.localforage.INDEXEDDB,name:"JAV-JHS",version:1,storeName:"appData"});
     await forage.setItem("data_version",3);
     await forage.setItem("snapshots",[{id:"ui-snapshot",name:"升级前的手动备份",source:"manual",time:"2026-10-03 16:00:00",itemCount:75,kind:"snapshot",data:{}}]);
     for(const name of ["Blacklist","FavoriteActress","NewVideo"]) { window.localStorage.setItem(`jhs_time_check${name}`,String(Date.parse("2026-10-04T06:00:00Z"))); window.localStorage.setItem(`jhs_time_check${name}_next`,String(Date.parse("2026-10-05T06:00:00Z"))); }
-    window.localStorage.setItem("jhs_actress_profile_attempts_v1",JSON.stringify({schema:3,entries:{"ui-actor":Date.parse("2026-10-04T06:00:00Z")}}));
+    await forage.setItem(backfillKey,backfillState);
     await forage.setItem("car_list",Array.from({length:75},(_,i)=>({carNum:`UI-${100+i}`,url:`https://javdb.com/v/ui-${i}`,names:"演员名称与长别名测试",remark:i%2?"":"需要保留的影片备注",createDate:"2026-10-03 12:30:00",updateDate:"2026-10-04 12:30:00",publishTime:"2026-10-01",stateFlags:{downloaded:true,favorite:false,watched:false,blocked:false}})));
     await forage.setItem("favorite_actresses",[{starId:"ui-actor",name:"测试演员",allName:Array(12).fill("很长的演员别名"),actressType:"censored",avatar:image,lastCheckTime:"2026-10-04 16:22:31",lastPublishTime:"2026-10-06",newVideoList:Array.from({length:75},(_,i)=>({carNum:`NV-${100+i}`,title:"有内容的影片标题",publishTime:"2026-10-06",coverUrl:image}))}]);
     await forage.setItem("activity_log",{entries:Array.from({length:8},(_,i)=>({id:`ui-log-${i}`,type:"list-card-state",createdAt:"2026-10-04T12:00:00Z",commitState:"committed",changes:[{carNum:`UI-${i+100}`,undoState:"available"}]}))});
     await forage.setItem("offline_history",Array.from({length:8},(_,i)=>({id:`ui-offline-${i}`,providerId:"123",carNum:`UI-${i+100}`,createdAt:"2026-10-04T12:00:00Z",status:i===0?"failed":"submitted",errorMessage:i===0?"fixture media error":"",resource:`magnet:?xt=urn:btih:${"abcdef".repeat(30)}&dn=long-fixture-name`})));
-  },image);
+  },{image,backfillKey:ACTRESS_PROFILE_BACKFILL_KEY,backfillState:{
+    ...createActressProfileBackfillState(),initialized:true,entries:{"ui-actor":Date.parse("2026-10-04T06:00:00Z")},
+  }});
 }
 export async function boot(page,context,theme,options={}){
   await page.clock.setFixedTime(new Date("2026-10-04T08:00:00Z"));
