@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { WebDavService } from "../src/services/webdav-service.js";
-import { DialogService } from "../src/services/dialog-service.js";
 import { LayerDialogAdapter } from "../src/platform/userscript/layer-dialog-adapter.js";
 import { Utils } from "../src/core/utils.js";
 import { loadSettingForm, saveSettingForm } from "../src/features/settings/setting-forms.js";
@@ -163,7 +162,7 @@ describe("full settings WebDAV save transaction", () => {
         vi.stubGlobal("$", $); vi.stubGlobal("layer", layer);
         const utilities = Object.create(Utils.prototype);
         Object.assign(utilities, { layerIndexStack: [], iframeEscBindings: new Map(), isMobileMode: () => false });
-        utilities.setDialogService(new DialogService(new LayerDialogAdapter(layer)));
+        utilities.setDialogService(new LayerDialogAdapter(layer));
         test.dependencies.utilities = utilities;
         editProfileAndOrdinaryField(test.root);
         const save = saveSettingForm(test.dependencies, test.root);

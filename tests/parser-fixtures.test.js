@@ -9,7 +9,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { movieCodeKey } from "../src/core/movie-code-evidence.js";
 
 const fixture = (name) => readTestFile(join(import.meta.dirname, "fixtures", name), "utf8");
-const source = ["javstore", "host-list", "av123"].map((id) => readTestFile(join(import.meta.dirname, `../src/integrations/${id}/parser.js`), "utf8")).join("\n");
+const source = ["../src/integrations/javstore/parser.js", "../src/core/host-list-page-parser.js", "../src/integrations/av123/parser.js"]
+    .map((file) => readTestFile(join(import.meta.dirname, file), "utf8")).join("\n");
 
 const javdbPage = new JSDOM("", { url: "https://javdb.com/" });
 const javdb = new JavDbHostAdapter(javdbPage.window.document, javdbPage.window.location);

@@ -1,6 +1,5 @@
 // @ts-check
 
-import { defineIntegration } from "../contracts/manifests.js";
 import { SERVICE } from "../contracts/tokens.js";
 
 export const CACHE_POLICIES = Object.freeze({
@@ -66,9 +65,8 @@ export class IntegrationRegistry {
     /** @param {Record<string, any>} manifest */
     register(manifest) {
         try {
-            const validated = /** @type {Record<string, any>} */ (defineIntegration(manifest));
-            if (this.manifests.has(validated.id)) throw new Error(`Duplicate integration: ${validated.id}`);
-            this.manifests.set(validated.id, validated);
+            if (this.manifests.has(manifest.id)) throw new Error(`Duplicate integration: ${manifest.id}`);
+            this.manifests.set(manifest.id, manifest);
         } catch (error) {
             this.diagnostics.recordError(error);
             throw error;
@@ -78,6 +76,15 @@ export class IntegrationRegistry {
     /** @param {string} capability */
     list(capability) { return [...this.manifests.values()].filter((manifest) => manifest.capabilities.includes(capability)); }
 
+    /** @param {string} capability @param {string} method @param {...unknown} args */
+    async invokeList(capability, method, ...args) {
+        for (const manifest of this.list(capability)) {
+            const adapter = this.getAdapter(manifest.id);
+            if (typeof adapter[method] === "function") return adapter[method](...args);
+        }
+        return [];
+    }
+
     /** @param {string} id */
     getAdapter(id) {
         const cached = this.adapters.get(id);
@@ -85,10 +92,8 @@ export class IntegrationRegistry {
         const manifest = this.manifests.get(id);
         if (!manifest) throw new Error(`Unknown integration: ${id}`);
         try {
-            const declared = this.container.resolveDeclared(manifest.requires);
-            const dependencies = Object.create(null);
-            for (const token of manifest.requires) Object.defineProperty(dependencies, token, { value: token === SERVICE.http ? createIntegrationRequestFacade(declared[token], manifest) : declared[token], enumerable: true });
-            Object.freeze(dependencies);
+            const dependencies = this.container.resolveDeclared(manifest.requires);
+            if (manifest.requires.includes(SERVICE.http)) dependencies[SERVICE.http] = createIntegrationRequestFacade(dependencies[SERVICE.http], manifest);
             const client = manifest.createClient(dependencies);
             const adapter = manifest.createAdapter(client, dependencies);
             this.adapters.set(id, adapter);

@@ -1,12 +1,10 @@
 // @ts-check
 
-import { assertPort, PORT_METHODS } from "../contracts/ports.js";
-
 export class StorageService {
     /** @type {import("./personal-preferences-service.js").PersonalPreferencesService | null} */ preferences = null;
-    /** @param {any} storagePort */
-    constructor(storagePort) { this.port = assertPort(storagePort, "StoragePort", PORT_METHODS.storage); }
-    /** @param {string} key */
+    /** @param {import("../contracts/ports.js").StoragePort & Partial<import("../contracts/ports.js").LockedBatchStoragePort & import("../contracts/ports.js").AtomicStoragePort>} storagePort */
+    constructor(storagePort) { this.port = storagePort; }
+    /** @param {string} key @returns {Promise<any>} */
     get(key) { return this.port.get(key); }
     /** @param {string} key @param {unknown} value */
     set(key, value) { return this.port.set(key, value); }

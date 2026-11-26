@@ -4,6 +4,7 @@ import { ActorSourceHealth } from "./actor-source-health.js";
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { escapeHtml } from "../../core/constants.js";
+import { parseDetailPage } from "../../core/host-list-page-parser.js";
 
 /** @param {any} styles */
 async function registerNewVideoStyles(styles) {
@@ -114,7 +115,7 @@ export const newVideoFeature = defineFeature({
 export const schedulerFeature = defineFeature({
     optionalRequires: [SERVICE.backgroundWork],
     id: "scheduler", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "idle",
-    requires: [PORT.javdbHost, PORT.javbusHost, SERVICE.events, SERVICE.storage, SERVICE.settings, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, SERVICE.state, SERVICE.domUi, SERVICE.hostListParser, SERVICE.clog, SERVICE.notifications],
+    requires: [PORT.javdbHost, PORT.javbusHost, SERVICE.events, SERVICE.storage, SERVICE.settings, SERVICE.legacyStorage, SERVICE.legacyUtils, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, SERVICE.state, SERVICE.domUi, SERVICE.clog, SERVICE.notifications],
     contributes: ["discovery.scheduler"], providesCommands: ["scheduler.service"],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "discovery.scheduler";
@@ -127,7 +128,7 @@ export const schedulerFeature = defineFeature({
             runtimeServices: {
                 storage: deps[SERVICE.storage], http: deps[SERVICE.http], actressInfo: deps[SERVICE.actressInfo],
                 movie: deps[SERVICE.movie], state: deps[SERVICE.state], events: deps[SERVICE.events], scope: () => runtime.scope,
-                hostAdapters: { javdb: deps[PORT.javdbHost], javbus: deps[PORT.javbusHost] }, hostListParser: deps[SERVICE.hostListParser],
+                hostAdapters: { javdb: deps[PORT.javdbHost], javbus: deps[PORT.javbusHost] }, hostListParser: { parseDetailPage },
             },
             blacklist: {
                 available: () => runtime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin"),

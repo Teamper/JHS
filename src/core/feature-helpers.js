@@ -2,6 +2,7 @@
 
 import { escapeHtml, normalizeCarNum } from "./constants.js";
 import { getMovieStateEligibility } from "./movie-identity.js";
+import { LifecycleScope } from "./lifecycle-scope.js";
 
 export const PROFILE_BACKFILL_LOCK_KEY = "jhsBackfillActressProfiles";
 
@@ -144,4 +145,17 @@ export async function safePlay(/** @type {HTMLMediaElement | null | undefined} *
         notify && ![ "NotAllowedError", "AbortError" ].includes(name) && notifyUser(message);
         return !1;
     }
+}
+
+/** @param {{scope: LifecycleScope, diagnostics: {recordError: (error: unknown) => void}}} runtime @param {string} featureId @param {string} id @param {(scope: LifecycleScope) => Promise<boolean> | boolean} mount */
+export async function mountContribution(runtime, featureId, id, mount) {
+    const scope = new LifecycleScope("feature:" + featureId + ":" + id);
+    scope.addCleanup(runtime.scope.addCleanup(() => scope.dispose()));
+    try {
+        if (await mount(scope) && !scope.disposed) return id;
+    } catch (error) {
+        runtime.diagnostics.recordError({ source: featureId + "-feature", featureId, contributionId: id, message: error instanceof Error ? error.message : String(error) });
+    }
+    scope.dispose();
+    return null;
 }

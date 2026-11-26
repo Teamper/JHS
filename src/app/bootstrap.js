@@ -197,7 +197,7 @@ export async function bootstrapJhs() {
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
         markPhase("registry");
-        Object.assign(globalThis.unsafeWindow, { utils, gmHttp, storageManager, stateService, jhsEventBus, ...logger });
+        if (globalThis.unsafeWindow !== globalThis) Object.assign(globalThis.unsafeWindow, { utils, gmHttp, storageManager, stateService, jhsEventBus, ...logger });
         const telemetry = context.services.diagnostics;
         globalThis.unsafeWindow.jhsDiagnostics = {
             startPerformanceCapture: () => telemetry.startPerformanceCapture(),

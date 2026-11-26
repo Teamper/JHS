@@ -2,14 +2,11 @@
 
 /** @param {string} category @param {string} id */
 function createToken(category, id) {
-    return Symbol.for(`jhs.${category}.${id}`);
+    return Symbol(`jhs.${category}.${id}`);
 }
 
 export const PORT = Object.freeze({
-    navigation: createToken("port", "navigation"),
     http: createToken("port", "http"),
-    storage: createToken("port", "storage"),
-    dialog: createToken("port", "dialog"),
     style: createToken("port", "style"),
     host: createToken("port", "host"),
     javdbHost: createToken("port", "javdb-host"),
@@ -27,7 +24,6 @@ export const SERVICE = Object.freeze({
     legacyStorage: createToken("service", "legacy-storage"),
     legacyUtils: createToken("service", "legacy-utils"),
     webdav: createToken("service", "webdav"),
-    autoBackup: createToken("service", "auto-backup"),
     webdavSync: createToken("service", "webdav-sync"),
     credential: createToken("service", "credential"),
     pan123Credential: createToken("service", "pan123-credential"),
@@ -38,7 +34,6 @@ export const SERVICE = Object.freeze({
     clipboard: createToken("service", "clipboard"),
     movie: createToken("service", "movie"),
     actressInfo: createToken("service", "actress-info"),
-    imageSearch: createToken("service", "image-search"),
     domUi: createToken("service", "dom-ui"),
     review: createToken("service", "review"),
     related: createToken("service", "related"),
@@ -62,14 +57,9 @@ export const SERVICE = Object.freeze({
     busImageLayout: createToken("service", "bus-image-layout"),
     events: createToken("service", "events"),
     profile: createToken("service", "profile"),
-    libraryStats: createToken("service", "library-stats"),
-    hostListParser: createToken("service", "host-list-parser"),
 });
 
 export const REGISTRY = Object.freeze({
-    command: createToken("registry", "command"),
-    feature: createToken("registry", "feature"),
-    provider: createToken("registry", "provider"),
     settings: createToken("registry", "settings"),
     integration: createToken("registry", "integration"),
 });

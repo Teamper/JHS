@@ -2,6 +2,7 @@
 
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
+import { mountContribution } from "../../core/feature-helpers.js";
 
 export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
@@ -45,8 +46,6 @@ export default defineFeature({
         ]);
         /** @type {string[]} */ const activeContributions = [];
         /** @type {import("./list-controller.js").ListController | null} */ let controller = null;
-        /** @type {import("./auto-page-controller.js").AutoPageController | null} */ let autoPageController = null;
-        /** @type {import("./list-category-fold-controller.js").ListCategoryFoldController | null} */ let categoryFoldController = null;
         /** @type {import("./list-actions-controller.js").ListActionsController | null} */ let listActionsController = null;
         /** @type {import("./cover-button-controller.js").CoverButtonController | null} */ let coverButtonController = null;
         /** @type {import("./list-compatibility-service.js").ListPageCompatibilityService | null} */ let listCompatibilityService = null;
@@ -145,22 +144,17 @@ export default defineFeature({
             }
         }
         if (runtime.enabledContributions.includes("list.auto-page")) {
-            let releaseStyle = () => {};
-            try {
-                releaseStyle = deps[PORT.style].register("jhs-auto-page-feature", AUTO_PAGE_STYLES);
-                runtime.scope.addCleanup(releaseStyle);
-                const list = listCompatibilityService?.getAutoPageCapability() ?? null;
-                autoPageController = new AutoPageController({
+            const mounted = await mountContribution(runtime, "list", "list.auto-page", (scope) => {
+                scope.addCleanup(deps[PORT.style].register("jhs-auto-page-feature", AUTO_PAGE_STYLES));
+                const autoPage = new AutoPageController({
                     hostAdapter: deps[PORT.host], http: deps[SERVICE.http], settings: deps[SERVICE.settings],
-                    list, ui: deps[SERVICE.domUi], eventBus: deps[SERVICE.events], scope: runtime.scope,
+                    list: listCompatibilityService?.getAutoPageCapability() ?? null,
+                    ui: deps[SERVICE.domUi], eventBus: deps[SERVICE.events], scope,
                 });
-                if (await autoPageController.mount()) activeContributions.push("list.auto-page");
-            } catch (error) {
-                autoPageController?.dispose();
-                releaseStyle();
-                autoPageController = null;
-                runtime.diagnostics.recordError({ source: "list-feature", featureId: "list", contributionId: "list.auto-page", message: error instanceof Error ? error.message : String(error) });
-            }
+                scope.addCleanup(() => autoPage.dispose());
+                return autoPage.mount();
+            });
+            if (mounted) activeContributions.push(mounted);
         }
         if (runtime.enabledContributions.includes("detail.fc2-navigation")) {
             const fc2WorkspaceEnabled = runtime.isContributionEnabled("fc2-workspace", "detail.fc2-owned", "Fc2Plugin");
@@ -179,18 +173,16 @@ export default defineFeature({
             }
         }
         if (runtime.enabledContributions.includes("list.fold-category")) {
-            categoryFoldController = new ListCategoryFoldController({
-                hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
-                storageMutation: deps[SERVICE.storageMutation], styles: deps[PORT.style], notifications: deps[SERVICE.notifications],
-                diagnostics: runtime.diagnostics, scope: runtime.scope, route: runtime.route,
+            const mounted = await mountContribution(runtime, "list", "list.fold-category", (scope) => {
+                const categoryFold = new ListCategoryFoldController({
+                    hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
+                    storageMutation: deps[SERVICE.storageMutation], styles: deps[PORT.style], notifications: deps[SERVICE.notifications],
+                    diagnostics: runtime.diagnostics, scope, route: runtime.route,
+                });
+                scope.addCleanup(() => categoryFold.dispose());
+                return categoryFold.start();
             });
-            try {
-                if (await categoryFoldController.start()) activeContributions.push("list.fold-category");
-            } catch (error) {
-                categoryFoldController.dispose();
-                runtime.diagnostics.recordError({ source: "list-feature", featureId: "list", contributionId: "list.fold-category", message: error instanceof Error ? error.message : String(error) });
-                categoryFoldController = null;
-            }
+            if (mounted) activeContributions.push(mounted);
         }
         if (runtime.enabledContributions.includes("list.actions") && listCompatibilityService) {
             const list = listCompatibilityService;
@@ -230,7 +222,7 @@ export default defineFeature({
                 "list.current-page-summary": () => listCompatibilityService?.getCurrentPageSummary?.() ?? { blockedItems: 0 },
                 "list.set-quick-filter": (/** @type {string} */ filter) => listCompatibilityService?.setQuickFilter?.(filter),
             },
-            dispose: () => { controller?.dispose(); autoPageController?.dispose(); categoryFoldController?.dispose(); listActionsController?.dispose(); sortController.dispose(); },
+            dispose: () => { controller?.dispose(); listActionsController?.dispose(); sortController.dispose(); },
         };
     },
 });

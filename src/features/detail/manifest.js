@@ -2,6 +2,7 @@
 
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
+import { mountContribution } from "../../core/feature-helpers.js";
 import { DetailController } from "./detail-controller.js";
 import { RelatedController } from "./related-controller.js";
 import { ReviewController } from "./review-controller.js";
@@ -11,16 +12,6 @@ import { DETAIL_MAGNET_FILTER_STYLES, MagnetFilterController } from "./magnet-fi
 import { JAVDB_PREVIEW_STYLES, JavDbPreviewController } from "./javdb-preview-controller.js";
 import { DetailPageActionsController } from "./detail-page-actions-controller.js";
 import { DETAIL_SHORTCUT_STYLES, DetailShortcutController } from "./detail-shortcut-controller.js";
-
-/** @param {any} runtime @param {string} contributionId @param {() => Promise<boolean> | boolean} start */
-async function startOptionalDetailContribution(runtime, contributionId, start) {
-    try {
-        return await start() ? contributionId : null;
-    } catch (error) {
-        runtime.diagnostics.recordError({ source: "detail-feature", featureId: "detail", contributionId, message: error instanceof Error ? error.message : String(error) });
-        return null;
-    }
-}
 
 export default defineFeature({
     id: "detail", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
@@ -119,55 +110,41 @@ export default defineFeature({
             }
         }
         const optionalStarts = [];
-        if (runtime.enabledContributions.includes("detail.javdb-preview")) optionalStarts.push(startOptionalDetailContribution(runtime, "detail.javdb-preview", async () => {
-            let releaseStyle = () => {};
-            try {
-                releaseStyle = deps[PORT.style].register("jhs-detail-javdb-preview-feature", JAVDB_PREVIEW_STYLES);
-                const previewController = new JavDbPreviewController({
-                    settings: deps[SERVICE.settings], events: deps[SERVICE.events], scope: runtime.scope,
-                    storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog],
-                    hostAdapter: deps[PORT.host], route: runtime.route,
-                    detailActions: pageActionsController?.stateBinding ? pageActionsController : null,
-                });
-                if (!(await previewController.start())) { releaseStyle(); return false; }
-                runtime.scope.addCleanup(releaseStyle);
-                runtime.inspect?.("detail.javdb-preview", previewController);
-                return true;
-            } catch (error) {
-                releaseStyle();
-                throw error;
-            }
+        if (runtime.enabledContributions.includes("detail.javdb-preview")) optionalStarts.push(mountContribution(runtime, "detail", "detail.javdb-preview", async (scope) => {
+            scope.addCleanup(deps[PORT.style].register("jhs-detail-javdb-preview-feature", JAVDB_PREVIEW_STYLES));
+            const preview = new JavDbPreviewController({
+                settings: deps[SERVICE.settings], events: deps[SERVICE.events], scope,
+                storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog],
+                hostAdapter: deps[PORT.host], route: runtime.route,
+                detailActions: pageActionsController?.stateBinding ? pageActionsController : null,
+            });
+            if (!(await preview.start())) return false;
+            const release = runtime.inspect?.("detail.javdb-preview", preview);
+            if (release) scope.addCleanup(release);
+            return true;
         }));
-        if (runtime.enabledContributions.includes("detail.javbus-preview")) optionalStarts.push(startOptionalDetailContribution(runtime, "detail.javbus-preview", async () => {
-            let releaseStyle = () => {};
-            try {
-                releaseStyle = deps[PORT.style].register("jhs-detail-javbus-preview-feature", JAVBUS_PREVIEW_STYLES);
-                const previewController = new JavBusPreviewController({
-                    document, window, hostAdapter: deps[PORT.host], route: runtime.route,
-                    settings: deps[SERVICE.settings], events: deps[SERVICE.events], storage: deps[SERVICE.storage],
-                    movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], ui: { ...deps[SERVICE.domUi], notifications: deps[SERVICE.notifications] },
-                    diagnostics: runtime.diagnostics, scope: runtime.scope,
-                });
-                if (!previewController.start()) { releaseStyle(); return false; }
-                runtime.scope.addCleanup(releaseStyle);
-                return true;
-            } catch (error) {
-                releaseStyle();
-                throw error;
-            }
+        if (runtime.enabledContributions.includes("detail.javbus-preview")) optionalStarts.push(mountContribution(runtime, "detail", "detail.javbus-preview", (scope) => {
+            scope.addCleanup(deps[PORT.style].register("jhs-detail-javbus-preview-feature", JAVBUS_PREVIEW_STYLES));
+            const preview = new JavBusPreviewController({
+                document, window, hostAdapter: deps[PORT.host], route: runtime.route,
+                settings: deps[SERVICE.settings], events: deps[SERVICE.events], storage: deps[SERVICE.storage],
+                movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], ui: { ...deps[SERVICE.domUi], notifications: deps[SERVICE.notifications] },
+                diagnostics: runtime.diagnostics, scope,
+            });
+            return preview.start();
         }));
-        if (runtime.enabledContributions.includes("detail.related")) optionalStarts.push(startOptionalDetailContribution(runtime, "detail.related", async () => {
+        if (runtime.enabledContributions.includes("detail.related")) optionalStarts.push(mountContribution(runtime, "detail", "detail.related", (scope) => {
             const relatedController = new RelatedController({
                 document, hostAdapter: deps[PORT.host], route: runtime.route, related: deps[SERVICE.related],
-                settings: deps[SERVICE.settings], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope: runtime.scope,
+                settings: deps[SERVICE.settings], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope,
             });
             return relatedController.start();
         }));
-        if (runtime.enabledContributions.includes("detail.reviews")) optionalStarts.push(startOptionalDetailContribution(runtime, "detail.reviews", async () => {
+        if (runtime.enabledContributions.includes("detail.reviews")) optionalStarts.push(mountContribution(runtime, "detail", "detail.reviews", (scope) => {
             const reviewController = new ReviewController({
                 document, window, hostAdapter: deps[PORT.host], route: runtime.route, review: deps[SERVICE.review], movie: deps[SERVICE.movie],
                 settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], ui: deps[SERVICE.domUi], clipboard: deps[SERVICE.clipboard],
-                notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope: runtime.scope,
+                notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope,
             });
             return reviewController.start();
         }));

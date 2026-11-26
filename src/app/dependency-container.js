@@ -41,25 +41,11 @@ export class DependencyContainer {
                 this.diagnostics?.recordError?.(error);
                 throw error;
             }
-            Object.defineProperty(dependencies, token, {
-                value: this.values.get(token),
-                enumerable: true,
-            });
+            dependencies[token] = this.values.get(token);
         }
         for (const token of optionalTokens) {
-            if (this.values.has(token)) Object.defineProperty(dependencies, token, { value: this.values.get(token), enumerable: true });
+            if (this.values.has(token)) dependencies[token] = this.values.get(token);
         }
-        Object.freeze(dependencies);
-        return new Proxy(dependencies, {
-            get: (target, property, receiver) => {
-                const tokenName = typeof property === "symbol" ? Symbol.keyFor(property) : null;
-                if (tokenName?.startsWith("jhs.") && !seen.has(property)) {
-                    const error = new JhsError("UNDECLARED_DEPENDENCY", `Undeclared dependency access: ${String(property)}`, { source: "DependencyContainer" });
-                    this.diagnostics?.recordError?.(error);
-                    throw error;
-                }
-                return Reflect.get(target, property, receiver);
-            },
-        });
+        return dependencies;
     }
 }

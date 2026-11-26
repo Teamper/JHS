@@ -92,7 +92,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     const taskIntervalsSource = readTestFile(join(repoRoot, "src/features/discovery/task-intervals.js"), "utf8")
         .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
         .replace(/^export\s+(?=function\s)/gm, "");
-    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/host-list/parser.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n") + `\n${taskIntervalsSource}\n${taskExecutionSource}`;
+    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/core/host-list-page-parser.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n") + `\n${taskIntervalsSource}\n${taskExecutionSource}`;
     vm.runInContext(`${source};globalThis.Task=TaskExecutionService`, context);
     const plugin = new context.Task({
         runtimeServices: {

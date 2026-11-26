@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LibraryStatsService } from "../src/services/library-stats-service.js";
+import { LibraryStatsService } from "../src/features/system/stats-controller.js";
 
 describe("library stats read service", () => {
     it("loads the 6.5.1 library snapshot through read-only domain operations", async () => {

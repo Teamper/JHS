@@ -157,10 +157,13 @@ test("manual actress backfill discards a late result after data recovery in anot
         }, url);
         await configure(page, dav.url);
         await service(page, "pause", true);
-        await page.waitForFunction(() => window.__jhsBrowserDiagnostics.features["discovery.scheduler"]?.service?.featureNewVideoScanController);
+        await page.evaluate(async () => {
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+            await window.__jhsBrowserDiagnostics.executeCommand("scheduler.service");
+        });
         await page.evaluate(async () => {
             await window.stateService.updateFavoriteActress({ starId: "fixture", actressProfile: null });
-            const task = window.__jhsBrowserDiagnostics.features["discovery.scheduler"].service;
+            const task = window.__jhsBrowserDiagnostics.features.scheduler;
             task.checkNewVideo = async () => ({ completed: true, fatal: false });
             task.featureNewVideoScanController.actressInfo = {
                 lookupAny: () => new Promise(resolve => { window.finishFixtureActorLookup = resolve; }),

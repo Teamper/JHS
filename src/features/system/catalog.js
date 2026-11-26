@@ -161,18 +161,19 @@ export const systemFeatureManifests = Object.freeze([
     }),
     defineFeature({
         id: "stats", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "idle",
-        requires: [SERVICE.libraryStats, SERVICE.diagnostics, SERVICE.notifications, SERVICE.movie, SERVICE.settings, SERVICE.dialog, SERVICE.events, SERVICE.domUi, PORT.style],
+        requires: [SERVICE.legacyStorage, SERVICE.state, SERVICE.diagnostics, SERVICE.notifications, SERVICE.movie, SERVICE.settings, SERVICE.dialog, SERVICE.events, SERVICE.domUi, PORT.style],
         contributes: ["stats.dashboard"], providesCommands: [],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-            const { StatsController } = await import("./stats-controller.js");
+            const { LibraryStatsService, StatsController } = await import("./stats-controller.js");
+            const libraryStats = new LibraryStatsService({ storage: deps[SERVICE.legacyStorage], state: deps[SERVICE.state] });
             const controller = new StatsController({
                 document,
-                libraryStats: deps[SERVICE.libraryStats], diagnostics: deps[SERVICE.diagnostics], notifications: deps[SERVICE.notifications],
+                libraryStats, diagnostics: deps[SERVICE.diagnostics], notifications: deps[SERVICE.notifications],
                 movie: deps[SERVICE.movie], settings: deps[SERVICE.settings], dialog: deps[SERVICE.dialog],
                 events: deps[SERVICE.events], ui: deps[SERVICE.domUi], styles: deps[PORT.style], scope: runtime.scope,
                 getPendingNewVideoTotal: async () => {
                     if (!runtime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin")) return 0;
-                    try { return await deps[SERVICE.libraryStats].getPendingNewVideoTotal(); }
+                    try { return await libraryStats.getPendingNewVideoTotal(); }
                     catch (error) {
                         runtime.diagnostics.recordError({ source: "stats-feature", featureId: "stats", contributionId: "stats.dashboard", message: error instanceof Error ? error.message : String(error) });
                         return 0;

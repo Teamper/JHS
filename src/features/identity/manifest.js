@@ -1,11 +1,11 @@
 // @ts-check
 
 import { defineFeature } from "../../contracts/manifests.js";
-import { PORT, SERVICE } from "../../contracts/tokens.js";
+import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 
 export default defineFeature({
     id: "identity", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.navigation, SERVICE.notifications, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch, SERVICE.settings],
+    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.navigation, SERVICE.notifications, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, REGISTRY.integration, SERVICE.settings],
     contributionAvailability: {
         "identity.javdb-navigation": { sites: ["javdb"] },
         "identity.javbus-navigation": { sites: ["javbus"] },
@@ -20,9 +20,9 @@ export default defineFeature({
             let releaseStyle = () => {};
             let controller = null;
             try {
-                const { ImageSearchController, IMAGE_SEARCH_CSS } = await import("./image-search-controller.js");
+                const { resolveImageSearch, ImageSearchController, IMAGE_SEARCH_CSS } = await import("./image-search-controller.js");
                 controller = new ImageSearchController({
-                    document, window, dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], imageSearch: deps[SERVICE.imageSearch],
+                    document, window, dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], imageSearch: { resolve: (source, options) => resolveImageSearch(deps[REGISTRY.integration], source, options) },
                     notifications: deps[SERVICE.notifications], settings: deps[SERVICE.settings],
                     onError: (error) => runtime.diagnostics.recordError({ source: "identity-image-search", featureId: "identity", contributionId: "identity.image-search", message: error instanceof Error ? error.message : String(error) }),
                 });

@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { JavBusPreviewController } from "../src/features/detail/javbus-preview-controller.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { DialogService } from "../src/services/dialog-service.js";
 import { LayerDialogAdapter } from "../src/platform/userscript/layer-dialog-adapter.js";
 
 const scopes = [];
@@ -53,7 +52,7 @@ function harness({ pendingSource = null, realLayer = false } = {}) {
     const owner = new JavBusPreviewController({
         document, window, scope, route: "detail",
         hostAdapter: { site: "javbus", locateNativeGallery: () => document.querySelector("#gallery"), readMovieRef: () => ({ carNum: "ABC-123" }) },
-        settings, storage, movie, dialog: new DialogService(new LayerDialogAdapter(layer)),
+        settings, storage, movie, dialog: new LayerDialogAdapter(layer),
         events: { on: (_name, callback) => { ready = callback; return () => {}; } },
         ui: { jquery, notifications, getResponsiveArea: area => area, setupEscClose: vi.fn() }, diagnostics: { recordError: vi.fn() },
     });

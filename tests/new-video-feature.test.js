@@ -168,7 +168,7 @@ describe("new video and scheduler feature lifecycle", () => {
             [SERVICE.http]: { request: vi.fn() }, [SERVICE.actressInfo]: { movies: vi.fn(), collection: vi.fn() },
             [SERVICE.movie]: { externalSiteOrigin: vi.fn(async () => "https://javdb.com") }, [SERVICE.state]: {},
             [SERVICE.domUi]: { jquery: vi.fn(() => ({ text: vi.fn(), length: 0 })) }, [SERVICE.clog]: logger,
-            [SERVICE.hostListParser]: { parseDetailPage: vi.fn() }, [SERVICE.notifications]: { error: vi.fn() },
+            [SERVICE.notifications]: { error: vi.fn() },
         };
         const result = await schedulerFeature.activate(dependencies, runtime);
         expect(result.activeContributions).toEqual(["discovery.scheduler"]);

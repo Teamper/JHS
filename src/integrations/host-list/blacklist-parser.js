@@ -6,7 +6,7 @@ import { readCleanActorElementText } from "../../core/actress-measurements.js";
 import { selectLatestPublishTime } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { assertMovieStateEligible } from "../../core/movie-identity.js";
-import { parseDetailPage } from "./parser.js";
+import { parseDetailPage } from "../../core/host-list-page-parser.js";
 
 const LIST_SELECTORS = Object.freeze({
     javdb: Object.freeze({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }),

@@ -50,7 +50,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     selectLatestPublishTime: values => values.filter(Boolean).sort().at(-1) || "",
     $: () => ({ text: vi.fn() })
   });
-  const parsers = ["src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
+  const parsers = ["src/core/site-context.js", "src/core/feature-helpers.js", "src/core/host-list-page-parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
   const taskSource = readFileSync(join(repoRoot, "src/features/discovery/task-execution-service.js"), "utf8")
     .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
     .replace(/^export\s+(?=class\s)/gm, "");
