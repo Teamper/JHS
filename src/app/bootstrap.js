@@ -62,6 +62,11 @@ async function readDisabledPluginSettings(storageManager) {
     return { migrated, needsMigration: JSON.stringify(previous) !== JSON.stringify(migrated) };
 }
 
+export function normalizeScreenshotSetting(draft) {
+    if (!Object.prototype.hasOwnProperty.call(draft, "enableLoadScreenShot")) draft.enableLoadScreenShot = "yes";
+    if (!Object.prototype.hasOwnProperty.call(draft, "enableScreenSvg")) draft.enableScreenSvg = draft.enableLoadScreenShot ?? "yes";
+}
+
 /** Apply bootstrap compatibility values in one atomic settings write. */
 async function persistBootstrapMigration(settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration = null, alreadyLocked = false) {
     await (alreadyLocked ? settings.updateWithoutLock : settings.update).call(settings, (draft) => {
@@ -75,8 +80,7 @@ async function persistBootstrapMigration(settings, disabledMigration, localOrigi
             draft.trustedLocalOrigins = [ ...origins ];
         }
         if (localOriginSettings.needsNotice) draft.localOriginTrustNoticeV1 = true;
-        if (!Object.prototype.hasOwnProperty.call(draft, "enableLoadScreenShot")) draft.enableLoadScreenShot = "yes";
-        if (!Object.prototype.hasOwnProperty.call(draft, "enableScreenSvg")) draft.enableScreenSvg = draft.enableLoadScreenShot ?? "yes";
+        normalizeScreenshotSetting(draft);
         if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) draft.sortMethod = legacySortMethod;
         if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) draft.foldCategoryCollapsed = legacyFoldCategory === "yes";
         if (draft.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) draft.videoMuted = legacyVideoMuted === "yes";
@@ -84,12 +88,6 @@ async function persistBootstrapMigration(settings, disabledMigration, localOrigi
             if (draft[key] === credentialMigration.cleanup.settingValues?.[key]) delete draft[key];
         }
     });
-}
-
-// Kept as a named compatibility seam for diagnostics/tests; bootstrap invokes
-// the consolidated writer above so local-origin changes are not a second write.
-async function persistLocalOriginMigration(settings, resolved) {
-    return persistBootstrapMigration(settings, null, resolved, null, null, null);
 }
 
 async function resolveLocalOrigins(storageManager) {

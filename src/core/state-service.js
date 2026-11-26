@@ -390,7 +390,6 @@ export class StateService {
         }
         try { this.storage._invalidateCache(); } catch { /* Cache cleanup is post-commit. */ }
         if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
-        this.storage.backupChanges?.primary(activity.changes.map((/** @type {any} */ change) => change.carNum));
     }
     /** Use detached domain snapshots prepared under the shared mutation lock.
      * @param {StateRecord} next @param {StateRecord} activity @param {StateRecord} log @param {string[]} touched */
@@ -400,29 +399,23 @@ export class StateService {
         const committedLog = { ...log, entries: log.entries.map((/** @type {StateRecord} */ entry) => entry.id === activity.id ? committed : entry) };
         const puts = Object.fromEntries(touched.map(key => [this.domains[key].storageKey, key === "activity" ? committedLog : next[key]]));
         const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), committed, committedLog.entries);
-        const backup = await this.storage.backupChanges?.prepareCommittedMutation?.(activity.changes.map((/** @type {StateRecord} */ change) => change.carNum));
-        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts, ...backup?.puts }, deletes: [] })) return false;
+        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts }, deletes: [] })) return false;
         activity.commitState = "committed";
         // Post-commit bookkeeping cannot turn a durable toggle into a retry.
-        for (const receipt of [sync, backup]) {
-            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed toggle intact. */ } }
-        }
+        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed toggle intact. */ } }
         try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
         if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
         return true;
     }
-    /** Persist an undo mutation atomically with sync/backup receipts under the shared lock.
-     * @param {StateRecord} nextState @param {StateRecord} log @param {string[]} touchedDomains @param {string[]} reverted @param {string} undoJournalId */
-    async _commitUndoAtomic(nextState, log, touchedDomains, reverted, undoJournalId) {
+    /** Persist an undo mutation atomically with sync receipts under the shared lock.
+     * @param {StateRecord} nextState @param {StateRecord} log @param {string[]} touchedDomains @param {string} undoJournalId */
+    async _commitUndoAtomic(nextState, log, touchedDomains, undoJournalId) {
         if (!this.mutationCoordinator || !this.storage.atomicStorage?.commitLockedBatch) return false;
         const puts = Object.fromEntries(touchedDomains.map(key => [this.domains[key].storageKey, key === "activity" ? log : nextState[key]]));
         const undoNotice = { id: undoJournalId, changes: [], commitState: "committed" };
         const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), undoNotice, log.entries);
-        const backup = await this.storage.backupChanges?.prepareCommittedMutation?.(reverted);
-        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts, ...backup?.puts }, deletes: [] })) return false;
-        for (const receipt of [sync, backup]) {
-            try { receipt?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed undo intact. */ } }
-        }
+        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts }, deletes: [] })) return false;
+        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed undo intact. */ } }
         try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
         this._listSnapshot = null;
         return true;
@@ -683,7 +676,7 @@ export class StateService {
             /** @type {Record<string, any>} */
             const beforeMap = before;
             const journal = { schema: 2, dataVersion: CURRENT_DATA_VERSION, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(beforeMap[key])])), after: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(nextState[key])])) };
-            const committedAtomically = await this._commitUndoAtomic(nextState, log, touchedDomains, reverted, journal.id);
+            const committedAtomically = await this._commitUndoAtomic(nextState, log, touchedDomains, journal.id);
             if (!committedAtomically) {
                 try {
                     await this.storage.forage.setItem("mutation_journal", journal);
@@ -697,7 +690,6 @@ export class StateService {
                     await this._recoverWithoutLock();
                     throw error;
                 }
-                this.storage.backupChanges?.primary(reverted);
             }
             reverted.length && await this._notifyCommitted("car-state-changed", { carNums: reverted, transactionId: journal.id, undoOf: transactionId });
             if (touched.has("ratings")) await this._notifyCommitted("personal-rating-changed", { carNums: reverted, transactionId: journal.id, undoOf: transactionId });

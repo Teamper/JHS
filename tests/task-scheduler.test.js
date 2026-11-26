@@ -1,3 +1,4 @@
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 import { ActorSourceHealth, isMissingActorSource } from "../src/features/discovery/actor-source-health.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
@@ -50,8 +51,10 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         request: vi.fn(async request => ({ data: await gmHttp.get(request.url), finalUrl: request.url }))
     }, actressInfo = {
         collection: vi.fn(async (_integrationId, input) => {
-            const html = await gmHttp.get(input.pageUrl), page = $(new JSDOM(html, { url: input.pageUrl }).window.document);
-            return context.parseJavDbActorList(page, input.pageUrl);
+            const html = await gmHttp.get(input.pageUrl);
+            vi.stubGlobal("DOMParser", dom.window.DOMParser);
+            try { return new JavDbHostAdapter(dom.window.document, dom.window.location).parseActorCollection(html, input.pageUrl); }
+            finally { vi.unstubAllGlobals(); }
         }),
         movies: vi.fn(async (_integrationId, input) => {
             const url = `${input.baseUrl}/actors/${input.actorId}?t=d`, html = await gmHttp.get(url), page = $(new JSDOM(html, { url }).window.document);
@@ -89,7 +92,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     const taskIntervalsSource = readTestFile(join(repoRoot, "src/features/discovery/task-intervals.js"), "utf8")
         .replace(/^\s*import\s+[^;]+;\s*$/gm, "")
         .replace(/^export\s+(?=function\s)/gm, "");
-    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n") + `\n${taskIntervalsSource}\n${taskExecutionSource}`;
+    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/host-list/parser.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n") + `\n${taskIntervalsSource}\n${taskExecutionSource}`;
     vm.runInContext(`${source};globalThis.Task=TaskExecutionService`, context);
     const plugin = new context.Task({
         runtimeServices: {

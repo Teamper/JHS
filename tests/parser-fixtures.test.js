@@ -1,19 +1,25 @@
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import jquery from "jquery";
 import { JSDOM } from "jsdom";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { movieCodeKey } from "../src/core/movie-code-evidence.js";
 
 const fixture = (name) => readTestFile(join(import.meta.dirname, "fixtures", name), "utf8");
-const source = ["javstore", "javdb", "host-list", "av123"].map((id) => readTestFile(join(import.meta.dirname, `../src/integrations/${id}/parser.js`), "utf8")).join("\n");
+const source = ["javstore", "host-list", "av123"].map((id) => readTestFile(join(import.meta.dirname, `../src/integrations/${id}/parser.js`), "utf8")).join("\n");
+
+const javdbPage = new JSDOM("", { url: "https://javdb.com/" });
+const javdb = new JavDbHostAdapter(javdbPage.window.document, javdbPage.window.location);
+beforeAll(() => vi.stubGlobal("DOMParser", javdbPage.window.DOMParser));
+afterAll(() => { vi.unstubAllGlobals(); javdbPage.window.close(); });
 
 function loadParsers(html) {
     const dom = new JSDOM(html, { url: "https://javdb.com/" }), $ = jquery(dom.window);
     const context = vm.createContext({ URL, $, A: "uncensored", D: "censored", normalizeCarNum: (value) => value?.trim() || null, movieCodeKey });
-    vm.runInContext(`${source}; globalThis.parsers = { normalizeJavStoreAssetUrl, parseJavStoreSearch, parseJavStorePreview, parseJavDbActorList, parseDetailPage, parse123AvCards, merge123AvCards, parse123AvSourceMaxPage, parse123AvVideoInfo };`, context);
+    vm.runInContext(`${source}; globalThis.parsers = { normalizeJavStoreAssetUrl, parseJavStoreSearch, parseJavStorePreview, parseDetailPage, parse123AvCards, merge123AvCards, parse123AvSourceMaxPage, parse123AvVideoInfo };`, context);
     return { ...context.parsers, $page: $(dom.window.document) };
 }
 
@@ -49,26 +55,21 @@ describe("third-party parser fixtures", () => {
     });
 
     it("parses actor identity, aliases, relative resources and pagination", () => {
-        const { parseJavDbActorList, $page } = loadParsers(fixture("javdb-actor-list.html"));
-        const parsed = parseJavDbActorList($page, "https://javdb.com/users/collection_actors");
+        const parsed = javdb.parseActorCollection(fixture("javdb-actor-list.html"), "https://javdb.com/users/collection_actors");
         expect(parsed.state).toBe("valid");
         expect(parsed.isEmpty).toBe(false);
         expect(JSON.parse(JSON.stringify(parsed.actors))).toEqual([{
-            starId: "actor-1", name: "演员甲", allName: ["演员甲", "别名甲"], avatar: "/actor.jpg",
+            starId: "actor-1", name: "演员甲", allName: ["演员甲", "别名甲"], avatar: "https://javdb.com/actor.jpg",
             actressType: "uncensored", lastCheckTime: null, lastUpdateTime: null
         }]);
         expect(parsed.nextUrl).toBe("https://javdb.com/users/collection_actors?page=2");
     });
 
     it("distinguishes valid empty, challenge, login and malformed actor collection pages", () => {
-        let loaded = loadParsers(fixture("javdb-empty-actor-list.html"));
-        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors")).toMatchObject({ state: "valid", isEmpty: true, actors: [] });
-        loaded = loadParsers(fixture("cloudflare-challenge.html"));
-        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors").state).toBe("challenge");
-        loaded = loadParsers(fixture("javdb-login.html"));
-        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors").state).toBe("invalid");
-        loaded = loadParsers(fixture("javdb-malformed-actor-list.html"));
-        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors").state).toBe("invalid");
+        expect(javdb.parseActorCollection(fixture("javdb-empty-actor-list.html"), "https://javdb.com/users/collection_actors")).toMatchObject({ state: "valid", isEmpty: true, actors: [] });
+        expect(javdb.parseActorCollection(fixture("cloudflare-challenge.html"), "https://javdb.com/users/collection_actors").state).toBe("challenge");
+        expect(javdb.parseActorCollection(fixture("javdb-login.html"), "https://javdb.com/users/collection_actors").state).toBe("invalid");
+        expect(javdb.parseActorCollection(fixture("javdb-malformed-actor-list.html"), "https://javdb.com/users/collection_actors").state).toBe("invalid");
     });
 
     it("distinguishes normal, valid empty and challenge pages", () => {

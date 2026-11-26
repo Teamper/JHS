@@ -131,7 +131,6 @@ export class StorageManager {
         (!e || e === this.setting_key) && (this.cacheSettingObj = null);
     }
     async _setItemAndInvalidate(e, t) {
-        await this.backupChanges?.capture(e);
         await this.syncState?.capture(e);
         await this.forage.setItem(e, t);
         this._invalidateCache(e);
@@ -265,7 +264,6 @@ export class StorageManager {
             const initialized = checkpoint.initialized || (progress.completeInitialRun && [...currentIds].every(isCurrent));
             const puts = { [ACTRESS_PROFILE_BACKFILL_KEY]: { ...checkpoint, initialized, entries: Object.fromEntries(entries) } };
             if (updated > 0) {
-                await this.backupChanges?.capture(favoriteKey);
                 await this.syncState?.capture(favoriteKey);
                 puts[favoriteKey] = nextList;
             }
@@ -806,7 +804,6 @@ export class StorageManager {
                 if (options.prepareData) ({ data: imported, warnings } = normalizePortableData(await options.prepareData()));
                 const batch = await prepareAtomicImport(this, atomic, imported, warnings, targetVersion, options.resetActressProfileBackfill !== false);
                 await options.assertActive?.();
-                for (const key of Object.keys(batch.puts)) await this.backupChanges?.capture(key);
                 await atomic.commitAtomicBatch({ ...batch, signal: options.signal });
                 committed = true;
                 refreshSettings = targetVersion < 1 || Object.hasOwn(imported, this.setting_key);

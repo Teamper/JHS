@@ -12,7 +12,7 @@ import { HttpService } from "../src/services/http-service.js";
 import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
 import { CacheService } from "../src/services/cache-service.js";
 import { assessMagnetQuality } from "../src/core/magnet-quality.js";
-import { Fc2Plugin } from "../src/plugins/external-search/fc2.js";
+import { Fc2WorkspaceService as Fc2Plugin } from "../src/features/detail/fc2-workspace-service.js";
 import { Fc2WorkspaceService } from "../src/features/detail/fc2-workspace-service.js";
 import { acquirePageScrollLock } from "../src/core/page-scroll-lock.js";
 import { dismissActiveTooltip } from "../src/core/tooltip-controller.js";
