@@ -137,6 +137,72 @@ test("zero requests without credentials, saved connection auto joins, pause and 
     } finally { await dav.close(); }
 });
 
+test("manual actress backfill discards a late result after data recovery in another tab", async ({ page, context }, info) => {
+    test.skip(info.project.name !== "desktop-wide", "same-origin recovery flow");
+    const dav = await isolatedDav();
+    try {
+        const install = await sharedUserscriptInstallation(context, dav);
+        await fulfillHostFixtures(context);
+        await page.goto("https://javdb.com/");
+        await injectUserscriptRuntime(page, {
+            settingOverrides: { enableCheckNewVideo: "no", enableCheckFavoriteActress: "no" },
+            beforeUserscriptInjection: install,
+        });
+        const url = "https://ja.wikipedia.org/wiki/Fixture_Actor";
+        await page.evaluate(async url => {
+            await window.storageManager.forage.setItem("favorite_actresses", [{
+                starId: "fixture", name: "Fixture Actor", actressProfileVerifiedUrl: url,
+                actressProfile: { url, matchedName: "Fixture Actor", height: "170cm" },
+            }]);
+        }, url);
+        await configure(page, dav.url);
+        await service(page, "pause", true);
+        await page.waitForFunction(() => window.unsafeWindow.pluginManager.getBean("TaskPlugin")?.service?.featureNewVideoScanController);
+        await page.evaluate(async () => {
+            await window.stateService.updateFavoriteActress({ starId: "fixture", actressProfile: null });
+            const task = window.unsafeWindow.pluginManager.getBean("TaskPlugin").service;
+            task.checkNewVideo = async () => ({ completed: true, fatal: false });
+            task.featureNewVideoScanController.actressInfo = {
+                lookupAny: () => new Promise(resolve => { window.finishFixtureActorLookup = resolve; }),
+            };
+            const trigger = task.triggerProfileBackfill.bind(task);
+            task.triggerProfileBackfill = async options => {
+                const result = await trigger(options);
+                window.fixtureActorBackfillDone = true;
+                return result;
+            };
+        });
+        await page.locator("#newVideoBtn").click();
+        await page.locator(".newVideoToolBox #checkNewVideo").click();
+        await page.waitForFunction(() => typeof window.finishFixtureActorLookup === "function");
+
+        const other = await context.newPage();
+        await other.goto("https://javdb.com/");
+        await injectUserscriptRuntime(other, { preserveStorage: true, beforeUserscriptInjection: install });
+        const recovery = await openSettings(other);
+        await recovery.locator("summary").filter({ hasText: "历史恢复" }).click();
+        await recovery.locator("#webdavSyncHistoryBtn").click();
+        const chooser = recovery.getByRole("combobox", { name: "选择恢复版本" });
+        await expect(chooser).toContainText("版本");
+        await chooser.click();
+        await other.getByRole("option", { name: /版本 1$/ }).click();
+        await recovery.locator("#webdavSyncRestorePreferences").uncheck();
+        await recovery.locator("#webdavSyncRestoreBtn").click();
+        await other.locator(".layui-layer-btn").getByRole("button", { name: "恢复", exact: true }).click();
+        const backfillState = () => other.evaluate(() => window.stateService.getActressProfileBackfillSnapshot());
+        await expect.poll(async () => (await backfillState()).state.generation).toEqual(expect.any(String));
+        const restored = await backfillState();
+        expect(restored.state).toMatchObject({ initialized: false, entries: {} });
+        expect(restored.actresses[0].actressProfile.height).toBe("170cm");
+
+        await page.evaluate(url => window.finishFixtureActorLookup({
+            info: { url, height: "150cm" }, matchedName: "Fixture Actor",
+        }), url);
+        await page.waitForFunction(() => window.fixtureActorBackfillDone);
+        expect(await backfillState()).toEqual(restored);
+    } finally { await dav.close(); }
+});
+
 test("same-origin tabs share scheduled polling while another tab can publish local changes", async ({ page, context }) => {
     const dav = await isolatedDav();
     try {

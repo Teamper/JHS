@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState } from "../src/core/actress-profile-backfill-state.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -25,6 +26,8 @@ describe("selected WebDAV recovery", () => {
         const dav = memoryDav(), a = await syncReplica(dav, { data: { setting: { themeMode: "dark", containerColumns: 7 }, filter_keyword_title: ["before"] } });
         await a.service.check();
         const file = [...dav.files.keys()][0];
+        const checkpoint = { ...createActressProfileBackfillState("before"), initialized: true, entries: { actor: 1000 } };
+        a.values.set(ACTRESS_PROFILE_BACKFILL_KEY, checkpoint);
         await a.settings.patch({ themeMode: "light", containerColumns: 2 });
         const original = a.storage.importDataWithGuard.bind(a.storage);
         vi.spyOn(a.storage, "importDataWithGuard").mockImplementationOnce(async (...args) => {
@@ -38,6 +41,11 @@ describe("selected WebDAV recovery", () => {
         expect(a.values.get("setting")).toMatchObject({ themeMode: selection.preferences ? "dark" : "system", containerColumns: layout ? 7 : 4 });
         expect(a.values.get("filter_keyword_title")).toEqual(selection.data ? ["before"] : ["before", "concurrent-new"]);
         expect(a.values.get("car_list").map(car => car.carNum)).toEqual(selection.data ? [] : ["CONCURRENT-1"]);
+        const backfill = a.values.get(ACTRESS_PROFILE_BACKFILL_KEY);
+        if (selection.data) {
+            expect(backfill).toEqual(createActressProfileBackfillState(expect.any(String)));
+            expect(backfill.generation).not.toBe(checkpoint.generation);
+        } else expect(backfill).toEqual(checkpoint);
         const snapshot = a.values.get("snapshots").find(item => item.source === "auto-import");
         expect(snapshot).toBeTruthy();
     });

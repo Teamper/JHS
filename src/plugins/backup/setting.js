@@ -740,13 +740,13 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         }));
         root.find(".clean-btn").on("click", (async e => {
             const key = this.jquery(e.currentTarget).data("key"), cacheItem = this.cacheItems.find((item => item.key === key));
-            key === this.legacyStorage.third_party_cache_key ? (await this.legacyStorage.clearThirdPartyCache(), await this.getRuntimeService("cache").clearNamespace("external-detail-v1")) : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : "jhs_translate" === key ? await translation.clearCache() : "jhs_actress_info" === key ? (await this.getRuntimeService("cache").clearNamespace("actress-info"), await storage.removeLocal(key), storage.removeLocal("jhs_actress_profile_attempts_v1")) : "jhs_screenShot" === key ? (await this.getRuntimeService("cache").clearNamespace("screenshot"), await storage.removeLocal(key)) : storage.removeLocal(key);
+            key === this.legacyStorage.third_party_cache_key ? (await this.legacyStorage.clearThirdPartyCache(), await this.getRuntimeService("cache").clearNamespace("external-detail-v1")) : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : "jhs_translate" === key ? await translation.clearCache() : "jhs_actress_info" === key ? (await this.getRuntimeService("cache").clearNamespace("actress-info"), await storage.removeLocal(key), await this.getRuntimeService("state").clearActressProfileBackfillAttempts()) : "jhs_screenShot" === key ? (await this.getRuntimeService("cache").clearNamespace("screenshot"), await storage.removeLocal(key)) : storage.removeLocal(key);
             this.notifications.ok("已清理所选缓存"), root.find("#cache-data-display").addClass("jhs-is-hidden");
             "jhs_dmm_video" === key && storage.removeLocal("jhs_other_site_dmm");
         }));
         root.find("#clean-all").on("click", (async () => {
-            this.cacheItems.forEach((item => "jhs_translate" !== item.key && storage.removeLocal(item.key))), await translation.clearCache(), await this.getRuntimeService("cache").clearAll(), this.notifications.ok("已清理全部缓存");
-            root.find("#cache-data-display").addClass("jhs-is-hidden"), storage.removeLocal("jhs_other_site_dmm"), storage.removeLocal("jhs_actress_profile_attempts_v1"), await this.legacyStorage.clearThirdPartyCache();
+            this.cacheItems.forEach((item => "jhs_translate" !== item.key && storage.removeLocal(item.key))), await translation.clearCache(), await this.getRuntimeService("cache").clearAll(), await this.getRuntimeService("state").clearActressProfileBackfillAttempts(), this.notifications.ok("已清理全部缓存");
+            root.find("#cache-data-display").addClass("jhs-is-hidden"), storage.removeLocal("jhs_other_site_dmm"), await this.legacyStorage.clearThirdPartyCache();
         }));
         root.find(".view-btn").on("click", (async e => {
             const key = this.jquery(e.currentTarget).data("key");

@@ -57,11 +57,13 @@ export const newVideoFeature = defineFeature({
         const taskPlugin = runtime.resolveCompatibilityBean("TaskPlugin");
         const scanController = new NewVideoScanController({
             sourceHealth, backgroundWork: deps[SERVICE.backgroundWork],
-            storage: deps[SERVICE.storage],
             state: deps[SERVICE.state],
             titleKeywords: deps[SERVICE.titleKeywords],
             actressInfo: deps[SERVICE.actressInfo],
             scope: runtime.scope,
+            events: deps[SERVICE.events],
+            jquery: deps[SERVICE.domUi].jquery,
+            window,
             logger: deps[SERVICE.clog],
             getTimestamp: () => deps[SERVICE.legacyUtils].getNowStr(),
             onNewItems: (name, count) => deps[SERVICE.clog].html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${count}部</span>`),

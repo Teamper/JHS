@@ -9,6 +9,7 @@ import {
     hasActiveBodyFilter,
     isSameActressProfile,
     matchesBodyFilter,
+    normalizeActressMatchKey,
     normalizeActressProfileData,
     normalizeBodyFilter,
     parseActressMeasurements,
@@ -17,6 +18,7 @@ import {
     parseHeightCm,
     readCleanActorElementText,
     readStoredActressMeasurements,
+    readVerifiedActressProfile,
 } from "../src/core/actress-measurements.js";
 import { JhsError, isAbortError, isNotFoundError, isTransientBlockError } from "../src/core/jhs-error.js";
 
@@ -206,5 +208,32 @@ describe("actress-measurements core primitives", () => {
         expect(isTransientBlockError(new JhsError("CIRCUIT_OPEN", "open"))).toBe(true);
         expect(isTransientBlockError(new JhsError("CF_BLOCKED", "cf"))).toBe(true);
         expect(isTransientBlockError(new JhsError("NOT_FOUND", "404"))).toBe(false);
+    });
+
+    it("normalizes fullwidth digits/cups and matches space/case/CJK variants for verified profiles", () => {
+        expect(parseHeightCm("１５９ｃｍ")).toBe(159);
+        expect(parseAgeYears("３３歳")).toBe(33);
+        expect(parseCupLetter("Ｊ")).toBe("J");
+        expect(parseCupLetter("Ｆカップ[1]")).toBe("F");
+
+        expect(normalizeActressMatchKey("二階堂 夢")).toBe(normalizeActressMatchKey("二階堂夢"));
+        expect(normalizeActressMatchKey("Miru")).toBe(normalizeActressMatchKey("miru"));
+        expect(normalizeActressMatchKey("三上悠亞")).toBe(normalizeActressMatchKey("三上悠亜"));
+        expect(normalizeActressMatchKey("蒼井空")).toBe(normalizeActressMatchKey("苍井空"));
+        expect(normalizeActressMatchKey("澤田")).toBe(normalizeActressMatchKey("沢田"));
+
+        const url = "https://ja.wikipedia.org/wiki/Sample";
+        expect(readVerifiedActressProfile({
+            name: "二階堂夢",
+            allName: ["miru"],
+            actressProfileVerifiedUrl: url,
+            actressProfile: { url, height: "158cm", braSize: "Ｊ", matchedName: "二階堂 夢" },
+        })).toMatchObject({ url, braSize: "Ｊ", matchedName: "二階堂 夢" });
+
+        expect(readVerifiedActressProfile({
+            name: "Actor",
+            actressProfileVerifiedUrl: url,
+            actressProfile: { url, height: "158cm", matchedName: "" },
+        })).toBeNull();
     });
 });

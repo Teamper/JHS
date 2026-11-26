@@ -3,6 +3,20 @@
 import { escapeHtml, normalizeCarNum } from "./constants.js";
 import { getMovieStateEligibility } from "./movie-identity.js";
 
+export const PROFILE_BACKFILL_LOCK_KEY = "jhsBackfillActressProfiles";
+
+/** @param {unknown} error @returns {boolean} */
+export function isNetworkBlockedError(error) {
+    if (!error || typeof error !== "object") return false;
+    const item = /** @type {Record<string, any>} */ (error);
+    return item.name === "AbortError"
+        || item.code === "ABORTED"
+        || item.code === "CF_BLOCKED"
+        || item.code === "CIRCUIT_OPEN"
+        || item._cfBlocked === true
+        || item._circuitBroken === true;
+}
+
 /** @template T,R @param {T[]} items @param {number} concurrency @param {(item: T, index: number) => Promise<R> | R} mapper @returns {Promise<R[]>} */
 export async function mapLimit(items, concurrency = 4, mapper) {
     const results = new Array(items.length); let cursor = 0;

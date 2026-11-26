@@ -3,12 +3,10 @@
 import { isMissingActorSource } from "./actor-source-health.js";
 import { collectActressLookupNames, isSameActressProfile, normalizeActressProfileData, readVerifiedActressProfile } from "../../core/actress-measurements.js";
 import { CACHE_TTL } from "../../core/cache-policy.js";
-import { selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
+import { PROFILE_BACKFILL_LOCK_KEY, isNetworkBlockedError, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { isAbortError, isTransientBlockError } from "../../core/jhs-error.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
-
-const PROFILE_ATTEMPTS_KEY = "jhs_actress_profile_attempts_v1";
-const PROFILE_ATTEMPTS_SCHEMA = 2;
 
 /** @param {unknown} [cause] */
 function createScanAbortError(cause) {
@@ -34,7 +32,7 @@ function sleepAbortable(ms, signal) {
 
 /** Converts discovered actor titles into the existing 6.5.1 actress record shape. */
 export class NewVideoScanController {
-    /** @param {{state: any, titleKeywords?: any, actressInfo?: any, scope?: any, logger?: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, storage?: any, preserveNewVideo?: boolean, onNewItems: (name: string, count: number) => void}} options */
+    /** @param {{state: any, titleKeywords?: any, actressInfo?: any, scope?: any, logger?: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, events?: any, jquery?: ((selector: any) => any) | null, window?: (Window & typeof globalThis) | null, preserveNewVideo?: boolean, onNewItems: (name: string, count: number) => void}} options */
     constructor(options) {
         this.state = options.state;
         this.titleKeywords = options.titleKeywords;
@@ -43,13 +41,14 @@ export class NewVideoScanController {
         this.backgroundWork = options.backgroundWork;
         this.preserveNewVideo = options.preserveNewVideo === true;
         this.sourceHealth = options.sourceHealth;
-        this.storage = options.storage ?? null;
+        this.events = options.events ?? null;
+        this.jquery = options.jquery ?? null;
+        this.window = options.window ?? null;
         this.logger = options.logger;
         this.getTimestamp = options.getTimestamp;
         this.onNewItems = options.onNewItems;
         this.disposed = false;
         /** @type {Set<() => void>} */ this.visibilityWaits = new Set();
-        /** @type {Map<string, number>} */ this.fallbackProfileAttempts = new Map();
     }
 
     /** Fetch and persist one actor's manual scan through the same feature-owned write path. */
@@ -262,155 +261,204 @@ export class NewVideoScanController {
         return fresh.length;
     }
 
-    /** @returns {Map<string, number>} */
-    readProfileAttempts() {
-        if (typeof this.storage?.getLocal !== "function") return new Map(this.fallbackProfileAttempts);
-        try {
-            const raw = this.storage.getLocal(PROFILE_ATTEMPTS_KEY);
-            if (!raw) return new Map();
-            const parsed = JSON.parse(raw);
-            if (parsed?.schema !== PROFILE_ATTEMPTS_SCHEMA || !parsed.entries || typeof parsed.entries !== "object" || Array.isArray(parsed.entries)) {
-                return new Map();
-            }
-            const map = new Map();
-            for (const [starId, ts] of Object.entries(parsed.entries)) {
-                const key = String(starId || "").trim();
-                const value = Number(ts);
-                if (key && Number.isFinite(value) && value > 0) map.set(key, value);
-            }
-            return map;
-        } catch (error) {
-            this.logger?.warn?.("读取演员资料冷却缓存失败，已重置:", error);
-            return new Map();
-        }
+    async needsProfileBackfillInit() {
+        return !(await this.state.getActressProfileBackfillState()).initialized;
     }
 
-    /** @param {Map<string, number>} attempts @param {Set<string>} validStarIds */
-    writeProfileAttempts(attempts, validStarIds) {
-        /** @type {Record<string, number>} */
-        const entries = {};
-        for (const [starId, ts] of attempts.entries()) {
-            if (!validStarIds.has(starId) || !Number.isFinite(ts) || ts <= 0) continue;
-            entries[starId] = ts;
-        }
-        if (typeof this.storage?.setLocal === "function") {
-            try {
-                this.storage.setLocal(PROFILE_ATTEMPTS_KEY, JSON.stringify({ schema: PROFILE_ATTEMPTS_SCHEMA, entries }));
-            } catch (error) {
-                try { this.logger?.warn?.("保存演员资料冷却缓存失败，已忽略:", error); }
-                catch { /* 本地冷却缓存写入失败不应覆盖已提交的业务写入。 */ }
+    /**
+     * Coordinate profile backfill under the shared Web Lock with status updates and commit notifications.
+     * @param {Record<string, any>} [options]
+     * @param {{ signal?: AbortSignal, isDisposed?: () => boolean, isListPage?: () => boolean }} [caller]
+     */
+    async triggerProfileBackfill(options = {}, caller = {}) {
+        const isDisposed = () => this.disposed || Boolean(this.scope?.disposed) || Boolean(caller.isDisposed?.());
+        if (isDisposed()) return null;
+        const { requireListPage = false, waitForLock, onProgress: callerOnProgress, ...backfillOptions } = options || {};
+        const hostWindow = this.window ?? (typeof globalThis !== "undefined" ? (globalThis.window ?? globalThis) : null);
+        const isListPage = () => typeof caller.isListPage === "function"
+            ? Boolean(caller.isListPage())
+            : Boolean(/** @type {any} */ (hostWindow)?.isListPage);
+        if (requireListPage && !isListPage()) return null;
+
+        const isTargeted = (Array.isArray(backfillOptions.starIds) && backfillOptions.starIds.length > 0)
+            || backfillOptions.force === true
+            || backfillOptions.refresh === true;
+        const shouldWaitForLock = waitForLock === true || (waitForLock === undefined && isTargeted);
+
+        const signals = /** @type {AbortSignal[]} */ ([caller.signal, this.scope?.signal].filter(Boolean));
+        const requestScope = caller.signal && caller.signal !== this.scope?.signal ? new LifecycleScope("actress-profile-backfill") : null;
+        /** @type {Array<() => void>} */
+        const signalCleanups = [];
+        if (requestScope) {
+            for (const item of signals) {
+                if (item.aborted) {
+                    requestScope.dispose();
+                    break;
+                }
+                const forward = () => requestScope.dispose();
+                item.addEventListener?.("abort", forward, { once: true });
+                signalCleanups.push(() => item.removeEventListener?.("abort", forward));
             }
-        } else {
-            this.fallbackProfileAttempts = new Map(Object.entries(entries).map(([k, v]) => [k, Number(v)]));
+        }
+        const signal = requestScope?.signal ?? signals[0];
+        if (signal?.aborted) {
+            for (const cleanup of signalCleanups) cleanup();
+            return null;
+        }
+
+        const setStatus = (/** @type {string} */ message) => {
+            if (isDisposed() || signal?.aborted) return;
+            try { this.jquery?.("#checkNewVideoMsg")?.text?.(message); }
+            catch { /* 状态栏更新失败不影响补齐主流程。 */ }
+        };
+        const runWithPresentation = async () => {
+            let committedCount = 0;
+            /** @type {{ total: number, updated: number, unchanged: number, failed: number, rateLimited: number } | null} */
+            let summary = null;
+            let completed = false;
+            try {
+                summary = await this.backfillFavoriteProfiles({
+                    ...backfillOptions,
+                    scope: requestScope ?? this.scope,
+                    onBatchCommitted: (count) => {
+                        if (Number.isFinite(count) && count > 0) committedCount += count;
+                    },
+                    onProgress: (progress) => {
+                        setStatus(`正在补齐演员资料 (${progress.processed}/${progress.total})…`);
+                        if (typeof callerOnProgress === "function") callerOnProgress(progress);
+                    },
+                });
+                completed = true;
+                if (summary && summary.total > 0) {
+                    setStatus(
+                        `演员资料补齐：更新 ${summary.updated}，未变 ${summary.unchanged}，失败 ${summary.failed}${summary.rateLimited ? `，限流 ${summary.rateLimited}` : ""}`
+                    );
+                }
+                return summary;
+            } catch (error) {
+                if (!isNetworkBlockedError(error)) setStatus("演员资料补齐失败");
+                throw error;
+            } finally {
+                const updatedCount = completed ? Number(summary?.updated || 0) : committedCount;
+                if (updatedCount > 0) {
+                    try {
+                        await this.events?.emit?.("new-video-changed", { reason: "favorite-profile-backfill", carNums: [] });
+                    } catch (notifyError) {
+                        try { this.logger?.warn?.("演员身材资料补齐状态已记录，但结束通知失败", notifyError); }
+                        catch { /* 已提交的资料补齐不受诊断输出影响。 */ }
+                    }
+                }
+            }
+        };
+
+        const locks = /** @type {any} */ (hostWindow)?.navigator?.locks;
+        const requestLock = locks?.request;
+        try {
+            if (typeof requestLock !== "function") return await runWithPresentation();
+            const lockOptions = shouldWaitForLock ? (signal ? { signal } : {}) : { ifAvailable: true };
+            return await requestLock.call(locks, PROFILE_BACKFILL_LOCK_KEY, lockOptions, async (/** @type {unknown} */ lock) => {
+                if (!lock || isDisposed() || signal?.aborted || (requireListPage && !isListPage())) return null;
+                return await runWithPresentation();
+            });
+        } catch (error) {
+            if (isNetworkBlockedError(error)) {
+                const reason = error instanceof Error ? error.message : String(error);
+                this.logger?.warn?.(`演员身材资料补齐已停止: ${reason}`);
+            } else {
+                this.logger?.error?.("演员身材资料补齐出现错误:", error);
+            }
+            return null;
+        } finally {
+            requestScope?.dispose();
+            for (const cleanup of signalCleanups) cleanup();
         }
     }
 
     /**
-     * Backfill missing or expired Wikipedia actress profiles for favorite actresses without touching unchanged records.
-     * @param {{ now?: number, concurrency?: number, delayMs?: number, onProgress?: (progress: { processed: number, total: number, updated: number, unchanged: number, failed: number, rateLimited: number }) => void }} [options]
-     * @returns {Promise<{ total: number, updated: number, unchanged: number, failed: number, rateLimited: number }>}
+     * Save completed lookups in batches and mark the initial sweep only after an untargeted run finishes.
+     * @param {{now?: number, concurrency?: number, delayMs?: number, starIds?: string[], force?: boolean, refresh?: boolean, commitBatchSize?: number, scope?: any, onBatchCommitted?: (count: number) => void, onProgress?: (progress: {processed: number, total: number, updated: number, unchanged: number, failed: number, rateLimited: number}) => void}} [options]
      */
-    async backfillFavoriteProfiles({ now = Date.now(), concurrency = 2, delayMs = 150, onProgress } = {}) {
-        this.assertActive();
-        if (this.scope?.signal?.aborted) throw createScanAbortError(this.scope.signal.reason);
-        const actresses = await this.state.getFavoriteActressList();
-        this.assertActive();
-        if (this.scope?.signal?.aborted) throw createScanAbortError(this.scope.signal.reason);
+    async backfillFavoriteProfiles({ now = Date.now(), concurrency = 2, delayMs = 150, starIds, force = false, refresh = false, commitBatchSize = 10, scope = this.scope, onBatchCommitted, onProgress } = {}) {
+        const signal = scope?.signal;
+        const assertActive = () => {
+            this.assertActive();
+            if (signal?.aborted) throw createScanAbortError(signal.reason);
+        };
+        assertActive();
+        const { actresses, state } = await this.state.getActressProfileBackfillSnapshot();
+        assertActive();
 
-        const list = Array.isArray(actresses) ? actresses : [];
-        const validStarIds = new Set(list.map((/** @type {any} */ item) => String(item?.starId || "").trim()).filter(Boolean));
-        const attempts = this.readProfileAttempts();
-        let hasOrphans = false;
-        for (const starId of attempts.keys()) {
-            if (!validStarIds.has(starId)) {
-                hasOrphans = true;
-                break;
+        const targetIds = starIds?.length ? new Set(starIds.map(id => id.trim())) : null;
+        const attempts = /** @type {Record<string, number>} */ (state.entries);
+        const currentIds = new Set();
+        /** @type {Array<{actress: any, starId: string, profile: ReturnType<typeof readVerifiedActressProfile>}>} */
+        const due = [];
+        for (const actress of actresses) {
+            const starId = String(actress?.starId || "").trim();
+            if (!starId) continue;
+            currentIds.add(starId);
+            if (targetIds && !targetIds.has(starId)) continue;
+            const profile = readVerifiedActressProfile(actress);
+            const cooldown = profile ? CACHE_TTL.actressInfo : CACHE_TTL.actressInfoNegative;
+            if (force || !Object.hasOwn(attempts, starId) || now - attempts[starId] >= cooldown) {
+                due.push({ actress, starId, profile });
             }
         }
 
-        /** @type {Array<{ actress: any, starId: string, currentProfile: ReturnType<typeof normalizeActressProfileData> }>} */
-        const dueList = [];
-        for (const actress of list) {
-            const starId = String(actress?.starId || "").trim();
-            if (!starId) continue;
-            const currentProfile = readVerifiedActressProfile(actress);
-            const cooldown = currentProfile?.url ? CACHE_TTL.actressInfo : CACHE_TTL.actressInfoNegative;
-            const lastAttempt = attempts.get(starId) ?? 0;
-            const due = lastAttempt <= 0 || (now - lastAttempt) >= cooldown;
-            if (due) dueList.push({ actress, starId, currentProfile });
-        }
+        const total = due.length;
+        const batchSize = Math.max(1, Math.trunc(Number(commitBatchSize) || 10));
+        const pendingAttempts = new Map();
+        /** @type {Array<{starId: string, actressProfile: NonNullable<ReturnType<typeof normalizeActressProfileData>>}>} */
+        const pendingProfiles = [];
+        let prune = Object.keys(attempts).some(id => !currentIds.has(id));
+        let nextIndex = 0, processed = 0, updated = 0, unchanged = 0, failed = 0, rateLimited = 0;
+        let stopped = false, writeFailed = false;
+        let writes = Promise.resolve();
 
-        if (!dueList.length) {
-            if (hasOrphans) this.writeProfileAttempts(attempts, validStarIds);
-            return { total: 0, updated: 0, unchanged: 0, failed: 0, rateLimited: 0 };
-        }
+        const flush = (completeInitialRun = false) => {
+            const next = writes.then(async () => {
+                if (writeFailed || (!pendingAttempts.size && !prune && !completeInitialRun)) return;
+                assertActive();
+                const batch = pendingProfiles.splice(0);
+                const attempts = new Map(pendingAttempts);
+                pendingAttempts.clear();
+                const committed = await this.state.batchUpdateFavoriteActressProfiles(batch, {
+                    generation: state.generation, actorRevisions: state.actorRevisions, attempts, completeInitialRun, signal,
+                });
+                prune = false;
+                updated += committed;
+                unchanged += batch.length - committed;
+                if (committed) onBatchCommitted?.(committed);
+            });
+            writes = next.catch(() => { writeFailed = true; stopped = true; });
+            return next;
+        };
 
-        const total = dueList.length;
-        let nextIndex = 0;
-        let processed = 0;
-        let updated = 0;
-        let unchanged = 0;
-        let failed = 0;
-        let rateLimited = 0;
-        let stopWorkers = false;
-        let attemptsDirty = hasOrphans;
-        /** @type {Array<{ starId: string, actressProfile: NonNullable<ReturnType<typeof normalizeActressProfileData>> }>} */
-        const profileUpdates = [];
-
-        const workerCount = Math.max(1, Math.min(Math.trunc(Number(concurrency) || 1), total));
+        const lookupOptions = refresh ? { scope, refresh: true } : { scope };
+        const workerCount = Math.min(total, Math.max(1, Math.trunc(Number(concurrency) || 1)));
         const workers = Array.from({ length: workerCount }, async () => {
-            while (!stopWorkers && !this.disposed && !this.scope?.signal?.aborted) {
-                const index = nextIndex++;
-                if (index >= total) return;
-                await this.waitForVisible();
-                await this.backgroundWork?.waitForTurn?.({ signal: this.scope?.signal });
-                this.assertActive();
-                if (this.scope?.signal?.aborted) throw createScanAbortError(this.scope.signal.reason);
-                if (stopWorkers) return;
-
-                const { actress, starId, currentProfile } = dueList[index];
-                const names = collectActressLookupNames(actress?.name, actress?.allName);
+            while (!stopped && nextIndex < total) {
+                const { actress, starId, profile } = due[nextIndex++];
+                await this.waitForVisible(signal);
+                await this.backgroundWork?.waitForTurn?.({ signal });
+                assertActive();
+                if (stopped) return;
+                const names = collectActressLookupNames(actress.name, actress.allName);
                 try {
-                    /** @type {any} */
-                    let result = null;
-                    if (names.length) {
-                        if (typeof this.actressInfo?.lookupAny === "function") {
-                            result = await this.actressInfo.lookupAny(names, { scope: this.scope });
-                        } else if (typeof this.actressInfo?.lookup === "function") {
-                            for (const candidate of names) {
-                                const info = await this.actressInfo.lookup(candidate, { scope: this.scope });
-                                if (info) {
-                                    result = { info, matchedName: candidate };
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    this.assertActive();
-                    if (this.scope?.signal?.aborted) throw createScanAbortError(this.scope.signal.reason);
-                    const rawInfo = result && typeof result === "object" && "info" in result ? result.info : result;
-                    const matchedName = result && typeof result === "object" && "matchedName" in result
-                        ? result.matchedName
-                        : (rawInfo?.matchedName || names[0] || "");
-                    const nextProfile = rawInfo
-                        ? normalizeActressProfileData({ ...rawInfo, matchedName })
-                        : null;
-                    attempts.set(starId, now);
-                    attemptsDirty = true;
-                    if (nextProfile) {
-                        if (!isSameActressProfile(currentProfile, nextProfile)) {
-                            profileUpdates.push({ starId, actressProfile: nextProfile });
-                            updated += 1;
-                        } else {
-                            unchanged += 1;
-                        }
-                    } else {
-                        unchanged += 1;
-                    }
+                    const result = names.length ? await this.actressInfo.lookupAny(names, lookupOptions) : null;
+                    assertActive();
+                    if (stopped) return;
+                    const nextProfile = result && normalizeActressProfileData({ ...result.info, matchedName: result.matchedName });
+                    pendingAttempts.set(starId, now);
+                    if (nextProfile && !isSameActressProfile(profile, nextProfile)) pendingProfiles.push({ starId, actressProfile: nextProfile });
+                    else unchanged += 1;
                 } catch (error) {
-                    if (isAbortError(error) || this.disposed || this.scope?.signal?.aborted) throw error;
+                    if (isAbortError(error) || this.disposed || signal?.aborted) {
+                        stopped = true;
+                        throw error;
+                    }
                     if (isTransientBlockError(error)) {
-                        stopWorkers = true;
+                        stopped = true;
                         rateLimited += 1;
                         this.logger?.warn?.("演员身材资料补齐触发限流，本轮停止", error);
                     } else {
@@ -418,62 +466,39 @@ export class NewVideoScanController {
                         this.logger?.warn?.("演员身材资料补齐失败:", starId, error);
                     }
                 }
+                if (pendingAttempts.size >= batchSize) await flush();
                 processed += 1;
-                try {
-                    onProgress?.({ processed, total, updated, unchanged, failed, rateLimited });
-                } catch (progressError) {
-                    this.logger?.warn?.("演员资料补齐进度回调失败", progressError);
-                }
-                if (!stopWorkers && delayMs > 0 && nextIndex < total) {
-                    await sleepAbortable(delayMs, this.scope?.signal);
-                }
+                assertActive();
+                try { onProgress?.({ processed, total, updated, unchanged, failed, rateLimited }); }
+                catch (error) { this.logger?.warn?.("演员资料补齐进度回调失败", error); }
+                if (!stopped && nextIndex < total) await sleepAbortable(delayMs, signal);
             }
-            this.assertActive();
         });
 
         const settled = await Promise.allSettled(workers);
-        const failure = settled.find((item) => item.status === "rejected");
-        if (failure?.status === "rejected") {
-            throw failure.reason;
-        }
-        this.assertActive();
-        if (this.scope?.signal?.aborted) throw createScanAbortError(this.scope.signal.reason);
-
-        if (profileUpdates.length > 0) {
-            let persistedUpdated = 0;
-            if (typeof this.state.batchUpdateFavoriteActressProfiles === "function") {
-                const committed = await this.state.batchUpdateFavoriteActressProfiles(profileUpdates);
-                persistedUpdated = typeof committed === "number" && Number.isFinite(committed)
-                    ? Math.max(0, Math.min(committed, profileUpdates.length))
-                    : profileUpdates.length;
-            } else if (typeof this.state.updateFavoriteActress === "function") {
-                for (const item of profileUpdates) {
-                    const ok = await this.state.updateFavoriteActress(item);
-                    if (ok !== false) persistedUpdated += 1;
-                }
-            }
-            if (persistedUpdated < updated) {
-                unchanged += updated - persistedUpdated;
-                updated = persistedUpdated;
-            }
-        }
-        if (attemptsDirty) {
-            this.writeProfileAttempts(attempts, validStarIds);
-        }
+        const failure = settled.find(item => item.status === "rejected");
+        if (failure?.status === "rejected") throw failure.reason;
+        assertActive();
+        await flush(!targetIds && !state.initialized && processed === total && !rateLimited);
         return { total, updated, unchanged, failed, rateLimited };
     }
 
-    async waitForVisible() {
+    /** @param {AbortSignal} [signal] */
+    async waitForVisible(signal = this.scope?.signal) {
         const doc = globalThis.document;
         if (!doc?.hidden) return;
         await new Promise((resolve, reject) => {
-            const cleanup = () => { this.visibilityWaits.delete(abort); doc.removeEventListener("visibilitychange", check); this.scope.signal?.removeEventListener("abort", abort); };
+            const cleanup = () => {
+                this.visibilityWaits.delete(abort);
+                doc.removeEventListener("visibilitychange", check);
+                signal?.removeEventListener("abort", abort);
+            };
             const check = () => { if (!doc.hidden) { cleanup(); resolve(undefined); } };
             const abort = () => { cleanup(); reject(new DOMException("Scan disposed", "AbortError")); };
             this.visibilityWaits.add(abort);
             doc.addEventListener("visibilitychange", check);
-            this.scope.signal?.addEventListener("abort", abort, { once: true });
-            if (this.scope.disposed || this.disposed) abort(); else check();
+            signal?.addEventListener("abort", abort, { once: true });
+            if (signal?.aborted || this.disposed) abort(); else check();
         });
     }
 

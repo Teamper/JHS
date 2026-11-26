@@ -121,12 +121,13 @@ describe("migration write ownership", () => {
         expect(merge).not.toContain("await this.saveSetting(e)");
     });
 
-    it("invalidates favorite_actresses cache on cross-tab new-video-changed and clears local profile attempts in SettingPlugin", () => {
+    it("invalidates favorite_actresses cache on cross-tab new-video-changed and resets profile attempts through StateService", () => {
         expect(bootstrap).toContain('jhsEventBus.on("new-video-changed"');
         expect(bootstrap).toContain("storageManager.favorite_actresses_key");
         const cleanBtn = methodBody(settingPlugin, 'root.find(".clean-btn")', 'root.find(".view-btn")');
         expect(cleanBtn).toContain('"jhs_actress_info" === key');
-        expect(cleanBtn).toContain('storage.removeLocal("jhs_actress_profile_attempts_v1")');
-        expect(cleanBtn.slice(cleanBtn.indexOf("#clean-all"))).toContain('storage.removeLocal("jhs_actress_profile_attempts_v1")');
+        const clearAttempts = 'await this.getRuntimeService("state").clearActressProfileBackfillAttempts()';
+        expect(cleanBtn.slice(0, cleanBtn.indexOf("#clean-all"))).toContain(clearAttempts);
+        expect(cleanBtn.slice(cleanBtn.indexOf("#clean-all"))).toContain(clearAttempts);
     });
 });

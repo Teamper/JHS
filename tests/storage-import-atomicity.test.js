@@ -1,6 +1,9 @@
 import { memoryAtomicStorage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StorageManager } from "../src/core/storage.js";
+import { StateService } from "../src/core/state-service.js";
+import { ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState } from "../src/core/actress-profile-backfill-state.js";
+import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 import { runDataMigrations } from "../src/core/migration.js";
 import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 import { SettingsService } from "../src/services/settings-service.js";
@@ -60,6 +63,7 @@ function createStorage(options = {}) {
         filter_keyword_review_key: "filter_keyword_review",
         third_party_cache_key: "third_party_ttl_cache",
         mutationCoordinator: coordinator,
+        _actressLock: Promise.resolve(),
         stateService: { recoverPendingTransactionWithoutLock: vi.fn(async () => false) },
         forage,
         getCarList: async () => data.get("car_list") || [],
@@ -92,12 +96,15 @@ describe("portable import atomicity", () => {
         expect(data.get("snapshots").filter(snapshot => snapshot.source === "auto-import")).toHaveLength(1);
     });
 
-    it.each(["data_version", "car_list", "setting", "favorite_actresses"])("keeps the pre-import data when persisting %s fails", async (failKey) => {
+    it.each(["data_version", "car_list", "setting", "favorite_actresses", ACTRESS_PROFILE_BACKFILL_KEY])("keeps the pre-import data when persisting %s fails", async (failKey) => {
         vi.stubGlobal("utils", { getNowStr: () => "2026-09-26 00:00:00" });
         vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
         vi.stubGlobal("navigator", {});
         const version = failKey === "data_version" ? 2 : 3;
-        const { storage, data, coordinator, writes } = createStorage({ failKey, initial: { data_version: version } });
+        const checkpoint = { ...createActressProfileBackfillState("before"), initialized: true, entries: { "old-star": 1000 } };
+        const { storage, data, coordinator, writes } = createStorage({
+            failKey, initial: { data_version: version, [ACTRESS_PROFILE_BACKFILL_KEY]: checkpoint },
+        });
 
         await expect(storage.importData({
             data_version: 3,
@@ -109,10 +116,46 @@ describe("portable import atomicity", () => {
         expect(data.get("car_list")).toEqual([{ carNum: "OLD-1", url: "/v/old" }]);
         expect(data.get("setting")).toEqual({ themeMode: "light", webDavPassword: "AES:local" });
         expect(data.get("favorite_actresses")).toEqual([{ starId: "old-star", name: "Old" }]);
+        expect(data.get(ACTRESS_PROFILE_BACKFILL_KEY)).toEqual(checkpoint);
         expect(data.get("data_version")).toBe(version);
         expect(data.has("snapshots")).toBe(false);
         expect(coordinator.entries).toBe(1);
         expect(writes.every((write) => write.depth === 1)).toBe(true);
+    });
+
+    it.each(["import", "snapshot"])("discards a lookup started in another tab before %s commits", async mode => {
+        vi.stubGlobal("utils", { getNowStr: () => "2026-11-25 12:00:00" });
+        vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
+        const { storage, data } = createStorage({
+            initial: { [ACTRESS_PROFILE_BACKFILL_KEY]: { ...createActressProfileBackfillState("before"), initialized: true, entries: { "old-star": 1000 } } },
+        });
+        const otherTab = Object.assign(Object.create(StorageManager.prototype), storage, { _actressLock: Promise.resolve() });
+        const state = new StateService(otherTab, {});
+        const url = "https://ja.wikipedia.org/wiki/Old";
+        let release;
+        const lookup = vi.fn(() => new Promise(resolve => { release = resolve; }));
+        const controller = new NewVideoScanController({ state, actressInfo: { lookupAny: lookup }, getTimestamp: () => "", onNewItems: () => {} });
+        const inFlight = controller.backfillFavoriteProfiles({ now: 2000, delayMs: 0, force: true });
+        await vi.waitFor(() => expect(lookup).toHaveBeenCalledOnce());
+
+        const backup = {
+            data_version: 3,
+            favorite_actresses: [{ starId: "old-star", name: "Old", actressProfile: { url, matchedName: "Old", height: "170cm" }, actressProfileVerifiedUrl: url }],
+        };
+        if (mode === "snapshot") {
+            vi.spyOn(storage, "getSnapshot").mockResolvedValue({ data: backup });
+            await storage.restoreSnapshot("restore-point");
+        } else await storage.importData(backup);
+        const committed = await state.getActressProfileBackfillState();
+        expect(committed).toEqual(createActressProfileBackfillState(expect.any(String)));
+        expect(committed.generation).not.toBe("before");
+        release(mode === "import" ? { info: { url, height: "150cm" }, matchedName: "Old" } : null);
+
+        await expect(inFlight).rejects.toMatchObject({ name: "AbortError" });
+        expect(await state.getActressProfileBackfillState()).toEqual(committed);
+        expect(data.get("favorite_actresses")[0].actressProfile.height).toBe("170cm");
+        expect(await controller.needsProfileBackfillInit()).toBe(true);
+        expect(await storage.exportPortableData()).not.toHaveProperty(ACTRESS_PROFILE_BACKFILL_KEY);
     });
 
     it("restores all data when the destination migration fails before applying the import", async () => {

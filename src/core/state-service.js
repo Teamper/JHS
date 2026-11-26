@@ -296,9 +296,19 @@ export class StateService {
     async updateFavoriteActress(update, options) {
         return options?.scan ? this.storage.updateFavoriteActress(update, options) : this.storage.updateFavoriteActress(update);
     }
-    /** Atomically update materially changed actress profiles under the actress lock. @param {Array<{starId: string, actressProfile: StateRecord}>} updates */
-    async batchUpdateFavoriteActressProfiles(updates) {
-        return this.storage.batchUpdateFavoriteActressProfiles(updates);
+    async getActressProfileBackfillState() {
+        return this.storage.getActressProfileBackfillState();
+    }
+    async getActressProfileBackfillSnapshot() {
+        return this.storage.getActressProfileBackfillSnapshot();
+    }
+    /** @param {string[]} [starIds] */
+    async clearActressProfileBackfillAttempts(starIds) {
+        return this.storage.clearActressProfileBackfillAttempts(starIds);
+    }
+    /** @param {Array<{starId: string, actressProfile: StateRecord}>} updates @param {import("./actress-profile-backfill-state.js").ActressProfileBackfillProgress} [progress] */
+    async batchUpdateFavoriteActressProfiles(updates, progress) {
+        return this.storage.batchUpdateFavoriteActressProfiles(updates, progress);
     }
     /** Atomically migrate or merge a favorite actress record onto a new starId under the actress lock. @param {StateRecord} payload */
     async rebindFavoriteActress(payload) {
