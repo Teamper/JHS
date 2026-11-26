@@ -4,6 +4,8 @@ import { closeOwnedPopover } from "../../core/owned-popover.js";
 import { prepareDialogOptions } from "../../core/dialog-shell.js";
 import { JHS_Z_INDEX } from "../../core/theme.js";
 
+/** @typedef {import("../../contracts/ports.js").DialogPort} DialogPort */
+/** @implements {DialogPort} */
 export class LayerDialogAdapter {
     /** @param {{open: (options: Record<string, unknown>) => number, close: (id: number) => void, confirm: (message: string, options: Record<string, unknown>, yes: (id: number) => void, no?: (id: number) => void) => number, alert: (message: string, options?: Record<string, unknown>) => number}} layerRuntime */
     constructor(layerRuntime) { this.layer = layerRuntime; }

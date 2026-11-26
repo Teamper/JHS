@@ -5,7 +5,7 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 
 export default defineFeature({
     id: "library", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.movie, SERVICE.titleKeywords, SERVICE.domUi, SERVICE.notifications, SERVICE.events, SERVICE.profile, SERVICE.dialog, SERVICE.clipboard, SERVICE.clog],
+    requires: [PORT.host, PORT.style, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.movie, SERVICE.legacyStorage, SERVICE.domUi, SERVICE.notifications, SERVICE.events, SERVICE.profile, SERVICE.dialog, SERVICE.clipboard, SERVICE.clog],
     contributionAvailability: {
         "library.keyword-filter": { routes: ["list", "detail", "owned-detail"] },
         "library.state-actions": { sites: ["javdb"], routes: ["list"] },
@@ -127,7 +127,7 @@ export default defineFeature({
         if (runtime.enabledContributions.includes("library.keyword-filter")) {
             const controller = new TitleKeywordController({
                 document, window, site: runtime.site, route: runtime.route,
-                settings: deps[SERVICE.settings], keywords: deps[SERVICE.titleKeywords],
+                settings: deps[SERVICE.settings], saveKeyword: (/** @type {string} */ keyword) => deps[SERVICE.legacyStorage].saveTitleFilterKeyword(keyword),
                 events: deps[SERVICE.events], ui: deps[SERVICE.domUi], scope: runtime.scope, diagnostics: runtime.diagnostics,
             });
             if (controller.start()) disposers.push(() => controller.dispose());

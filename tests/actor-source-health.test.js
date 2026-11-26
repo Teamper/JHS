@@ -8,7 +8,7 @@ describe("unavailable actor source recovery", () => {
         const health = new ActorSourceHealth({ getLocal: key => local.get(key), setLocal: (key, value) => local.set(key, value) }, () => now);
         const saved = [{ starId: "gone", name: "Missing", newVideoList: ["KEEP-1"] }, { starId: "ok", name: "Available" }];
         const movies = vi.fn(async (_provider, ref) => { if (ref.actorId === "gone") throw Object.assign(new Error("404"), { code: "NOT_FOUND" }); return []; });
-        const controller = new NewVideoScanController({ state: { getFavoriteActressList: async () => saved, getBlacklistCarList: async () => [], updateFavoriteActress: vi.fn(async () => true) }, sourceHealth: health, titleKeywords: { getAll: async () => [] }, actressInfo: { movies }, scope: {}, getTimestamp: () => "2026-10-26", onNewItems() {} });
+        const controller = new NewVideoScanController({ state: { getFavoriteActressList: async () => saved, getBlacklistCarList: async () => [], updateFavoriteActress: vi.fn(async () => true) }, sourceHealth: health, readTitleKeywords: async () => [], actressInfo: { movies }, scope: {}, getTimestamp: () => "2026-10-26", onNewItems() {} });
         const options = { baseUrl: "https://javdb.com", force: false, concurrency: 1, sleepMs: 0, intervalHours: 12, ruleHours: 0, isUnnecessaryCheck: () => false, isNetworkBlocked: () => false, sleep: async () => {} };
         await expect(controller.scanActresses(options)).resolves.toMatchObject({ success: 1, unavailable: 1, networkFailed: 0 });
         expect(saved[0].newVideoList).toEqual(["KEEP-1"]);

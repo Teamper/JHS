@@ -12,7 +12,7 @@ for (const [cards, library, filter, suppressBroadcast] of [[40, 1000, "waitCheck
         await context.route("https://javdb.com/v/**", route => route.fulfill({ contentType: "text/html", body: html }));
         await page.goto("https://javdb.com/");
         const settings = { autoPage: "no", enableTranslation: "no", enableLoadReview: "no", enableLoadPreviewVideo: "no", needClosePage: "yes", defaultQuickFilterTab: "waitCheck" };
-        await injectUserscriptRuntime(page, { settingOverrides: settings, beforeUserscriptInjection: async host => {
+        await injectUserscriptRuntime(page, { settingOverrides: settings, disabledPlugins: ["TaskPlugin"], beforeUserscriptInjection: async host => {
             await host.evaluate(async ({ cards, library }) => {
                 const root = document.querySelector(".movie-list"), template = root.firstElementChild;
                 for (let i = 1; i < cards; i++) {
@@ -38,27 +38,30 @@ for (const [cards, library, filter, suppressBroadcast] of [[40, 1000, "waitCheck
         await injectUserscriptRuntime(frame, { preserveStorage: true });
         await frame.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
         await page.evaluate(filter => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter(filter), filter);
-        await page.evaluate(async () => {
-            const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
-            await list.filterContextProvider.get();
-            window.__markReads = { rules: 0, historyUi: 0 };
-            const keywords = list.getRuntimeService("titleKeywords"), readRules = keywords.getAll.bind(keywords);
-            keywords.getAll = (...args) => { window.__markReads.rules++; return readRules(...args); };
-            const state = window.stateService, readHistory = state.getActivityLog.bind(state);
-            state.getActivityLog = (...args) => { window.__markReads.historyUi++; return readHistory(...args); };
-        });
         await frame.evaluate(async suppressBroadcast => {
             const controller = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
             controller.registry = { getCandidates: async () => [{ provider: { id: "123", name: "123", isEnabled: async () => true, submit: async () => { window.parent.__offlineSubmitCount++; } }, availability: { authState: "ready" } }], updateAvailability() {} };
             const store = window.storageManager.syncState;
-            await store.merge([], "fixture-joined", async () => {});
+            const channel = window.jhsEventBus.channel, postMessage = channel.postMessage;
+            // The initial merge belongs to fixture setup. Only the actual mark follows the case's broadcast policy.
+            channel.postMessage = () => {};
+            try { await store.merge([], "fixture-joined", async () => {}); }
+            finally { if (!suppressBroadcast) channel.postMessage = postMessage; }
             store.deps.backgroundWork = { waitForTurn: () => new Promise(() => {}) };
             store.reconcileWithoutLock = () => new Promise(() => {});
-            if (suppressBroadcast) window.jhsEventBus.channel.postMessage = () => {};
             const state = window.stateService, commit = state._commit.bind(state);
             state._commit = async (...args) => { const value = await commit(...args); window.parent.__markTiming.durableAt = window.parent.performance.now(); return value; };
             window.jhsEventBus.on("car-state-changed", () => { window.parent.__localMarkListenerEntered = true; return new Promise(() => {}); });
         }, suppressBroadcast);
+        await page.evaluate(async () => {
+            const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+            await list.filterContextProvider.get();
+            window.__markReads = { rules: 0, historyUi: 0 };
+            const storage = list.getRuntimeService("legacyStorage"), readRules = storage.getTitleFilterKeyword.bind(storage);
+            storage.getTitleFilterKeyword = (...args) => { window.__markReads.rules++; return readRules(...args); };
+            const state = window.stateService, readHistory = state.getActivityLog.bind(state);
+            state.getActivityLog = (...args) => { window.__markReads.historyUi++; return readHistory(...args); };
+        });
         await frame.locator(".jhs-offline-native").first().click();
         await expect(frame.getByRole("button", { name: "标记已下载", exact: true })).toBeVisible();
         await page.evaluate(() => {

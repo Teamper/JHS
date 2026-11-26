@@ -3,7 +3,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { TitleKeywordController } from "../src/features/library/title-keyword-controller.js";
-import { TitleKeywordService } from "../src/services/title-keyword-service.js";
 
 function setup({ site = "javdb", route = "detail", initial = {}, selection = "Movie title" } = {}) {
     const host = document.createElement("main");
@@ -22,7 +21,7 @@ function setup({ site = "javdb", route = "detail", initial = {}, selection = "Mo
     const diagnostics = { recordError: vi.fn() };
     const ui = { confirm, jquery: value => ({ value }), closePage };
     const controller = new TitleKeywordController({
-        document, window, site, route, settings, keywords: { add }, events: { emit: emitted }, ui, scope, diagnostics,
+        document, window, site, route, settings, saveKeyword: add, events: { emit: emitted }, ui, scope, diagnostics,
     });
     return { controller, scope, settings, host, confirm, closePage, emitted, add, diagnostics };
 }
@@ -103,14 +102,4 @@ describe("Library Feature title keyword controller", () => {
         javbusList.scope.dispose();
     });
 
-    it("keeps title keyword reads and writes behind the compatibility service", async () => {
-        const saveTitleFilterKeyword = vi.fn(async keyword => keyword), getTitleFilterKeyword = vi.fn(async () => ["keyword"]);
-        const service = new TitleKeywordService({ saveTitleFilterKeyword, getTitleFilterKeyword });
-        await expect(service.add("ABC")).resolves.toBe("ABC");
-        expect(saveTitleFilterKeyword).toHaveBeenCalledWith("ABC");
-        await expect(service.getAll()).resolves.toEqual(["keyword"]);
-        expect(getTitleFilterKeyword).toHaveBeenCalledOnce();
-        await expect(new TitleKeywordService(undefined).add("ABC")).rejects.toThrow("标题关键词存储兼容服务不可用");
-        await expect(new TitleKeywordService(undefined).getAll()).rejects.toThrow("标题关键词读取兼容服务不可用");
-    });
 });

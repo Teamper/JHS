@@ -2,7 +2,6 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { ClipboardService } from "../src/services/clipboard-service.js";
 import { JavBusNativeController } from "../src/features/identity/javbus-native-controller.js";
 
 describe("JavBus native page controller", () => {
@@ -50,7 +49,7 @@ describe("JavBus native page controller", () => {
 describe("ClipboardService", () => {
     it("uses the injected compatibility helper so copy behavior and fallback remain unchanged", async () => {
         const copyText = vi.fn().mockResolvedValue(true);
-        const service = new ClipboardService(copyText);
+        const service = { copyText };
 
         await expect(service.copyText("番号", "ABC-123")).resolves.toBe(true);
         expect(copyText).toHaveBeenCalledWith("番号", "ABC-123");

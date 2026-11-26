@@ -63,7 +63,7 @@ describe("new video and scheduler feature lifecycle", () => {
         };
         const settings = { snapshot: vi.fn(() => ({ checkNewVideo_ruleTime: 8760 })) };
         const movie = { externalSiteOrigin: vi.fn(() => "https://javdb.com") };
-        const titleKeywords = { getAll: vi.fn(async () => []) }, actressInfo = { movies: vi.fn(async () => []) }, logger = { html: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const legacyStorage = { getTitleFilterKeyword: vi.fn(async () => []) }, actressInfo = { movies: vi.fn(async () => []) }, logger = { html: vi.fn(), warn: vi.fn(), error: vi.fn() };
         const styles = { register: vi.fn(() => releaseStyle) }, runtime = createRuntime("discovery.new-video", plugin, events);
 
         for (const [method, mock] of Object.entries(plugin)) {
@@ -74,8 +74,8 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(Object.hasOwn(NewVideoWorkspaceService.prototype, "initCss")).toBe(false);
         const dependencies = {
             [PORT.style]: styles, [SERVICE.events]: events, [SERVICE.state]: state, [SERVICE.settings]: settings,
-            [SERVICE.movie]: movie, [SERVICE.titleKeywords]: titleKeywords, [SERVICE.actressInfo]: actressInfo,
-            [SERVICE.legacyUtils]: { getNowStr: () => "2026-08-01 00:00:00" }, [SERVICE.legacyStorage]: {},
+            [SERVICE.movie]: movie, [SERVICE.actressInfo]: actressInfo,
+            [SERVICE.legacyUtils]: { getNowStr: () => "2026-08-01 00:00:00" }, [SERVICE.legacyStorage]: legacyStorage,
             [SERVICE.domUi]: { jquery: vi.fn(), createImageHoverPreview: vi.fn() },
             [SERVICE.notifications]: { error: vi.fn() }, [SERVICE.clog]: logger,
         };

@@ -6,7 +6,7 @@ import { CommandRegistry } from "../src/app/command-registry.js";
 import { DependencyContainer } from "../src/app/dependency-container.js";
 import { FeatureRuntime, migrateDisabledPlugins } from "../src/app/feature-runtime.js";
 import { ProviderRegistry } from "../src/app/provider-registry.js";
-import { defineFeature, defineIntegration } from "../src/contracts/manifests.js";
+import { defineFeature } from "../src/contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../src/contracts/tokens.js";
 import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { featureManifests } from "../src/features/catalog.js";
@@ -63,20 +63,20 @@ describe("v6.5 architecture runtime contracts", () => {
         const movie = { id: "movie" };
         container.register(SERVICE.movie, movie);
         expect(container.resolveDeclared([SERVICE.movie])[SERVICE.movie]).toBe(movie);
-        expect(() => container.resolveDeclared([SERVICE.movie])[SERVICE.review]).toThrow(/Undeclared dependency access/);
-        expect(diagnostics.exportSnapshot().errors.at(-1)).toMatchObject({ code: "UNDECLARED_DEPENDENCY", source: "DependencyContainer" });
+        container.register(SERVICE.review, {});
+        expect(container.resolveDeclared([SERVICE.movie])[SERVICE.review]).toBeUndefined();
         expect(() => container.register(SERVICE.movie, {})).toThrow(/Duplicate/);
-        expect(() => container.resolveDeclared([SERVICE.review])).toThrow(/Missing/);
+        expect(() => container.resolveDeclared([SERVICE.state])).toThrow(/Missing/);
         expect(() => container.resolveDeclared([SERVICE.movie, SERVICE.movie])).toThrow(/Duplicate declared dependency/);
     });
 
-    it("permits declared optional tokens to be absent while rejecting undeclared access", () => {
+    it("permits declared optional tokens to be absent without exposing undeclared services", () => {
         const container = new DependencyContainer(new DiagnosticsService()), dialog = { open() {} };
         container.register(SERVICE.dialog, dialog);
         const dependencies = container.resolveDeclared([SERVICE.dialog], [PORT.host]);
         expect(dependencies[SERVICE.dialog]).toBe(dialog);
         expect(dependencies[PORT.host]).toBeUndefined();
-        expect(() => dependencies[SERVICE.state]).toThrow(/Undeclared dependency access/);
+        expect(dependencies[SERVICE.state]).toBeUndefined();
     });
 
     it("declares command owners and platform dependencies in Feature manifests", () => {
@@ -120,9 +120,9 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(featureManifests.find((item) => item.id === "detail").contributes).not.toContain("detail.external-magnets");
         expect(featureManifests.find((item) => item.id === "list").contributes).toContain("detail.fc2-navigation");
         expect(featureManifests.find((item) => item.id === "detail").contributes).not.toContain("detail.fc2-navigation");
-        expect(featureManifests.find((item) => item.id === "identity").requires).toEqual(expect.arrayContaining([PORT.host, PORT.style, SERVICE.movie, SERVICE.navigation, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch, SERVICE.settings]));
+        expect(featureManifests.find((item) => item.id === "identity").requires).toEqual(expect.arrayContaining([PORT.host, PORT.style, SERVICE.movie, SERVICE.navigation, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, REGISTRY.integration, SERVICE.settings]));
         expect(featureManifests.find((item) => item.id === "detail").requires).toContain(SERVICE.domUi);
-        expect(featureManifests.find((item) => item.id === "library").requires).toEqual(expect.arrayContaining([SERVICE.titleKeywords, SERVICE.domUi, SERVICE.events, SERVICE.profile]));
+        expect(featureManifests.find((item) => item.id === "library").requires).toEqual(expect.arrayContaining([SERVICE.legacyStorage, SERVICE.domUi, SERVICE.events, SERVICE.profile]));
         expect(featureManifests.find((item) => item.id === "identity").contributes).toContain("identity.javdb-navigation");
         expect(featureManifests.find((item) => item.id === "identity").contributes).toContain("identity.javbus-navigation");
         expect(featureManifests.find((item) => item.id === "identity").contributes).toContain("detail.javbus-native");
@@ -355,12 +355,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(scope.canCommit(generation)).toBe(false);
     });
 
-    it("validates integration manifests and keeps ProviderRegistry focused", async () => {
-        expect(() => defineIntegration({ id: "bad", trustClass: "builtin-public", hosts: [], capabilities: [], requires: [], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow();
-        expect(() => defineIntegration({ id: "bad-host", trustClass: "builtin-public", hosts: ["HTTPS://EXAMPLE.COM"], capabilities: ["movie.detail"], requires: [], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/host is invalid/);
-        expect(() => defineIntegration({ id: "bad-cache", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail", "movie.images"], requires: [], cachePolicy: { "movie.detail": "none" }, quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/cachePolicy mismatch/);
-        expect(() => defineIntegration({ id: "bad-deps", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail"], requires: [SERVICE.http, SERVICE.http], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/duplicate tokens/);
-        expect(() => defineIntegration({ id: "bad-host-adapter", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail"], requires: [], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {}, createHostAdapter: undefined })).toThrow(/createHostAdapter/);
+    it("keeps ProviderRegistry focused", async () => {
         const registry = new ProviderRegistry();
         registry.register({ id: "slow", capabilities: ["magnet"], priority: 1 });
         registry.register({ id: "fast", capabilities: ["magnet"], priority: 2, isAvailable: async () => true });

@@ -1,6 +1,24 @@
 // @ts-check
 
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
+import { JhsError } from "../../core/jhs-error.js";
+
+/** @param {import("../../app/integration-registry.js").IntegrationRegistry} integrations @param {string} source @param {{scope?: import("../../core/lifecycle-scope.js").LifecycleScope}} [options] */
+export async function resolveImageSearch(integrations, source, options = {}) {
+    const manifest = integrations.list("image.search-targets")[0];
+    if (!manifest) throw new JhsError("UNSUPPORTED", "以图识图 Integration 不可用", { source: "resolveImageSearch" });
+    const adapter = integrations.getAdapter(manifest.id);
+    let imageUrl = String(source || "");
+    if (imageUrl.startsWith("data:")) imageUrl = await adapter.upload(imageUrl, options);
+    else {
+        let parsed;
+        try { parsed = new URL(imageUrl); }
+        catch (cause) { throw new JhsError("INVALID_URL", "图片 URL 无效", { source: "resolveImageSearch", cause }); }
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new JhsError("INVALID_URL", "图片 URL 必须使用 HTTP/HTTPS", { source: "resolveImageSearch" });
+        imageUrl = parsed.href;
+    }
+    return Object.freeze({ imageUrl, targets: adapter.createTargets(imageUrl) });
+}
 
 const SELECTED_SITES_KEY = "jhs_selectedSites";
 

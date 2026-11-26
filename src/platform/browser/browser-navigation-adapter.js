@@ -1,22 +1,22 @@
 // @ts-check
 
-import { assertPort, PORT_METHODS } from "../../contracts/ports.js";
-
+/** @typedef {import("../../contracts/ports.js").NavigationPort} NavigationPort */
+/** @implements {NavigationPort} */
 export class BrowserNavigationAdapter {
     /** @param {{location?: Location, open?: typeof window.open}} [runtime] */
     constructor(runtime = {}) {
         this.location = runtime.location ?? window.location;
         this.openWindow = runtime.open ?? window.open.bind(window);
-        assertPort(this, "NavigationPort", PORT_METHODS.navigation);
     }
-    /** @param {string} url @param {{newTab?: boolean, background?: boolean}} [options] */
+    /** @param {string | URL} url @param {{newTab?: boolean, background?: boolean}} [options] */
     open(url, options = {}) {
         const openInTab = /** @type {any} */ (globalThis).GM_openInTab;
-        if (options.background && typeof openInTab === "function") return openInTab(url, { insert: 0 });
-        return options.newTab ? this.openWindow(url, "_blank", "noopener") : this.assign(url);
+        const href = String(url);
+        if (options.background && typeof openInTab === "function") return openInTab(href, { insert: 0 });
+        return options.newTab ? this.openWindow(href, "_blank", "noopener") : this.assign(href);
     }
-    /** @param {string} url */
-    assign(url) { this.location.assign(url); }
-    /** @param {string} url */
-    replace(url) { this.location.replace(url); }
+    /** @param {string | URL} url */
+    assign(url) { this.location.assign(String(url)); }
+    /** @param {string | URL} url */
+    replace(url) { this.location.replace(String(url)); }
 }

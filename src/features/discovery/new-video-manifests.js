@@ -14,7 +14,7 @@ async function registerNewVideoStyles(styles) {
 export const newVideoFeature = defineFeature({
     optionalRequires: [SERVICE.backgroundWork, SERVICE.taskExecution],
     id: "new-video", kind: "feature", disableable: true, sites: ["javdb"], routes: [], startup: "idle",
-    requires: [PORT.style, SERVICE.dialog, SERVICE.events, SERVICE.state, SERVICE.settings, SERVICE.profile, SERVICE.storage, SERVICE.movie, SERVICE.actressInfo, SERVICE.titleKeywords, SERVICE.legacyUtils, SERVICE.legacyStorage, SERVICE.domUi, SERVICE.notifications, SERVICE.clog], contributes: ["discovery.new-video"], providesCommands: ["new-video.open"],
+    requires: [PORT.style, SERVICE.dialog, SERVICE.events, SERVICE.state, SERVICE.settings, SERVICE.profile, SERVICE.storage, SERVICE.movie, SERVICE.actressInfo, SERVICE.legacyUtils, SERVICE.legacyStorage, SERVICE.domUi, SERVICE.notifications, SERVICE.clog], contributes: ["discovery.new-video"], providesCommands: ["new-video.open"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "discovery.new-video";
         if (!runtime.enabledContributions.includes(id)) return { activeContributions: [], commands: { "new-video.open": () => undefined } };
@@ -43,7 +43,7 @@ export const newVideoFeature = defineFeature({
             sourceHealth, backgroundWork: deps[SERVICE.backgroundWork],
             storage: deps[SERVICE.storage],
             state: deps[SERVICE.state],
-            titleKeywords: deps[SERVICE.titleKeywords],
+            readTitleKeywords: () => deps[SERVICE.legacyStorage].getTitleFilterKeyword(),
             actressInfo: deps[SERVICE.actressInfo],
             scope: runtime.scope,
             logger: deps[SERVICE.clog],

@@ -2,8 +2,7 @@
 
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { escapeHtml } from "../../core/constants.js";
-import { decryptCredential, decryptPortableBackup } from "../../core/credential-crypto.js";
-import { uploadWebDavBackup } from "../../services/backup-service.js";
+import { decryptCredential, decryptPortableBackup, encryptPortableBackup } from "../../core/credential-crypto.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { formatUiDateTime } from "../../core/ui-date-time.js";
@@ -132,13 +131,17 @@ export async function backupDataByWebDav(folderName, webdavService, dependencies
         if (!a) return void show.error("请填写并保存用户名");
         if (!t.password) return void show.error("请填写并保存密码");
         const s = utils.getNowStr("_", "_") + ".json";
-        const uploaded = await uploadWebDavBackup({
-            webdav: webdavService, profile: { url: n, username: a, password: t.password }, folderName, fileName: s,
-            scope: dependencies.scope, isActive: dependencies.isActive, onStage: logStage,
-            measure: (/** @type {string} */ stage, /** @type {() => Promise<any>} */ action) => measureBackupStage(stage, action, dependencies),
-            exportSnapshot: async () => ({ data: await storageManager.exportData(), revision: 0 }),
-        });
-        bytes = uploaded.bytes;
+        const assertActive = () => {
+            if (dependencies.scope?.disposed || dependencies.isActive?.() === false) throw new DOMException("备份已取消", "AbortError");
+        };
+        const data = await measureBackupStage("导出数据", () => storageManager.exportData(), dependencies);
+        assertActive();
+        const encrypted = await measureBackupStage("加密", () => encryptPortableBackup(JSON.stringify(data)), dependencies);
+        assertActive();
+        const client = webdavService.createClient({ url: n, username: a, password: t.password }, { scope: dependencies.scope });
+        await client.backup(folderName, s, encrypted, logStage);
+        assertActive();
+        bytes = encrypted.length;
         result = "success";
     } catch (l) {
         clog.error("[WebDAV备份失败]", backupErrorDetails(l));

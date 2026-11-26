@@ -1,5 +1,7 @@
 // @ts-check
 
+/** @typedef {import("../../contracts/ports.js").StylePort} StylePort */
+/** @implements {StylePort} */
 export class BrowserStyleAdapter {
     /** @param {Document} [documentRuntime] */
     constructor(documentRuntime = document) { this.document = documentRuntime; }

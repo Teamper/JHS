@@ -34,10 +34,10 @@ function sleepAbortable(ms, signal) {
 
 /** Converts discovered actor titles into the existing 6.5.1 actress record shape. */
 export class NewVideoScanController {
-    /** @param {{state: any, titleKeywords?: any, actressInfo?: any, scope?: any, logger?: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, storage?: any, preserveNewVideo?: boolean, onNewItems: (name: string, count: number) => void}} options */
+    /** @param {{state: any, readTitleKeywords: () => Promise<string[]>, actressInfo?: any, scope?: any, logger?: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, storage?: any, preserveNewVideo?: boolean, onNewItems: (name: string, count: number) => void}} options */
     constructor(options) {
         this.state = options.state;
-        this.titleKeywords = options.titleKeywords;
+        this.readTitleKeywords = options.readTitleKeywords;
         this.actressInfo = options.actressInfo;
         this.scope = options.scope;
         this.backgroundWork = options.backgroundWork;
@@ -58,7 +58,7 @@ export class NewVideoScanController {
         this.assertActive();
         const { starId, name } = actress, url = `${options.baseUrl}/actors/${starId}?t=d`;
         const [titleKeywords, blacklistCars] = await Promise.all([
-            this.titleKeywords.getAll(), this.state.getBlacklistCarList(),
+            this.readTitleKeywords(), this.state.getBlacklistCarList(),
         ]);
         this.assertActive();
         const blacklistSet = new Set(blacklistCars.map((/** @type {any} */ item) => item.carNum));
@@ -157,7 +157,7 @@ export class NewVideoScanController {
         if (!eligible.length) return { ...result, blockedError: null };
 
         const [titleKeywords, blacklistCars] = await Promise.all([
-            this.titleKeywords.getAll(), this.state.getBlacklistCarList(),
+            this.readTitleKeywords(), this.state.getBlacklistCarList(),
         ]);
         this.assertActive();
         const blacklistSet = new Set(blacklistCars.map((/** @type {any} */ item) => item.carNum));

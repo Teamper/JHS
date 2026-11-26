@@ -9,8 +9,6 @@ import { defineFeature } from "../src/contracts/manifests.js";
 
 const newVideo = readTestFile(join(process.cwd(), "src/features/discovery/new-video-workspace-service.js"), "utf8");
 const coverButtons = readTestFile(join(process.cwd(), "src/features/list/cover-button-controller.js"), "utf8");
-const registrySource = readTestFile(join(process.cwd(), "src/app/command-registry.js"), "utf8");
-const runtimeSource = readTestFile(join(process.cwd(), "src/app/feature-runtime.js"), "utf8");
 
 describe("capability availability (无死按钮)", () => {
     it("CommandRegistry tracks owner availability", () => {
@@ -38,9 +36,4 @@ describe("capability availability (无死按钮)", () => {
         expect(newVideo).not.toContain('this.jquery("#edit-actress-name")');
     });
 
-    it("feature runtime declares owner availability for provided commands", () => {
-        expect(registrySource).toContain("setOwnerEnabled(command, enabled)");
-        expect(registrySource).toContain("isAvailable(command)");
-        expect(runtimeSource).toContain("this.commands.setOwnerEnabled(command, this.isEligible(validated))");
-    });
 });

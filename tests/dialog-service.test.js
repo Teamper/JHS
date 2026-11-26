@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { LayerDialogAdapter } from "../src/platform/userscript/layer-dialog-adapter.js";
-import { DialogService } from "../src/services/dialog-service.js";
 import { JHS_Z_INDEX } from "../src/core/theme.js";
 
 describe("dialog service", () => {
@@ -19,7 +18,7 @@ describe("dialog service", () => {
         const layer = {
             open: vi.fn(() => 1), close: vi.fn(), confirm: vi.fn(() => 2), alert: vi.fn(() => 3),
         };
-        const service = new DialogService(new LayerDialogAdapter(layer)), yes = vi.fn();
+        const service = new LayerDialogAdapter(layer), yes = vi.fn();
         expect(service.open({ title: "dialog" })).toBe(1);
         service.close(1);
         expect(service.confirm("confirm", { icon: 3 }, yes)).toBe(2);
@@ -35,7 +34,7 @@ describe("dialog service", () => {
 
     it("supports an explicit ui: false opt-out and preserves caller z-index", () => {
         const layer = { open: vi.fn(() => 1), close: vi.fn(), confirm: vi.fn(), alert: vi.fn() };
-        const service = new DialogService(new LayerDialogAdapter(layer));
+        const service = new LayerDialogAdapter(layer);
         service.open({ zIndex: 42, ui: false });
         expect(layer.open).toHaveBeenCalledWith({ zIndex: 42 });
     });

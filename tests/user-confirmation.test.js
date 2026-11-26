@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { ownedPopoverRoots } from "../src/core/owned-popover.js";
 import { enhanceDialogButtons } from "../src/core/dialog-shell.js";
 import { DomUiService } from "../src/services/dom-ui-service.js";
-import { DialogService } from "../src/services/dialog-service.js";
 import { LayerDialogAdapter } from "../src/platform/userscript/layer-dialog-adapter.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 
@@ -80,7 +79,7 @@ describe("user confirmation actions", () => {
 
     it("maps a Layer named action to the second button without changing legacy confirms", () => {
         const layer = { open: vi.fn(), close: vi.fn(), confirm: vi.fn(() => 8), alert: vi.fn() };
-        const service = new DialogService(new LayerDialogAdapter(layer)), accept = vi.fn();
+        const service = new LayerDialogAdapter(layer), accept = vi.fn();
         service.confirm("删除备份？", { confirmText: "删除", cancelText: "保留", skin: "caller-skin" }, accept);
         const [, options, first, second] = layer.confirm.mock.calls[0];
         expect(options.btn).toEqual(["保留", "删除"]);
@@ -105,7 +104,7 @@ describe("user confirmation actions", () => {
     it("prefers the injected DialogService and cleans up each close without canceling twice", () => {
         const { utils, layer } = loadUtils(false), accept = vi.fn(), cancel = vi.fn();
         Object.assign(layer, { open: vi.fn(), alert: vi.fn() });
-        const service = new DialogService(new LayerDialogAdapter(layer)), confirm = vi.spyOn(service, "confirm");
+        const service = new LayerDialogAdapter(layer), confirm = vi.spyOn(service, "confirm");
         utils.setDialogService(service);
         utils.q(null, "授权此地址？", accept, cancel, { confirmText: "授权" });
         expect(confirm).toHaveBeenCalledWith("授权此地址？", expect.objectContaining({ confirmText: "授权" }), expect.any(Function), expect.any(Function));
@@ -128,7 +127,7 @@ describe("user confirmation actions", () => {
         const { utils, layer } = loadUtils(false), accept = vi.fn(), cancel = vi.fn();
         if (injected) {
             Object.assign(layer, { open: vi.fn(), alert: vi.fn() });
-            utils.setDialogService(new DialogService(new LayerDialogAdapter(layer)));
+            utils.setDialogService(new LayerDialogAdapter(layer));
         }
         utils.q(null, "授权此地址？", accept, cancel, { confirmText: "授权" });
         const [, options, , action] = layer.confirm.mock.calls[0];
@@ -144,7 +143,7 @@ describe("user confirmation actions", () => {
     it("never invokes cancellation when an injected confirmation was accepted", () => {
         const { utils, layer } = loadUtils(true), accept = vi.fn(), cancel = vi.fn();
         Object.assign(layer, { open: vi.fn(), alert: vi.fn() });
-        utils.setDialogService(new DialogService(new LayerDialogAdapter(layer)));
+        utils.setDialogService(new LayerDialogAdapter(layer));
         utils.q(null, "授权此地址？", accept, cancel, { confirmText: "授权" });
         const [, options, , action] = layer.confirm.mock.calls[0];
         options.success(null, 7);

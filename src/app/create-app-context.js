@@ -9,11 +9,8 @@ import { UserscriptHttpAdapter } from "../platform/userscript/userscript-http-ad
 import { CacheService } from "../services/cache-service.js";
 import { ActressInfoService } from "../services/actress-info-service.js";
 import { DiagnosticsService } from "../services/diagnostics-service.js";
-import { DialogService } from "../services/dialog-service.js";
 import { ExternalUrlPolicy } from "../services/external-url-policy.js";
 import { HttpService } from "../services/http-service.js";
-import { ImageSearchService } from "../services/image-search-service.js";
-import { NavigationService } from "../services/navigation-service.js";
 import { MagnetService } from "../services/magnet-service.js";
 import { MovieIdentityService } from "../services/movie-identity-service.js";
 import { OneOneFiveMatchService } from "../services/one-one-five-match-service.js";
@@ -24,8 +21,6 @@ import { JavDbListService } from "../services/javdb-list-service.js";
 import { MOVIE_SELECTION_KEY, MovieSelectionService } from "../services/movie-selection-service.js";
 import { PrivacyService } from "../services/privacy-service.js";
 import { ProfileService } from "../services/profile-service.js";
-import { RelatedService } from "../services/related-service.js";
-import { ReviewService } from "../services/review-service.js";
 import { ScreenshotService } from "../services/screenshot-service.js";
 import { TranslationService } from "../services/translation-service.js";
 import { SubtitleUploadService } from "../services/subtitle-upload-service.js";
@@ -44,12 +39,9 @@ import { JavDbWantService } from "../services/javdb-want-service.js";
 import { bindJavDbWantService } from "../core/javdb-api.js";
 import { CredentialService } from "../services/credential-service.js";
 import { Pan123CredentialService } from "../services/pan123-credential-service.js";
-import { ClipboardService } from "../services/clipboard-service.js";
 import { ResourceSettingsService } from "../services/resource-settings-service.js";
 import { DomUiService } from "../services/dom-ui-service.js";
-import { TitleKeywordService } from "../services/title-keyword-service.js";
 import { LibraryStatsService } from "../services/library-stats-service.js";
-import { StyleRegistry } from "../services/style-registry.js";
 import { CommandRegistry } from "./command-registry.js";
 import { DependencyContainer } from "./dependency-container.js";
 import { FeatureRuntime } from "./feature-runtime.js";
@@ -70,7 +62,7 @@ export function createAppContext(runtime) {
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
     const backgroundWork = new BackgroundWork({ document: runtime.hostAdapter?.document ?? document, window, scope: rootScope });
     const container = new DependencyContainer(diagnostics);
-    const navigationPort = new BrowserNavigationAdapter();
+    const navigation = new BrowserNavigationAdapter();
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
     const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue, runtime.gmDeleteValue);
     const mutationCoordinator = runtime.storageMutationCoordinator ?? new StorageMutationCoordinator();
@@ -78,16 +70,13 @@ export function createAppContext(runtime) {
     storagePort.gmListValues = gmRuntime.gmListValues;
     storagePort.gmListenValue = gmRuntime.gmListenValue;
     storagePort.gmUnlistenValue = gmRuntime.gmUnlistenValue;
-    const dialogPort = new LayerDialogAdapter(runtime.layer);
-    const stylePort = new BrowserStyleAdapter();
+    const dialog = new LayerDialogAdapter(runtime.layer);
+    const styles = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
-    const navigation = new NavigationService(navigationPort);
     const storage = new StorageService(storagePort);
     if (runtime.legacyStorage) runtime.legacyStorage.atomicStorage = storage;
     const cache = new CacheService({ diagnostics, storage });
-    const dialog = new DialogService(dialogPort);
     runtime.legacyUtils?.setDialogService?.(dialog);
-    const styles = new StyleRegistry(stylePort);
     const settingsRegistry = new SettingsRegistry();
     registerDefaultSettings(settingsRegistry);
     const validateSetting = (/** @type {string} */ key, /** @type {any} */ value) => settingsRegistry.validateSync(key, value);
@@ -109,7 +98,7 @@ export function createAppContext(runtime) {
         saveSettingItem: (/** @type {string} */ key, /** @type {unknown} */ value) => settings.set(key, value),
         updateSetting: (/** @type {any} */ mutator) => settings.update(mutator),
     });
-    const clipboard = new ClipboardService(runtime.copyToClipboard);
+    const clipboard = { copyText: runtime.copyToClipboard ?? (async () => false) };
     const domUi = new DomUiService(
         /** @type {any} */ (globalThis).jQuery ?? /** @type {any} */ (globalThis).$,
         runtime.legacyUtils,
@@ -122,7 +111,6 @@ export function createAppContext(runtime) {
         },
         /** @type {any} */ (globalThis).Tabulator,
     );
-    const titleKeywords = new TitleKeywordService(runtime.legacyStorage);
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache, settings });
     diagnostics.setNetworkController(http);
     const privacy = new PrivacyService({ storage, settings });
@@ -185,9 +173,8 @@ export function createAppContext(runtime) {
     const movieSelection = new MovieSelectionService({ origin: window.location.origin, read: () => window.sessionStorage.getItem(MOVIE_SELECTION_KEY), write: value => window.sessionStorage.setItem(MOVIE_SELECTION_KEY, value) });
     const movie = new MovieIdentityService(integrations);
     const actressInfo = new ActressInfoService(integrations, cache);
-    const imageSearch = new ImageSearchService(integrations);
-    const review = new ReviewService(integrations);
-    const related = new RelatedService(integrations);
+    const review = { list: (/** @type {Record<string, unknown>} */ movieRef, /** @type {Record<string, any>} */ options = {}) => integrations.invokeList("movie.reviews", "listReviews", movieRef, options) };
+    const related = { list: (/** @type {Record<string, unknown>} */ movieRef, /** @type {Record<string, any>} */ options = {}) => integrations.invokeList("movie.related", "listRelated", movieRef, options) };
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations, diagnostics);
     const translation = new TranslationService(integrations, storage, {credential,settings,urlPolicy,enabled:true});
@@ -207,8 +194,8 @@ export function createAppContext(runtime) {
     const hostListParser = Object.freeze({ parseDetailPage });
 
     container
-        .register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort)
-        .register(PORT.dialog, dialogPort).register(PORT.style, stylePort)
+        .register(PORT.navigation, navigation).register(PORT.http, httpPort).register(PORT.storage, storagePort)
+        .register(PORT.dialog, dialog).register(PORT.style, styles)
         .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage)
         .register(SERVICE.legacyStorage, runtime.legacyStorage).register(SERVICE.legacyUtils, runtime.legacyUtils).register(SERVICE.webdav, webdav)
@@ -219,8 +206,8 @@ export function createAppContext(runtime) {
         .register(SERVICE.javdbLists, javdbLists).register(SERVICE.movieSelection, movieSelection)
         .register(SERVICE.pan123Credential, pan123Credential)
           .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.resourceSettings, resourceSettings).register(SERVICE.notifications, notifications).register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
-        .register(SERVICE.state, runtime.stateService).register(SERVICE.titleKeywords, titleKeywords).register(SERVICE.storageMutation, runtime.storageMutationCoordinator).register(SERVICE.busImageLayout, busImageLayout).register(SERVICE.events, runtime.eventBus).register(SERVICE.libraryStats, libraryStats)
-        .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
+        .register(SERVICE.state, runtime.stateService).register(SERVICE.storageMutation, runtime.storageMutationCoordinator).register(SERVICE.busImageLayout, busImageLayout).register(SERVICE.events, runtime.eventBus).register(SERVICE.libraryStats, libraryStats)
+        .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.one115Match, one115Match).register(SERVICE.offlineSubmissionReceipts, offlineSubmissionReceipts)
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.subtitleUpload, subtitleUpload).register(SERVICE.account, account).register(SERVICE.hostListParser, hostListParser)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
@@ -237,5 +224,5 @@ export function createAppContext(runtime) {
         }
     });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ backgroundWork, diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, webdavSync, autoBackup: webdavSync, privacy, mediaLibrary, javdbLists, movieSelection, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, titleKeywords, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, subtitleUpload, account, offline, one115Match, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort: navigation, httpPort, storagePort, dialogPort: dialog, stylePort: styles }), services: Object.freeze({ backgroundWork, diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage, legacyUtils: runtime.legacyUtils, webdav, webdavSync, autoBackup: webdavSync, privacy, mediaLibrary, javdbLists, movieSelection, credential, pan123Credential, dialog, styles, settings, resourceSettings, notifications, clipboard, domUi, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator, busImageLayout, libraryStats, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, subtitleUpload, account, offline, one115Match, offlineSubmissionReceipts, hostListParser }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

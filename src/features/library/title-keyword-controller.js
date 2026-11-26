@@ -4,14 +4,14 @@ import { escapeHtml } from "../../core/constants.js";
 
 /** Owns title-selection filtering, including title nodes inserted by owned-detail dialogs. */
 export class TitleKeywordController {
-    /** @param {{document: Document, window: Window, site: string, route: string, settings: any, keywords: any, events: any, ui: any, scope: any, diagnostics?: any}} options */
+    /** @param {{document: Document, window: Window, site: string, route: string, settings: any, saveKeyword: (keyword: string) => Promise<unknown>, events: any, ui: any, scope: any, diagnostics?: any}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
         this.site = options.site;
         this.route = options.route;
         this.settings = options.settings;
-        this.keywords = options.keywords;
+        this.saveKeyword = options.saveKeyword;
         this.events = options.events;
         this.ui = options.ui;
         this.scope = options.scope;
@@ -58,7 +58,7 @@ export class TitleKeywordController {
     async addKeyword(selectedText, title) {
         try {
             const keyword = selectedText.replace(/\r?\n+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 120);
-            if (keyword) await this.keywords.add(keyword);
+            if (keyword) await this.saveKeyword(keyword);
             await this.events?.emit?.("filter-rules-changed", { scope: "title-keyword" });
             await this.ui.closePage({ root: this.ui.jquery(title) });
         } catch (error) {

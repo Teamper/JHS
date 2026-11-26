@@ -5,7 +5,6 @@ import { parseBooleanSetting } from "../core/feature-helpers.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { disabledIdForPlugin, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
-import { defineFeature } from "../contracts/manifests.js";
 import { ENHANCEMENT_FEATURES, ENHANCEMENT_METADATA } from "../core/enhancement-controls.js";
 
 export { LEGACY_PLUGIN_CONTRIBUTION_MAP, migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
@@ -45,17 +44,16 @@ export class FeatureRuntime {
 
     /** @param {Record<string, any>} manifest */
     register(manifest) {
-        const validated = /** @type {Record<string, any>} */ (defineFeature(manifest));
-        if (this.manifests.has(validated.id)) throw new Error(`Duplicate feature: ${validated.id}`);
-        for (const contributionId of validated.contributes) {
+        if (this.manifests.has(manifest.id)) throw new Error(`Duplicate feature: ${manifest.id}`);
+        for (const contributionId of manifest.contributes) {
             const owner = this.contributionOwners.get(contributionId);
-            if (owner) throw new Error(`Duplicate contribution ownership: ${contributionId} (${owner}, ${validated.id})`);
+            if (owner) throw new Error(`Duplicate contribution ownership: ${contributionId} (${owner}, ${manifest.id})`);
         }
-        this.manifests.set(validated.id, validated);
-        for (const contributionId of validated.contributes) this.contributionOwners.set(contributionId, validated.id);
-        for (const command of validated.providesCommands) {
-            this.commands.registerOwner(command, validated.id);
-            this.commands.setOwnerEnabled(command, this.isEligible(validated));
+        this.manifests.set(manifest.id, manifest);
+        for (const contributionId of manifest.contributes) this.contributionOwners.set(contributionId, manifest.id);
+        for (const command of manifest.providesCommands) {
+            this.commands.registerOwner(command, manifest.id);
+            this.commands.setOwnerEnabled(command, this.isEligible(manifest));
         }
     }
 
@@ -202,13 +200,12 @@ export class FeatureRuntime {
         };
         try {
             const requiredFeatures = manifest.requiresFeaturesByRoute?.[this.route] ?? [];
-            if (!Array.isArray(requiredFeatures)) throw new TypeError(`Feature ${manifest.id} has invalid route dependencies for ${this.route}`);
             for (const featureId of requiredFeatures) await this.activate(featureId);
             const dependencies = this.container.resolveDeclared(manifest.requires, manifest.optionalRequires ?? []);
             const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => this.isContributionEnabled(manifest.id, id)));
             const inspection = this.inspection;
             result = await manifest.activate(dependencies, Object.freeze({
-                scope, enabledContributions, site: this.site, route: this.route,
+                scope, featureId: manifest.id, enabledContributions, site: this.site, route: this.route,
                 isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionEnabled(featureId, contributionId, legacyPluginId),
                 isContributionPreferenceEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionPreferenceEnabled(featureId, contributionId, legacyPluginId),
                 executeCommand: /** @type {(command: string, ...args: unknown[]) => Promise<unknown>} */ ((command, ...args) => this.commands.execute(command, ...args)),

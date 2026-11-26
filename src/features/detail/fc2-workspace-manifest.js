@@ -19,7 +19,7 @@ export default defineFeature({
     contributes: [contributionId], providesCommands: [commandId],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         if (!runtime.enabledContributions.includes(contributionId)) {
-            return { activeContributions: [], commands: { [commandId]: () => null } };
+            return { activeContributions: [], commands: { [commandId]: /** @returns {null} */ () => null } };
         }
 
         const want = deps[SERVICE.account].want;

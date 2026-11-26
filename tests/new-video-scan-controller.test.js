@@ -24,7 +24,7 @@ describe("NewVideoScanController", () => {
     it("does not wait for another background permit after its final actor completed", async () => {
         const state = { getFavoriteActressList: async () => [{ starId: "a1", name: "Actor" }], getBlacklistCarList: async () => [], updateFavoriteActress: async () => true };
         let permits = 0;
-        const controller = new NewVideoScanController({ state, titleKeywords: { getAll: async () => [] }, actressInfo: { movies: async () => [] }, scope: {}, getTimestamp: () => "2026-10-24", onNewItems() {}, backgroundWork: { waitForTurn: async () => { if (++permits > 1) throw new Error("empty batch requested a permit"); } } });
+        const controller = new NewVideoScanController({ state, readTitleKeywords: async () => [], actressInfo: { movies: async () => [] }, scope: {}, getTimestamp: () => "2026-10-24", onNewItems() {}, backgroundWork: { waitForTurn: async () => { if (++permits > 1) throw new Error("empty batch requested a permit"); } } });
         await expect(controller.scanActresses({ baseUrl: "https://javdb.com", concurrency: 1, sleepMs: 0, intervalHours: 12, ruleHours: 8760, force: false, isUnnecessaryCheck: () => false, isNetworkBlocked: () => false, sleep: async () => {} })).resolves.toMatchObject({ success: 1 });
         expect(permits).toBe(1);
     });
@@ -84,7 +84,7 @@ describe("NewVideoScanController", () => {
             getNewVideoDecisions: vi.fn(async () => ({})), updateFavoriteActress: vi.fn(async () => false),
         };
         const controller = new NewVideoScanController({
-            state, titleKeywords: { getAll: vi.fn(async () => []) },
+            state, readTitleKeywords: vi.fn(async () => []),
             actressInfo: { movies: vi.fn(async () => [{ carNum: "ABC-123" }]) }, scope: {},
             logger: { html: vi.fn(), error: vi.fn(), warn: vi.fn() }, getTimestamp: () => "2026-09-29", onNewItems: vi.fn(),
         });
@@ -150,7 +150,7 @@ describe("NewVideoScanController", () => {
         }) };
         const logger = { html: vi.fn(), error: vi.fn(), warn: vi.fn() }, sleep = vi.fn(async () => {});
         const controller = new NewVideoScanController({
-            state, titleKeywords: { getAll: vi.fn(async () => []) }, actressInfo, scope: {}, logger,
+            state, readTitleKeywords: vi.fn(async () => []), actressInfo, scope: {}, logger,
             getTimestamp: () => "2026-09-27 15:00:00", onNewItems: vi.fn(),
         });
 
@@ -181,7 +181,7 @@ describe("NewVideoScanController", () => {
         const blocked = Object.assign(new Error("blocked"), { code: "CF_BLOCKED" });
         const actressInfo = { movies: vi.fn(async () => { throw blocked; }) };
         const controller = new NewVideoScanController({
-            state, titleKeywords: { getAll: vi.fn(async () => []) }, actressInfo, scope: {},
+            state, readTitleKeywords: vi.fn(async () => []), actressInfo, scope: {},
             logger: { html: vi.fn(), error: vi.fn(), warn: vi.fn() }, getTimestamp: () => "2026-09-27",
             onNewItems: vi.fn(),
         });
@@ -202,9 +202,9 @@ describe("NewVideoScanController", () => {
             updateFavoriteActress: vi.fn(async () => true),
         };
         const actressInfo = { movies: vi.fn(async () => [{ carNum: "ACTOR-001", title: "Synthetic title" }]) };
-        const titleKeywords = { getAll: vi.fn(async () => []) }, onActorStart = vi.fn();
+        const readTitleKeywords = vi.fn(async () => []), onActorStart = vi.fn();
         const controller = new NewVideoScanController({
-            state, titleKeywords, actressInfo, scope, logger: { warn: vi.fn() },
+            state, readTitleKeywords, actressInfo, scope, logger: { warn: vi.fn() },
             getTimestamp: () => "2026-09-27 15:00:00", onNewItems: vi.fn(),
         });
 
@@ -240,7 +240,7 @@ describe("NewVideoScanController", () => {
             const { actress } = await state.rebindFavoriteActress({ fromStarId: "old", toStarId: "new" });
             const movies = vi.fn(async () => [{ carNum: "LIVE-003", title: "Updated title" }]);
             const controller = new NewVideoScanController({
-                state, titleKeywords: { getAll: async () => [] }, actressInfo: { movies },
+                state, readTitleKeywords: async () => [], actressInfo: { movies },
                 scope: new LifecycleScope("rebind-scan"), getTimestamp: utils.getNowStr, onNewItems: vi.fn(),
             });
             await controller.scanActress(actress, { baseUrl: "https://javdb.com" });
@@ -379,7 +379,7 @@ describe("NewVideoScanController", () => {
     it("keeps a committed actress result when the optional count notification fails", async () => {
         const state = { getCarMap: vi.fn(async () => new Map()), getNewVideoDecisions: vi.fn(async () => ({})), updateFavoriteActress: vi.fn(async () => true) };
         const logger = { warn: vi.fn() }, controller = new NewVideoScanController({
-            state, titleKeywords: {}, actressInfo: {}, scope: {}, logger, getTimestamp: () => "2026-09-27", onNewItems: () => { throw new Error("toast failed"); },
+            state, readTitleKeywords: async () => [], actressInfo: {}, scope: {}, logger, getTimestamp: () => "2026-09-27", onNewItems: () => { throw new Error("toast failed"); },
         });
 
         await expect(controller.parseActorMovies([{ carNum: "ABC-001" }], "actor", "Actor", [], new Set())).resolves.toBe(1);

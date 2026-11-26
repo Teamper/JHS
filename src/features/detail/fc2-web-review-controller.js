@@ -3,7 +3,7 @@
 /** @typedef {import("../../services/javdb-web-review-service.js").ReviewView} ReviewView */
 /** @typedef {import("../../integrations/javdb/web-review.js").ReviewAction} ReviewAction */
 
-/** @param {{root: HTMLElement, movie: import("../../integrations/javdb/web-review.js").ReviewMovie, service: import("../../services/javdb-web-review-service.js").JavDbWebReviewService, scope: import("../../core/lifecycle-scope.js").LifecycleScope, dialog: import("../../services/dialog-service.js").DialogService, ui: import("../../services/dom-ui-service.js").DomUiService, notifications: any}} options */
+/** @param {{root: HTMLElement, movie: import("../../integrations/javdb/web-review.js").ReviewMovie, service: import("../../services/javdb-web-review-service.js").JavDbWebReviewService, scope: import("../../core/lifecycle-scope.js").LifecycleScope, dialog: import("../../platform/userscript/layer-dialog-adapter.js").LayerDialogAdapter, ui: import("../../services/dom-ui-service.js").DomUiService, notifications: any}} options */
 export function mountFc2WebReview({ root, movie, service, scope, dialog, ui, notifications }) {
     const doc = root.ownerDocument;
     const win = /** @type {Window} */ (doc.defaultView);

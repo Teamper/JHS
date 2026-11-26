@@ -59,7 +59,7 @@ async function initialize() {
     context.services.webdavSync.start(context.rootScope, document);
     context.services.webdavSync.addEventListener("status", () => { void broadcast({ type: "sync-status" }); });
     const scan = new NewVideoScanController({
-        state: context.services.state, actressInfo: context.services.actressInfo, titleKeywords: context.services.titleKeywords,
+        state: context.services.state, actressInfo: context.services.actressInfo, readTitleKeywords: () => legacyRuntime.storageManager.getTitleFilterKeyword(),
         sourceHealth: new ActorSourceHealth(context.services.storage), scope: context.rootScope, allowHidden: true,
         logger: /** @type {any} */ (globalThis).clog, getTimestamp: () => legacyRuntime.utils.getNowStr(), onNewItems() {},
     });
