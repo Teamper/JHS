@@ -8,7 +8,7 @@ for (const url of ["https://javdb.com/v/test-id", "https://www.javbus.com/ABC-12
     await page.goto(url);
     await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no", reviewCount: 1 } });
     await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]))).toBe(true);
-    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).toContain("detail.reviews");
+    await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions)).toContain("detail.reviews");
     await page.evaluate(async () => {
       const services = window.__jhsBrowserDiagnostics.detailServices;
       window.reviewRegressionRequests = 0;

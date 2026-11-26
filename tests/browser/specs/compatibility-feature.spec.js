@@ -34,14 +34,13 @@ test("compatibility decorations run as a native Feature and retain the old disab
     }),
   });
 
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).toContain("compatibility.enhancements");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions)).toContain("compatibility.enhancements");
   await expect(page.locator(".actor-section-name .jhs-badge--fav")).toHaveCount(1);
   await expect(page.locator(".actor-section-name .jhs-badge--danger")).toHaveCount(1);
   await expect(page.locator(".actor-box .jhs-badge--fav")).toHaveCount(1);
   await expect.poll(() => page.locator(".sda-content").evaluate((element) => getComputedStyle(element).display)).toBe("none");
 
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("CompatibilityEnhancementsPlugin"))).toBe(false);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "CompatibilityEnhancementsPlugin"))).toBe(true);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name }) => name === "CompatibilityEnhancementsPlugin"))).toBe(true);
 
   await page.evaluate(async () => {
     await window.unsafeWindow.stateService.removeFavoriteActress("compat-fixture");

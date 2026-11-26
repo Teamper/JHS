@@ -26,10 +26,8 @@ test("JavTrailers preview behavior runs under its Feature while retaining its le
   await expect(page.locator("#vjs_video_3_html5_api")).toHaveCSS("position", "fixed");
   await expect(page.locator("#vjs_video_3 canvas")).toHaveCSS("position", "fixed");
   const runtime = await page.evaluate(() => ({
-    pluginNames: window.unsafeWindow.pluginManager.getPluginNames(),
-    descriptors: window.unsafeWindow.pluginManager.getPluginDescriptors(),
+    descriptors: window.__jhsBrowserDiagnostics.getContributionDescriptors(),
   }));
-  expect(runtime.pluginNames).not.toContain("JavTrailersPlugin");
   expect(runtime.descriptors).toContainEqual({ name: "JavTrailersPlugin", disableable: true });
 });
 
@@ -38,7 +36,6 @@ test("the saved JavTrailersPlugin disable key prevents Feature preview activatio
   await prepareJavTrailers(page);
   await injectUserscriptRuntime(page, { disabledPlugins: ["JavTrailersPlugin"] });
   await expect(page.locator("#vjs_video_3_html5_api")).not.toHaveCSS("position", "fixed");
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames())).not.toContain("JavTrailersPlugin");
 });
 
 async function prepareSubtitleCat(page) {
@@ -60,10 +57,8 @@ test("SubtitleCat result filtering runs in the Feature and keeps its legacy disa
   await expect(page.locator(".sub-table tr").nth(1)).toBeHidden();
   await expect(page.locator(".sec-title")).toHaveText("1 字幕");
   const runtime = await page.evaluate(() => ({
-    pluginNames: window.unsafeWindow.pluginManager.getPluginNames(),
-    descriptors: window.unsafeWindow.pluginManager.getPluginDescriptors(),
+    descriptors: window.__jhsBrowserDiagnostics.getContributionDescriptors(),
   }));
-  expect(runtime.pluginNames).not.toContain("SubTitleCatPlugin");
   expect(runtime.descriptors).toContainEqual({ name: "SubTitleCatPlugin", disableable: true });
 });
 

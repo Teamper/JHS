@@ -51,7 +51,6 @@ test("External FC2 JavDB want login retries without the TOP250 contribution", as
     submitUrls: ["https://jdforrepam.com/api/v1/movies/fixture-id/reviews"],
     token: "synthetic-javdb-token",
   });
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("TOP250Plugin"))).toBe(false);
 });
 
 test("FC2 JavDB want remains committed after cache and success-notice failures", async ({ context, page }, testInfo) => {

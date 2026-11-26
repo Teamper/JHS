@@ -64,10 +64,9 @@ test("favorite actress actions are feature-owned and retain the legacy disable I
   await expect.poll(async () => (await readFavoriteActresses(page)).length).toBe(1);
   expect(await readFavoriteActresses(page)).toMatchObject([{ starId: "fixtureactor", name: "演员甲", allName: ["演员甲", "Actor A", "演员乙"], avatar: "https://img.example/avatar.jpg" }]);
   const runtime = await page.evaluate(() => ({
-    pluginRegistered: window.unsafeWindow.pluginManager.getPluginNames().includes("FavoriteActressesPlugin"),
-    descriptorPreserved: window.unsafeWindow.pluginManager.getPluginDescriptors().some(item => item.name === "FavoriteActressesPlugin"),
+    descriptorPreserved: window.__jhsBrowserDiagnostics.getContributionDescriptors().some(item => item.name === "FavoriteActressesPlugin"),
   }));
-  expect(runtime).toEqual({ pluginRegistered: false, descriptorPreserved: true });
+  expect(runtime).toEqual({ descriptorPreserved: true });
 
   const disabledContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {

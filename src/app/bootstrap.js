@@ -7,10 +7,9 @@ import { detectSite, resolveLegacyJavDbUrl } from "../core/site-context.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
 import { assertSupportedDataVersion, runDataMigrations } from "../core/migration.js";
-import { CompatibilityBeanRegistry } from "../core/compatibility-bean-registry.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
-import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
+import { LEGACY_PLUGIN_CONTRIBUTION_MAP, migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { initializeLoggerRuntime } from "../core/logger.js";
 import { applyThemeMode, initializeThemeRuntime } from "../core/theme.js";
 import { initializeUiAccessibility } from "../core/ui-primitives.js";
@@ -19,7 +18,6 @@ import { JavBusHostAdapter } from "../platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../platform/hosts/javdb-host-adapter.js";
 import { getBlacklistSubjectInfo, parseBlacklistFilterPage } from "../integrations/host-list/blacklist-parser.js";
 import { featureManifests } from "../features/catalog.js";
-import { registerSiteCompatibility } from "../features/compatibility/contribution-catalog.js";
 import { attachCompatibilityFacade } from "./compatibility-facade.js";
 import { createAppContext } from "./create-app-context.js";
 import { integrationManifests } from "./integration-catalog.js";
@@ -154,6 +152,12 @@ export async function bootstrapJhs() {
         if (diagnostics && globalThis.unsafeWindow === globalThis) {
             const { movie, related, review, settings, storage } = context.services;
             diagnostics.detailServices = { movie, related, review, settings, storage };
+            Object.defineProperty(diagnostics, "diagnostics", { value: context.services.diagnostics });
+            diagnostics.getContributionDescriptors = () => {
+                const descriptors = new Map(context.services.diagnostics.contributionDescriptors.map(item => [item.id, item.disableable]));
+                return Object.entries(LEGACY_PLUGIN_CONTRIBUTION_MAP).flatMap(([name, id]) =>
+                    descriptors.has(id) ? [{ name, disableable: descriptors.get(id) }] : []);
+            };
             diagnostics.executeCommand = context.registries.commands.execute.bind(context.registries.commands);
             context.registries.features.inspection = diagnostics.features = {};
             diagnostics.activateFeature = async (id) => { await context.registries.features.activate(id); };
@@ -195,17 +199,13 @@ export async function bootstrapJhs() {
         Object.assign(globalThis, logger);
         if (credentialMigration.issues?.length) logger.show.info("部分旧凭证未能安全迁移，已保留原数据，请重新保存对应凭证");
         if (localOriginSettings.notice) logger.show.info(localOriginSettings.notice);
-        const compatibilityBeans = new CompatibilityBeanRegistry({
-            diagnostics: context.services.diagnostics,
-        });
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
-        registerSiteCompatibility(compatibilityBeans, context.registries.features, siteContext.site);
         markPhase("registry");
         // Compatibility infrastructure must be ready before any feature mounts.
         // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.
         attachCompatibilityFacade({
-            pluginManager: compatibilityBeans, utils, gmHttp, storageManager, stateService, jhsEventBus,
+            pluginManager: context.registries.features.runtimeLookup, utils, gmHttp, storageManager, stateService, jhsEventBus,
             clog: logger.clog, show: logger.show, loading: logger.loading, showImageViewer: logger.showImageViewer,
         }, globalThis.unsafeWindow);
         window.isDetailPage = route === "detail";

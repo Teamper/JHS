@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ListController } from "../src/features/list/list-controller.js";
 import { ListFilterContextProvider } from "../src/features/list/list-filter-context.js";
-import { CompatibilityBeanRegistry } from "../src/core/compatibility-bean-registry.js";
 import { JSDOM } from "jsdom";
 
 const HOST_SELECTORS = { boxSelector: ".movie-list", itemSelector: ".movie-list .item" };
@@ -397,18 +396,4 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
-    it("keeps the compatibility registry lookup-only with zero executor metrics", () => {
-        const registry = new CompatibilityBeanRegistry(), bean = { handle: vi.fn(), initCss: vi.fn() };
-        registry.registerCompatibilityBean("FeatureBean", bean);
-
-        expect(registry.getBean("FeatureBean")).toBe(bean);
-        expect(registry.getPluginNames()).toEqual([]);
-        expect(registry.getTimings()).toEqual([]);
-        expect(registry.getCssTimings()).toEqual([]);
-        expect(registry.getStartupReport()).toMatchObject({ registeredPlugins: 0, cssMs: 0, immediateMs: 0, idlePending: 0, idleCompleted: 0 });
-        expect(registry.processPlugins).toBeUndefined();
-        expect(registry.prepareCss).toBeUndefined();
-        expect(bean.handle).not.toHaveBeenCalled();
-        expect(bean.initCss).not.toHaveBeenCalled();
-    });
 });

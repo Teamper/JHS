@@ -45,14 +45,8 @@ export class DiagnosticsService {
         /** @type {Array<Record<string, any>>} */
         this.errors = [];
         this.browserMetadata = null;
-        /** @type {string[]} */
-        this.legacyPlugins = [];
-        /** @type {Array<{name: string, disableable: boolean}>} */
-        this.legacyPluginDescriptors = [];
+        /** @type {{id: string, disableable: boolean}[]} */ this.contributionDescriptors = [];
         /** @type {any[]} */ this.featureDescriptors = [];
-        this.legacyStartup = null;
-        /** @type {Array<Record<string, unknown>>} */
-        this.legacyTimings = [];
         this.legacyHttp = options.legacyHttp ?? null;
         this.networkController = null;
         /** @type {{longTasks: number, blockingMs: number, longFrames: number, interactions: number[]} | null} */ this.performanceCapture = null;
@@ -139,13 +133,6 @@ export class DiagnosticsService {
     }
     /** @param {Record<string, unknown>} metadata */
     setBrowserMetadata(metadata) { this.browserMetadata = Object.freeze({ ...metadata }); }
-    /** @param {Array<{name: string, disableable: boolean}>} descriptors @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
-    setLegacyRuntime(descriptors, startup, timings) {
-        this.legacyPluginDescriptors = descriptors.map((item) => Object.freeze({ ...item }));
-        this.legacyPlugins = Number(startup.registeredPlugins) > 0 ? descriptors.map((item) => item.name) : [];
-        this.legacyStartup = Object.freeze({ ...startup });
-        this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
-    }
     clearErrors() { this.errors = []; }
     /** @param {any} controller */
     setNetworkController(controller) { this.networkController = controller; }
@@ -172,7 +159,7 @@ export class DiagnosticsService {
             requestConsumers: this.requestStats.consumers, underlyingRequests: this.requestStats.underlying,
             cacheHits: this.cacheStats.hits, cacheMisses: this.cacheStats.misses,
             providerHealth: Object.fromEntries(this.providerHealth), errors: this.errors.map((error) => ({ ...error })),
-            legacyPlugins: [...this.legacyPlugins], legacyPluginDescriptors: this.legacyPluginDescriptors.map((item) => ({ ...item })), legacyStartup: this.legacyStartup, legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
+            contributionDescriptors: this.contributionDescriptors.map(item => ({ ...item })),
             performance: this.performanceSnapshot(),
             browser: this.browserMetadata, uptimeMs: performance.now() - this.startedAt,
         });

@@ -12,7 +12,7 @@ test("Library title filter safely confirms selected FC2 text and preserves the 6
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { settingOverrides: { enableTitleSelectFilter: "yes" }, userscriptPath: devUserscriptPath, beforeUserscriptInjection: injectRealLayer });
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).toContain("library.keyword-filter");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions)).toContain("library.keyword-filter");
   await page.evaluate(async () => {
     await window.unsafeWindow.settingsService.set("enableTitleSelectFilter", "no");
     await window.unsafeWindow.settingsService.set("enableTitleSelectFilter", "yes");
@@ -46,6 +46,5 @@ test("Library title filter safely confirms selected FC2 text and preserves the 6
     const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
     return forage.getItem("filter_keyword_title");
   })).toEqual(["FC2-TEST <img src=x onerror=alert(1)>"]);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("FilterTitleKeywordPlugin"))).toBe(false);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "FilterTitleKeywordPlugin"))).toBe(true);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name }) => name === "FilterTitleKeywordPlugin"))).toBe(true);
 });

@@ -6,6 +6,11 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 export default defineFeature({
     id: "identity", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.navigation, SERVICE.notifications, SERVICE.clipboard, SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch, SERVICE.settings],
+    contributionAvailability: {
+        "identity.javdb-navigation": { sites: ["javdb"] },
+        "identity.javbus-navigation": { sites: ["javbus"] },
+        "detail.javbus-native": { sites: ["javbus"] },
+    },
     contributes: ["identity.javdb-navigation", "identity.javbus-navigation", "identity.image-search", "detail.javbus-native"], providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const enabled = runtime.enabledContributions;

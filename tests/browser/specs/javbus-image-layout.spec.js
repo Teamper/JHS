@@ -41,8 +41,7 @@ test.describe("JavBus image layout Feature migration", () => {
       { height: "100px", priority: "important" },
       { height: "100px", priority: "important" },
     ]);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("BusImgPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "BusImgPlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name }) => name === "BusImgPlugin"))).toBe(true);
   });
 
   test("the old BusImgPlugin disable ID keeps the feature contribution inactive", async ({ context, page }, testInfo) => {
@@ -72,6 +71,5 @@ test.describe("JavBus image layout Feature migration", () => {
     });
 
     expect(heights).toEqual(["", "", ""]);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("BusImgPlugin"))).toBe(false);
   });
 });

@@ -109,15 +109,12 @@ test("Library Feature owns blacklist behavior without registering the legacy plu
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   const ownership = await page.evaluate(() => {
-    const manager = window.unsafeWindow.pluginManager;
     return {
       style: document.getElementById("jhs-library-blacklist-feature")?.textContent.includes(".jhs-blacklist-layout") ?? false,
-      contribution: manager.diagnostics.exportSnapshot().activeContributions.includes("library.blacklist"),
-      legacyExecutor: manager.getPluginNames().includes("BlacklistPlugin"),
-      runtimeStatus: manager.getTimings().find(({ name }) => name === "BlacklistPlugin")?.status ?? null,
+      contribution: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions.includes("library.blacklist"),
     };
   });
-  expect(ownership).toEqual({ style: true, contribution: true, legacyExecutor: false, runtimeStatus: null });
+  expect(ownership).toEqual({ style: true, contribution: true });
 });
 
 test("Library Feature owns the blacklist workspace filter and actor deletion flow", async ({ context, page }, testInfo) => {
@@ -259,7 +256,7 @@ test("screenshot master switch OFF removes detail screenshot UI", async ({ conte
   await injectUserscriptRuntime(page);
   await expect(page.locator(".screen-container")).toHaveCount(1);
   expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ScreenShotPlugin"))).toBeUndefined();
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(item => item.name === "ScreenShotPlugin"))).toBe(true);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(item => item.name === "ScreenShotPlugin"))).toBe(true);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadScreenShot", "no"));
   await page.waitForTimeout(300);
   await expect(page.locator(".screen-container")).toHaveCount(0);
@@ -474,13 +471,11 @@ test("JavBus preview is native Feature-owned and disappears when the DMM sub swi
   const previewOwnership = await page.evaluate(() => {
     const manager = window.unsafeWindow.pluginManager;
     return {
-      registered: manager.getPluginNames().includes("BusPreviewVideoPlugin"),
       managedByFeature: manager.getBean("BusPreviewVideoPlugin")?.managedByFeature === true,
-      timing: manager.getTimings().find(item => item.name === "BusPreviewVideoPlugin")?.status ?? null,
       route: window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"] != null ? window.isDetailPage : null,
     };
   });
-  expect(previewOwnership).toEqual({ registered: false, managedByFeature: false, timing: null, route: true });
+  expect(previewOwnership).toEqual({ managedByFeature: false, route: true });
   await expect(page.locator(".preview-video-container")).toHaveCount(1);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadPreviewVideo", "no"));
   await page.waitForTimeout(300);
@@ -502,11 +497,9 @@ test("FC2 OtherSite slot survives OFF→ON toggles", async ({ context, page }, t
     return {
       controller: controller?.managedByFeature === true && typeof controller.loadOtherSite === "function" && typeof controller.handle === "undefined",
       fc2Injected: fc2?.featureExternalSitesAdapter === controller,
-      noLegacyExecutor: !manager.getPluginNames().includes("OtherSitePlugin"),
-      noLegacyTiming: !manager.getTimings().some((item) => item.name === "OtherSitePlugin"),
     };
   });
-  expect(ownership).toEqual({ controller: true, fc2Injected: true, noLegacyExecutor: true, noLegacyTiming: true });
+  expect(ownership).toEqual({ controller: true, fc2Injected: true });
   const setOtherSite = (value) => page.evaluate((v) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadOtherSite", v), value);
   await expect(slot).toHaveCount(1);
   await expect(group).toBeVisible();

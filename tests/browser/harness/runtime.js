@@ -260,7 +260,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
     await page.evaluate((phases) => { window.__jhsBrowserDiagnostics.bootstrapPhases = { ...(window.__jhsBrowserDiagnostics.bootstrapPhases || {}), harness: phases }; }, bootstrapPhases);
   } catch (error) {
     const state = await page.evaluate(() => {
-      const snapshot = window.unsafeWindow?.pluginManager?.diagnostics?.exportSnapshot?.();
+      const snapshot = window.__jhsBrowserDiagnostics?.diagnostics?.exportSnapshot?.();
       return { phases: window.__jhsBrowserDiagnostics?.bootstrapPhases, activeFeatures: snapshot?.activeFeatures, featureTimings: snapshot?.startupTimings };
     }).catch(() => null);
     console.error("JHS fixture startup state", JSON.stringify(state));

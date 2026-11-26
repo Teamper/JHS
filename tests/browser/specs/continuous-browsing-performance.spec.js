@@ -38,7 +38,7 @@ for (const [cards, records] of sizes) test(`JavDB continuous browsing ${cards} c
     await expect.poll(() => page.locator('.item[data-jhs-processed="true"]').count()).toBe(cards);
     const before = await raw.send("Performance.getMetrics");
     const measurements = await page.evaluate(async sampleCount => {
-        const manager = window.unsafeWindow.pluginManager, diagnostics = manager.diagnostics;
+        const diagnostics = window.__jhsBrowserDiagnostics.diagnostics;
         diagnostics.startPerformanceCapture?.();
         const times = [], processed = [];
         for (let index = 0; index < sampleCount; index++) {

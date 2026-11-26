@@ -83,7 +83,7 @@ for (const [cards, records] of process.env.JHS_PERF_STRESS === "1" ? [[1000, 500
       if (cpu) await cpu.send("Profiler.start");
       await page.evaluate(({ round, captureDiagnostics }) => {
         window.hoverSamples = []; window.mixedLongTasks = [];
-        const diagnostics = window.unsafeWindow.pluginManager.diagnostics;
+        const diagnostics = window.__jhsBrowserDiagnostics.diagnostics;
         if (captureDiagnostics) diagnostics.startPerformanceCapture?.();
         window.mixedStateDuration = null; window.mixedStateRequestWait = null;
         window.mixedStateRequestedWhileLocked = false;
@@ -104,7 +104,7 @@ for (const [cards, records] of process.env.JHS_PERF_STRESS === "1" ? [[1000, 500
       const result = await page.evaluate(async () => {
         await window.mixedSyncPromise; await window.mixedStatePromise;
         await new Promise(resolve => setTimeout(resolve, 50));
-        const diagnostics = window.unsafeWindow.pluginManager.diagnostics;
+        const diagnostics = window.__jhsBrowserDiagnostics.diagnostics;
         const result = { hoverPaintMs: window.hoverSamples, longTasks: window.mixedLongTasks, syncMs: window.mixedSyncDuration, stateCommitMs: window.mixedStateDuration, stateRequestWaitMs: window.mixedStateRequestWait, requestedWhileSyncLocked: window.mixedStateRequestedWhileLocked, diagnostics: diagnostics.performanceSnapshot?.() };
         diagnostics.stopPerformanceCapture?.(); return result;
       });

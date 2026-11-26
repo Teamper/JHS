@@ -259,8 +259,9 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
     if (dependencies.isActive?.() === false) return;
     const featureEntries = diagnosticSnapshot.featureDescriptors || [];
     const featureById = new Map(featureEntries.map((/** @type {any} */ entry) => [entry.id, entry]));
-    const configuredNames = [...featureEntries.map((/** @type {any} */ item) => item.id), ...(diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string}} */ item) => item.name)];
-    const allNames = [...new Set([...configuredNames, ...(diagnosticSnapshot.legacyPlugins || [])])];
+    const { categories: categoryDefaults, pluginMeta } = getPluginCategories();
+    const contributions = new Map(diagnosticSnapshot.contributionDescriptors.map((/** @type {{id: string, disableable: boolean}} */ item) => [item.id, item]));
+    const allNames = [...featureById.keys(), ...Object.keys(pluginMeta).filter(name => contributions.has(disabledIdForPlugin(name)))];
     const effectiveDisabledNames = (/** @type {string[]} */ values) => {
         const disabledSet = new Set(values);
         return allNames.filter((/** @type {string} */ name) => {
@@ -268,7 +269,6 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
             return key ? !parseBooleanSetting(settings.snapshot()[key], true) : disabledSet.has(name) || disabledSet.has(disabledIdForPlugin(name));
         });
     };
-    const { categories: categoryDefaults, pluginMeta } = getPluginCategories();
     const categories = /** @type {Record<string, {label:string,plugins:string[]}>} */ (categoryDefaults);
     for (const item of featureEntries) {
         const key = `feature-${item.group}`;
@@ -276,7 +276,6 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
         categories[key].plugins.push(item.id);
         pluginMeta[item.id] = [item.name, key];
     }
-    const pluginDescriptors = new Map((diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string, disableable: boolean}} */ item) => [item.name, item]));
     const registeredSet = new Set(allNames);
     let html = "";
     for (const [catKey, cat] of Object.entries(categories)) {
@@ -285,7 +284,7 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
         html += '<section class="jhs-plugin-group">';
         html += `<h4 class="jhs-plugin-group__title">${escapeHtml(cat.label)}</h4>`;
         for (const pName of visiblePlugins) {
-            const isCore = pluginDescriptors.get(pName)?.disableable === false;
+            const isCore = contributions.get(disabledIdForPlugin(pName))?.disableable === false;
             const descriptor = featureById.get(pName);
             const isDisabled = descriptor?.settingKey ? !parseBooleanSetting(settings.snapshot()[descriptor.settingKey], true) : disabled.includes(pName) || disabled.includes(disabledIdForPlugin(pName));
             const productName = pluginMeta[pName]?.[0] || pName;
@@ -351,10 +350,8 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
             clog.error("插件状态已保存，但通知显示失败", error);
         }
     });
-    const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;
     const featureTimings = Object.entries(diagnosticSnapshot.startupTimings || {});
     const formatMs = (/** @type {number} */ value) => Number.isFinite(value) ? value.toFixed(1) : "0.0";
-    const startupHtml = startup?.registeredPlugins ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (featureTimings.length) {
         const activeFeatures = new Set(diagnosticSnapshot.activeFeatures);
         const sorted = featureTimings.sort((a, b) => Number(b[1]) - Number(a[1]));
@@ -366,18 +363,8 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
         }
         tHtml += '</table><p class="jhs-caption">激活耗时包含异步依赖等待，不代表主线程执行时间。</p>';
         $("#plugin-timing-table").html(tHtml);
-    } else if (timings.length) {
-        const sorted = [...timings].sort(((/** @type {any} */ a, /** @type {any} */ b) => b.elapsed - a.elapsed));
-        let tHtml = '<table class="jhs-data-table"><tr><th>插件</th><th class="is-center">阶段</th><th class="is-right">耗时(ms)</th><th class="is-center">状态</th></tr>';
-        for (const t of sorted) {
-            const stateClass = t.status === "disabled" ? "is-muted" : t.elapsed > 500 ? "is-slow" : t.elapsed > 200 ? "is-warning" : "";
-            const statusText = t.status === "disabled" ? "已关闭" : t.status === "error" ? "错误" : t.status === "pending-idle" ? "等待空闲" : t.status === "skipped-mobile" ? "移动端跳过" : "正常";
-            tHtml += `<tr><td class="${stateClass}">${escapeHtml(t.name)}</td><td class="is-center">${t.startupMode === "idle" ? "空闲" : "即时"}</td><td class="is-right ${stateClass}">${t.elapsed.toFixed(1)}</td><td class="is-center">${statusText}</td></tr>`;
-        }
-        tHtml += '</table>';
-        $("#plugin-timing-table").html(startupHtml + tHtml);
     } else {
-        $("#plugin-timing-table").html(startupHtml + '<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
+        $("#plugin-timing-table").html('<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
     const errorLog = diagnosticSnapshot.errors;
     if (errorLog.length) {

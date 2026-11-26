@@ -4,7 +4,6 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { migrateDisabledPlugins } from "../src/app/feature-runtime.js";
 import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import listFeature from "../src/features/list/manifest.js";
-import { compatibilityContributionCatalog } from "../src/features/compatibility/contribution-catalog.js";
 
 function setup(styleRegistration = vi.fn(() => vi.fn())) {
     document.body.innerHTML = '<div class="movie-list"><div class="item"></div></div>';
@@ -39,8 +38,6 @@ afterEach(() => { document.body.innerHTML = ""; });
 
 describe("List Feature native auto-page ownership", () => {
     it("preserves the legacy disable ID while moving execution out of PluginManager", async () => {
-        const contribution = compatibilityContributionCatalog.find((item) => item.id === "list.auto-page");
-        expect(contribution).toMatchObject({ featureId: "list", legacyPluginId: "AutoPagePlugin", executionOwner: "feature", plugin: null });
         expect(migrateDisabledPlugins(["AutoPagePlugin"])).toEqual(["list.auto-page"]);
         const fixture = setup();
         const result = await listFeature.activate(fixture.deps, fixture.runtime);

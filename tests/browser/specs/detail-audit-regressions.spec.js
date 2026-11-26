@@ -61,9 +61,8 @@ test("JavDB native preview is Feature-managed and retains its live master switch
   const pluginState = await frame.evaluate(() => ({
     managedByFeature: window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")?.managedByFeature,
     runtimeStatus: window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")?.runtimeStatus,
-    registeredLegacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("PreviewVideoPlugin"),
   }));
-  expect(pluginState).toEqual({ managedByFeature: true, runtimeStatus: "managed-feature", registeredLegacyExecutor: false });
+  expect(pluginState).toEqual({ managedByFeature: true, runtimeStatus: "managed-feature" });
   const trigger = frame.locator(".preview-video-container").first();
   await expect(trigger).not.toHaveClass(/jhs-native-preview-hidden/);
   await frame.evaluate(() => window.settingsService.set("enablePreviewVideo", "no"));
@@ -75,11 +74,10 @@ test("JavDB native preview is Feature-managed and retains its live master switch
 test("legacy PreviewVideoPlugin disable ID suppresses the native controller and compatibility bean", async ({ page, context }) => {
   const frame = await boot(page, context, { disabledPlugins: ["PreviewVideoPlugin"] });
   const state = await frame.evaluate(() => ({
-    legacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("PreviewVideoPlugin"),
     compatibilityBean: Boolean(window.unsafeWindow.pluginManager.getBean("PreviewVideoPlugin")),
     dmmTriggers: document.querySelectorAll("[data-jhs-dmm-trigger]").length,
   }));
-  expect(state).toEqual({ legacyExecutor: false, compatibilityBean: false, dmmTriggers: 0 });
+  expect(state).toEqual({ compatibilityBean: false, dmmTriggers: 0 });
 });
 
 test("open detail iframe shrinks with its viewport and stays usable", async ({ page, context }) => {

@@ -8,6 +8,13 @@ export default defineFeature({
     sites: ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], routes: [], startup: "eager",
     requires: [PORT.style, SERVICE.notifications, SERVICE.pan123Credential, SERVICE.storage, SERVICE.http, SERVICE.magnet, SERVICE.resourceSettings, SERVICE.clipboard, SERVICE.domUi, SERVICE.diagnostics, SERVICE.dialog, SERVICE.offline, SERVICE.offlineSubmissionReceipts, SERVICE.state, SERVICE.settings, SERVICE.events],
     optionalRequires: [PORT.host],
+    contributionAvailability: {
+        "external-bridge.offline": { sites: ["javdb", "javbus"], routes: ["detail", "list"] },
+        "external-bridge.123pan": { sites: ["javdb", "javbus", "123pan"] },
+        "external-bridge.javtrailers": { sites: ["javtrailers"] },
+        "external-bridge.subtitle": { sites: ["subtitlecat"] },
+        "detail.external-magnets": { sites: ["javdb", "javbus"] },
+    },
     contributes: ["external-bridge.offline", "external-bridge.123pan", "external-bridge.javtrailers", "external-bridge.subtitle", "detail.external-magnets"],
     providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {

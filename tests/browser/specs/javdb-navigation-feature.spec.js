@@ -84,8 +84,7 @@ test.describe("JavDB navigation Feature migration", () => {
     await expect(page.locator(".search-image")).toHaveCount(1);
     await page.locator(".search-image").click();
     expect(await page.evaluate(() => window.hostImageSearchClicks)).toBe(1);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("NavBarPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "NavBarPlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name }) => name === "NavBarPlugin"))).toBe(true);
   });
 
   test("opens a new-tab search from non-search pages", async ({ context, page }, testInfo) => {

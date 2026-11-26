@@ -25,10 +25,9 @@ test("statistics dashboard is a native Feature and preserves read metrics and li
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { userscriptPath: devUserscriptPath, beforeUserscriptInjection: seedLibraryBeforeInjection });
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).toContain("stats.dashboard");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions)).toContain("stats.dashboard");
   await expect(page.locator("#newVideoBtn + #statsBtn")).toBeVisible();
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("StatsPlugin"))).toBe(false);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name, disableable }) => name === "StatsPlugin" && !disableable))).toBe(true);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name, disableable }) => name === "StatsPlugin" && !disableable))).toBe(true);
 
   await page.locator("#statsBtn").click();
   const dialog = page.locator(".layui-layer").filter({ has: page.locator(".jhs-stats") }).last();
@@ -47,8 +46,7 @@ test("statistics remains non-disableable when old configuration contains its leg
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins: ["StatsPlugin"], userscriptPath: devUserscriptPath });
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).toContain("stats.dashboard");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeContributions)).toContain("stats.dashboard");
   await expect(page.locator("#statsBtn")).toBeVisible();
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("StatsPlugin"))).toBe(false);
-  expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name, disableable }) => name === "StatsPlugin" && !disableable))).toBe(true);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name, disableable }) => name === "StatsPlugin" && !disableable))).toBe(true);
 });

@@ -125,7 +125,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
         remainingBreaks: card?.querySelectorAll("br").length,
         preservedItemTag: card?.querySelector(".item-tag")?.textContent,
         preservedDates: [...(card?.querySelectorAll("date") ?? [])].map((node) => node.textContent),
-        listFeatureActive: window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeFeatures.includes("list"),
+        listFeatureActive: window.__jhsBrowserDiagnostics.diagnostics.exportSnapshot().activeFeatures.includes("list"),
         navigationAdapterActive: Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.featureListNavigationAdapter),
       };
     });
@@ -278,11 +278,10 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     });
 
     const ownership = await page.evaluate(() => ({
-      legacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("CoverButtonPlugin"),
       compatibility: typeof window.unsafeWindow.pluginManager.getBean("CoverButtonPlugin")?.enableSvgBtn === "function",
-      contribution: window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "CoverButtonPlugin"),
+      contribution: window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name }) => name === "CoverButtonPlugin"),
     }));
-    expect(ownership).toEqual({ legacyExecutor: false, compatibility: true, contribution: true });
+    expect(ownership).toEqual({ compatibility: true, contribution: true });
     await expect(page.locator(".movie-list > .item .jhs-cover-tools")).toHaveCount(1);
     const handle = page.locator(".movie-list > .item .handleSvg");
     await expect(handle).toHaveCSS("display", "block");
@@ -362,11 +361,10 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     await expect(page.locator("#favoriteAllVideo")).toHaveCount(1);
     await expect(page.locator(".jhs-sort-control")).toHaveCount(1);
     const ownership = await page.evaluate(() => ({
-      legacyExecutor: window.unsafeWindow.pluginManager.getPluginNames().includes("ListPageButtonPlugin"),
       compatibility: typeof window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin")?.openWaitCheck === "function",
       managedByFeature: window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin")?.managedByFeature === true,
     }));
-    expect(ownership).toEqual({ legacyExecutor: false, compatibility: true, managedByFeature: true });
+    expect(ownership).toEqual({ compatibility: true, managedByFeature: true });
 
     await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPageButtonPlugin").dispose());
     await expect(page.locator("#waitCheckBtn, #favoriteAllVideo, #sort-toggle-btn")).toHaveCount(0);
@@ -382,9 +380,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
     await expect(page.locator(".movie-list .item")).toHaveCount(1);
     await expect(page.locator(".jhs-list-btn-row")).toHaveCount(0);
     expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true)).toBe(true);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPagePlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPageButtonPlugin"))).toBe(false);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors().some(({ name }) => name === "ListPageButtonPlugin"))).toBe(true);
+    expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.getContributionDescriptors().some(({ name }) => name === "ListPageButtonPlugin"))).toBe(true);
   });
 
   test("List core owns right-click blocking once even when list actions are disabled", async ({ context, page }, testInfo) => {
@@ -420,10 +416,9 @@ test.describe("JavDB list actions Feature lifecycle", () => {
       confirmations: window.__listBlockConfirms,
       names: window.__listBlockConfirms.length,
       listCore: window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.managedByFeature === true,
-      listActions: window.unsafeWindow.pluginManager.getPluginNames().includes("ListPageButtonPlugin"),
     }));
     expect(result).toEqual({
-      confirmations: ["屏蔽「ABC-123」？"], names: 1, listCore: true, listActions: false,
+      confirmations: ["屏蔽「ABC-123」？"], names: 1, listCore: true,
     });
     await expect(page.locator(".movie-list > .item .jhs-status-tags .status-tag")).toHaveText(["已屏蔽"]);
   });

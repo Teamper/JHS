@@ -8,6 +8,7 @@ export default defineFeature({
     id: "fc2-catalog", kind: "feature", disableable: true,
     sites: ["javdb"], routes: [], startup: "idle",
     requires: [PORT.host, SERVICE.movie, SERVICE.domUi, SERVICE.notifications, SERVICE.diagnostics],
+    contributionRoutes: ["list", "detail", "owned-detail"],
     contributes: ["detail.fc2-lookup"], providesCommands: ["fc2-catalog.ensure"],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "detail.fc2-lookup";

@@ -29,19 +29,16 @@ test("list iframe panels share inset, surface and typography without losing cont
   await expect(frame.locator(".jhs-related-item")).toHaveCount(1);
   const featureOwnership = await frame.evaluate(() => {
     const manager = window.unsafeWindow.pluginManager;
-    const descriptors = manager.getPluginDescriptors();
+    const descriptors = window.__jhsBrowserDiagnostics.getContributionDescriptors();
     return {
       reviewDescriptors: ["ReviewPlugin", "RelatedPlugin"].every(name => descriptors.some(item => item.name === name)),
       externalFeatureBeans: ["OtherSitePlugin", "UnifiedOfflinePlugin"].every(name => manager.getBean(name)?.managedByFeature === true),
       externalSitesController: typeof manager.getBean("OtherSitePlugin")?.loadOtherSite === "function" && typeof manager.getBean("OtherSitePlugin")?.handle === "undefined",
-      externalFeatureTimings: !manager.getTimings().some(item => item.name === "UnifiedOfflinePlugin" || item.name === "OtherSitePlugin"),
       magnetBeanMissing: manager.getBean("HighlightMagnetPlugin") === undefined,
       magnetDescriptorPresent: descriptors.some(item => item.name === "HighlightMagnetPlugin"),
-      pluginNames: manager.getPluginNames().filter(name => ["ReviewPlugin", "RelatedPlugin", "HighlightMagnetPlugin", "OtherSitePlugin"].includes(name)),
     };
   });
-  expect(featureOwnership).toMatchObject({ reviewDescriptors: true, externalFeatureBeans: true, externalSitesController: true, externalFeatureTimings: true, magnetBeanMissing: true, magnetDescriptorPresent: true });
-  expect(featureOwnership.pluginNames).toEqual([]);
+  expect(featureOwnership).toMatchObject({ reviewDescriptors: true, externalFeatureBeans: true, externalSitesController: true, magnetBeanMissing: true, magnetDescriptorPresent: true });
   for(const width of [360,390,768,992,1248,1408]) for(const theme of ["light","dark"]) {
     await page.setViewportSize({width,height:900});
     await frame.evaluate(theme=>window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("themeMode",theme),theme);

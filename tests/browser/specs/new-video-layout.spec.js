@@ -185,7 +185,6 @@ test("new video feature owns its style and keeps the legacy disable ID",async({p
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page,{settingOverrides:{enableCheckBlacklist:"no",enableCheckFavoriteActress:"no",enableCheckNewVideo:"no"}});
     await expect(page.locator("#feature-new-video-workspace")).toHaveCount(0);
-    expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("NewVideoPlugin"))).toBe(false);
     await page.locator("#newVideoBtn").click();
     await expect(page.locator(".newVideoToolBox")).toBeVisible();
     await expect(page.locator("#feature-new-video-workspace")).toHaveCount(1);
@@ -201,7 +200,6 @@ test("new video feature owns its style and keeps the legacy disable ID",async({p
         await expect(disabledPage.locator("#newVideoBtn")).toHaveCount(0);
         await expect(disabledPage.locator("#feature-new-video-workspace")).toHaveCount(0);
         await expect(disabledPage.locator("#jhs-quick-filter")).toBeVisible();
-        expect(await disabledPage.evaluate(()=>window.unsafeWindow.pluginManager.getPluginNames().includes("NewVideoPlugin"))).toBe(false);
     } finally {
         await disabledContext.close();
     }

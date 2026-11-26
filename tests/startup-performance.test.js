@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
-import { CompatibilityBeanRegistry } from "../src/core/compatibility-bean-registry.js";
+import { createRuntimeLookup } from "../src/app/runtime-lookup.js";
 import { isAbortError } from "../src/core/jhs-error.js";
 import { getMovieStateEligibility } from "../src/core/movie-identity.js";
 
@@ -121,33 +121,18 @@ function loadHttpManager(requestHandler) {
   return new context.TestGmHttp({ utils: new TestUtils(), storageManager: new TestStorage() });
 }
 
-describe("compatibility registry zero-runtime contract", () => {
-  it("preserves legacy bean lookup and settings descriptors without plugin execution", () => {
-    const registry = new CompatibilityBeanRegistry(), bean = { handle: vi.fn(), initCss: vi.fn() };
-    registry.registerCompatibilityBean("ListPagePlugin", bean);
-    registry.setCatalogDescriptors([{ name: "ListPagePlugin", disableable: true }]);
-
-    expect(registry.getBean("ListPagePlugin")).toBe(bean);
-    expect(registry.getPluginDescriptors()).toEqual([{ name: "ListPagePlugin", disableable: true }]);
-    expect(registry.getPluginNames()).toEqual([]);
-    expect(registry.getTimings()).toEqual([]);
-    expect(registry.getCssTimings()).toEqual([]);
-    expect(registry.getStartupReport()).toEqual({ registeredPlugins: 0, registrationMs: 0, cssMs: 0, immediateMs: 0, readyMs: 0, idlePending: 0, idleCompleted: 0 });
-    expect(registry.processPlugins).toBeUndefined();
-    expect(registry.prepareCss).toBeUndefined();
-    expect(bean.handle).not.toHaveBeenCalled();
-    expect(bean.initCss).not.toHaveBeenCalled();
-  });
-
-  it("rejects duplicate aliases and only releases the exact registered bean", () => {
-    const registry = new CompatibilityBeanRegistry(), bean = {};
-    registry.registerCompatibilityBean("StableAlias", bean);
-    expect(() => registry.registerCompatibilityBean("StableAlias", {})).toThrow("兼容 Bean 重复或无效: StableAlias");
-    expect(registry.unregisterCompatibilityBean("StableAlias", {})).toBe(false);
-    expect(registry.unregisterCompatibilityBean("StableAlias", bean)).toBe(true);
-    expect(registry.getBean("StableAlias")).toBeUndefined();
-  });
+it("releases lookup aliases only while they still refer to the registered instance", () => {
+  const lookup = createRuntimeLookup(), bean = {}, replacement = {};
+  const release = lookup.register("StableAlias", bean);
+  expect(lookup.getBean("StableAlias")).toBe(bean);
+  expect(() => lookup.register("StableAlias", {})).toThrow("兼容 Bean 重复或无效: StableAlias");
+  release();
+  expect(lookup.getBean("StableAlias")).toBeUndefined();
+  lookup.register("StableAlias", replacement);
+  release();
+  expect(lookup.getBean("StableAlias")).toBe(replacement);
 });
+
 describe("storage read coalescing", () => {
   it("uses one IndexedDB read for concurrent cache misses", async () => {
     const getItem = vi.fn(async (key) => key === "setting" ? { theme: "dark" } : []);

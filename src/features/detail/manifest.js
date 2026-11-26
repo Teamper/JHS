@@ -25,6 +25,15 @@ async function startOptionalDetailContribution(runtime, contributionId, start) {
 export default defineFeature({
     id: "detail", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot, SERVICE.state, SERVICE.events, SERVICE.domUi, SERVICE.settings, SERVICE.notifications, SERVICE.storage, SERVICE.clipboard, SERVICE.dialog, SERVICE.subtitle],
+    contributionRoutes: ["detail", "owned-detail"],
+    contributionAvailability: {
+        "detail.javdb-native": { sites: ["javdb"] },
+        "detail.javdb-preview": { sites: ["javdb"] },
+        "detail.related": { sites: ["javdb"] },
+        "detail.javbus-preview": { sites: ["javbus"] },
+        "detail.shortcuts": { routes: ["list", "detail", "owned-detail"] },
+        "detail.screenshot": { routes: ["list", "detail"] },
+    },
     contributes: ["detail.javdb-native", "detail.workspace", "detail.page-state-actions", "detail.shortcuts", "detail.javdb-preview", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.screenshot"],
     providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {

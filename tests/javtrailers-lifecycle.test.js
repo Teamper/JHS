@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { JavTrailersController } from "../src/features/external-bridge/javtrailers-controller.js";
 import externalBridge from "../src/features/external-bridge/manifest.js";
-import { compatibilityContributionCatalog } from "../src/features/compatibility/contribution-catalog.js";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -23,8 +22,6 @@ function makeController(path, options = {}) {
 
 describe("JavTrailers Feature controller", () => {
     it("owns the old disable ID but no longer registers a BasePlugin behavior executor", () => {
-        const contribution = compatibilityContributionCatalog.find((item) => item.id === "external-bridge.javtrailers");
-        expect(contribution).toMatchObject({ legacyPluginId: "JavTrailersPlugin", executionOwner: "feature", plugin: null });
         expect(externalBridge.contributes).toContain("external-bridge.javtrailers");
     });
 

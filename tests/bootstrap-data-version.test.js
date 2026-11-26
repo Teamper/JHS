@@ -22,7 +22,6 @@ vi.mock("../src/core/ui-primitives.js", () => ({ initializeUiAccessibility() {} 
 vi.mock("../src/app/compatibility-facade.js", () => ({ attachCompatibilityFacade() {} }));
 vi.mock("../src/features/catalog.js", () => ({ featureManifests: [] }));
 vi.mock("../src/app/integration-catalog.js", () => ({ integrationManifests: [] }));
-vi.mock("../src/features/compatibility/contribution-catalog.js", () => ({ registerSiteCompatibility() {} }));
 import { bootstrapJhs } from "../src/app/bootstrap.js";
 
 function fixture(version = CURRENT_DATA_VERSION) {

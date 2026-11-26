@@ -33,16 +33,6 @@ describe("FC2 workspace Feature ownership", () => {
             .register(SERVICE.clog, logger);
         const commands = new CommandRegistry();
         const runtime = new FeatureRuntime({ container, commands, diagnostics, site: "javdb", route: "list" });
-        runtime.setContributionCatalog([{
-            id: "detail.fc2-owned", featureId: "fc2-workspace", legacyPluginId: "Fc2Plugin",
-            executionOwner: "feature", sites: ["javdb"], routes: ["list", "detail", "owned-detail"], surfaces: ["list-card", "detail-page"],
-        }]);
-        let registeredBean;
-        runtime.setCompatibilityBeanRegistrar((_name, bean) => {
-            registeredBean = bean;
-            return vi.fn();
-        });
-        runtime.setCompatibilityBeanResolver(() => null);
 
         /** @type {any} */ let consumedService = null;
         const consumer = defineFeature({
@@ -58,7 +48,7 @@ describe("FC2 workspace Feature ownership", () => {
 
         await runtime.start();
 
-        expect(consumedService).toBe(registeredBean);
+        expect(consumedService).toBe(runtime.runtimeLookup.getBean("Fc2Plugin"));
         expect(consumedService.getRuntimeService("movie")).toBe(movie);
         expect(consumedService.getRuntimeService("logger")).toBe(logger);
         expect(consumedService.managedByFeature).toBe(true);
