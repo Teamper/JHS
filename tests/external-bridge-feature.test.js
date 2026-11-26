@@ -11,9 +11,8 @@ describe("external bridge Feature ownership", () => {
     it("provides one scoped magnet capability to existing consumers and keeps the old bean alias", async () => {
         const feature = externalBridge;
         const scope = new LifecycleScope("feature:external-bridge");
-        const releaseStyle = vi.fn(), releaseBean = vi.fn(), consumers = new Map(["DetailPageButtonPlugin", "Fc2Plugin", "MobileBottomBarPlugin"].map((name) => [name, {
-            attachFeatureMagnetHubAdapter: vi.fn(), detachFeatureMagnetHubAdapter: vi.fn(),
-        }]));
+        const releaseStyle = vi.fn(), releaseBean = vi.fn();
+        const capabilities = new Map();
         const style = { register: vi.fn(() => releaseStyle) };
         const diagnostics = { recordError: vi.fn() };
         let compatibilityBean;
@@ -22,9 +21,7 @@ describe("external bridge Feature ownership", () => {
             [SERVICE.resourceSettings]: {}, [SERVICE.clipboard]: {}, [SERVICE.domUi]: { jquery: vi.fn() }, [SERVICE.diagnostics]: diagnostics,
         }, {
             enabledContributions: ["detail.external-magnets"], scope, diagnostics,
-            site: "javdb", resolveCompatibilityBean: (name) => consumers.get(name),
-            isContributionEnabled: (featureId, contributionId) => featureId === "fc2-workspace" && contributionId === "detail.fc2-owned",
-            executeCommand: async (command) => { expect(command).toBe("detail.fc2.workspace"); return consumers.get("Fc2Plugin"); },
+            site: "javdb", provideCapability: (id, value) => { capabilities.set(id, value); scope.addCleanup(() => capabilities.delete(id)); },
             registerCompatibilityBean: vi.fn((name, bean) => {
                 expect(name).toBe("MagnetHubPlugin");
                 compatibilityBean = bean;
@@ -35,12 +32,12 @@ describe("external bridge Feature ownership", () => {
         expect(result.activeContributions).toEqual(["detail.external-magnets"]);
         expect(style.register).toHaveBeenCalledWith("jhs-detail-external-magnets-feature", expect.stringContaining(".magnet-container"));
         expect(compatibilityBean).toMatchObject({ managedByFeature: true, runtimeStatus: "managed-feature" });
-        for (const consumer of consumers.values()) expect(consumer.attachFeatureMagnetHubAdapter).toHaveBeenCalledWith(compatibilityBean);
+        expect(capabilities.get("detail.external-magnets")).toBe(compatibilityBean);
         expect(diagnostics.recordError).not.toHaveBeenCalled();
         scope.dispose();
         expect(releaseStyle).toHaveBeenCalledOnce();
         expect(releaseBean).toHaveBeenCalledOnce();
-        for (const consumer of consumers.values()) expect(consumer.detachFeatureMagnetHubAdapter).toHaveBeenCalledWith(compatibilityBean);
+        expect(capabilities.has("detail.external-magnets")).toBe(false);
     });
 
     it("does not resolve or mount the shared magnet hub when its legacy contribution is disabled", async () => {
@@ -79,7 +76,7 @@ describe("external bridge Feature ownership", () => {
         document.body.innerHTML = '<nav id="navbar-menu-hero"><a href="/tags/fc2">FC2</a></nav><section><div class="container"><h2 class="section-title">FC2</h2><div class="movie-list"><div class="item">host</div></div><nav class="pagination"></nav></div></section>';
         window.history.replaceState({}, "", "/tags/fc2?c10=1&jhs_source=123av");
         const scope = new LifecycleScope("feature:external-bridge");
-        const releaseBean = vi.fn(), fc2 = { attachFeature123AvAdapter: vi.fn(), detachFeature123AvAdapter: vi.fn() };
+        const releaseBean = vi.fn(), provideCapability = vi.fn();
         const listPage = { processAddedItems: vi.fn(async () => {}) };
         const host = {
             getListContainer: () => document.querySelector(".container"),
@@ -98,9 +95,7 @@ describe("external bridge Feature ownership", () => {
             [SERVICE.notifications]: { error: vi.fn() }, [SERVICE.diagnostics]: diagnostics,
         }, {
             enabledContributions: ["detail.fc2-lookup"], scope, diagnostics, site: "javdb", route: "list",
-            isContributionEnabled: (featureId, contributionId) => featureId === "fc2-workspace" && contributionId === "detail.fc2-owned",
-            executeCommand: async (command) => { expect(command).toBe("detail.fc2.workspace"); return fc2; },
-            resolveCompatibilityBean: (name) => name === "Fc2Plugin" ? fc2 : name === "ListPagePlugin" ? listPage : null,
+            provideCapability, resolveCompatibilityBean: (name) => name === "ListPagePlugin" ? listPage : null,
             registerCompatibilityBean,
         });
 
@@ -108,10 +103,9 @@ describe("external bridge Feature ownership", () => {
         expect(result.commands["fc2-catalog.ensure"]()).toMatchObject({ managedByFeature: true });
         expect(document.querySelector("#jhs-123av-nav").getAttribute("href")).toBe("/tags/fc2?c10=1&jhs_source=123av");
         expect(document.querySelector(".jhs-123av-list")).not.toBeNull();
-        expect(fc2.attachFeature123AvAdapter).toHaveBeenCalledWith(expect.objectContaining({ managedByFeature: true }));
+        expect(provideCapability).toHaveBeenCalledWith("detail.fc2-lookup", result.commands["fc2-catalog.ensure"]());
         expect(diagnostics.recordError).not.toHaveBeenCalled();
         scope.dispose();
-        expect(fc2.detachFeature123AvAdapter).toHaveBeenCalledOnce();
         expect(releaseBean).toHaveBeenCalledOnce();
         expect(document.querySelector("#jhs-123av-nav")).toBeNull();
         expect(document.querySelector(".jhs-123av-list")).toBeNull();

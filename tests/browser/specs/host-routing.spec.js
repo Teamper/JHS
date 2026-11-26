@@ -130,20 +130,20 @@ test("legacy disabled plugin migrates to one contribution only", async ({ contex
     return {
       pluginNames: manager.getPluginNames(),
       descriptors: manager.getPluginDescriptors(),
-      reviewBean: manager.getBean("ReviewPlugin"),
-      relatedManaged: manager.getBean("RelatedPlugin")?.managedByFeature === true,
+
+
       activeContributions: manager.diagnostics.exportSnapshot().activeContributions,
-      relatedService: Boolean(manager.getBean("RelatedPlugin")?.getRuntimeService("related")),
+
     };
   });
   expect(state.pluginNames).not.toContain("ReviewPlugin");
   expect(state.pluginNames).not.toContain("RelatedPlugin");
-  expect(state.reviewBean).toBeUndefined();
-  expect(state.relatedManaged).toBe(true);
+
+
   expect(state.descriptors).toContainEqual({ name: "ReviewPlugin", disableable: true });
   expect(state.activeContributions).not.toContain("detail.reviews");
   expect(state.activeContributions).toContain("detail.related");
-  expect(state.relatedService).toBe(true);
+
   expect(state.pluginNames).not.toContain("DetailWorkspacePlugin");
   const descriptors = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginDescriptors());
   expect(descriptors).toContainEqual({ name: "DetailWorkspacePlugin", disableable: true });
@@ -380,8 +380,8 @@ test("JavDB list titles translate through the Translation Feature and roll back 
   await expect(page.locator(".movie-list .item")).toHaveAttribute("data-jhs-translation-key", "ABC-123");
   await expect(title).toContainText("即时译文");
   const attached = await page.evaluate(() => {
-    const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.delegate;
-    return Boolean(list?.featureListTranslationAdapter && typeof list.featureListTranslationAdapter.translateListItems === "function");
+    const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+    return typeof list?.readTranslation()?.translateListItems === "function";
   });
   expect(attached).toBe(true);
 

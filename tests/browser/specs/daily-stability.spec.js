@@ -38,7 +38,8 @@ for (const theme of ["light", "dark"]) test(`ordinary detail screenshot policy r
 for (const theme of ["light", "dark"]) test(`actor source exceptions expose a safe manual retry ${theme}`, async ({ page, context }, info) => {
     await boot(page, context, theme);
     await page.evaluate(async () => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         const baseActors = await window.storageManager.getFavoriteActressList();
         const extra = [
             { ...baseActors[0], starId: "unavail-2", name: "善場まみ" },
@@ -49,7 +50,7 @@ for (const theme of ["light", "dark"]) test(`actor source exceptions expose a sa
         for (const actor of [allActors[0], ...extra]) {
             plugin.getRuntimeService("sourceHealth").unavailable("https://javdb.com", { starId: actor.starId, name: actor.name });
         }
-        window.unsafeWindow.pluginManager.getBean("TaskPlugin").checkOneNewVideo = async actress => plugin.getRuntimeService("sourceHealth").clear("https://javdb.com", actress.starId);
+        (await window.__jhsBrowserDiagnostics.executeCommand("scheduler.service")).checkOneNewVideo = async actress => plugin.getRuntimeService("sourceHealth").clear("https://javdb.com", actress.starId);
         plugin.openDialog();
     });
     const workspace = page.locator(".newVideoToolBox");
@@ -82,11 +83,12 @@ test("a closed actor retry cannot move focus in a later workspace", async ({ pag
     test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "dialog replacement lifecycle");
     await boot(page, context, "light");
     await page.evaluate(async () => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin"), actors = await window.storageManager.getFavoriteActressList();
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo, actors = await window.storageManager.getFavoriteActressList();
         plugin.getRuntimeService("sourceHealth").unavailable("https://javdb.com", actors[0]);
         const run = plugin.runManualTask.bind(plugin);
         plugin.runManualTask = async (...args) => { try { return await run(...args); } finally { window.actorRetryFinished = true; } };
-        window.unsafeWindow.pluginManager.getBean("TaskPlugin").checkOneNewVideo = () => new Promise(resolve => { window.releaseActorRetry = resolve; });
+        (await window.__jhsBrowserDiagnostics.executeCommand("scheduler.service")).checkOneNewVideo = () => new Promise(resolve => { window.releaseActorRetry = resolve; });
         plugin.openDialog();
     });
     const root = page.locator(".newVideoToolBox");
@@ -95,7 +97,7 @@ test("a closed actor retry cannot move focus in a later workspace", async ({ pag
     await expect.poll(() => page.evaluate(() => typeof window.releaseActorRetry)).toBe("function");
     await page.locator(".layui-layer-close").click();
     await expect(root).toHaveCount(0);
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").openDialog());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));
     await root.locator("#nvViewList").click();
     await root.locator("#nvSearch").focus();
     await expect(root.locator("#nvSearch")).toBeFocused();
@@ -141,9 +143,10 @@ test("unavailable actor source panel supports profile inspection, rebind search,
             });
         },
     });
-    await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"] && typeof window.unsafeWindow?.pluginManager?.getBean("NewVideoPlugin")?.getRuntimeService === "function"));
+    await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"] && typeof window.__jhsBrowserDiagnostics.features.newVideo?.getRuntimeService === "function"));
     await page.evaluate(async () => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin"), actors = await window.storageManager.getFavoriteActressList();
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo, actors = await window.storageManager.getFavoriteActressList();
         const health = plugin.getRuntimeService("sourceHealth");
         health.unavailable("https://javdb.com", actors[0]);
         health.unavailable("https://javdb.com", actors[1]);

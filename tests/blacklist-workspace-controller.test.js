@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { BlacklistWorkspaceController } from "../src/features/library/blacklist-workspace-controller.js";
-import { TaskCompatibilityBean } from "../src/compat/task-compatibility-bean.js";
 
 function createWorkspace(records = []) {
     const dom = new JSDOM('<body><input id="searchValue"><select id="dataType"><option value=""></option><option value="actor">男演员</option><option value="actress">女演员</option></select><select id="statusType"><option value=""></option><option value="normal">继续检测</option><option value="stop">停更跳过</option></select><select id="urlType"><option value=""></option><option value="hasT">按所选分类屏蔽</option><option value="noT">未筛选分类</option></select></body>', { url: "https://javdb.com/" });
@@ -45,7 +44,7 @@ describe("BlacklistWorkspaceController", () => {
         const button = $('<button id="checkBlacklistBtn"><span>检测</span></button>').appendTo(controller.blacklistRoot);
         Object.defineProperty(dom.window.navigator, "locks", { configurable: true, value: { request: async (_key, _options, callback) => callback({}) } });
         const failure = new Error("后台任务尚未就绪，请稍后重试");
-        controller.task = { singleTaskKey: "synthetic-blacklist", checkBlacklist: vi.fn(async () => { throw failure; }) };
+        controller.task = { singleTaskKey: "synthetic-blacklist", activate: vi.fn(async () => { throw failure; }) };
 
         await controller.runManualScan({ currentTarget: button[0] }, controller.dialogGeneration);
 
@@ -63,15 +62,16 @@ describe("BlacklistWorkspaceController", () => {
         const button = $('<button id="checkBlacklistBtn"><span>检测</span></button>').appendTo(controller.blacklistRoot);
         const request = vi.fn(async (_key, _options, callback) => callback({}));
         Object.defineProperty(dom.window.navigator, "locks", { configurable: true, value: { request } });
-        const task = new TaskCompatibilityBean();
-        controller.task = task;
+        let finishActivation;
+        const activate = vi.fn(() => new Promise(resolve => { finishActivation = resolve; }));
+        controller.task = { activate };
         const pending = controller.runManualScan({ currentTarget: button[0] }, controller.dialogGeneration);
-        expect(task.serviceWaiters.size).toBe(1);
+        expect(activate).toHaveBeenCalledOnce();
         await controller.finishDialog(controller.dialogGeneration, false);
+        finishActivation({ checkBlacklist: vi.fn() });
         await pending;
 
         expect(request).not.toHaveBeenCalled();
-        expect(task.serviceWaiters.size).toBe(0);
         expect(vi.getTimerCount()).toBe(0);
         expect(controller.notifications.error).not.toHaveBeenCalled();
         dom.window.close();

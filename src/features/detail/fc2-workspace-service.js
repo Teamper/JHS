@@ -71,11 +71,13 @@ export function parseExplicitJavDbMovieId(/** @type {string} */ value) {
 }
 
 export class Fc2WorkspaceService {
-    /** @param {{runtimeServices?: Record<string, any>, resolveDependency?: (name: string) => any}} [options] */
+    /** @param {{runtimeServices?: Record<string, any>, readMagnetHub?: () => any, readExternalSites?: () => any, readCatalog?: () => any}} [options] */
     constructor(options = {}) {
         this.runtimeServices = Object.freeze({ ...(options.runtimeServices ?? {}) });
         this.logger = this.runtimeServices.logger ?? console;
-        this.resolveDependency = options.resolveDependency ?? (() => null);
+        this.readMagnetHub = options.readMagnetHub ?? (() => null);
+        this.readExternalSites = options.readExternalSites ?? (() => null);
+        this.readCatalog = options.readCatalog ?? (() => null);
         this.managedByFeature = true;
         this.runtimeStatus = "managed-feature";
         /** @type {Set<string>} */ this.submittedWantMovieIds = new Set();
@@ -84,9 +86,6 @@ export class Fc2WorkspaceService {
         /** @type {DetailStateController | null} */
         this.detailStateController = null;
         /** @type {number} */ this.translationGeneration = 0;
-        /** @type {any} */ this.featureMagnetHubAdapter = null;
-        /** @type {any} */ this.featureExternalSitesAdapter = null;
-        /** @type {any} */ this.feature123AvAdapter = null;
     }
     getName() { return "Fc2Plugin"; }
     /** @param {string} name */
@@ -95,19 +94,8 @@ export class Fc2WorkspaceService {
         if (service === undefined) throw new Error(`FC2 workspace service is unavailable: ${name}`);
         return service;
     }
-    /** @param {string} name */
-    getOptionalDependency(name) { return this.resolveDependency(name); }
-    /** @param {any} adapter */
-    attachFeatureMagnetHubAdapter(adapter) {
-        this.featureMagnetHubAdapter = adapter;
-        this.refreshMagnetHubAvailability();
-    }
-    /** @param {any} adapter */
-    detachFeatureMagnetHubAdapter(adapter) {
-        if (this.featureMagnetHubAdapter !== adapter) return;
-        this.featureMagnetHubAdapter = null;
-        this.refreshMagnetHubAvailability();
-    }
+    get featureMagnetHubAdapter() { return this.readMagnetHub(); }
+    get featureExternalSitesAdapter() { return this.readExternalSites(); }
     /** Refresh existing empty states when the optional search Feature changes. */
     refreshMagnetHubAvailability() {
         if (typeof $ !== "function") return;
@@ -119,15 +107,18 @@ export class Fc2WorkspaceService {
             if (context?.isAlive() && message) this.renderNativeMagnetEmpty(context, message);
         });
     }
-    /** @param {any} adapter */
-    attachFeatureExternalSitesAdapter(adapter) {
-        this.featureExternalSitesAdapter = adapter;
-        if (!adapter) return;
+    refreshExternalSites() {
+        const adapter = this.readExternalSites();
         $(".jhs-fc2-workspace").each((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
             const workspace = $(element), context = /** @type {Fc2DetailContext | undefined} */ (workspace.data("jhsFc2Context"));
             if (!context?.isAlive()) return;
             const resources = context.getSlot("resources");
             let sitesGroup = resources.find('[data-jhs-role="other-sites"]').closest(".jhs-fc2-resource-group");
+            if (!adapter) {
+                this.unmountFc2OtherSites(context, sitesGroup);
+                sitesGroup.remove();
+                return;
+            }
             if (!sitesGroup.length) {
                 sitesGroup = this.createResourceGroup("第三方站点", "other-sites");
                 const hubGroup = resources.find('[data-jhs-role="magnet-hub"]').closest(".jhs-fc2-resource-group");
@@ -137,21 +128,6 @@ export class Fc2WorkspaceService {
             this.mountFc2OtherSites(context, sitesGroup, adapter);
         });
     }
-    /** @param {any} adapter */
-    detachFeatureExternalSitesAdapter(adapter) {
-        if (this.featureExternalSitesAdapter !== adapter) return;
-        this.featureExternalSitesAdapter = null;
-        $(".jhs-fc2-workspace").each((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
-            const context = /** @type {Fc2DetailContext | undefined} */ ($(element).data("jhsFc2Context"));
-            if (!context) return;
-            context.otherSiteGeneration = (context.otherSiteGeneration || 0) + 1;
-            context.getSlot("resources").find('[data-jhs-role="other-sites"]').closest(".jhs-fc2-resource-group").remove();
-        });
-    }
-    /** @param {any} adapter */
-    attachFeature123AvAdapter(adapter) { this.feature123AvAdapter = adapter; }
-    /** @param {any} adapter */
-    detachFeature123AvAdapter(adapter) { if (this.feature123AvAdapter === adapter) this.feature123AvAdapter = null; }
     /** Exposes the narrow FC2 surface needed by the list-card controller. @returns {{resolveMovieIdForRecord: (carNum: string, url: string) => Promise<any>, resolveFc2Source: (record: Fc2SourceRecord) => Promise<any>, openFc2Page: (movieId: any, carNum: string, url: string, navigation: any, options: any) => Promise<any>, openFc2Dialog: (movieId: any, carNum: string, url: string, options: any) => any, openNativeFallback: (url: string, carNum: string, options: {event: any, newTab: boolean}) => void}} */
     getListNavigationCapability() {
         return Object.freeze({
@@ -239,7 +215,7 @@ export class Fc2WorkspaceService {
             void open({ carNum: context.carNum, owner: context.root[0], trigger: event.currentTarget }).catch((/** @type {unknown} */ error) => this.logger.error("字幕打开失败", error));
         }));
         context.syncMagnetHub = () => {
-            if (this.featureMagnetHubAdapter) {
+            if (this.readMagnetHub()) {
                 if (!hubGroup[0].isConnected) resources.append(hubGroup);
             } else {
                 hubGroup.detach().find('[data-jhs-role="magnet-hub-content"]').empty();
@@ -250,7 +226,7 @@ export class Fc2WorkspaceService {
         };
         context.syncMagnetHub();
         context.openMagnetHub = async (external = false) => {
-            const magnetHub = this.featureMagnetHubAdapter;
+            const magnetHub = this.readMagnetHub();
             if (!magnetHub) return;
             if (!context.isAlive()) return;
             if (!hubGroup[0].isConnected) resources.append(hubGroup);
@@ -265,15 +241,15 @@ export class Fc2WorkspaceService {
                 magnetHubPromise ||= magnetHub.createMagnetHub({ movieContext: context.movieContext, root: context.root }, {
                     initialEngineId: external ? "all" : undefined,
                     requireExternal: external,
-                    isActive: () => context.isAlive() && this.featureMagnetHubAdapter === magnetHub,
+                    isActive: () => context.isAlive() && this.readMagnetHub() === magnetHub,
                 });
                 const hub = await magnetHubPromise;
-                if (!context.isAlive() || this.featureMagnetHubAdapter !== magnetHub) return;
+                if (!context.isAlive() || this.readMagnetHub() !== magnetHub) return;
                 if (!box.children().length) box.append(hub);
                 if (external) hub.data("jhsOpenExternalMagnets")?.();
                 hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
             } catch (error) {
-                if (!context.isAlive() || this.featureMagnetHubAdapter !== magnetHub) return;
+                if (!context.isAlive() || this.readMagnetHub() !== magnetHub) return;
                 magnetHubPromise = null;
                 renderFc2State(box, "磁力搜索初始化失败", () => void context.openMagnetHub?.(true));
                 hubButton.attr("aria-expanded", "false");
@@ -284,7 +260,7 @@ export class Fc2WorkspaceService {
         this.getDetailStateController().bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", isActive: () => context.isAlive(), getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
         this.runtimeServices.mountShortcuts?.(context);
         "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
-        this.mountFc2OtherSites(context, sitesGroup, this.featureExternalSitesAdapter);
+        this.mountFc2OtherSites(context, sitesGroup, this.readExternalSites());
         this.loadFc2Screenshot(context);
     }
     /** FC2 统一 live lifecycle：单一 settings listener，按 key 分发到各功能 mount/unmount/reconfigure。 */
@@ -316,7 +292,7 @@ export class Fc2WorkspaceService {
                     context.otherSiteGeneration = (context.otherSiteGeneration || 0) + 1;
                     this.unmountFc2OtherSites(context, sitesGroup);
                 } else {
-                    void this.mountFc2OtherSites(context, sitesGroup, this.featureExternalSitesAdapter);
+                    void this.mountFc2OtherSites(context, sitesGroup, this.readExternalSites());
                 }
             }
         };
@@ -450,7 +426,7 @@ export class Fc2WorkspaceService {
     }
     /** @param {Fc2DetailContext} context */
     async load123AvDetail(context) {
-        let source = this.feature123AvAdapter;
+        let source = this.readCatalog();
         if (!source && typeof this.runtimeServices.ensureFc2Catalog === "function") {
             try { source = await this.runtimeServices.ensureFc2Catalog(); }
             catch {
@@ -472,7 +448,7 @@ export class Fc2WorkspaceService {
     }
     /** @param {Fc2DetailContext} context */
     async load123AvMagnets(context) {
-        const source = this.feature123AvAdapter;
+        const source = this.readCatalog();
         if (!source) throw new Error("123AV 详情功能已禁用");
         const movieId = await source.resolveMovieId(context.carNum);
         return this.fetchAndRenderNativeMagnets(context, movieId);
@@ -695,7 +671,7 @@ export class Fc2WorkspaceService {
         const host = context.root.find('[data-jhs-role="native-magnets"]');
         host.data("jhsNativeEmptyMessage", message);
         renderFc2State(host, message);
-        if (!this.featureMagnetHubAdapter) {
+        if (!this.readMagnetHub()) {
             host.append($("<p></p>").text("第三方磁力搜索已关闭，请在设置中开启"));
             return;
         }

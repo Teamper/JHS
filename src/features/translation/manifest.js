@@ -13,19 +13,13 @@ export default defineFeature({
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         if (!runtime.enabledContributions.includes("external-bridge.translation")) return { activeContributions: [] };
         try {
-            const listAdapter = runtime.route === "list" ? runtime.resolveCompatibilityBean?.("ListPagePlugin") : null;
-            const legacyList = listAdapter?.ensureDelegate?.() ?? listAdapter;
-            /** @type {{attachFeatureListTranslationAdapter: (adapter: any) => void, detachFeatureListTranslationAdapter: (adapter: any) => void} | null} */
-            const listTranslation = legacyList ? Object.freeze({
-                attachFeatureListTranslationAdapter: (adapter) => legacyList.attachFeatureListTranslationAdapter?.(adapter),
-                detachFeatureListTranslationAdapter: (adapter) => legacyList.detachFeatureListTranslationAdapter?.(adapter),
-            }) : null;
             const controller = new ExternalBridgeTranslationController({
-                document, window, route: runtime.route, hostAdapter: deps[PORT.host], listPage: listTranslation,
+                document, window, route: runtime.route, hostAdapter: deps[PORT.host],
                 settings: deps[SERVICE.settings], translation: deps[SERVICE.translation], styles: deps[PORT.style],
                 diagnostics: runtime.diagnostics, scope: runtime.scope, privacy:deps[SERVICE.privacy],
             });
             controller.start();
+            if (runtime.route === "list") runtime.provideCapability?.("external-bridge.translation", controller);
             return { activeContributions: ["external-bridge.translation"] };
         } catch (error) {
             runtime.diagnostics.recordError({

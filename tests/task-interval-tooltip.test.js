@@ -11,7 +11,7 @@ function fixture(settings, enabled = true) {
     const task = enabled ? { lastCheckFavoriteActressTimeKey: "favorite", lastCheckNewVideoTimeKey: "newVideo" } : null;
     const service = new NewVideoWorkspaceService({
         runtimeServices: { storage: { getLocal: () => null } },
-        resolveDependency: name => name === "TaskPlugin" ? task : null,
+        task: { available: () => Boolean(task), current: () => task, activate: async () => task },
         jquery, legacyStorage: { getSetting: vi.fn(async () => settings) },
         utilities: {}, notifications: {}, logger: {}, events: {}, createImageHoverPreview: () => null, document, window,
     });

@@ -45,7 +45,7 @@ describe("List Feature native auto-page ownership", () => {
         const fixture = setup();
         const result = await listFeature.activate(fixture.deps, fixture.runtime);
         expect(result.activeContributions).toContain("list.auto-page");
-        expect(fixture.runtime.resolveCompatibilityBean).toHaveBeenCalledWith("ListPagePlugin");
+        expect(fixture.runtime.resolveCompatibilityBean).not.toHaveBeenCalled();
         expect(fixture.styleRegistration).toHaveBeenCalledWith("jhs-auto-page-feature", expect.stringContaining(".jhs-scroll"));
         expect(fixture.eventBus.on).toHaveBeenCalledWith("list-items-added", expect.any(Function));
         result.dispose();

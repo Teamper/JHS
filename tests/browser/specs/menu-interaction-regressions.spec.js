@@ -76,7 +76,7 @@ test("cover disablement cancels a pending actor action before state submission",
     test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "cover contribution cancellation");
     await boot(page, context);
     await page.evaluate(() => {
-        const manager = window.unsafeWindow.pluginManager, list = manager.getBean("ListPagePlugin").delegate, cover = manager.getBean("CoverButtonPlugin");
+        const manager = window.unsafeWindow.pluginManager, list = manager.getBean("ListPagePlugin"), cover = manager.getBean("CoverButtonPlugin");
         window.__coverPatchCount = 0;
         const patch = cover.state.patch.bind(cover.state);
         cover.state.patch = (...args) => { window.__coverPatchCount++; return patch(...args); };

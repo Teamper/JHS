@@ -6,10 +6,10 @@ import { FeatureRuntime } from "../src/app/feature-runtime.js";
 import { systemFeatureManifests } from "../src/features/system/catalog.js";
 import { openSettingsUi } from "../src/core/settings-ui-owner.js";
 import { PORT, REGISTRY, SERVICE } from "../src/contracts/tokens.js";
-import { SettingsCompatibilityBean } from "../src/compat/settings-compatibility-bean.js";
+import { SettingPlugin } from "../src/features/settings/settings-controller.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("Settings system Feature UI ownership", () => {
     it("registers the compatibility dialog through the Feature command and releases its owner", async () => {
@@ -25,10 +25,8 @@ describe("Settings system Feature UI ownership", () => {
             site: "javdb",
             route: "list",
         });
-        runtime.setCompatibilityBeanResolver((name) => name === "SettingPlugin" ? { openSettingDialog } : undefined);
-        runtime.setContributionCatalog([
-            { id: "settings.core", featureId: "settings-entry", legacyPluginId: "SettingPlugin", executionOwner: "feature", sites: ["javdb", "javbus"] },
-        ]);
+        runtime.register({ id: "settings-owner-fixture", kind: "system", disableable: false, sites: [], routes: [], startup: "eager", requires: [], contributes: [], providesCommands: [], activate: (_deps, api) => { api.provideCapability("settings.core", { openSettingDialog }); } });
+        await runtime.activate("settings-owner-fixture");
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings"));
         commands.setActivator((id) => runtime.activate(id));
 
@@ -94,13 +92,17 @@ describe("Settings system Feature UI ownership", () => {
                 .register(SERVICE.notifications, { error: vi.fn() }),
             commands, diagnostics, disabled: [], site: "javdb", route: "list",
         });
-        const service = { openSettingDialog, disposeQuickSettings: closeQuickSettings, activateFeatureSurface, initCss: async () => "<style>.settings-test{color:red}</style>" };
-        let serviceOptions;
-        const compatibilityBean = new SettingsCompatibilityBean((options) => {
-            serviceOptions = options;
-            return service;
+        vi.spyOn(SettingPlugin.prototype, "openSettingDialog").mockImplementation(openSettingDialog);
+        vi.spyOn(SettingPlugin.prototype, "disposeQuickSettings").mockImplementation(closeQuickSettings);
+        vi.spyOn(SettingPlugin.prototype, "activateFeatureSurface").mockImplementation(activateFeatureSurface);
+        vi.spyOn(SettingPlugin.prototype, "initEntryCss").mockResolvedValue("<style>.settings-test{color:red}</style>");
+        let controller;
+        runtime.setCompatibilityBeanResolver(name => name === "SettingPlugin" ? controller : undefined);
+        runtime.setCompatibilityBeanRegistrar((name, value) => {
+            expect(name).toBe("SettingPlugin");
+            controller = value;
+            return () => { controller = undefined; };
         });
-        runtime.setCompatibilityBeanResolver((name) => name === "SettingPlugin" ? compatibilityBean : undefined);
         runtime.setContributionCatalog([
             { id: "settings.core", featureId: "settings-entry", legacyPluginId: "SettingPlugin", executionOwner: "feature", plugin: null, sites: ["javdb", "javbus"] },
         ]);
@@ -108,16 +110,9 @@ describe("Settings system Feature UI ownership", () => {
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings"));
 
         await runtime.start();
-        expect(compatibilityBean.getName()).toBe("SettingPlugin");
-        expect(compatibilityBean.service).toBe(service);
-        expect(serviceOptions).toMatchObject({
-            runtimeServices: expect.objectContaining({ settings: {}, settingsRegistry: {} }),
-            capabilities: expect.objectContaining({ ListPagePlugin: undefined, NewVideoPlugin: undefined }),
-            jquery: expect.any(Function),
-            utilities: {},
-            logger: expect.objectContaining({ lowZIndex: expect.any(Function) }),
-            notifications: expect.objectContaining({ error: expect.any(Function) }),
-        });
+        expect(controller).toBeInstanceOf(SettingPlugin);
+        expect(controller.getRuntimeService("settings")).toEqual({});
+        expect(controller.getRuntimeService("settingsRegistry")).toEqual({});
         expect(registerStyle).toHaveBeenCalledExactlyOnceWith("jhs-settings-feature", ".settings-test{color:red}");
         expect(activateFeatureSurface).toHaveBeenCalledOnce();
         expect(activateFeatureSurface.mock.calls[0][1]).toMatchObject({ current: expect.any(Function) });
@@ -128,7 +123,7 @@ describe("Settings system Feature UI ownership", () => {
 
         (await runtime.activate("settings")).dispose();
         (await runtime.activate("settings-entry")).dispose();
-        expect(compatibilityBean.service).toBeNull();
+        expect(controller).toBeUndefined();
         expect(releaseStyle).toHaveBeenCalledOnce();
         dom.window.close();
     });

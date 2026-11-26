@@ -34,11 +34,14 @@ export default defineFeature({
         const pageActionsController = runtime.route === "detail" && runtime.enabledContributions.includes("detail.page-state-actions")
             ? new DetailPageActionsController({
                 hostAdapter: deps[PORT.host], route: runtime.route, scope: runtime.scope,
+                readMagnetHub: () => runtime.getCapability?.("detail.external-magnets"),
+                readMagnetFilter: () => runtime.getCapability?.("detail.native-magnets"),
                 settings: deps[SERVICE.settings], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle],
                 openSubtitles: (movie) => runtime.isCommandAvailable?.("subtitle.open") ? runtime.executeCommand("subtitle.open", movie) : Promise.resolve(null),
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], events: deps[SERVICE.events], diagnostics: runtime.diagnostics,
             })
             : null;
+        if (pageActionsController) runtime.onCapabilityChanged?.("detail.external-magnets", () => pageActionsController.closeMagnetDialog());
         const pageActions = pageActionsController?.getFeatureStateActionsAdapter() ?? null;
         const workspaceUi = runtime.enabledContributions.includes("detail.workspace") ? deps[SERVICE.domUi] : null;
         const featureActivatedContributions = new Set(["detail.shortcuts", "detail.native-magnets", "detail.javdb-preview", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.screenshot"]);
@@ -79,13 +82,7 @@ export default defineFeature({
                     document, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], events: deps[SERVICE.events], scope: runtime.scope,
                 });
                 if (magnetFilter.start()) {
-                    const consumers = ["DetailPageButtonPlugin", "MobileBottomBarPlugin"]
-                        .map((name) => runtime.resolveCompatibilityBean?.(name))
-                        .filter(Boolean);
-                    for (const consumer of consumers) consumer.attachFeatureMagnetFilterAdapter?.(magnetFilter.compatibilityAdapter);
-                    runtime.scope.addCleanup(() => {
-                        for (const consumer of consumers) consumer.detachFeatureMagnetFilterAdapter?.(magnetFilter.compatibilityAdapter);
-                    });
+                    runtime.provideCapability?.("detail.native-magnets", magnetFilter.compatibilityAdapter);
                     runtime.scope.addCleanup(releaseStyle);
                     activeContributions.push("detail.native-magnets");
                 } else releaseStyle();
@@ -163,7 +160,10 @@ export default defineFeature({
                 document, hostAdapter: deps[PORT.host], route: runtime.route, related: deps[SERVICE.related],
                 settings: deps[SERVICE.settings], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope: runtime.scope,
             });
-            return relatedController.start();
+            if (!await relatedController.start()) return false;
+            const release = runtime.registerCompatibilityBean?.("RelatedPlugin", relatedController);
+            if (release) runtime.scope.addCleanup(release);
+            return true;
         }));
         if (runtime.enabledContributions.includes("detail.reviews")) optionalStarts.push(startOptionalDetailContribution(runtime, "detail.reviews", async () => {
             const reviewController = new ReviewController({
@@ -171,7 +171,10 @@ export default defineFeature({
                 settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], ui: deps[SERVICE.domUi], clipboard: deps[SERVICE.clipboard],
                 notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope: runtime.scope,
             });
-            return reviewController.start();
+            if (!await reviewController.start()) return false;
+            const release = runtime.registerCompatibilityBean?.("ReviewPlugin", reviewController);
+            if (release) runtime.scope.addCleanup(release);
+            return true;
         }));
         for (const contributionId of await Promise.all(optionalStarts)) {
             if (contributionId) activeContributions.push(contributionId);

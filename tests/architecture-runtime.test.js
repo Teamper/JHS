@@ -221,13 +221,8 @@ describe("v6.5 architecture runtime contracts", () => {
         const javdb = new CompatibilityBeanRegistry();
         registerSiteCompatibility(javdb, createRuntime("javdb"), "javdb");
         expect(javdb.getPluginNames()).toEqual([]);
-        expect(javdb.getBean("ListPagePlugin")).toMatchObject({ managedByFeature: true, runtimeStatus: "managed-feature", delegate: null });
-        expect(javdb.getBean("SettingPlugin")).toMatchObject({ getName: expect.any(Function), createFeatureService: expect.any(Function), connect: expect.any(Function) });
         expect(javdb.getPluginNames()).not.toContain("HistoryPlugin");
-        expect(javdb.getBean("HistoryPlugin")).toMatchObject({ getName: expect.any(Function), openHistory: expect.any(Function) });
-        expect(javdb.getBean("BlacklistPlugin")).toMatchObject({ getName: expect.any(Function), addBlacklist: expect.any(Function), filterAllVideo: expect.any(Function) });
         expect(javdb.getPluginNames()).not.toContain("MobileBottomBarPlugin");
-        expect(javdb.getBean("MobileBottomBarPlugin")).toMatchObject({ magnetFilterAdapter: null, magnetHubAdapter: null });
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "MobileBottomBarPlugin", disableable: false });
         expect(javdb.getPluginNames()).not.toContain("WantAndWatchedVideosPlugin");
         expect(javdb.getPluginNames()).not.toContain("ReviewPlugin");
@@ -242,9 +237,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(javdb.getBean("CompatibilityEnhancementsPlugin")).toBeUndefined();
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "CompatibilityEnhancementsPlugin", disableable: true });
         expect(javdb.getPluginNames()).not.toContain("HitShowPlugin");
-        expect(javdb.getBean("NewVideoPlugin")).toMatchObject({ getName: expect.any(Function), connect: expect.any(Function), disconnect: expect.any(Function), openDialog: expect.any(Function) });
         expect(javdb.getPluginNames()).not.toContain("TaskPlugin");
-        expect(javdb.getBean("TaskPlugin")).toMatchObject({ getName: expect.any(Function), connect: expect.any(Function) });
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "TaskPlugin", disableable: true });
         expect(javdb.getBean("AutoPagePlugin")).toBeUndefined();
         expect(javdb.getPluginDescriptors()).toContainEqual({ name: "AutoPagePlugin", disableable: true });
@@ -276,8 +269,6 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(javdbDetail.getBean("BlacklistPlugin")).toBeUndefined();
         expect(javdbDetail.getPluginNames()).not.toContain("TranslatePlugin");
         expect(javdbDetail.getPluginDescriptors()).toContainEqual({ name: "DetailPagePlugin", disableable: true });
-        expect(javdbDetail.getBean("ReviewPlugin").managedByFeature).toBe(true);
-        expect(javdbDetail.getBean("RelatedPlugin").managedByFeature).toBe(true);
         expect(javdbDetail.getPluginNames()).not.toContain("ReviewPlugin");
         expect(javdbDetail.getPluginNames()).not.toContain("RelatedPlugin");
         expect(javdbDetail.getBean("HighlightMagnetPlugin")).toBeUndefined();
@@ -307,7 +298,6 @@ describe("v6.5 architecture runtime contracts", () => {
         registerSiteCompatibility(javdbWithCoverDisabled, createRuntime("javdb", ["CoverButtonPlugin"]), "javdb");
         expect(javdbWithCoverDisabled.getPluginNames()).not.toContain("CoverButtonPlugin");
         expect(javdbWithCoverDisabled.getPluginNames()).not.toContain("ListPagePlugin");
-        expect(javdbWithCoverDisabled.getBean("ListPagePlugin")).toMatchObject({ managedByFeature: true, delegate: null });
         expect(javdbWithCoverDisabled.getPluginDescriptors()).toContainEqual({ name: "CoverButtonPlugin", disableable: true });
 
         const javdbWithExternalSitesDisabled = new CompatibilityBeanRegistry();
@@ -333,10 +323,11 @@ describe("v6.5 architecture runtime contracts", () => {
             ["javdb", "MagnetHubPlugin", "ListPagePlugin"],
         ]) {
             const manager = new CompatibilityBeanRegistry();
-            registerSiteCompatibility(manager, createRuntime(site, [disabledPlugin]), site);
+            const runtime = createRuntime(site, [disabledPlugin]);
+            registerSiteCompatibility(manager, runtime, site);
             expect(manager.getPluginNames(), `${survivingPlugin} must survive disabled ${disabledPlugin}`).not.toContain(disabledPlugin);
             expect(manager.getPluginNames(), `${survivingPlugin} must stay out of PluginManager execution`).not.toContain(survivingPlugin);
-            expect(manager.getBean(survivingPlugin), `${survivingPlugin} compatibility lookup must survive disabled ${disabledPlugin}`).toBeDefined();
+            expect(runtime.isContributionEnabled("list", "list.core", survivingPlugin)).toBe(true);
         }
         expect(migrateDisabledPlugins(["AutoPagePlugin"])).toContain("list.auto-page");
         expect(migrateDisabledPlugins(["TranslatePlugin"])).toEqual(["external-bridge.translation"]);
@@ -345,9 +336,7 @@ describe("v6.5 architecture runtime contracts", () => {
         const javdbWithStaleSystemDisables = new CompatibilityBeanRegistry({ diagnostics: legacyDiagnostics });
         registerSiteCompatibility(javdbWithStaleSystemDisables, createRuntime("javdb", ["settings.core", "stats.dashboard", "responsive-shell.bottom-bar"]), "javdb");
         expect(javdbWithStaleSystemDisables.getPluginNames()).not.toContain("SettingPlugin");
-        expect(javdbWithStaleSystemDisables.getBean("SettingPlugin")).toBeDefined();
         expect(javdbWithStaleSystemDisables.getPluginNames()).not.toContain("MobileBottomBarPlugin");
-        expect(javdbWithStaleSystemDisables.getBean("MobileBottomBarPlugin")).toBeDefined();
         expect(javdbWithStaleSystemDisables.getPluginNames()).not.toContain("StatsPlugin");
         expect(javdbWithStaleSystemDisables.getPluginDescriptors()).toContainEqual({ name: "StatsPlugin", disableable: false });
         expect(javdbWithStaleSystemDisables.getPluginDescriptors().filter((plugin) => plugin.disableable === false).map((plugin) => plugin.name)).toEqual([

@@ -16,15 +16,15 @@ test("history detail and its shade stay above history across close and reopen", 
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
     await expect.poll(() => page.locator("#jhs-library-history-feature").evaluate(style => style.textContent.includes(".jhs-history-layout"))).toBe(true);
     await page.evaluate(() => {
-        const history = window.unsafeWindow.pluginManager.getBean("HistoryPlugin");
-        history.historyRepository.list = async () => [{
+        const history = window.__jhsBrowserDiagnostics.features.history;
+        history.repository.list = async () => [{
             carNum: "ABC-123", url: "https://javdb.com/v/test-id", names: "Fixture",
             stateFlags: { downloaded: true }, createdAt: "2026-09-18", updatedAt: "2026-09-18",
         }];
     });
 
     for (let cycle = 0; cycle < 3; cycle++) {
-        await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("HistoryPlugin").openHistory());
+        await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
         const history = page.locator(".layui-layer-page").filter({ has: page.locator(".jhs-history-dialog") });
         await expect(history.locator(".history-detailBtn")).toBeVisible();
         await expect.poll(() => history.locator(".jhs-history-layout").evaluate(node => getComputedStyle(node).display)).toBe("flex");

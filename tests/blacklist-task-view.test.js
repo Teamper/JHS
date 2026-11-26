@@ -14,7 +14,7 @@ describe("blacklist task status parity", () => {
         [{ ready: true, state: "idle", nextAt: 0 }, {}],
     ])("uses the same committed schedule interpretation as other surfaces: %j", (snapshot, settings) => {
         const dom = new JSDOM('<div id="workspace"><div id="blacklist-task-status"></div></div>'), $ = jquery(dom.window);
-        const controller = new BlacklistWorkspaceController({ jquery: $, settings: { snapshot: () => settings }, task: { getTaskStatusSnapshot: () => snapshot } });
+        const controller = new BlacklistWorkspaceController({ jquery: $, settings: { snapshot: () => settings }, task: { current: () => ({ getTaskStatusSnapshot: () => snapshot }) } });
         controller.blacklistRoot = $("#workspace"); controller.renderTaskStatus();
         expect($("#blacklist-task-status").text()).toBe(renderTaskStatus($, "blacklist", snapshot, settings).text());
         expect($("#blacklist-task-status .jhs-task-times")).toHaveLength(1); dom.window.close();

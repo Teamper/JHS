@@ -75,10 +75,9 @@ async function createHarness(count = 9, { durableState = false } = {}) {
         storage: { getLocal: () => null }, actressInfo: { getAvatarSources: () => [] },
     };
     const plugin = new NewVideoWorkspaceService({ runtimeServices, jquery: $, legacyStorage: storageManager, utilities: globalThis.utils, notifications: globalThis.show, logger: globalThis.clog, events: bus, createImageHoverPreview: config => new dom.window.ImageHoverPreview(config), document: dom.window.document, window: dom.window });
-    plugin.attachFeatureNewVideoWorkspaceController(new NewVideoWorkspaceController({ state, settings, movie: runtimeServices.movie }));
+    plugin.featureNewVideoWorkspaceController = new NewVideoWorkspaceController({ state, settings, movie: runtimeServices.movie });
     const scope = new LifecycleScope("new-video-incremental-test");
     const lifecycle = new NewVideoLifecycleController({ plugin, events: bus, scope, onError: error => { throw error; } });
-    vi.spyOn(plugin, "getOptionalDependency").mockReturnValue(null);
     plugin.nvWorkspaceMounted = true, plugin.nvWorkspaceRoot = $(".newVideoToolBox"), plugin._viewMode = "list", plugin.nvPageSize = 3;
     lifecycle.start();
     await plugin.reloadNewVideoWorkspaceData();

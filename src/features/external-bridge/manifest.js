@@ -34,7 +34,6 @@ export default defineFeature({
         }
         if (runtime.enabledContributions.includes("detail.external-magnets")) {
             let releaseStyle = () => {};
-            let detachConsumers = () => {};
             let unregisterCompatibilityBean = () => {};
             try {
                 const { MAGNET_HUB_STYLES, MagnetHubController } = await import("./magnet-hub-controller.js");
@@ -47,21 +46,6 @@ export default defineFeature({
                 let styleRemoved = false;
                 releaseStyle = () => { if (styleRemoved) return; styleRemoved = true; removeStyle(); };
                 runtime.scope.addCleanup(releaseStyle);
-                const consumers = ["DetailPageButtonPlugin", "MobileBottomBarPlugin"]
-                    .map((name) => runtime.resolveCompatibilityBean?.(name))
-                    .filter(Boolean);
-                if (runtime.isContributionEnabled("fc2-workspace", "detail.fc2-owned", "Fc2Plugin")) {
-                    const fc2 = await runtime.executeCommand("detail.fc2.workspace");
-                    if (fc2) consumers.push(fc2);
-                }
-                for (const consumer of consumers) consumer.attachFeatureMagnetHubAdapter?.(controller);
-                let consumersDetached = false;
-                detachConsumers = () => {
-                    if (consumersDetached) return;
-                    consumersDetached = true;
-                    for (const consumer of consumers) consumer.detachFeatureMagnetHubAdapter?.(controller);
-                };
-                runtime.scope.addCleanup(detachConsumers);
                 const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("MagnetHubPlugin", controller);
                 let compatibilityBeanReleased = false;
                 unregisterCompatibilityBean = () => {
@@ -70,10 +54,10 @@ export default defineFeature({
                     if (typeof releaseCompatibilityBean === "function") releaseCompatibilityBean();
                 };
                 runtime.scope.addCleanup(unregisterCompatibilityBean);
+                runtime.provideCapability?.("detail.external-magnets", controller);
                 activeContributions.push("detail.external-magnets");
             } catch (error) {
                 releaseStyle();
-                detachConsumers();
                 unregisterCompatibilityBean();
                 runtime.diagnostics.recordError({ source: "external-bridge-feature", featureId: "external-bridge", contributionId: "detail.external-magnets", message: error instanceof Error ? error.message : String(error) });
             }

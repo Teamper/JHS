@@ -133,7 +133,7 @@ test("legacy contributions can be disabled and remounted without duplicated cont
     await expect(page.locator("#historyBtn")).toHaveCount(1);
     await page.evaluate(async () => {
         await window.stateService.setPersonalRating("ABC-123",4);
-        await window.unsafeWindow.pluginManager.getBean("HistoryPlugin").openHistory();
+        await window.__jhsBrowserDiagnostics.executeCommand("library.history.open");
     });
     const history = page.locator(".jhs-history-dialog");
     await expect(history.locator(".tabulator-row")).toHaveCount(1);

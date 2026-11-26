@@ -18,7 +18,6 @@
     "src/main.js",
     "src/app/**/*.js",
     "src/app/bootstrap.d.ts",
-    "src/compat/**/*.js",
     "src/contracts/**/*",
     "src/core/jhs-error.js",
     "src/core/cooperative-work.js",

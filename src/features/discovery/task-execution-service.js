@@ -21,11 +21,11 @@ function assertCompleteMovieIdentities(items) {
 
 /** Runs due background scans behind the Scheduler Feature and preserves the 6.5.1 task metadata contract. */
 export class TaskExecutionService {
-    /** @param {{runtimeServices: Record<string, any>, resolveDependency: (name: string) => any, legacyStorage: any, utilities: any, logger: any, jquery: (selector: any) => any, window: Window & typeof globalThis, notifications: any, storageQueue?: StorageQueue}} options */
+    /** @param {{runtimeServices: Record<string, any>, blacklist?: {available: () => boolean, parseAndSave: (page: any, name: string, starId: string, site: string) => Promise<any>, resetStatus?: () => Promise<unknown>}, legacyStorage: any, utilities: any, logger: any, jquery: (selector: any) => any, window: Window & typeof globalThis, notifications: any, storageQueue?: StorageQueue, getNewVideoScanner?: () => any, getBlacklistScanner?: () => any}} options */
     constructor(options) {
         this.runtimeServices = Object.freeze({ ...options.runtimeServices });
         this.sourceHealth = new ActorSourceHealth(options.runtimeServices.storage, () => Date.now());
-        this.resolveDependency = options.resolveDependency;
+        this.blacklist = options.blacklist;
         this.legacyStorage = options.legacyStorage;
         this.utils = options.utilities;
         this.logger = options.logger;
@@ -51,8 +51,8 @@ export class TaskExecutionService {
         /** @type {Promise<any> | null} */ this.configRefreshPromise = null;
         this.configRefreshQueued = !1;
         /** @type {Set<string>} */ this.activeTasks = new Set();
-        /** @type {any} */ this.featureNewVideoScanController = null;
-        /** @type {any} */ this.featureBlacklistScanController = null;
+        this.getNewVideoScanner = options.getNewVideoScanner ?? (() => null);
+        this.getBlacklistScanner = options.getBlacklistScanner ?? (() => null);
         this.disposed = false;
     }
     /** @param {string} name */
@@ -60,8 +60,6 @@ export class TaskExecutionService {
         if (!Object.prototype.hasOwnProperty.call(this.runtimeServices, name)) throw new Error(`TaskExecutionService 未注入运行时依赖 ${name}`);
         return this.runtimeServices[name];
     }
-    /** @param {string} name */
-    getOptionalDependency(name) { return this.resolveDependency(name) ?? null; }
     /** Read the host list-page flag without assuming it exists. */
     getHostListPageFlag() { return /** @type {{ isListPage?: boolean }} */ (this.window).isListPage; }
     /** @param {string} [site] */
@@ -71,19 +69,9 @@ export class TaskExecutionService {
         if (typeof adapter?.getListSelectors !== "function") throw new Error(`未注入 ${siteName} 列表宿主适配器`);
         return adapter.getListSelectors();
     }
-    /** @param {any} controller */
-    attachFeatureNewVideoScanController(controller) { this.featureNewVideoScanController = controller; }
-    /** @param {any} controller */
-    detachFeatureNewVideoScanController(controller) { if (this.featureNewVideoScanController === controller) this.featureNewVideoScanController = null; }
-    /** @param {any} controller */
-    attachFeatureBlacklistScanController(controller) { this.featureBlacklistScanController = controller; }
-    /** @param {any} controller */
-    detachFeatureBlacklistScanController(controller) { if (this.featureBlacklistScanController === controller) this.featureBlacklistScanController = null; }
-    dispose() {
-        this.disposed = true;
-        this.featureNewVideoScanController = null;
-        this.featureBlacklistScanController = null;
-    }
+    get featureNewVideoScanController() { return this.disposed ? null : this.getNewVideoScanner(); }
+    get featureBlacklistScanController() { return this.disposed ? null : this.getBlacklistScanner(); }
+    dispose() { this.disposed = true; }
     /** @param {any[]} e @param {number} t @param {number} n @param {(item: any) => Promise<void>} a */
     async limitConcurrency(e, t, n, a) {
         let i = 0, s = !1;
@@ -348,8 +336,8 @@ export class TaskExecutionService {
     }
     async checkBlacklist(force = !1) {
         const result = this.createTaskResult({ skippedHost: 0 });
-        const blacklistPlugin = this.getOptionalDependency("BlacklistPlugin");
-        if (!blacklistPlugin) return this.logger.warn("黑名单功能已禁用，跳过自动检测"), result;
+        const blacklist = this.blacklist;
+        if (!blacklist?.available()) return this.logger.warn("黑名单功能已禁用，跳过自动检测"), result;
         await this.ensureReady();
         if (!await this.shouldStartTask("blacklist", force)) return this.logger.debug("检测黑名单未到整批执行时间"), result;
         this.beginTaskAttempt("blacklist"), result.attempted = !0;
@@ -423,7 +411,7 @@ export class TaskExecutionService {
                             const sourceItems = [...pageState.items].filter(item => site !== I || !this.jquery(item).find(".avatar-box").length);
                             this.readCompletePageMovies(sourceItems);
                             await this.storageQueue.addTask((async () => {
-                                const parsed = await blacklistPlugin.parseAndSaveFilterInfo(page, name, starId, site);
+                                const parsed = await blacklist.parseAndSave(page, name, starId, site);
                                 await this.legacyStorage.updateBlacklistItem({ starId, name, checkTime: this.utils.getNowStr(), lastPublishTime: parsed.lastPublishTime });
                             })), result.success++;
                         } catch (error) {
@@ -439,7 +427,7 @@ export class TaskExecutionService {
             result.completed = completed, result.fatal = !!blockedError, await this.finalizeTask("blacklist", completed), finalized = !0;
             try { this.renderBlacklistResult(result, completed); }
             catch (error) { this.reportCompletedNoticeFailure("黑名单整批检测", error); }
-            try { await blacklistPlugin.resetBtnTip(); }
+            try { await blacklist?.resetStatus?.(); }
             catch (error) { this.reportCompletedNoticeFailure("黑名单整批检测", error); }
             if (blockedError) throw blockedError;
             return result;

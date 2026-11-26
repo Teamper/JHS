@@ -4,8 +4,6 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { newVideoFeature, schedulerFeature } from "../src/features/discovery/new-video-manifests.js";
 import { TaskExecutionService } from "../src/features/discovery/task-execution-service.js";
-import { TaskCompatibilityBean } from "../src/compat/task-compatibility-bean.js";
-import { NewVideoCompatibilityBean } from "../src/compat/new-video-compatibility-bean.js";
 import { NEW_VIDEO_STYLES } from "../src/features/discovery/new-video-styles.js";
 import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
 import { SupplementaryCardsController } from "../src/features/list/supplementary-cards-controller.js";
@@ -14,60 +12,48 @@ import { NewVideoWorkspaceService } from "../src/features/discovery/new-video-wo
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 function createRuntime(id, plugin, events = { on: vi.fn(() => vi.fn()) }) {
-    const compatibilityBean = id === "discovery.new-video" ? {
-        createFeatureService: () => plugin,
-        connect: vi.fn(),
-        disconnect: vi.fn(),
-    } : null;
     return {
         enabledContributions: [id],
         scope: new LifecycleScope(`feature:${id}`),
         diagnostics: { recordError: vi.fn() },
-        resolveCompatibilityBean: vi.fn((name) => name === "NewVideoPlugin" ? compatibilityBean : name === "TaskPlugin" ? plugin : null),
+        resolveCompatibilityBean: vi.fn(() => null),
+        provideCapability: vi.fn(),
         events,
     };
 }
 
 describe("new video and scheduler feature lifecycle", () => {
-    it("declares the storage capability used to construct the workspace service", () => {
-        expect(newVideoFeature.requires).toContain(SERVICE.storage);
+    it("routes scheduler commands to the injected extension task service", async () => {
+        const task = { checkNewVideo: vi.fn(async () => ({ completed: true })) };
+        const runtime = createRuntime("discovery.scheduler");
+        runtime.registerCompatibilityBean = vi.fn(() => vi.fn());
+        const result = await schedulerFeature.activate({ [SERVICE.taskExecution]: task }, runtime);
+        expect(result.activeContributions).toEqual(["discovery.scheduler"]);
+        expect(result.commands["scheduler.service"]()).toBe(task);
+        expect(runtime.provideCapability).toHaveBeenCalledWith("discovery.scheduler", task);
+        expect(runtime.registerCompatibilityBean).toHaveBeenCalledWith("TaskPlugin", task);
+        await expect(result.commands["scheduler.service"]().checkNewVideo(true)).resolves.toEqual({ completed: true });
+        expect(task.checkNewVideo).toHaveBeenCalledWith(true);
+        runtime.scope.dispose();
     });
 
-    it("keeps the old bean name as a forwarding-only Feature compatibility surface", async () => {
-        const executeCommand = vi.fn(async (command, ...args) => ({ command, args }));
-        const service = { openDialog: vi.fn(async () => "opened"), getPendingNewVideoTotal: vi.fn(async () => 4), getNewVideoFlatList: vi.fn(async () => []) };
-        const bean = new NewVideoCompatibilityBean(executeCommand, () => service);
-        expect(bean.getName()).toBe("NewVideoPlugin");
-        await expect(bean.openDialog("from-legacy")).resolves.toEqual({ command: "new-video.open", args: ["from-legacy"] });
-
-        bean.getNewVideoFlatList = vi.fn(async () => ["early override"]);
-        bean.connect(service);
-        expect(bean.createFeatureService({})).toBe(service);
-        await expect(bean.openDialog()).resolves.toBe("opened");
-        await expect(bean.getPendingNewVideoTotal()).resolves.toBe(4);
-        await expect(bean.getNewVideoFlatList()).resolves.toEqual(["early override"]);
-        bean.getNewVideoFlatList = vi.fn(async () => ["feature override"]);
-        await expect(service.getNewVideoFlatList()).resolves.toEqual(["feature override"]);
-        bean.disconnect(service);
-        expect(bean.service).toBeNull();
+    it("declares the storage capability used to construct the workspace service", () => {
+        expect(newVideoFeature.requires).toContain(SERVICE.storage);
     });
 
     it("loads new-video styles with idle activation under a disposable feature scope", async () => {
         const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://javdb.com/" });
         vi.stubGlobal("document", dom.window.document);
         vi.stubGlobal("window", dom.window);
-        let loadFeatureStyles;
         const releaseStyle = vi.fn(), handlers = new Map(), events = {
             on: vi.fn((type, handler) => { handlers.set(type, handler); return () => handlers.delete(type); }),
         }, plugin = {
-            prepareFeatureActivation: vi.fn(), attachFeatureNewVideoStyleLoader: vi.fn((loader) => { loadFeatureStyles = loader; }),
-            detachFeatureNewVideoStyleLoader: vi.fn(), initializeLocalState: vi.fn(), showNewVideoCount: vi.fn(),
-            attachFeatureNewVideoBatchController: vi.fn(), detachFeatureNewVideoBatchController: vi.fn(),
-            attachFeatureNewVideoWorkspaceController: vi.fn(), detachFeatureNewVideoWorkspaceController: vi.fn(),
-            attachFeatureNewVideoScanController: vi.fn(), detachFeatureNewVideoScanController: vi.fn(),
+            prepareFeatureActivation: vi.fn(),
+            initializeLocalState: vi.fn(), showNewVideoCount: vi.fn(),
             openDialog: vi.fn(),
             scheduleWorkspaceReload: vi.fn(), isWorkspaceMounted: vi.fn(() => true), renderTaskStatuses: vi.fn(), dispose: vi.fn(),
         };
@@ -80,6 +66,11 @@ describe("new video and scheduler feature lifecycle", () => {
         const titleKeywords = { getAll: vi.fn(async () => []) }, actressInfo = { movies: vi.fn(async () => []) }, logger = { html: vi.fn(), warn: vi.fn(), error: vi.fn() };
         const styles = { register: vi.fn(() => releaseStyle) }, runtime = createRuntime("discovery.new-video", plugin, events);
 
+        for (const [method, mock] of Object.entries(plugin)) {
+            if (typeof NewVideoWorkspaceService.prototype[method] === "function") {
+                vi.spyOn(NewVideoWorkspaceService.prototype, method).mockImplementation(mock);
+            }
+        }
         expect(Object.hasOwn(NewVideoWorkspaceService.prototype, "initCss")).toBe(false);
         const dependencies = {
             [PORT.style]: styles, [SERVICE.events]: events, [SERVICE.state]: state, [SERVICE.settings]: settings,
@@ -90,16 +81,16 @@ describe("new video and scheduler feature lifecycle", () => {
         };
         const result = await newVideoFeature.activate(dependencies, runtime);
         expect(styles.register).not.toHaveBeenCalled();
-        await loadFeatureStyles();
+        const workspace = runtime.provideCapability.mock.calls.find(([id]) => id === "discovery.new-video")[1];
+        await workspace.loadStyles();
         expect(styles.register).toHaveBeenCalledWith("feature-new-video-workspace", NEW_VIDEO_STYLES);
         expect(NEW_VIDEO_STYLES).toContain(".newVideoToolBox");
         expect(plugin.prepareFeatureActivation).toHaveBeenCalledOnce();
-        expect(plugin.attachFeatureNewVideoBatchController).toHaveBeenCalledOnce();
-        const batchController = plugin.attachFeatureNewVideoBatchController.mock.calls[0][0];
+        const batchController = workspace.featureNewVideoBatchController;
         await batchController.run("favorite", [{ carNum: "ABC-001" }]);
         expect(state.patch).toHaveBeenCalledWith(["ABC-001"], { favorite: true }, expect.objectContaining({ type: "new-video-batch-state" }));
-        const workspaceController = plugin.attachFeatureNewVideoWorkspaceController.mock.calls[0][0];
-        const scanController = plugin.attachFeatureNewVideoScanController.mock.calls[0][0];
+        const workspaceController = workspace.featureNewVideoWorkspaceController;
+        const scanController = runtime.provideCapability.mock.calls.find(([id]) => id === "discovery.new-video-scan")?.[1];
         expect(scanController).toBeDefined();
         await expect(scanController.scanActresses({ baseUrl: "https://javdb.com", concurrency: 2, sleepMs: 0, intervalHours: 12, ruleHours: 8760, force: false, isUnnecessaryCheck: () => false, isNetworkBlocked: () => false, sleep: async () => {} })).resolves.toMatchObject({ actressCount: 0, eligibleCount: 0 });
         expect(await workspaceController.getPendingSummary()).toEqual({ count: 0, decisions: {} });
@@ -120,10 +111,6 @@ describe("new video and scheduler feature lifecycle", () => {
 
         expect(styles.register).toHaveBeenCalledWith("feature-new-video-workspace", NEW_VIDEO_STYLES);
         runtime.scope.dispose();
-        expect(plugin.detachFeatureNewVideoStyleLoader).toHaveBeenCalledOnce();
-        expect(plugin.detachFeatureNewVideoBatchController).toHaveBeenCalledWith(batchController);
-        expect(plugin.detachFeatureNewVideoWorkspaceController).toHaveBeenCalledWith(workspaceController);
-        expect(plugin.detachFeatureNewVideoScanController).toHaveBeenCalledWith(scanController);
         await expect(batchController.run("favorite", [{ carNum: "ABC-001" }])).rejects.toMatchObject({ name: "AbortError" });
         await expect(workspaceController.loadWorkspace()).rejects.toMatchObject({ name: "AbortError" });
         await expect(scanController.parseActorMovies([{ carNum: "ABC-123" }], "actor-1", "Actor One", [], new Set())).rejects.toMatchObject({ name: "AbortError" });
@@ -140,7 +127,7 @@ describe("new video and scheduler feature lifecycle", () => {
     });
 
     it("does not resolve, style, or schedule a disabled contribution", async () => {
-        const plugin = { attachFeatureNewVideoStyleLoader: vi.fn() }, runtime = createRuntime("discovery.new-video", plugin);
+        const plugin = {}, runtime = createRuntime("discovery.new-video", plugin);
         runtime.enabledContributions = [];
         const styles = { register: vi.fn() };
 
@@ -172,7 +159,6 @@ describe("new video and scheduler feature lifecycle", () => {
         const pageDocument = Object.assign(new EventTarget(), { hidden: true });
         vi.stubGlobal("window", pageWindow);
         vi.stubGlobal("document", pageDocument);
-        const taskBean = new TaskCompatibilityBean();
         const eventHandlers = new Map();
         const events = {
             on: vi.fn((name, handler) => {
@@ -184,7 +170,7 @@ describe("new video and scheduler feature lifecycle", () => {
         const legacyStorage = { getSetting: vi.fn(async () => ({})) };
         const legacyUtils = { getNowStr: vi.fn(() => "2026-08-01 00:00:00"), sleep: vi.fn(async () => {}), getHourDifference: vi.fn(() => 100) };
         const logger = { log: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), html: vi.fn(), htmlDebug: vi.fn() };
-        const runtime = createRuntime("discovery.scheduler", taskBean);
+        const runtime = createRuntime("discovery.scheduler");
 
         const dependencies = {
             [PORT.javdbHost]: { getListSelectors: vi.fn(() => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item" })) },
@@ -198,14 +184,13 @@ describe("new video and scheduler feature lifecycle", () => {
         };
         const result = await schedulerFeature.activate(dependencies, runtime);
         expect(result.activeContributions).toEqual(["discovery.scheduler"]);
-        expect(taskBean.service).toBeInstanceOf(TaskExecutionService);
-        expect(taskBean.service.legacyStorage).toBe(legacyStorage);
-        expect(taskBean.service.getRuntimeService("storage")).toBe(storage);
-        const taskService = taskBean.service;
+        const taskService = result.commands["scheduler.service"]();
+        expect(taskService).toBeInstanceOf(TaskExecutionService);
+        expect(taskService.legacyStorage).toBe(legacyStorage);
+        expect(taskService.getRuntimeService("storage")).toBe(storage);
         expect(events.on).toHaveBeenCalledWith("settings-changed", expect.any(Function));
         runtime.scope.dispose();
         expect(taskService.disposed).toBe(true);
-        expect(taskBean.service).toBeNull();
         expect(eventHandlers.has("settings-changed")).toBe(false);
     });
 
@@ -293,7 +278,7 @@ describe("new video and scheduler feature lifecycle", () => {
             onProgress?.({ processed: 1, total: 1 });
             return { total: 1, updated: 0, unchanged: 1, failed: 0, rateLimited: 0 };
         });
-        taskService.attachFeatureNewVideoScanController({ backfillFavoriteProfiles: backfill });
+        taskService.getNewVideoScanner = () => ({ backfillFavoriteProfiles: backfill });
 
         expect(taskService.isNetworkBlocked(new DOMException("Scan disposed", "AbortError"))).toBe(true);
 
@@ -342,7 +327,7 @@ describe("new video and scheduler feature lifecycle", () => {
             notifications: { error: vi.fn() },
         });
         const skippedBackfill = vi.fn();
-        scheduledService.attachFeatureNewVideoScanController({ backfillFavoriteProfiles: skippedBackfill });
+        scheduledService.getNewVideoScanner = () => ({ backfillFavoriteProfiles: skippedBackfill });
         await scheduledService.doTask();
         expect(skippedBackfill).not.toHaveBeenCalled();
     });

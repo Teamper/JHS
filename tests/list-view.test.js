@@ -208,8 +208,8 @@ describe("ListView", () => {
         dom.window.document.addEventListener("click", hostClick);
         if (binding === "ListView") view.bindCardVideoPlayback(root);
         else {
-            const service = Object.assign(Object.create(ListPageCompatibilityService.prototype), {
-                listView: null, featureListContextMenuAdapter: {},
+            const service = Object.assign(new ListPageCompatibilityService({ controllers: { contextMenu: {} } }), {
+                listView: null,
                 getSelector: () => ({ boxSelector: ".movie-list" }), bindMovieDetailNavigation: vi.fn(),
             });
             await service.bindClick();

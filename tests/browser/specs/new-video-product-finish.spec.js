@@ -5,7 +5,7 @@ for (const theme of ["light", "dark"]) {
     test(`new works compact controls leave room for browsing ${theme}`, async ({ page, context }, info) => {
         test.skip(!["mobile", "mobile-small", "mobile-landscape"].includes(info.project.name), "compact viewport acceptance");
         await boot(page, context, theme);
-        await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").openDialog());
+        await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));
         const workspace = page.locator(".newVideoToolBox");
         await expect(workspace).toHaveAttribute("data-jhs-compact", "true");
         const contrast = await workspace.locator(".card-tag").first().evaluate(node => {
@@ -75,15 +75,16 @@ for (const theme of ["light", "dark"]) {
 test("actor editor labels and delayed avatar search belong to the editor", async ({ page, context }, info) => {
     test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "one desktop and one compact lifecycle acceptance");
     await boot(page, context, "light");
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").openDialog());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));
     await page.locator(".actress-card__menu > button").first().click();
     await page.getByRole("menuitem", { name: "编辑资料", exact: true }).click();
     const editor = page.getByRole("dialog", { name: "编辑演员：测试演员", exact: true });
     await expect(editor.getByRole("textbox", { name: "主名称", exact: true })).toHaveValue("测试演员");
     await expect(editor.getByRole("textbox", { name: "备注", exact: true })).toBeVisible();
     await expect(editor.getByRole("combobox", { name: "演员类别", exact: true })).toBeVisible();
-    await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+    await page.evaluate(async () => {
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.avatarSources = [{ id: "fixture-avatar", name: "Fixture" }, { id: "fixture-backup", name: "备用 Fixture" }];
         plugin.getRuntimeService("actressInfo").searchAvatars = async () => ["https://images.example.test/chosen-avatar.svg"];
     });
@@ -101,20 +102,22 @@ test("actor editor labels and delayed avatar search belong to the editor", async
     await expect(editor.getByRole("textbox", { name: "头像链接", exact: true })).toHaveValue("https://images.example.test/chosen-avatar.svg");
     await editor.getByRole("button", { name: "搜索头像", exact: true }).click();
     await expect(candidates).toBeVisible();
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").closeActressEditor());
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.features.newVideo.closeActressEditor());
     await expect(page.locator(".layui-layer")).toHaveCount(1);
     await expect(page.locator(".layer-anim-close")).toHaveCount(0);
     await page.locator(".actress-card__menu > button").first().click();
     await page.getByRole("menuitem", { name: "编辑资料", exact: true }).click();
     await expect(editor).toBeVisible();
-    await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+    await page.evaluate(async () => {
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.getRuntimeService("actressInfo").searchAvatars = () => new Promise(resolve => window.finishAvatarSearch = () => resolve(["https://images.example.test/late-avatar.svg"]));
     });
     await editor.getByRole("button", { name: "搜索头像", exact: true }).click();
     await page.waitForFunction(() => typeof window.finishAvatarSearch === "function");
-    await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+    await page.evaluate(async () => {
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.getRuntimeService("dialog").close(plugin.editor.id); window.finishAvatarSearch();
     });
     await expect(editor).toHaveCount(0);

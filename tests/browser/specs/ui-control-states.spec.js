@@ -135,7 +135,7 @@ for (const theme of ["light", "dark"]) {
     });
 
     test(`real history selected and hovered rows remain distinct ${theme}`, async ({ page, context }) => {
-        await boot(page, context, theme); await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("HistoryPlugin").openHistory());
+        await boot(page, context, theme); await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
         const row = page.locator(".jhs-history-dialog .tabulator-row").first(); await expect(row).toBeVisible();
         await row.scrollIntoViewIfNeeded(); await page.mouse.move(0, 0); const normal = await styles(row);
         await row.hover(); const hover = await styles(row); expect(hover.background).not.toBe(normal.background);

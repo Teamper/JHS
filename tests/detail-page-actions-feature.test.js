@@ -11,6 +11,7 @@ function createFixture({ carNum = "ABC123", mount = true, subtitleResults = [] }
     document.body.innerHTML = '<div id="detail"></div><div id="preview-video"></div>';
     let stateChanged = null;
     const scope = new LifecycleScope("test:detail-page-actions");
+    let magnetHub;
     const loadingClose = vi.fn();
     const stateActions = {
         stateController: {}, bind: vi.fn(() => ({})), showStatus: vi.fn(), getStateRecord: vi.fn(() => ({ carNum })),
@@ -29,12 +30,12 @@ function createFixture({ carNum = "ABC123", mount = true, subtitleResults = [] }
             readMovieInfo: () => ({ carNum, url: "https://javdb.example/v/test", actress: "actress", actors: "actor", publishTime: "2026-01-01" }),
             mountDetailActions: (row) => { if (!mount) return false; document.querySelector("#detail").append(row); return true; },
         },
-        route: "detail", scope, settings: { snapshot: () => ({ enableMagnetsFilter: "no" }) },
+        route: "detail", scope, readMagnetHub: () => magnetHub, settings: { snapshot: () => ({ enableMagnetsFilter: "no" }) },
         dialog, subtitle: { search: vi.fn(async () => subtitleResults), download: vi.fn() },
         ui, notifications, events: { on: vi.fn((_name, listener) => { stateChanged = listener; return () => { stateChanged = null; }; }) }, diagnostics,
     });
     controller.getFeatureStateActionsAdapter().attach(stateActions);
-    return { controller, scope, stateActions, ui, notifications, diagnostics, dialog, loadingClose, get stateChanged() { return stateChanged; } };
+    return { controller, scope, setMagnetHub(value) { magnetHub = value; controller.closeMagnetDialog(); }, stateActions, ui, notifications, diagnostics, dialog, loadingClose, get stateChanged() { return stateChanged; } };
 }
 
 describe("Detail page actions Feature controller", () => {
@@ -77,7 +78,7 @@ describe("Detail page actions Feature controller", () => {
         const fixture = createFixture();
         let resolveHub;
         const createMagnetHub = vi.fn(() => new Promise(resolve => { resolveHub = resolve; }));
-        fixture.controller.attachFeatureMagnetHubAdapter({ createMagnetHub });
+        fixture.setMagnetHub({ createMagnetHub });
         fixture.controller.start();
         $("#magnetSearchBtn").trigger("click").trigger("click");
         expect(fixture.dialog.open).toHaveBeenCalledOnce();
@@ -109,7 +110,7 @@ describe("Detail page actions Feature controller", () => {
     it("shows a retry after magnet initialization fails and closes on feature detach", async () => {
         const fixture = createFixture();
         const adapter = { createMagnetHub: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue($("<div>磁力结果</div>")) };
-        fixture.controller.attachFeatureMagnetHubAdapter(adapter);
+        fixture.setMagnetHub(adapter);
         fixture.controller.start();
         $("#magnetSearchBtn").trigger("click");
         const options = fixture.dialog.open.mock.calls[0][0];
@@ -119,7 +120,7 @@ describe("Detail page actions Feature controller", () => {
         await vi.waitFor(() => expect(content.find("button").text()).toBe("重试"));
         content.find("button").trigger("click");
         await vi.waitFor(() => expect(content.text()).toContain("磁力结果"));
-        fixture.controller.detachFeatureMagnetHubAdapter(adapter);
+        fixture.setMagnetHub(null);
         expect(fixture.dialog.close).toHaveBeenCalledExactlyOnceWith(7);
         fixture.scope.dispose();
     });

@@ -6,7 +6,6 @@ const listPage = readTestFile(join(process.cwd(), "src/features/list/list-compat
 const listBatch = readTestFile(join(process.cwd(), "src/features/list/list-batch-controller.js"), "utf8");
 const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-actions-controller.js"), "utf8");
 const listBatchUi = readTestFile(join(process.cwd(), "src/features/list/list-batch-ui.js"), "utf8");
-const blacklist = readTestFile(join(process.cwd(), "src/compat/blacklist-compatibility-bean.js"), "utf8");
 const scanner = readTestFile(join(process.cwd(), "src/features/list/batch-scanner.js"), "utf8");
 
 describe("batch action contract (筛选后批量语义)", () => {
@@ -25,14 +24,11 @@ describe("batch action contract (筛选后批量语义)", () => {
     it("confirms with filter-aware copy for all and other filters", () => {
         expect(listBatch).toContain("将处理当前搜索全部分页的所有影片，包括屏蔽项。");
         expect(listBatch).toContain("将处理当前搜索全部分页中符合「");
-        expect(blacklist).toContain("return this.batchAllVideos(name, options)");
     });
 
     it("writes in chunks through StateService.batch patch instead of per-item transactions", () => {
         expect(listBatch).toMatch(/index \+= 75[\s\S]{0,220}this\.state\.patch\(chunk\.map\(\(item\) => item\.carNum\)/);
         expect(listBatch).toContain('type: stateFlag === "blocked" ? "actor-page-block" : "actor-page-batch-state"');
-        const compatibilityBatch = blacklist.slice(blacklist.indexOf("filterAllVideo(name"), blacklist.indexOf("\n}"));
-        expect(compatibilityBatch).not.toContain("state").and.not.toContain("scanAllPages");
         expect(listBatch).not.toMatch(/for \(const element of items\)[\s\S]{0,200}state\.patch\(carNum/);
     });
 
@@ -73,8 +69,5 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listBatch).toContain("this.ui.setButtonsDisabled(true)");
         expect(listBatch).toContain("this.ui.setButtonsDisabled(false)");
         expect(listBatchUi).toContain('"#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo, #jhs-fab-menu [data-page-action]"');
-        const compatibilityBatch = blacklist.slice(blacklist.indexOf("filterAllVideo(name"), blacklist.indexOf("\n}"));
-        expect(compatibilityBatch).not.toContain("tryBeginBatchRun");
-        expect(compatibilityBatch).not.toContain("endBatchRun");
     });
 });

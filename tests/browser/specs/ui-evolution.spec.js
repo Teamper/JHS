@@ -96,7 +96,7 @@ test("real Toastify and Viewer use semantic icons, neutral close controls and ca
 
 test("history empty text and pagination stay readable and reachable with host styles", async ({ page, context }) => {
   await boot(page, context);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("HistoryPlugin").openHistory());
+  await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
   const table = page.locator(".jhs-history-dialog .tabulator");
   await expect(table).toBeVisible();
   const empty = table.locator(".tabulator-placeholder-contents");
@@ -130,8 +130,8 @@ for (const theme of ["light", "dark"]) for (const scene of ["settings", "tasks",
     test.skip(!visualEnabled || !["desktop-wide", "mobile"].includes(info.project.name), "representative visual regression is opt-in and platform specific");
     await boot(page, context, theme, scene === "detail");
     if (scene === "settings" || scene === "tasks") await openSettings(page, scene === "tasks" ? "task-panel" : undefined);
-    if (scene === "history") await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("HistoryPlugin").openHistory());
-    if (scene === "new-video") await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").openDialog());
+    if (scene === "history") await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
+    if (scene === "new-video") await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));
     if (scene === "feedback") await page.evaluate(() => {
       window.show.ok("已保存", { duration: -1, gravity: "top" });
       window.show.info("暂无记录", { duration: -1, gravity: "center" });

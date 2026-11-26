@@ -7,7 +7,6 @@ import { FeatureRuntime } from "../src/app/feature-runtime.js";
 import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import library from "../src/features/library/manifest.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
-import { HistoryCompatibilityBean } from "../src/compat/history-compatibility-bean.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -83,25 +82,6 @@ describe("Library Feature history ownership", () => {
 
         expect(dialog.open).not.toHaveBeenCalled();
         expect(dom.window.document.querySelector(".layui-layer")).toBeNull();
-        dom.window.close();
-    });
-
-    it("keeps the legacy history repository available before the lazy dialog opens", async () => {
-        const dom = new JSDOM('<body><div class="navbar-end"></div><div class="navbar-search"></div></body>', { url: "https://javdb.com/" });
-        vi.stubGlobal("window", dom.window);
-        vi.stubGlobal("document", dom.window.document);
-        vi.stubGlobal("$", jqueryFactory(dom.window));
-        const { runtime } = createRuntime();
-        const adapter = new HistoryCompatibilityBean(vi.fn(async () => undefined));
-        runtime.setCompatibilityBeanResolver(() => adapter);
-        const feature = await runtime.activate("library");
-        const repository = adapter.historyRepository;
-
-        expect(repository).toBeTruthy();
-        expect(adapter.historySelectionModel).toBeTruthy();
-        expect(adapter.controller).toBeNull();
-        feature.dispose();
-        expect(adapter.historyRepository).toBeNull();
         dom.window.close();
     });
 

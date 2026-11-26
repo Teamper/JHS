@@ -150,9 +150,10 @@ test("NewVideo hover preview follows its owning dialog and is destroyed on close
   await expect(page.locator(".newVideoToolBox")).toBeVisible();
   await page.evaluate(() => window.layer.closeAll());
   await expect(page.locator(".layui-layer")).toHaveCount(0);
-  await page.evaluate(() => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
-    window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode", "list");
+  await page.evaluate(async () => {
+      await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+    const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
+    window.__jhsBrowserDiagnostics.detailServices.storage.setLocal("jhs_newVideoViewMode", "list");
     plugin.reloadNewVideoWorkspaceData = async function() {
       this.nvFlatListCache = [{ carNum: "ABC-001", title: "Preview fixture", actressName: "Fixture Actress", publishTime: "2026-09-01", coverUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", flags: {}, decisionState: "pending" }];
       this.nvJavDbUrl = "https://javdb.com";
@@ -208,8 +209,9 @@ test("NewVideo dialog close removes its owned preview instance", async ({ contex
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await page.evaluate(() => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+  await page.evaluate(async () => {
+      await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+    const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
     plugin.reloadNewVideoWorkspaceData = async function() {
       this.nvFlatListCache = [{ carNum: "ABC-001", title: "Cleanup fixture", actressName: "Fixture Actress", publishTime: "2026-09-01", coverUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", flags: {}, decisionState: "pending" }];
       this.nvJavDbUrl = "https://javdb.com";

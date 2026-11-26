@@ -27,15 +27,15 @@ function createHarness({ site = "javdb", translation = vi.fn(async () => "即时
         event.detail = { names: ["translateTitle"] };
         settings.dispatchEvent(event);
     };
-    const listPage = new ListPagePlugin();
     const scope = new LifecycleScope("list-translation-feature-test");
     const diagnostics = { recordError: vi.fn() };
     const controller = new ExternalBridgeTranslationController({
         document: window.document, window, route: "list", hostAdapter: {
             site, getListSelectors: () => ({ itemSelector: isJavDb ? ".movie-list .item" : ".masonry .item" }),
         },
-        listPage, settings, translation: { translate: translation }, styles: { register: () => () => {} }, diagnostics, scope,
+        settings, translation: { translate: translation }, styles: { register: () => () => {} }, diagnostics, scope,
     });
+    const listPage = new ListPagePlugin({ readTranslation: () => scope.disposed ? null : controller });
     return { dom, listPage, settings, translation, diagnostics, controller, scope };
 }
 

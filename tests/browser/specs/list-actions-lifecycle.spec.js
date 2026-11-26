@@ -44,11 +44,10 @@ test.describe("JavDB list actions Feature lifecycle", () => {
       const list = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
       return {
         featureRunner: typeof list?.listBatchController?.run,
-        blacklistCompatibility: typeof window.unsafeWindow.pluginManager.getBean("BlacklistPlugin")?.filterAllVideo,
         button: Boolean(document.querySelector("#filterAllVideo")),
       };
     });
-    expect(ownership).toEqual({ featureRunner: "function", blacklistCompatibility: "function", button: true });
+    expect(ownership).toEqual({ featureRunner: "function", button: true });
     await page.evaluate(() => {
       window.__loadingAudit = { count: 0, stacks: [] };
       const original = window.loading;
@@ -127,7 +126,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
         preservedItemTag: card?.querySelector(".item-tag")?.textContent,
         preservedDates: [...(card?.querySelectorAll("date") ?? [])].map((node) => node.textContent),
         listFeatureActive: window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeFeatures.includes("list"),
-        navigationAdapterActive: Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.delegate?.featureListNavigationAdapter),
+        navigationAdapterActive: Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.featureListNavigationAdapter),
       };
     });
     expect(initial).toEqual({
@@ -308,8 +307,8 @@ test.describe("JavDB list actions Feature lifecycle", () => {
       return {
         cardProcessed: item?.dataset.jhsProcessed === "true",
         coverTools: item?.querySelectorAll(".jhs-cover-tools").length ?? 0,
-        adapterAttached: Boolean(plugin?.delegate?.featureCoverButtonAdapter),
-        addedItemsFeatureAttached: typeof plugin?.delegate?.featureListAddedItemsAdapter?.processAddedItems === "function",
+        adapterAttached: Boolean(plugin?.featureCoverButtonAdapter),
+        addedItemsFeatureAttached: typeof plugin?.controllers.items?.processAddedItems === "function",
       };
     });
     expect(dynamicEvidence).toEqual({ cardProcessed: true, coverTools: 1, adapterAttached: true, addedItemsFeatureAttached: true });
