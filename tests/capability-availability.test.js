@@ -7,7 +7,6 @@ import { FeatureRuntime } from "../src/app/feature-runtime.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { defineFeature } from "../src/contracts/manifests.js";
 
-const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-actions-controller.js"), "utf8");
 const newVideo = readTestFile(join(process.cwd(), "src/features/discovery/new-video-workspace-service.js"), "utf8");
 const coverButtons = readTestFile(join(process.cwd(), "src/features/list/cover-button-controller.js"), "utf8");
 const registrySource = readTestFile(join(process.cwd(), "src/app/command-registry.js"), "utf8");
@@ -24,13 +23,6 @@ describe("capability availability (无死按钮)", () => {
         disabledRuntime.register(defineFeature({ id: "disabled-feature", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "on-command", requires: [], contributes: [], providesCommands: [ "disabled.open" ], activate: () => ({ commands: { "disabled.open": () => "no" } }) }));
         expect(disabledRuntime.commands.isAvailable("disabled.open")).toBe(false);
         expect(commands.isAvailable("unknown.open")).toBe(false);
-    });
-
-    it("legacy list toolbar renders buttons only when the capability exists", () => {
-        expect(listButtons).toContain('const newVideoAction = hasNewVideo ?');
-        expect(listButtons).toContain('const blacklistAction = hasBlacklist ?');
-        expect(listButtons).toContain('this.newVideo = options.newVideo ?? null');
-        expect(listButtons).not.toContain("黑名单功能已禁用");
     });
 
     it("card screenshot action uses the injected ScreenshotService capability", () => {

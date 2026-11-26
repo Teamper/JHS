@@ -11,7 +11,7 @@ describe("external bridge Feature ownership", () => {
     it("provides one scoped magnet capability to existing consumers and keeps the old bean alias", async () => {
         const feature = externalBridge;
         const scope = new LifecycleScope("feature:external-bridge");
-        const releaseStyle = vi.fn(), releaseBean = vi.fn(), consumers = new Map(["DetailPageButtonPlugin", "Fc2Plugin", "MobileBottomBarPlugin"].map((name) => [name, {
+        const releaseStyle = vi.fn(), releaseBean = vi.fn(), consumers = new Map(["DetailPageButtonPlugin", "Fc2Plugin"].map((name) => [name, {
             attachFeatureMagnetHubAdapter: vi.fn(), detachFeatureMagnetHubAdapter: vi.fn(),
         }]));
         const style = { register: vi.fn(() => releaseStyle) };

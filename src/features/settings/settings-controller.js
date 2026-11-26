@@ -53,9 +53,10 @@ export class SettingPlugin {
         this._quickSettingInstance = null;
         this._settingsDialog = null;
         this._settingsDialogOpenPromise = null;
+        /** @type {(() => Promise<void>) | null} */ this.fullSettingsStyleLoader = null;
         /** @type {any} */ this.featureExternalSitesAdapter = null;
         /** @type {any} */ this.featureCoverButtonAdapter = null;
-        i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
+        i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService(this.legacyStorage)), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
 i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "_cloudSettingBinding", null), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
             text: "预览视频缓存",

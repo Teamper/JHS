@@ -47,7 +47,7 @@ export default defineFeature({
                 let styleRemoved = false;
                 releaseStyle = () => { if (styleRemoved) return; styleRemoved = true; removeStyle(); };
                 runtime.scope.addCleanup(releaseStyle);
-                const consumers = ["DetailPageButtonPlugin", "MobileBottomBarPlugin"]
+                const consumers = ["DetailPageButtonPlugin"]
                     .map((name) => runtime.resolveCompatibilityBean?.(name))
                     .filter(Boolean);
                 if (runtime.isContributionEnabled("fc2-workspace", "detail.fc2-owned", "Fc2Plugin")) {
@@ -70,6 +70,7 @@ export default defineFeature({
                     if (typeof releaseCompatibilityBean === "function") releaseCompatibilityBean();
                 };
                 runtime.scope.addCleanup(unregisterCompatibilityBean);
+                runtime.provideCapability?.("detail.external-magnets", controller);
                 activeContributions.push("detail.external-magnets");
             } catch (error) {
                 releaseStyle();

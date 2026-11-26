@@ -112,10 +112,7 @@ export class ListController {
             filterAll: (revision) => this.filterListItems(null, revision),
             filterItems: (items, revision) => this.filterListItems(items, revision),
             reconcile: (items, revision) => this.reconcileListItems(items, revision),
-            syncHistory: () => {
-                const history = this.legacyPlugin.getOptionalDependency?.("HistoryPlugin");
-                history?.tableObj?.setData?.();
-            },
+            syncHistory: () => this.legacyPlugin.refreshHistory?.(),
         });
         this.legacyPlugin.attachFeatureListRefreshAdapter?.(this.listRefreshController);
         let listRefreshAdapterAttached = true;

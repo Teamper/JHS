@@ -151,6 +151,13 @@ export async function bootstrapJhs() {
             legacyHttp: gmHttp, legacyStorage: storageManager, legacyUtils: utils, copyToClipboard: (label, value) => utils.copyToClipboard(label, value), eventBus: jhsEventBus, storageMutationCoordinator, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
+        if (diagnostics && globalThis.unsafeWindow === globalThis) {
+            const { movie, related, review, settings, storage } = context.services;
+            diagnostics.detailServices = { movie, related, review, settings, storage };
+            diagnostics.executeCommand = context.registries.commands.execute.bind(context.registries.commands);
+            context.registries.features.inspection = diagnostics.features = {};
+            diagnostics.activateFeature = async (id) => { await context.registries.features.activate(id); };
+        }
         markPhase("context");
         injectCoreCss(context.services.styles);
         if (route === "list" || route === "detail" || route === "owned-detail") {

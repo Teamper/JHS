@@ -109,7 +109,7 @@ export class ListPageCompatibilityService {
     async initCss() {
         return `<style>.status-tag .tag{color:inherit!important}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
-    /** @param {{runtimeServices?: Record<string, any>, resolveDependency?: (name: string) => any}} [options] */
+    /** @param {{runtimeServices?: Record<string, any>, refreshHistory?: () => Promise<unknown>}} [options] */
     constructor(options = {}) {
         this.runtimeServices = Object.freeze({ ...(options.runtimeServices ?? {}) });
         this.logger = this.runtimeServices.logger ?? {
@@ -117,7 +117,7 @@ export class ListPageCompatibilityService {
             error: console.error.bind(console),
             html: console.log.bind(console),
         };
-        this.resolveDependency = options.resolveDependency ?? (() => null);
+        this.refreshHistory = options.refreshHistory;
         this.managedByFeature = true;
         this.runtimeStatus = "managed-feature";
         /** @type {import("../../features/list/list-view.js").ListView | null} */ this.listView = null;
@@ -177,8 +177,6 @@ export class ListPageCompatibilityService {
         if (service === undefined) throw new Error(`List compatibility service is unavailable: ${name}`);
         return service;
     }
-    /** @param {string} name */
-    getOptionalDependency(name) { return this.resolveDependency(name); }
     getCoverButtonCapability() {
         return Object.freeze({
             getSelector: () => this.getRuntimeService("host").getCardEnhancementSelectors?.() ?? this.getSelector(),
@@ -296,7 +294,7 @@ export class ListPageCompatibilityService {
                 || payload.changedDomains?.some((/** @type {string} */ key) => ["setting", "blacklist", "blacklist_car_list", "filter_keyword_title", "favorite_actresses"].includes(key)));
             const refreshed = full ? await this.requestListRefresh({ reason: "car-state-changed", full: true }) : await this.refreshCarNums(payload.carNums, event?.originId === events.originId ? payload.transactionId : null);
             if (!full && refreshed !== false) {
-                const update = this.getOptionalDependency("HistoryPlugin")?.tableObj?.setData?.();
+                const update = this.refreshHistory?.();
                 update?.catch?.((/** @type {unknown} */ error) => this.logger.error("鉴定记录刷新失败", error));
             }
             if (payload.notificationId) lastSyncRefresh = payload.notificationId;
@@ -376,10 +374,7 @@ export class ListPageCompatibilityService {
             filterAll: (revision) => this.doFilter(revision),
             filterItems: (items, revision) => this.doFilterItems(items, revision),
             reconcile: (items, revision) => this.reconcileListItems(items, revision),
-            syncHistory: () => {
-                const history = this.getOptionalDependency("HistoryPlugin");
-                history?.tableObj && history.tableObj.setData();
-            },
+            syncHistory: () => this.refreshHistory?.(),
         });
     }
     /** Coalesces refresh work in List Feature with the same coordinator as the compatibility path. */

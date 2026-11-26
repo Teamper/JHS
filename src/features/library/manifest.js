@@ -36,7 +36,6 @@ export default defineFeature({
         /** @type {import("./history-dialog-controller.js").HistoryDialogController | null} */ let historyDialog = null;
         /** @type {Promise<import("./history-dialog-controller.js").HistoryDialogController | null> | null} */ let historyDialogPromise = null;
         /** @type {any} */ let historyController = null;
-        /** @type {any} */ let historyAdapter = null;
         /** @type {any} */ let blacklistWorkspace = null;
         /** @type {any} */ let blacklistEntry = null;
         let featureDisposed = false;
@@ -63,7 +62,6 @@ export default defineFeature({
                     return null;
                 }
                 historyDialog = controller;
-                historyAdapter?.attachFeatureController?.(controller);
                 return controller;
             }).finally(() => { historyDialogPromise = null; });
             return historyDialogPromise;
@@ -78,8 +76,7 @@ export default defineFeature({
                 });
             }
             historyController = new HistoryController({ storage: deps[SERVICE.storage], state: deps[SERVICE.state] });
-            historyAdapter = runtime.resolveCompatibilityBean("HistoryPlugin");
-            historyAdapter?.attachFeatureDataController?.(historyController);
+            runtime.inspect?.("history", { repository: historyController.repository, get dialog() { return historyDialog; } });
             const entry = new HistoryEntryController({
                 document, window, jquery: /** @type {any} */ (globalThis).$, profile: deps[SERVICE.profile],
                 site: runtime.site, openHistory: () => runtime.executeCommand("library.history.open"), scope: runtime.scope,
@@ -94,10 +91,8 @@ export default defineFeature({
             disposers.push(() => {
                 featureDisposed = true;
                 entry.dispose();
-                historyAdapter?.detachFeatureController?.(historyDialog);
                 historyDialog?.dispose();
                 historyDialog = null;
-                historyAdapter?.detachFeatureDataController?.(historyController);
                 historyController?.dispose();
                 historyController = null;
             });
@@ -175,7 +170,7 @@ export default defineFeature({
             activeContributions,
             commands: {
                 "library.history.open": async () => (await ensureHistoryDialog())?.openHistory(),
-                "library.history.refresh": async () => (await ensureHistoryDialog())?.refresh(),
+                "library.history.refresh": () => historyDialog?.tableObj ? historyDialog.refresh() : undefined,
                 "library.blacklist.open": () => blacklistWorkspace?.openBlacklistDialog() ?? undefined,
                 /** @param {any} event */
                 "library.blacklist.add": (event) => blacklistEntry?.addBlacklist(event),

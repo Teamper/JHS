@@ -44,7 +44,7 @@ for (const theme of ["light","dark"]) {
         await editor.screenshot({path:info.outputPath("rating-editor.png")});
         await page.locator(".layui-layer-page").filter({has:editor}).locator(".layui-layer-close").click();
         await expect(editor).toHaveCount(0);
-        await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("HistoryPlugin").openHistory());
+        await page.evaluate(()=>window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
         const history = page.locator(".jhs-history-dialog");
         await expect(history.locator(".tabulator-row")).toHaveCount(1);
         const ratingButton = history.getByRole("button",{name:"设置 ABC-123 的个人评分",exact:true});

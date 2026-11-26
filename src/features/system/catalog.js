@@ -37,43 +37,40 @@ export const systemFeatureManifests = Object.freeze([
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const pageDocument = deps[PORT.host].document;
             const pageWindow = pageDocument.defaultView;
-            const compatibilityBean = runtime.resolveCompatibilityBean("SettingPlugin");
-            /** @type {any} */ let adapter = null;
-            if (compatibilityBean?.createFeatureService && compatibilityBean?.connect) {
-                adapter = compatibilityBean.createFeatureService({
-                    runtimeServices: {
-                        host: deps[PORT.host], diagnostics: deps[SERVICE.diagnostics], profile: deps[SERVICE.profile], webdav: deps[SERVICE.webdav], webdavSync: deps[SERVICE.webdavSync], autoBackup: deps[SERVICE.webdavSync],
-                        dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], cache: deps[SERVICE.cache],
-                        http: deps[SERVICE.http], offline: deps[SERVICE.offline], magnet: deps[SERVICE.magnet], movie: deps[SERVICE.movie],
-                        state: deps[SERVICE.state], translation: deps[SERVICE.translation], mediaLibrary: deps[SERVICE.mediaLibrary], busImageLayout: deps[SERVICE.busImageLayout],
-                        settingsRegistry: deps[REGISTRY.settings], scope: () => runtime.scope,
-                    },
-                    capabilities: Object.fromEntries(["ListPagePlugin", "NewVideoPlugin", "BlacklistPlugin", "TaskPlugin"].map((name) => [name, runtime.resolveCompatibilityBean(name)])),
-                    jquery: deps[SERVICE.domUi].jquery, utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
-                    logger: deps[SERVICE.clog], legacyStorage: deps[SERVICE.legacyStorage], events: deps[SERVICE.events], domUi: deps[SERVICE.domUi],
-                    document: pageDocument, window: pageWindow, site: runtime.site, route: runtime.route,
-                });
-                compatibilityBean.connect(adapter);
-                runtime.scope.addCleanup(() => compatibilityBean.disconnect(adapter));
-            }
+            const { SettingPlugin } = await import("../settings/settings-controller.js");
+            const adapter = new SettingPlugin({
+                runtimeServices: {
+                    host: deps[PORT.host], diagnostics: deps[SERVICE.diagnostics], profile: deps[SERVICE.profile], webdav: deps[SERVICE.webdav], webdavSync: deps[SERVICE.webdavSync], autoBackup: deps[SERVICE.webdavSync],
+                    dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], cache: deps[SERVICE.cache],
+                    http: deps[SERVICE.http], offline: deps[SERVICE.offline], magnet: deps[SERVICE.magnet], movie: deps[SERVICE.movie],
+                    state: deps[SERVICE.state], translation: deps[SERVICE.translation], mediaLibrary: deps[SERVICE.mediaLibrary], busImageLayout: deps[SERVICE.busImageLayout],
+                    settingsRegistry: deps[REGISTRY.settings], scope: () => runtime.scope,
+                },
+                resolveDependency: (/** @type {string} */ name) => runtime.resolveCompatibilityBean(name),
+                jquery: deps[SERVICE.domUi].jquery, utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
+                logger: deps[SERVICE.clog], legacyStorage: deps[SERVICE.legacyStorage], events: deps[SERVICE.events], domUi: deps[SERVICE.domUi],
+                document: pageDocument, window: pageWindow, site: runtime.site, route: runtime.route,
+            });
+            const release = runtime.registerCompatibilityBean?.("SettingPlugin", adapter);
+            if (release) runtime.scope.addCleanup(release);
             try {
-                const css = await (adapter?.initEntryCss ? adapter.initEntryCss() : adapter?.initCss?.());
+                const css = await adapter.initEntryCss();
                 if (css) runtime.scope.addCleanup(deps[PORT.style].register("jhs-settings-feature", css.replace(/^\s*<style>|<\/style>\s*$/g, "")));
             } catch (error) {
                 runtime.diagnostics.recordError({ source: "settings-entry", message: error instanceof Error ? error.message : String(error) });
                 deps[SERVICE.clog].error?.("设置界面样式加载失败", error);
             }
             let fullStylesPromise = /** @type {Promise<void> | null} */ (null);
-            if (adapter) adapter.fullSettingsStyleLoader = () => fullStylesPromise ??= (async () => {
+            adapter.fullSettingsStyleLoader = () => fullStylesPromise ??= (async () => {
                 const css = await adapter.initCss();
                 runtime.scope.assertActive();
                 if (css) runtime.scope.addCleanup(deps[PORT.style].register("jhs-full-settings-feature", css.replace(/^\s*<style>|<\/style>\s*$/g, "")));
             })().catch(error => { fullStylesPromise = null; throw error; });
             const controller = new SettingsEntryController({
                 document: pageDocument, scope: runtime.scope,
-                initializeSurface: () => adapter?.activateFeatureSurface?.(runtime.scope, deps[SERVICE.profile]),
+                initializeSurface: () => adapter.activateFeatureSurface(runtime.scope, deps[SERVICE.profile]),
                 executeCommand: (command) => runtime.executeCommand(command),
-                closeQuickSettings: () => adapter?.disposeQuickSettings?.(),
+                closeQuickSettings: () => adapter.disposeQuickSettings(),
                 lowZIndex: () => deps[SERVICE.clog].lowZIndex?.(),
                 onError: (error) => {
                     runtime.diagnostics.recordError({ source: "settings-entry", message: error instanceof Error ? error.message : String(error) });
@@ -110,8 +107,6 @@ export const systemFeatureManifests = Object.freeze([
             const id = "responsive-shell.bottom-bar";
             if (!runtime.enabledContributions.includes(id)) return { activeContributions: [] };
             const { RESPONSIVE_SHELL_CAPABILITIES, ResponsiveShellController } = await import("./responsive-shell-controller.js");
-            const bridge = runtime.resolveCompatibilityBean("MobileBottomBarPlugin");
-            if (!bridge) throw new Error("Responsive shell compatibility bridge is unavailable");
             const capabilities = {};
             for (const name of RESPONSIVE_SHELL_CAPABILITIES) Object.defineProperty(capabilities, name, { enumerable: true, get: () => runtime.isCompatibilityBeanAvailable?.(name) === false ? null : runtime.resolveCompatibilityBean(name) ?? null });
             const controller = new ResponsiveShellController({
@@ -121,6 +116,15 @@ export const systemFeatureManifests = Object.freeze([
                 privacyActions: { available: () => runtime.isCommandAvailable("privacy.toggle"), enabled: () => deps[SERVICE.privacy].enabled, toggle: () => runtime.executeCommand("privacy.toggle"), configure: () => runtime.executeCommand("privacy.configure"), bindReveal: (/** @type {HTMLElement} */ button, /** @type {any} */ scope) => runtime.executeCommand("privacy.bind-reveal", button, scope) },
                 mediaActions: { available: () => runtime.isCommandAvailable("media.configure") && !parseDisabledPlugins(deps[SERVICE.settings].snapshot().disabledPlugins).includes("media-library"), configure: () => runtime.executeCommand("media.configure") },
                 openNewVideo: () => runtime.executeCommand("new-video.open"),
+                magnetActions: {
+                    filterAvailable: () => Boolean(runtime.getCapability("detail.native-magnets")),
+                    hubAvailable: () => Boolean(runtime.getCapability("detail.external-magnets")),
+                },
+                newVideoAvailable: () => runtime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin"),
+                history: {
+                    available: () => runtime.isContributionEnabled("library", "library.history", "HistoryPlugin"),
+                    open: () => runtime.executeCommand("library.history.open"),
+                },
                 getPageActions: async () => {
                     const actions = await runtime.executeCommand("list.get-page-actions");
                     const count = deps[SERVICE.movieSelection].values().length;
@@ -135,8 +139,6 @@ export const systemFeatureManifests = Object.freeze([
             try {
                 releaseStyles = deps[PORT.style].register("feature-responsive-shell", await controller.initCss());
                 runtime.scope.addCleanup(releaseStyles);
-                bridge.attachController(controller);
-                runtime.scope.addCleanup(() => bridge.detachController(controller));
                 controller.start(runtime.scope);
                 return { activeContributions: [id], dispose: () => controller.dispose() };
             } catch (error) {

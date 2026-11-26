@@ -64,7 +64,7 @@ describe("continuous browsing work bounds", () => {
         const handlers = new Map(), events = { on: (name, handler) => { handlers.set(name, handler); return () => {}; } };
         const scope = { addCleanup() {} }, settings = { snapshot: () => ({}), addEventListener() {} };
         const historyRefresh = vi.fn(async () => {});
-        const list = new ListPageCompatibilityService({ runtimeServices: { scope: () => scope, settings, events }, resolveDependency: () => ({ tableObj: { setData: historyRefresh } }) });
+        const list = new ListPageCompatibilityService({ runtimeServices: { scope: () => scope, settings, events }, refreshHistory: historyRefresh });
         await list.handle({ scope, featureOwnsStartup: true });
         list.getIndexedItems = vi.fn(() => ["matched-card"]);
         list.invalidateListRefreshContext = vi.fn(); list.requestListRefresh = vi.fn(async () => true);

@@ -79,13 +79,9 @@ export default defineFeature({
                     document, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], events: deps[SERVICE.events], scope: runtime.scope,
                 });
                 if (magnetFilter.start()) {
-                    const consumers = ["DetailPageButtonPlugin", "MobileBottomBarPlugin"]
-                        .map((name) => runtime.resolveCompatibilityBean?.(name))
-                        .filter(Boolean);
-                    for (const consumer of consumers) consumer.attachFeatureMagnetFilterAdapter?.(magnetFilter.compatibilityAdapter);
-                    runtime.scope.addCleanup(() => {
-                        for (const consumer of consumers) consumer.detachFeatureMagnetFilterAdapter?.(magnetFilter.compatibilityAdapter);
-                    });
+                    runtime.provideCapability?.("detail.native-magnets", magnetFilter.compatibilityAdapter);
+                    pageActionsController?.attachFeatureMagnetFilterAdapter(magnetFilter.compatibilityAdapter);
+                    runtime.scope.addCleanup(() => pageActionsController?.detachFeatureMagnetFilterAdapter(magnetFilter.compatibilityAdapter));
                     runtime.scope.addCleanup(releaseStyle);
                     activeContributions.push("detail.native-magnets");
                 } else releaseStyle();

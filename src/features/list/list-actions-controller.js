@@ -12,7 +12,7 @@ import { isBatchRunActive } from "./batch-coordinator.js";
 
 /** List-page actions with explicit Feature capabilities and a legacy mobile-bar facade. */
 export class ListActionsController {
-    /** @param {{hostAdapter: any, list: any, batchController?: any, settings: any, storage: any, ui: any, notifications: any, scope: LifecycleScope, sortController: any, blacklist?: any, newVideo?: any, openNewVideo?: () => unknown, diagnostics?: any, document?: Document, window?: Window & typeof globalThis}} options */
+    /** @param {{hostAdapter: any, list: any, batchController?: any, settings: any, storage: any, ui: any, notifications: any, scope: LifecycleScope, sortController: any, blacklist?: any, openNewVideo?: () => unknown, diagnostics?: any, document?: Document, window?: Window & typeof globalThis}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.list = options.list;
@@ -24,7 +24,6 @@ export class ListActionsController {
         this.scope = options.scope;
         this.sortController = options.sortController ?? null;
         this.blacklist = options.blacklist ?? null;
-        this.newVideo = options.newVideo ?? null;
         this.openNewVideo = options.openNewVideo ?? null;
         this.diagnostics = options.diagnostics ?? null;
         this.document = options.document ?? globalThis.document;
@@ -129,7 +128,7 @@ export class ListActionsController {
         const $ = this.$, pageUrl = new URL(this.hostAdapter.location.href), isJavDb = this.hostAdapter.site === "javdb";
         const isActorPage = isJavDb ? pageUrl.pathname.includes("/actors/") : pageUrl.pathname.includes("/star/");
         const isTagPage = isJavDb && pageUrl.pathname.includes("/tags");
-        const hasNewVideo = Boolean(this.newVideo), hasBlacklist = Boolean(this.blacklist), hasList = Boolean(this.list);
+        const hasNewVideo = Boolean(this.openNewVideo), hasBlacklist = Boolean(this.blacklist), hasList = Boolean(this.list);
         const actorInfo = () => this.blacklist?.getActressPageInfo?.() ?? this.list?.getActressPageInfo?.() ?? {};
         let blacklistLabel = "加入黑名单", blacklistClass = "jhs-btn--filter";
         if (isActorPage && hasBlacklist) {
@@ -223,7 +222,7 @@ export class ListActionsController {
             void this.openWaitCheck().catch((error) => this.recordError("待鉴定列表打开失败", error));
         });
         $("#newVideoBtn").on("click.jhsListActions", () => {
-            const opening = this.openNewVideo ? this.openNewVideo() : this.newVideo?.openDialog?.();
+            const opening = this.openNewVideo?.();
             void Promise.resolve(opening).catch((error) => this.recordError("新作品工作区打开失败", error));
         });
         $("#blacklistBtn").on("click.jhsListActions", () => this.blacklist?.openBlacklistDialog?.());

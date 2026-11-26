@@ -20,9 +20,9 @@ for(const phase of ['before','after']) for(const theme of ['light','dark']) test
  }
  await clickSettingsCategory(dialog.locator('[data-panel="resources-panel"]'));await dialog.locator('#magnet-tag-rule-list').scrollIntoViewIfNeeded();await capture('rules');
  await page.keyboard.press('Escape');
- await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean('HistoryPlugin').openHistory());await expect(page.locator('.tabulator-row').first()).toBeVisible();await capture('history');
+ await page.evaluate(()=>window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));await expect(page.locator('.tabulator-row').first()).toBeVisible();await capture('history');
  for(const label of ['操作记录','离线任务']){await page.getByRole('button',{name:label,exact:true}).click();await expect(page.locator('.jhs-history-dialog .jhs-card').first()).toBeVisible();await capture(label==='操作记录'?'activity':'offline');}
- await page.keyboard.press('Escape');await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean('NewVideoPlugin').openDialog());await expect(page.locator('.actress-card').first()).toBeVisible();await capture('actor');
+ await page.keyboard.press('Escape');await page.evaluate(()=>window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));await expect(page.locator('.actress-card').first()).toBeVisible();await capture('actor');
  await page.locator('#nvViewList').click();await expect(page.locator('.nv-card')).toHaveCount(60);await capture('new-works');
  await page.keyboard.press('Escape');await page.evaluate(()=>document.querySelector('#statsBtn').click());await expect(page.locator('.jhs-stats')).toBeVisible();await capture('statistics');
  await page.keyboard.press('Escape');await page.evaluate(()=>{window.show.ok('已保存',{duration:-1});window.show.error('资源加载失败，请重试',{duration:-1});});await capture('feedback');

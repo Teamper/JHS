@@ -13,7 +13,9 @@ export class FeatureRuntime {
     /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, backgroundWork?: any, disabled?: string[], site?: string, route?: string}} options */
     constructor(options) {
         this.backgroundWork = options.backgroundWork;
+        /** @type {Record<string, unknown> | undefined} */ this.inspection = undefined;
         this.container = options.container;
+        /** @type {Map<string, unknown>} */ this.capabilities = new Map();
         this.commands = options.commands;
         this.diagnostics = options.diagnostics;
         this.disabled = new Set(migrateDisabledPlugins(options.disabled));
@@ -272,16 +274,27 @@ export class FeatureRuntime {
                 const contribution = this.contributionManifests.get(id);
                 return this.isContributionEnabled(manifest.id, id, contribution?.legacyPluginId || id);
             }));
+            const inspection = this.inspection;
             result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, site: this.site, route: this.route,
                 isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionEnabled(featureId, contributionId, legacyPluginId),
                 isContributionPreferenceEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId, /** @type {string} */ legacyPluginId = contributionId) => this.isContributionPreferenceEnabled(featureId, contributionId, legacyPluginId),
                 executeCommand: /** @type {(command: string, ...args: unknown[]) => Promise<unknown>} */ ((command, ...args) => this.commands.execute(command, ...args)),
                 isCommandAvailable: (/** @type {string} */ command) => this.commands.isAvailable(command),
+                getCapability: (/** @type {string} */ id) => this.capabilities.get(id),
+                provideCapability: (/** @type {string} */ id, /** @type {unknown} */ value) => {
+                    scope.assertActive();
+                    this.capabilities.set(id, value);
+                    return scope.addCleanup(() => { if (this.capabilities.get(id) === value) this.capabilities.delete(id); });
+                },
                 isCompatibilityBeanAvailable: (/** @type {string} */ name) => this.isCompatibilityBeanAvailable(name),
                 resolveCompatibilityBean: (/** @type {string} */ name) => this.compatibilityBeanResolver?.(name),
                 registerCompatibilityBean: (/** @type {string} */ name, /** @type {any} */ bean) => this.compatibilityBeanRegistrar?.(name, bean),
                 diagnostics: this.diagnostics,
+                inspect: inspection && ((/** @type {string} */ name, /** @type {unknown} */ value) => {
+                    inspection[name] = value;
+                    scope.addCleanup(() => { if (inspection[name] === value) delete inspection[name]; });
+                }),
             }));
             scope.assertActive();
             activeContributions = Object.freeze(result?.activeContributions ?? enabledContributions);

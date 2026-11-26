@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OwnedPopover, closeOwnedPopover } from "../src/core/owned-popover.js";
 import { getIcon } from "../src/core/icons.js";
 
-function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDetailPage = false, openNewVideo = null } = {}) {
+function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDetailPage = false, openNewVideo = null, history } = {}) {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     dom.window.isListPage = isListPage, dom.window.isDetailPage = isDetailPage;
     const labels = { all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看", blockedItems: "屏蔽项", undownloaded: "全部未下载", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看", downloadedUnwatched: "下载未观看", recent7d: "最近 7 天" };
@@ -29,16 +29,17 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
     });
     const source = readTestFile(join(import.meta.dirname, "../src/features/system/responsive-shell-controller.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestMobilePlugin=ResponsiveShellController`, context);
+    let hasMagnetFilter = false;
     const plugin = new context.TestMobilePlugin({
         jquery: $, window: dom.window, document: dom.window.document,
         profile: { current: () => "compact" }, settings, host,
         state: { getState: vi.fn(async () => null) },
         logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), openDialog: vi.fn() },
         notifications: { error: vi.fn() }, capabilities: beans,
-        openNewVideo,
+        openNewVideo, history, newVideoAvailable: () => Boolean(beans.NewVideoPlugin),
+        magnetActions: { filterAvailable: () => hasMagnetFilter, hubAvailable: () => Boolean(beans.MagnetHubPlugin) },
     });
-    if (beans.MagnetHubPlugin) plugin.attachFeatureMagnetHubAdapter(beans.MagnetHubPlugin);
-    return { $, host, listButtons, listPage, plugin };
+    return { $, host, listButtons, listPage, plugin, enableMagnetFilter: () => { hasMagnetFilter = true; } };
 }
 
 describe("mobile list FAB", () => {
@@ -86,14 +87,14 @@ describe("mobile list FAB", () => {
         expect(legacyOpen).not.toHaveBeenCalled();
     });
 
-    it("adds the history entry when HistoryPlugin is available and opens it via handleAction", async () => {
-        const history = { openHistory: vi.fn() };
-        const { plugin } = loadMobilePlugin({ beans: { ListPagePlugin: { activeQuickFilter: "waitCheck", setQuickFilter: vi.fn(), syncQuickFilterUi: vi.fn() }, ListPageButtonPlugin: { openWaitCheck: vi.fn(async () => {}), sortItems: vi.fn(async () => {}) }, NewVideoPlugin: {}, BlacklistPlugin: {}, SettingPlugin: {}, DetailPageButtonPlugin: {}, HighlightMagnetPlugin: {}, MagnetHubPlugin: {}, HistoryPlugin: history } });
+    it("adds the history entry and executes its command", async () => {
+        const history = { available: () => true, open: vi.fn() };
+        const { plugin } = loadMobilePlugin({ history });
         const menu = plugin.createMenu();
         expect(menu.find(".jhs-fab-menu-item")).toHaveLength(8);
         expect(menu.find('[data-action="history"]')).toHaveLength(1);
         await plugin.handleAction("history");
-        expect(history.openHistory).toHaveBeenCalledOnce();
+        expect(history.open).toHaveBeenCalledOnce();
     });
 
     it("reads the normalized car number from the HostAdapter", () => {
@@ -105,8 +106,8 @@ describe("mobile list FAB", () => {
 
 describe("mobile detail FAB", () => {
     it("projects the four status actions, magnet filter/search and subtitle when their plugins are present", () => {
-        const { plugin } = loadMobilePlugin({ isListPage: false, isDetailPage: true });
-        plugin.attachFeatureMagnetFilterAdapter({ doFilterMagnet() {}, showAll() {} });
+        const { plugin, enableMagnetFilter } = loadMobilePlugin({ isListPage: false, isDetailPage: true });
+        enableMagnetFilter();
         const menu = plugin.createMenu();
         expect(menu.find(".jhs-fab-menu-item")).toHaveLength(9);
         expect(menu.find('[data-action="filter"], [data-action="fav"], [data-action="down"], [data-action="watch"]')).toHaveLength(4);
@@ -124,8 +125,8 @@ describe("mobile detail FAB", () => {
     });
 
     it("shows the native filter action only when the Detail Feature capability is attached", () => {
-        const { plugin } = loadMobilePlugin({ beans: { DetailPageButtonPlugin: {}, MagnetHubPlugin: {} }, isListPage: false, isDetailPage: true });
-        plugin.attachFeatureMagnetFilterAdapter({ doFilterMagnet() {}, showAll() {} });
+        const { plugin, enableMagnetFilter } = loadMobilePlugin({ beans: { DetailPageButtonPlugin: {}, MagnetHubPlugin: {} }, isListPage: false, isDetailPage: true });
+        enableMagnetFilter();
         const menu = plugin.createMenu();
         expect(menu.find('[data-action="magnetFilter"]')).toHaveLength(1);
         expect(menu.find('[data-action="magnet"]')).toHaveLength(1);

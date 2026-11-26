@@ -18,9 +18,9 @@ test("list iframe panels share inset, surface and typography without losing cont
   await injectUserscriptRuntime(frame, options);
   await frame.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
   await frame.evaluate(()=>{
-    const manager=window.unsafeWindow.pluginManager;
-    manager.getBean("ReviewPlugin").getRuntimeService("review").list=async()=>[{author:"Fixture reviewer",content:"评论正文与长链接 "+"long-name-".repeat(30),createdAt:"2026-09-09",likes:3}];
-    manager.getBean("RelatedPlugin").getRuntimeService("related").list=async()=>[{id:"fixture",name:"相关清单长标题".repeat(12),movieCount:123,collectionCount:45,viewCount:678,createdAt:"2026-09-09"}];
+    const { review, related } = window.__jhsBrowserDiagnostics.detailServices;
+    review.list=async()=>[{author:"Fixture reviewer",content:"评论正文与长链接 "+"long-name-".repeat(30),createdAt:"2026-09-09",likes:3}];
+    related.list=async()=>[{id:"fixture",name:"相关清单长标题".repeat(12),movieCount:123,collectionCount:45,viewCount:678,createdAt:"2026-09-09"}];
     window.originalMagnetNodes=[...document.querySelectorAll("#magnets-content .item")];
   });
   await frame.locator(".jhs-review-toggle").click();

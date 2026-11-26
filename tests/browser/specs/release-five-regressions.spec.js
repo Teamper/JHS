@@ -12,7 +12,7 @@ async function boot(page, settings = {}, url = "https://javdb.com/v/test-id?jhsC
 test("review keyword confirmation treats external text as text with the real Layer runtime", async ({page,context}) => {
     await fulfillHostFixtures(context); await boot(page, {}, undefined, { beforeUserscriptInjection: injectRealLayer });
     const text = '<img src="data:," onerror="document.documentElement.dataset.auditExecuted=String(1)"> \' & <b>keyword</b>';
-    await page.evaluate(text => { window.unsafeWindow.pluginManager.getBean("ReviewPlugin").getRuntimeService("review").list = async () => [{author:"Audit",content:text,createdAt:"2026-09-09"}]; }, text);
+    await page.evaluate(text => { window.__jhsBrowserDiagnostics.detailServices.review.list = async () => [{author:"Audit",content:text,createdAt:"2026-09-09"}]; }, text);
     await page.locator(".jhs-review-toggle").click();
     const body=page.locator(".jhs-review-content");await expect(body).toHaveText(text);
     await body.evaluate(node => {const range=document.createRange();range.selectNodeContents(node);getSelection().removeAllRanges();getSelection().addRange(range);});
@@ -23,9 +23,9 @@ test("review keyword confirmation treats external text as text with the real Lay
     await expect(dialog).toContainText(text);
     await dialog.locator(".layui-layer-btn").getByText("取消", { exact: true }).click();
     await expect(dialog).toHaveCount(0);
-    expect(await page.evaluate(async () => (await window.unsafeWindow.pluginManager.getBean("ReviewPlugin").getRuntimeService("storage").get("filter_keyword_review")) ?? [])).not.toContain(text);
+    expect(await page.evaluate(async () => (await window.__jhsBrowserDiagnostics.detailServices.storage.get("filter_keyword_review")) ?? [])).not.toContain(text);
     await body.click({button:"right"});await page.locator(".layui-layer-dialog .layui-layer-btn").getByText("屏蔽", { exact: true }).click();
-    await expect.poll(()=>page.evaluate(()=>window.unsafeWindow.pluginManager.getBean("ReviewPlugin").getRuntimeService("storage").get("filter_keyword_review"))).toContain(text);
+    await expect.poll(()=>page.evaluate(()=>window.__jhsBrowserDiagnostics.detailServices.storage.get("filter_keyword_review"))).toContain(text);
 });
 test("resource source and rule deletion confirmations render external names as text", async ({page,context}) => {
     await fulfillHostFixtures(context);
@@ -111,7 +111,7 @@ test("115 matching retry stays on the list", async ({page,context}) => {
 });
 test("related expansion synchronizes across tabs like reviews", async ({page,context}) => {
     await fulfillHostFixtures(context);await boot(page);const other=await context.newPage();await boot(other);
-    for (const current of [page,other]) await current.evaluate(()=>{for(const [plugin,service] of [["RelatedPlugin","related"],["ReviewPlugin","review"]]) window.unsafeWindow.pluginManager.getBean(plugin).getRuntimeService(service).list=async()=>[];});
+    for (const current of [page,other]) await current.evaluate(()=>{for(const service of ["related","review"]) window.__jhsBrowserDiagnostics.detailServices[service].list=async()=>[];});
     await page.locator(".jhs-related-toggle").click();await page.locator(".jhs-review-toggle").click();
     await expect(other.locator(".jhs-review-toggle")).toHaveAttribute("aria-expanded","true");
     await expect(other.locator(".jhs-related-toggle")).toHaveAttribute("aria-expanded","true");
@@ -170,7 +170,7 @@ test("related collapse invalidates pending load and pagination can retry", async
     await fulfillHostFixtures(context);await boot(page);
     await page.evaluate(()=>{
         window.relatedRequests=[];
-        window.unsafeWindow.pluginManager.getBean("RelatedPlugin").getRuntimeService("related").list=(_movie,{page,scope})=>new Promise((resolve,reject)=>window.relatedRequests.push({page,scope,resolve,reject}));
+        window.__jhsBrowserDiagnostics.detailServices.related.list=(_movie,{page,scope})=>new Promise((resolve,reject)=>window.relatedRequests.push({page,scope,resolve,reject}));
     });
     await page.locator(".jhs-related-toggle").click();
     await expect.poll(()=>page.evaluate(()=>window.relatedRequests.length)).toBe(1);

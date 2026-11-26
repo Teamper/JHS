@@ -7,7 +7,6 @@ import { newVideoFeature, schedulerFeature } from "../src/features/discovery/new
 import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 import { TaskExecutionService } from "../src/features/discovery/task-execution-service.js";
 import { TaskCompatibilityBean } from "../src/compat/task-compatibility-bean.js";
-import { NewVideoCompatibilityBean } from "../src/compat/new-video-compatibility-bean.js";
 import { NEW_VIDEO_STYLES } from "../src/features/discovery/new-video-styles.js";
 import { ListPageCompatibilityService } from "../src/features/list/list-compatibility-service.js";
 import { SupplementaryCardsController } from "../src/features/list/supplementary-cards-controller.js";
@@ -16,19 +15,15 @@ import { NewVideoWorkspaceService } from "../src/features/discovery/new-video-wo
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 function createRuntime(id, plugin, events = { on: vi.fn(() => vi.fn()) }) {
-    const compatibilityBean = id === "discovery.new-video" ? {
-        createFeatureService: () => plugin,
-        connect: vi.fn(),
-        disconnect: vi.fn(),
-    } : null;
     return {
         enabledContributions: [id],
         scope: new LifecycleScope(`feature:${id}`),
         diagnostics: { recordError: vi.fn() },
-        resolveCompatibilityBean: vi.fn((name) => name === "NewVideoPlugin" ? compatibilityBean : name === "TaskPlugin" ? plugin : null),
+        resolveCompatibilityBean: vi.fn((name) => name === "TaskPlugin" ? plugin : null),
         events,
     };
 }
@@ -36,25 +31,6 @@ function createRuntime(id, plugin, events = { on: vi.fn(() => vi.fn()) }) {
 describe("new video and scheduler feature lifecycle", () => {
     it("declares the storage capability used to construct the workspace service", () => {
         expect(newVideoFeature.requires).toContain(SERVICE.storage);
-    });
-
-    it("keeps the old bean name as a forwarding-only Feature compatibility surface", async () => {
-        const executeCommand = vi.fn(async (command, ...args) => ({ command, args }));
-        const service = { openDialog: vi.fn(async () => "opened"), getPendingNewVideoTotal: vi.fn(async () => 4), getNewVideoFlatList: vi.fn(async () => []) };
-        const bean = new NewVideoCompatibilityBean(executeCommand, () => service);
-        expect(bean.getName()).toBe("NewVideoPlugin");
-        await expect(bean.openDialog("from-legacy")).resolves.toEqual({ command: "new-video.open", args: ["from-legacy"] });
-
-        bean.getNewVideoFlatList = vi.fn(async () => ["early override"]);
-        bean.connect(service);
-        expect(bean.createFeatureService({})).toBe(service);
-        await expect(bean.openDialog()).resolves.toBe("opened");
-        await expect(bean.getPendingNewVideoTotal()).resolves.toBe(4);
-        await expect(bean.getNewVideoFlatList()).resolves.toEqual(["early override"]);
-        bean.getNewVideoFlatList = vi.fn(async () => ["feature override"]);
-        await expect(service.getNewVideoFlatList()).resolves.toEqual(["feature override"]);
-        bean.disconnect(service);
-        expect(bean.service).toBeNull();
     });
 
     it("loads new-video styles with idle activation under a disposable feature scope", async () => {
@@ -82,6 +58,11 @@ describe("new video and scheduler feature lifecycle", () => {
         const titleKeywords = { getAll: vi.fn(async () => []) }, actressInfo = { movies: vi.fn(async () => []) }, logger = { html: vi.fn(), warn: vi.fn(), error: vi.fn() };
         const styles = { register: vi.fn(() => releaseStyle) }, runtime = createRuntime("discovery.new-video", plugin, events);
 
+        for (const [method, mock] of Object.entries(plugin)) {
+            if (typeof NewVideoWorkspaceService.prototype[method] === "function") {
+                vi.spyOn(NewVideoWorkspaceService.prototype, method).mockImplementation(mock);
+            }
+        }
         expect(Object.hasOwn(NewVideoWorkspaceService.prototype, "initCss")).toBe(false);
         const dependencies = {
             [PORT.style]: styles, [SERVICE.events]: events, [SERVICE.state]: state, [SERVICE.settings]: settings,

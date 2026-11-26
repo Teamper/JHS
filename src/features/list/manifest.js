@@ -43,9 +43,8 @@ export default defineFeature({
         /** @type {import("./list-category-fold-controller.js").ListCategoryFoldController | null} */ let categoryFoldController = null;
         /** @type {import("./list-actions-controller.js").ListActionsController | null} */ let listActionsController = null;
         /** @type {import("./cover-button-controller.js").CoverButtonController | null} */ let coverButtonController = null;
-        const listCompatibilityAdapter = runtime.resolveCompatibilityBean?.("ListPagePlugin") ?? null;
         /** @type {import("./list-compatibility-service.js").ListPageCompatibilityService | null} */ let listCompatibilityService = null;
-        if (runtime.enabledContributions.includes("list.core") && listCompatibilityAdapter) {
+        if (runtime.enabledContributions.includes("list.core")) {
             listCompatibilityService = new ListPageCompatibilityService({
                 runtimeServices: {
                     host: deps[PORT.host], translation: deps[SERVICE.translation], http: deps[SERVICE.http], diagnostics: runtime.diagnostics,
@@ -54,16 +53,14 @@ export default defineFeature({
                     busImageLayout: deps[SERVICE.busImageLayout], events: deps[SERVICE.events], scope: () => Promise.resolve(runtime.scope),
                     jquery: deps[SERVICE.domUi].jquery, utils: deps[SERVICE.legacyUtils], logger: deps[SERVICE.clog],
                 },
-                resolveDependency: (name) => runtime.resolveCompatibilityBean?.(name) ?? null,
+                refreshHistory: () => runtime.isCommandAvailable("library.history.refresh") ? runtime.executeCommand("library.history.refresh") : Promise.resolve(),
             });
-            listCompatibilityAdapter.attachFeatureDelegate(listCompatibilityService);
-            runtime.scope.addCleanup(() => listCompatibilityAdapter.detachFeatureDelegate(listCompatibilityService));
+            const release = runtime.registerCompatibilityBean?.("ListPagePlugin", listCompatibilityService);
+            if (release) runtime.scope.addCleanup(release);
         }
         const sortController = new ListSortController({ hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings] });
         if (runtime.enabledContributions.includes("detail.cover-state-actions") && listCompatibilityService) {
-            const listAdapter = listCompatibilityAdapter;
-            const list = listAdapter?.getCoverButtonCapability?.();
-            if (!list) throw new Error("List Feature requires the cover-button list capability");
+            const list = listCompatibilityService.getCoverButtonCapability();
             let releaseStyle = () => {};
             const coverScope = new LifecycleScope("feature:list:cover-state-actions");
             runtime.scope.addCleanup(() => coverScope.dispose());
@@ -78,7 +75,7 @@ export default defineFeature({
                 coverButtonController = coverButtons;
                 releaseStyle = deps[PORT.style].register("jhs-cover-button-feature", coverButtons.getStyles().replace(/^\s*<style>|<\/style>\s*$/g, ""));
                 coverScope.addCleanup(releaseStyle);
-                const consumers = [listAdapter, runtime.resolveCompatibilityBean?.("SettingPlugin")].filter(Boolean);
+                const consumers = [listCompatibilityService, runtime.resolveCompatibilityBean?.("SettingPlugin")].filter(Boolean);
                 for (const consumer of consumers) consumer.attachFeatureCoverButtonAdapter?.(coverButtons);
                 coverScope.addCleanup(() => {
                     for (const consumer of consumers) consumer.detachFeatureCoverButtonAdapter?.(coverButtons);
@@ -104,9 +101,8 @@ export default defineFeature({
                 runtime.diagnostics.recordError({ source: "list-feature", featureId: "list", contributionId: "detail.javbus-images", message: error instanceof Error ? error.message : String(error) });
             }
         }
-        if (runtime.enabledContributions.includes("list.core")) {
-            if (!listCompatibilityAdapter || !listCompatibilityService) throw new Error("List feature requires the ListPagePlugin compatibility service");
-            const legacyPlugin = listCompatibilityAdapter.ensureDelegate();
+        if (listCompatibilityService) {
+            const legacyPlugin = listCompatibilityService;
             const batchUi = new ListBatchUi({ dialog: deps[SERVICE.dialog], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics });
             const releaseBatchStyles = deps[PORT.style].register("jhs-list-batch-feature", LIST_BATCH_UI_STYLES);
             runtime.scope.addCleanup(() => { batchUi.dispose(); releaseBatchStyles(); });
@@ -145,7 +141,7 @@ export default defineFeature({
             try {
                 releaseStyle = deps[PORT.style].register("jhs-auto-page-feature", AUTO_PAGE_STYLES);
                 runtime.scope.addCleanup(releaseStyle);
-                const list = runtime.resolveCompatibilityBean?.("ListPagePlugin")?.getAutoPageCapability?.() ?? null;
+                const list = listCompatibilityService?.getAutoPageCapability() ?? null;
                 autoPageController = new AutoPageController({
                     hostAdapter: deps[PORT.host], http: deps[SERVICE.http], settings: deps[SERVICE.settings],
                     list, ui: deps[SERVICE.domUi], eventBus: deps[SERVICE.events], scope: runtime.scope,
@@ -189,8 +185,7 @@ export default defineFeature({
             }
         }
         if (runtime.enabledContributions.includes("list.actions") && listCompatibilityService) {
-            const listAdapter = listCompatibilityAdapter;
-            const list = listCompatibilityAdapter.ensureDelegate();
+            const list = listCompatibilityService;
             const scope = new LifecycleScope("feature:list:actions");
             runtime.scope.addCleanup(() => scope.dispose());
             const blacklistEnabled = runtime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin");
@@ -202,8 +197,8 @@ export default defineFeature({
             listActionsController = new ListActionsController({
                 hostAdapter: deps[PORT.host], list, batchController: controller?.batchController, settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
                 ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], scope, sortController,
-                blacklist, newVideo: runtime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin") ? runtime.resolveCompatibilityBean?.("NewVideoPlugin") : null,
-                diagnostics: runtime.diagnostics, openNewVideo: () => runtime.executeCommand("new-video.open"),
+                blacklist, diagnostics: runtime.diagnostics,
+                openNewVideo: runtime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin") ? () => runtime.executeCommand("new-video.open") : undefined,
             });
             try {
                 if (await listActionsController.start()) {

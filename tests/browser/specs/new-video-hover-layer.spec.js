@@ -23,9 +23,10 @@ async function boot(page, context) {
     await expect(page.locator(".newVideoToolBox")).toBeVisible();
     await page.locator(".layui-layer-close").click();
     await expect(page.locator(".layui-layer")).toHaveCount(0);
-    await page.evaluate(()=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
-        window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode","list");
+    await page.evaluate(async ()=>{
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin=window.__jhsBrowserDiagnostics.features.newVideo;
+        window.__jhsBrowserDiagnostics.detailServices.storage.setLocal("jhs_newVideoViewMode","list");
         plugin.reloadNewVideoWorkspaceData=async function(){
             this.nvFlatListCache=[{carNum:"ABC-001",title:"Hover fixture",actressName:"Fixture",coverUrl:"https://images.example.test/cover.svg",flags:{},decisionState:"pending"}];
             this.nvJavDbUrl="https://javdb.com";

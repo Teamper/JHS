@@ -10,15 +10,15 @@ for (const url of ["https://javdb.com/v/test-id", "https://www.javbus.com/ABC-12
     await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]))).toBe(true);
     await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeContributions)).toContain("detail.reviews");
     await page.evaluate(async () => {
-      const plugin = window.unsafeWindow.pluginManager.getBean("ReviewPlugin");
+      const services = window.__jhsBrowserDiagnostics.detailServices;
       window.reviewRegressionRequests = 0;
-      plugin.getRuntimeService("movie").resolve = async () => ({ movieId: "test-id" });
-      plugin.getRuntimeService("review").list = async () => { window.reviewRegressionRequests++; return [{ author: "fixture", content: "review body", createdAt: "2026-09-08" }]; };
-      await plugin.getRuntimeService("settings").set("enableLoadReview", "yes");
+      services.movie.resolve = async () => ({ movieId: "test-id" });
+      services.review.list = async () => { window.reviewRegressionRequests++; return [{ author: "fixture", content: "review body", createdAt: "2026-09-08" }]; };
+      await services.settings.set("enableLoadReview", "yes");
     });
     await expect(page.locator(".jhs-review-item")).toHaveCount(1);
     await expect(page.locator(".jhs-review-toggle")).toHaveAttribute("aria-expanded", "true");
-    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ReviewPlugin").getRuntimeService("settings").set("enableLoadReview", "no"));
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.detailServices.settings.set("enableLoadReview", "no"));
     await expect(page.locator(".jhs-review-toggle")).toHaveAttribute("aria-expanded", "false");
     await page.locator(".jhs-review-load-more").evaluate(button => button.click());
     expect(await page.evaluate(() => window.reviewRegressionRequests)).toBe(1);

@@ -9,7 +9,7 @@ import { tryBeginBatchRun, endBatchRun } from "../src/features/list/batch-coordi
 function createHarness({
     url = "https://javdb.com/",
     html = '<div class="main-tabs"></div><div class="movie-list"><div class="item" data-jhs-flags="{}" data-jhs-visibility="{}"></div></div>',
-    list = {}, batchController = null, blacklist = null, newVideo = null, openNewVideo = null, records = [], settingValues = {}, sortController = null,
+    list = {}, batchController = null, blacklist = null, openNewVideo = null, records = [], settingValues = {}, sortController = null,
 } = {}) {
     const dom = new JSDOM(html, { url }), $ = jqueryFactory(dom.window), scope = new LifecycleScope("test:list-actions");
     const settings = Object.assign(new dom.window.EventTarget(), {
@@ -32,7 +32,7 @@ function createHarness({
             isOwnedRankingPage: () => false, isExternalFc2CatalogPage: () => false, isFc2ListPage: () => false,
             activeSortMethod: () => "default", sortItems: vi.fn(async () => {}), selectSortMethod: vi.fn(async () => {}),
         },
-        blacklist, newVideo, openNewVideo, diagnostics, document: dom.window.document, window: dom.window,
+        blacklist, openNewVideo, diagnostics, document: dom.window.document, window: dom.window,
     });
     return { dom, $, scope, settings, notifications, diagnostics, controller };
 }
@@ -74,7 +74,7 @@ describe("native list actions controller", () => {
     it("mounts capability-dependent actions and routes batch operations through List Feature", async () => {
         harness = createHarness({
             blacklist: { addBlacklist: vi.fn(), filterAllVideo: vi.fn(), openBlacklistDialog: vi.fn() },
-            newVideo: { openDialog: vi.fn() },
+            openNewVideo: vi.fn(),
         });
         await harness.controller.start();
         expect(harness.$("#waitCheckBtn").length).toBe(1);
@@ -108,13 +108,12 @@ describe("native list actions controller", () => {
     });
 
     it("opens new-video through the on-demand Feature command when injected", async () => {
-        const openNewVideo = vi.fn(async () => {}), legacyOpen = vi.fn();
-        harness = createHarness({ openNewVideo, newVideo: { openDialog: legacyOpen } });
+        const openNewVideo = vi.fn(async () => {});
+        harness = createHarness({ openNewVideo });
         await harness.controller.start();
 
         harness.$("#newVideoBtn").trigger("click");
         await vi.waitFor(() => expect(openNewVideo).toHaveBeenCalledOnce());
-        expect(legacyOpen).not.toHaveBeenCalled();
     });
 
     it("leaves only list-independent controls when optional capabilities are unavailable", async () => {

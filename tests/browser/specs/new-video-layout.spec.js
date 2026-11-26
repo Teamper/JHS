@@ -10,8 +10,9 @@ for (const scenario of [
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page, { disabledPlugins: ["TaskPlugin"], settingOverrides: { enableLoadReview: "no" } });
-    await page.waitForFunction(() => window.unsafeWindow.pluginManager.getBean("NewVideoPlugin")?.featureNewVideoWorkspaceController);
+    await page.waitForFunction(() => window.__jhsBrowserDiagnostics.features.newVideo?.featureNewVideoWorkspaceController);
     await page.evaluate(async count => {
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
         const storage = window.storageManager;
         await storage.forage.setItem(storage.favorite_actresses_key, [{ starId: "fixture", name: "Fixture", actressType: "censored",
             newVideoList: Array.from({ length: count }, (_, index) => ({
@@ -20,14 +21,15 @@ for (const scenario of [
             })),
         }]);
         storage._invalidateCache(storage.favorite_actresses_key);
-        window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode", "list");
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+        window.__jhsBrowserDiagnostics.detailServices.storage.setLocal("jhs_newVideoViewMode", "list");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.nvPageSize = 3;
         await plugin.openDialog();
     }, scenario.count);
     await expect(page.locator("#nv-grid .nv-card")).toHaveCount(3);
     const result = await page.evaluate(async ({ removed, target, back }) => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         const animate = window.jQuery.fn.animate;
         let signalRemovalStarted;
         const removalStarted = new Promise(resolve => { signalRemovalStarted = resolve; });
@@ -78,7 +80,7 @@ test("browsing new video fades only that card and fills the page without losing 
         settingOverrides:{enableLoadReview:"no",autoRemoveNewVideoMarkAfterBrowse:"yes"}
     });
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
-    await page.waitForFunction(()=>window.unsafeWindow.pluginManager.getBean("NewVideoPlugin")?.featureNewVideoWorkspaceController);
+    await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.features.newVideo?.featureNewVideoWorkspaceController);
     await page.evaluate(async()=>{
         const storage=window.storageManager;
         await storage.forage.setItem(storage.favorite_actresses_key,[{
@@ -90,8 +92,8 @@ test("browsing new video fades only that card and fills the page without losing 
             }))
         }]);
         storage._invalidateCache(storage.favorite_actresses_key);
-        window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").getRuntimeService("storage").setLocal("jhs_newVideoViewMode","list");
-        await window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").openDialog();
+        window.__jhsBrowserDiagnostics.detailServices.storage.setLocal("jhs_newVideoViewMode","list");
+        await window.__jhsBrowserDiagnostics.executeCommand("new-video.open");
     });
     await expect(page.locator("#nv-grid .nv-card")).toHaveCount(60);
     await page.locator("#nv-pagination-bar").getByRole("button",{name:"下一页",exact:true}).click();
@@ -129,7 +131,7 @@ test("browsing new video fades only that card and fills the page without losing 
         grid:window.nvRetainedNodes.grid===document.querySelector("#nv-grid"),
         card:window.nvRetainedNodes.card===document.querySelector('.nv-card[data-car="ABC-091"]'),
         image:window.nvRetainedNodes.image===document.querySelector('.nv-card[data-car="ABC-091"] img'),
-        page:window.unsafeWindow.pluginManager.getBean("NewVideoPlugin").nvCurrentPage,
+        page:window.__jhsBrowserDiagnostics.features.newVideo.nvCurrentPage,
         fades:window.nvBrowseFades
     }))).toEqual({grid:true,card:true,image:true,page:2,fades:1});
 });
@@ -140,8 +142,9 @@ test("new video pagination remains reachable without scrolling through sixty car
     await page.goto("https://javdb.com/");
     await injectUserscriptRuntime(page,{settingOverrides:{enableLoadReview:"no"}});
     await page.waitForFunction(()=>window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
-    await page.evaluate(()=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+    await page.evaluate(async ()=>{
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin=window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.getNewVideoFlatList=async()=>Array.from({length:75},(_,i)=>({carNum:`ABC-${i+100}`,actressName:"Fixture",publishTime:"2026-09-09",title:"Fixture title"}));
         plugin.hydrateVisibleCovers=async()=>{};
     });
@@ -163,8 +166,9 @@ test("new video pagination remains reachable without scrolling through sixty car
     await expect(page.locator("#nv-pagination-bar")).not.toBeVisible();
     await page.locator("#nvViewList").click();
     await expect(page.locator("#nv-pagination-bar")).toHaveCount(1);
-    await page.evaluate(()=>{
-        const plugin=window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+    await page.evaluate(async ()=>{
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin=window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.featureNewVideoWorkspaceController.state.getNewVideoDecisions=()=>new Promise(resolve=>window.finishNvReload=()=>resolve({}));
     });
     if (!await page.locator("#reLoad").isVisible()) await page.locator("#nvWorkspaceMore").click();
@@ -211,8 +215,9 @@ test("new-video batch UI delegates state writes to the Discovery Feature", async
     await page.locator("#newVideoBtn").click();
     await expect(page.locator(".newVideoToolBox")).toBeVisible();
     await page.locator("#nvViewList").click();
-    await page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+    await page.evaluate(async () => {
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         const controller = plugin.featureNewVideoBatchController;
         if (!controller) throw new Error("Discovery Feature batch controller was not injected");
         const originalRun = controller.run.bind(controller);
@@ -256,12 +261,14 @@ test("new-video workspace snapshot uses its injected Discovery services", async 
     });
     await page.locator("#newVideoBtn").click();
     await expect(page.locator(".newVideoToolBox")).toBeVisible();
-    await expect.poll(() => page.evaluate(() => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+    await expect.poll(() => page.evaluate(async () => {
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         return Boolean(plugin.featureNewVideoWorkspaceController && plugin.nvJavDbUrl);
     })).toBe(true);
     const snapshot = await page.evaluate(async () => {
-        const plugin = window.unsafeWindow.pluginManager.getBean("NewVideoPlugin");
+            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
+        const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         const [workspace, pending] = await Promise.all([
             plugin.featureNewVideoWorkspaceController.loadWorkspace(),
             plugin.featureNewVideoWorkspaceController.getPendingSummary(),

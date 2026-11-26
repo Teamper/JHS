@@ -2,18 +2,9 @@
 
 import { defineContribution } from "../../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
-import { ListPagePluginAdapter } from "../../compat/list-page-adapter.js";
-import { RelatedCompatibilityBean, ReviewCompatibilityBean } from "../../compat/detail-panel-beans.js";
-import { ResponsiveShellBridge } from "../../compat/responsive-shell-bridge.js";
-import { RelatedPanel } from "../../ui/detail/related-panel.js";
-import { ReviewPanel } from "../../ui/detail/review-panel.js";
 import { BlacklistCompatibilityBean } from "../../compat/blacklist-compatibility-bean.js";
-import { HistoryCompatibilityBean } from "../../compat/history-compatibility-bean.js";
-import { SettingsCompatibilityBean } from "../../compat/settings-compatibility-bean.js";
-import { SettingPlugin } from "../settings/settings-controller.js";
 
 import { TaskCompatibilityBean } from "../../compat/task-compatibility-bean.js";
-import { NewVideoCompatibilityBean } from "../../compat/new-video-compatibility-bean.js";
 
 /** @param {string} id @param {string} featureId @param {any} plugin @param {string[]} sites @param {Record<string, number>} order @param {symbol[]} [requires] @param {{legacyPluginId?: string, executionOwner?: string, lifecycleOwner?: string, runtimeCapabilities?: Record<string, any>, routes?: string[], surfaces?: string[]}} [options] */
 const manifest = (id, featureId, plugin, sites, order, requires = [], options = {}) => {
@@ -96,15 +87,8 @@ export function registerSiteCompatibility(compatibilityBeans, featureRuntime, si
         compatibilityBeans.registerCompatibilityBean(name, bean);
         return () => compatibilityBeans.unregisterCompatibilityBean(name, bean);
     });
-    register("MobileBottomBarPlugin", new ResponsiveShellBridge());
-    if (featureRuntime.isContributionEnabled("list", "list.core", "ListPagePlugin")) {
-        register("ListPagePlugin", new ListPagePluginAdapter());
-    }
     if (featureRuntime.isContributionEnabled("scheduler", "discovery.scheduler", "TaskPlugin")) {
         register("TaskPlugin", new TaskCompatibilityBean());
-    }
-    if (featureRuntime.isContributionEnabled("library", "library.history", "HistoryPlugin")) {
-        register("HistoryPlugin", new HistoryCompatibilityBean((command, ...args) => featureRuntime.commands.execute(command, ...args)));
     }
     if (featureRuntime.route === "list" && featureRuntime.isContributionEnabled("library", "library.blacklist", "BlacklistPlugin")) {
         register("BlacklistPlugin", new BlacklistCompatibilityBean({
@@ -117,47 +101,7 @@ export function registerSiteCompatibility(compatibilityBeans, featureRuntime, si
             },
         }));
     }
-    if (featureRuntime.isContributionEnabled("settings-entry", "settings.core", "SettingPlugin")) {
-        register("SettingPlugin", new SettingsCompatibilityBean(
-            (options) => new SettingPlugin(options),
-        ));
-    }
-    if (featureRuntime.isContributionEnabled("new-video", "discovery.new-video", "NewVideoPlugin")) {
-        register("NewVideoPlugin", new NewVideoCompatibilityBean(
-            (command, ...args) => featureRuntime.commands.execute(command, ...args),
-            (options) => import("../discovery/new-video-workspace-service.js").then(({ NewVideoWorkspaceService }) => new NewVideoWorkspaceService(/** @type {ConstructorParameters<typeof NewVideoWorkspaceService>[0]} */ (options))),
-        ));
-    }
     compatibilityBeans.setCatalogDescriptors(compatibilityContributionCatalog
         .filter((item) => item.sites.includes(site))
         .map((item) => ({ name: item.legacyPluginId, disableable: featureRuntime.isFeatureDisableable(item.featureId) })));
-    if (featureRuntime.isContributionEnabled("detail", "detail.reviews", "ReviewPlugin")) {
-        const dependencies = featureRuntime.resolveDeclaredDependencies([PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]);
-        const ui = featureRuntime.resolveDeclaredDependencies([SERVICE.domUi])[SERVICE.domUi];
-        const support = featureRuntime.resolveDeclaredDependencies([SERVICE.clipboard, SERVICE.notifications, SERVICE.diagnostics]);
-        register("ReviewPlugin", new ReviewCompatibilityBean({
-            host: dependencies[PORT.host], review: dependencies[SERVICE.review], movie: dependencies[SERVICE.movie],
-            settings: dependencies[SERVICE.settings], storage: dependencies[SERVICE.storage],
-            getScope: () => featureRuntime.getScope("detail"),
-            showPanel: (movieId, target, options) => new ReviewPanel({
-                review: dependencies[SERVICE.review], settings: dependencies[SERVICE.settings], storage: dependencies[SERVICE.storage],
-                scope: () => featureRuntime.getScope("detail"), jquery: ui.jquery, ui,
-                document: globalThis.document, window: globalThis.window,
-                clipboard: support[SERVICE.clipboard], notifications: support[SERVICE.notifications], diagnostics: support[SERVICE.diagnostics],
-            }).show(movieId, target, options),
-        }));
-    }
-    if (featureRuntime.isContributionEnabled("detail", "detail.related", "RelatedPlugin")) {
-        const dependencies = featureRuntime.resolveDeclaredDependencies([PORT.host, SERVICE.related, SERVICE.settings, SERVICE.notifications, SERVICE.diagnostics]);
-        const ui = featureRuntime.resolveDeclaredDependencies([SERVICE.domUi])[SERVICE.domUi];
-        register("RelatedPlugin", new RelatedCompatibilityBean({
-            host: dependencies[PORT.host], related: dependencies[SERVICE.related], settings: dependencies[SERVICE.settings],
-            getScope: () => featureRuntime.getScope("detail"), jquery: ui.jquery,
-            showPanel: (target, movieId, options) => new RelatedPanel({
-                related: dependencies[SERVICE.related], settings: dependencies[SERVICE.settings],
-                scope: () => featureRuntime.getScope("detail"), jquery: ui.jquery, formatDate: ui.formatDate,
-                document: globalThis.document, notifications: dependencies[SERVICE.notifications], diagnostics: dependencies[SERVICE.diagnostics],
-            }).show(target, movieId, options),
-        }));
-    }
 }

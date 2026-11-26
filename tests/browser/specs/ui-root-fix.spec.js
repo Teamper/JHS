@@ -41,7 +41,7 @@ for(const theme of ["light","dark"]){
     await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0);
   });
   test(`rich new works and actor editing ${theme}`,async({page,context},info)=>{
-    await boot(page,context,theme); await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean('NewVideoPlugin').openDialog());
+    await boot(page,context,theme); await page.evaluate(()=>window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));
     const actor=page.locator('.actress-card').first(); await expect(actor).toBeVisible(); const before=await actor.boundingBox();
     if(page.viewportSize().width>=1280)expect(before.width).toBeLessThan(500);
     const alias=await actor.locator('.actress-card-allname').boundingBox(); expect(alias.x+alias.width).toBeLessThanOrEqual(before.x+before.width-12);
@@ -57,7 +57,7 @@ for(const theme of ["light","dark"]){
     await page.keyboard.press('Escape'); await expect(page.locator('body > .jhs-owned-popover')).toHaveCount(0);
   });
   test(`rich records and uniform metrics ${theme}`,async({page,context},info)=>{
-    await boot(page,context,theme); await page.evaluate(()=>window.unsafeWindow.pluginManager.getBean('HistoryPlugin').openHistory());
+    await boot(page,context,theme); await page.evaluate(()=>window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
     const dialog=page.locator('.jhs-history-dialog'); await expect(dialog.locator('.tabulator-row')).not.toHaveCount(0);
     const selectAll=dialog.locator('.jhs-history-select-all');
     await expect(selectAll).toBeVisible();

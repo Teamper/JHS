@@ -127,7 +127,7 @@ test.describe("JavDB list actions Feature lifecycle", () => {
         preservedItemTag: card?.querySelector(".item-tag")?.textContent,
         preservedDates: [...(card?.querySelectorAll("date") ?? [])].map((node) => node.textContent),
         listFeatureActive: window.unsafeWindow.pluginManager.diagnostics.exportSnapshot().activeFeatures.includes("list"),
-        navigationAdapterActive: Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.delegate?.featureListNavigationAdapter),
+        navigationAdapterActive: Boolean(window.unsafeWindow.pluginManager.getBean("ListPagePlugin")?.featureListNavigationAdapter),
       };
     });
     expect(initial).toEqual({
@@ -308,8 +308,8 @@ test.describe("JavDB list actions Feature lifecycle", () => {
       return {
         cardProcessed: item?.dataset.jhsProcessed === "true",
         coverTools: item?.querySelectorAll(".jhs-cover-tools").length ?? 0,
-        adapterAttached: Boolean(plugin?.delegate?.featureCoverButtonAdapter),
-        addedItemsFeatureAttached: typeof plugin?.delegate?.featureListAddedItemsAdapter?.processAddedItems === "function",
+        adapterAttached: Boolean(plugin?.featureCoverButtonAdapter),
+        addedItemsFeatureAttached: typeof plugin?.featureListAddedItemsAdapter?.processAddedItems === "function",
       };
     });
     expect(dynamicEvidence).toEqual({ cardProcessed: true, coverTools: 1, adapterAttached: true, addedItemsFeatureAttached: true });

@@ -13,8 +13,7 @@ export default defineFeature({
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         if (!runtime.enabledContributions.includes("external-bridge.translation")) return { activeContributions: [] };
         try {
-            const listAdapter = runtime.route === "list" ? runtime.resolveCompatibilityBean?.("ListPagePlugin") : null;
-            const legacyList = listAdapter?.ensureDelegate?.() ?? listAdapter;
+            const legacyList = runtime.route === "list" ? runtime.resolveCompatibilityBean?.("ListPagePlugin") : null;
             /** @type {{attachFeatureListTranslationAdapter: (adapter: any) => void, detachFeatureListTranslationAdapter: (adapter: any) => void} | null} */
             const listTranslation = legacyList ? Object.freeze({
                 attachFeatureListTranslationAdapter: (adapter) => legacyList.attachFeatureListTranslationAdapter?.(adapter),

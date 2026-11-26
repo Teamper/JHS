@@ -23,33 +23,28 @@ export const newVideoFeature = defineFeature({
             { NewVideoBatchController },
             { NewVideoWorkspaceController },
             { NewVideoScanController },
+            { NewVideoWorkspaceService },
         ] = await Promise.all([
             import("./new-video-lifecycle-controller.js"),
             import("./new-video-batch-controller.js"),
             import("./new-video-workspace-controller.js"),
             import("./new-video-scan-controller.js"),
+            import("./new-video-workspace-service.js"),
         ]);
         const sourceHealth = new ActorSourceHealth(deps[SERVICE.storage]);
-        const compatibilityBean = runtime.resolveCompatibilityBean("NewVideoPlugin");
-        /** @type {any} */ let plugin = null;
-        if (compatibilityBean?.createFeatureService && compatibilityBean?.connect) {
-            plugin = await compatibilityBean.createFeatureService({
-                runtimeServices: {
-                    sourceHealth, dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], actressInfo: deps[SERVICE.actressInfo],
-                    movie: deps[SERVICE.movie], state: deps[SERVICE.state], settings: deps[SERVICE.settings], profile: deps[SERVICE.profile],
-                    scope: () => runtime.scope,
-                },
-                resolveDependency: (/** @type {string} */ name) => runtime.resolveCompatibilityBean(name),
-                jquery: deps[SERVICE.domUi].jquery, legacyStorage: deps[SERVICE.legacyStorage],
-                utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
-                logger: deps[SERVICE.clog], events: deps[SERVICE.events],
-                createImageHoverPreview: (/** @type {Record<string, any>} */ config) => deps[SERVICE.domUi].createImageHoverPreview(config),
-                document, window,
-            });
-            compatibilityBean.connect(plugin);
-            runtime.scope.addCleanup(() => compatibilityBean.disconnect(plugin));
-        }
-        if (!plugin) throw new Error("New-video feature requires its workspace service or compatibility adapter");
+        const plugin = new NewVideoWorkspaceService({
+            runtimeServices: {
+                sourceHealth, dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], actressInfo: deps[SERVICE.actressInfo],
+                movie: deps[SERVICE.movie], state: deps[SERVICE.state], settings: deps[SERVICE.settings], profile: deps[SERVICE.profile],
+                scope: () => runtime.scope,
+            },
+            resolveDependency: (/** @type {string} */ name) => runtime.resolveCompatibilityBean(name),
+            jquery: deps[SERVICE.domUi].jquery, legacyStorage: deps[SERVICE.legacyStorage],
+            utilities: deps[SERVICE.legacyUtils], notifications: deps[SERVICE.notifications],
+            logger: deps[SERVICE.clog], events: deps[SERVICE.events],
+            createImageHoverPreview: (/** @type {Record<string, any>} */ config) => deps[SERVICE.domUi].createImageHoverPreview(config),
+            document, window,
+        });
         const batchController = new NewVideoBatchController({ state: deps[SERVICE.state] });
         const workspaceController = new NewVideoWorkspaceController({
             state: deps[SERVICE.state], settings: deps[SERVICE.settings], movie: deps[SERVICE.movie],
@@ -104,7 +99,10 @@ export const newVideoFeature = defineFeature({
             }),
         });
         if (!controller.start()) return { activeContributions: [] };
-        return { activeContributions: [id], commands: { "new-video.open": () => plugin.openDialog?.() } };
+        runtime.inspect?.("newVideo", plugin);
+        const release = runtime.registerCompatibilityBean?.("NewVideoPlugin", plugin);
+        if (release) runtime.scope.addCleanup(release);
+        return { activeContributions: [id], commands: { "new-video.open": () => plugin.openDialog() } };
     },
 });
 
