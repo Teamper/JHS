@@ -23,6 +23,7 @@ export class TaskSchedulerController {
 
     /** Bind list-page listeners once and start the first eligible batch. */
     start() {
+        if (this.document.documentElement?.getAttribute("data-jhs-runtime") === "extension") return;
         if (this.started || this.disposed || this.scope.disposed || !this.isListPage()) return;
         this.scope.assertActive();
         this.started = true;

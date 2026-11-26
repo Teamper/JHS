@@ -24,7 +24,7 @@ export const MEDIA_LIBRARY_STYLES = `
 @media(max-width:480px) { .jhs-media-connections fieldset { grid-template-columns:minmax(0,1fr); } }
 `;
 
-/** @param {{document: Document, scope: any, connections: any[], enabled: boolean, onSave: (connections: any[], enabled: boolean) => Promise<void>, onTest: (connection: any, scope: LifecycleScope) => Promise<any>, embedded?: boolean, bindDraft?: (editor: any) => void}} options */
+/** @param {{document: Document, scope: any, connections: any[], enabled: boolean, onSave: (connections: any[], enabled: boolean) => Promise<void>, onTest: (connection: any, scope: LifecycleScope) => Promise<any>, embedded?: boolean, requireHttps?: boolean, bindDraft?: (editor: any) => void}} options */
 export function createMediaConnections(options) {
     const { document, scope } = options;
     const root = document.createElement("div");
@@ -72,7 +72,10 @@ export function createMediaConnections(options) {
             row.append(label);
             return input;
         };
-        const name = field("名称", connection.name || ""), address = field("服务器地址（含代理子路径）", connection.address || ""), apiKey = field("API Key", connection.apiKey || "", "password"), userId = field("用户 ID 范围（可选）", connection.userId || "");
+        const name = field("名称", connection.name || "");
+        const address = field(options.requireHttps ? "服务器地址（HTTPS，可含代理子路径）" : "服务器地址（含代理子路径）", connection.address || "");
+        if (options.requireHttps) address.inputMode = "url";
+        const apiKey = field("API Key", connection.apiKey || "", "password"), userId = field("用户 ID 范围（可选）", connection.userId || "");
         rowScope.listen(name, "input", () => { legend.textContent = name.value.trim() || "新服务器"; summary.textContent = legend.textContent; });
         const typeHost = document.createElement("div");
         typeHost.className = "jhs-media-actions";
@@ -106,6 +109,7 @@ export function createMediaConnections(options) {
             result.textContent = mediaConnectionErrorLabel(error);
             result.classList.add("jhs-media-result--error");
             if (error instanceof MediaConnectionValidationError) {
+                editor.open = true;
                 const input = fields[error.field];
                 input?.closest("label")?.after(result);
                 input?.setAttribute("aria-invalid", "true");
@@ -130,7 +134,11 @@ export function createMediaConnections(options) {
                 input.removeAttribute("aria-invalid");
                 input.removeAttribute("aria-describedby");
             }
-            return normalizeMediaConnection(read());
+            const connection = normalizeMediaConnection(read());
+            if (options.requireHttps && !connection.address.startsWith("https://")) {
+                throw new MediaConnectionValidationError("address", "服务器地址必须使用 HTTPS");
+            }
+            return connection;
         };
         let testing = false;
         const test = button(footer, "测试连接", async () => {

@@ -42,7 +42,7 @@ test('card long screenshot mounts the real Viewer and releases its temporary hos
     const capability=window.unsafeWindow.pluginManager.getBean('CoverButtonPlugin');
     if(!capability)throw new Error('cover capability missing');
     const screenshot=capability.screenshot;
-    screenshot.resolve=async()=>({url:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="900"/%3E'});
+    screenshot.resolvePreview=async()=>({url:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="900"/%3E',match:'confirmed'});
   });
   const trigger=page.locator('.screenSvg').first();await trigger.click();
   await expect(page.locator('.viewer-container.viewer-in')).toBeVisible();await expect(page.locator('.temporary-container')).toHaveCount(1);

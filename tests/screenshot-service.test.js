@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ScreenshotService } from "../src/services/screenshot-service.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 describe("ScreenshotService", () => {
     it("normalizes screenshot assets at the service boundary", () => {
@@ -215,4 +216,62 @@ it("retains bounded JavStore failure stages in provider diagnostics", async () =
     const service = new ScreenshotService({ get: () => null }, integrations, diagnostics);
     await expect(service.resolve({ carNum: "MSFH-021" }, { providerId: "javstore" })).rejects.toBe(error);
     expect(diagnostics.updateProvider).toHaveBeenCalledWith("javstore", expect.objectContaining({ ok: false, details }));
+});
+describe("first-open screenshot selection", () => {
+    const image = (name, providerId = "javstore", match = "confirmed", rank = 0) => ({
+        url: `https://${providerId}.net/${name}.jpg`, providerId, match, rank,
+    });
+    const serviceFor = (adapters) => new ScreenshotService({ getAvailable: async () => [] }, {
+        list: () => Object.keys(adapters).map(id => ({ id })),
+        getAdapter: id => adapters[id],
+    });
+    const movie = { carNum: "ABC-170", title: "探索用プレビュー" };
+    const settings = { screenshotProviders: [{ id: "javfree", enabled: true }] };
+
+    it("tries later images on the same source, then falls back to a confirmed backup before displaying a candidate", async () => {
+        const broken = image("broken"), later = image("later"), candidate = image("weak", "javstore", "candidate", 2);
+        const backup = image("backup", "javfree");
+        const getImageBatches = vi.fn(async function* () { yield [candidate, broken]; yield [later]; });
+        const other = vi.fn(async () => [backup]);
+        const service = serviceFor({ javstore: { getImages: vi.fn(), getImageBatches }, javfree: { getImages: other } });
+        const loadImage = vi.fn(async url => url === backup.url ? { src: url } : null);
+        await expect(service.resolvePreview(movie, { settings, loadImage })).resolves.toMatchObject({
+            url: backup.url, providerId: "javfree", match: "confirmed",
+        });
+        expect(loadImage.mock.calls.map(([url]) => url)).toEqual([broken.url, later.url, backup.url]);
+        expect(getImageBatches).toHaveBeenCalledOnce();
+    });
+
+    it("tries candidates by rank after one title query and keeps manual mode on its selected source", async () => {
+        const first = image("first", "javstore", "candidate", 2), best = image("best", "javstore", "candidate", 3);
+        const getImageBatches = vi.fn(async function* (_movie, { preview }) {
+            if (preview.titleQuery) yield [best];
+            else yield [first];
+        });
+        const backup = vi.fn();
+        const service = serviceFor({ javstore: { getImages: vi.fn(), getImageBatches }, javfree: { getImages: backup } });
+        const loadImage = vi.fn(async url => url === best.url ? null : { src: url });
+        await expect(service.resolvePreview(movie, { providerId: "javstore", settings, loadImage })).resolves.toEqual({
+            url: first.url, providerId: "javstore", match: "candidate", image: { src: first.url },
+        });
+        expect(getImageBatches.mock.calls.map(([, { preview }]) => Boolean(preview.titleQuery))).toEqual([false, true]);
+        expect(loadImage.mock.calls).toEqual([[best.url], [first.url]]);
+        expect(backup).not.toHaveBeenCalled();
+    });
+
+    it("falls through a source timeout and ignores a loaded image after the preview closes", async () => {
+        const scope = new LifecycleScope("closed-preview");
+        const backup = image("backup", "javfree");
+        const failed = vi.fn(async () => { throw Object.assign(new Error("timeout"), { code: "TIMEOUT" }); });
+        const service = serviceFor({ javstore: { getImages: failed }, javfree: { getImages: async () => [backup] } });
+        let finish;
+        const loadImage = vi.fn(() => new Promise(resolve => { finish = resolve; }));
+        const request = service.resolvePreview(movie, { settings, scope, loadImage });
+        await vi.waitFor(() => expect(loadImage).toHaveBeenCalledWith(backup.url));
+        const closed = expect(request).rejects.toMatchObject({ name: "AbortError" });
+        scope.dispose();
+        finish({ src: backup.url });
+        await closed;
+        expect(failed).toHaveBeenCalledOnce();
+    });
 });

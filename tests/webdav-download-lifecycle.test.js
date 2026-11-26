@@ -47,7 +47,7 @@ describe.each([
             const headers = { Accept: "application/octet-stream", ...(mode === "sync" ? { "Cache-Control": "no-cache" } : {}) };
             expect(options).toMatchObject({ method: "GET", redirect: "manual", timeout: 10_000 });
             if (index < 2) {
-                expect(options.headers).toEqual({ Authorization: `Basic ${btoa("user:synthetic")}`, Depth: "1", ...headers });
+                expect(options.headers).toEqual({ Authorization: `Basic ${btoa("user:synthetic")}`, ...headers });
                 expect(options.anonymous).not.toBe(true);
             } else {
                 expect(options.headers).toEqual(headers);

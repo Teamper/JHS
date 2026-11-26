@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'">
+<script>
+  const send = (kind, text) => jhsLegacy.postMessage(JSON.stringify({ kind, text }));
+  const receiptPrefix = 'jhs_offline_receipt_v1:';
+  const readDatabase = async () => {
+    const sources = await indexedDB.databases();
+    if (!sources.some(entry => entry.name === 'JAV-JHS')) return [];
+    const db = await new Promise((resolve, reject) => {
+      const open = indexedDB.open('JAV-JHS');
+      open.onupgradeneeded = () => open.transaction.abort();
+      open.onerror = () => reject(open.error);
+      open.onblocked = () => reject(new Error('Database is busy'));
+      open.onsuccess = () => resolve(open.result);
+    });
+    if (!db.objectStoreNames.contains('appData')) throw new Error('Database store is missing');
+    const retained = new Set(['data_version', 'car_list', 'setting', 'favorite_actresses', 'new_video_decisions',
+      'filter_keyword_title', 'filter_keyword_review', 'blacklist', 'blacklist_car_list', 'highlighted_tags',
+      'activity_log', 'offline_history', 'personal_ratings', 'snapshots', 'data_health_warnings',
+      'mutation_journal', 'mutation_journal_conflicts', 'jhs_webdav_sync_state_v1', 'jhs_webdav_sync_pending_v1',
+      'jhs_webdav_sync_journal_v1', 'jhs_webdav_auto_backup_state_v1']);
+    const entries = await new Promise((resolve, reject) => {
+      const transaction = db.transaction('appData', 'readonly');
+      const cursor = transaction.objectStore('appData').openCursor();
+      const entries = [];
+      cursor.onsuccess = () => {
+        const row = cursor.result;
+        if (!row) return;
+        if (retained.has(row.key) || (typeof row.key === 'string' && row.key.startsWith(receiptPrefix))) {
+          entries.push([row.key, row.value]);
+        }
+        row.continue();
+      };
+      transaction.oncomplete = () => resolve(entries);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    db.close();
+    return entries;
+  };
+  (async () => {
+    const entries = new Map(await readDatabase());
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(receiptPrefix)) entries.set(key, localStorage.getItem(key));
+    }
+    if (!entries.size) { send('empty'); return; }
+    const json = JSON.stringify({ schema: 1, store: 'JAV-JHS/appData', entries: [...entries] });
+    for (let offset = 0; offset < json.length; offset += 65536) send('part', json.slice(offset, offset + 65536));
+    send('complete');
+  })().catch(() => send('error'));
+</script>

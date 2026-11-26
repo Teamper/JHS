@@ -75,22 +75,33 @@ export class Pan123CredentialService {
 
     async syncTokenOnce() {
         const generation = ++this.syncGeneration, source = this.getTokenFrom123Pan();
+        await this.persistToken(source, generation, () => this.getTokenFrom123Pan());
+    }
+
+    /** Save the authorization captured by an isolated in-app sign-in window. */
+    async acceptLoginToken(/** @type {string} */ token) {
+        const source = { token, source: "app-login" };
+        await this.persistToken(source, ++this.syncGeneration, () => source);
+    }
+
+    /** @param {{token: string, source: string}} source @param {number} generation @param {() => {token: string, source: string}} readLatest */
+    async persistToken(source, generation, readLatest) {
         if (!source.token) return;
         const secretKey = `${this.tokenKey}_secret`;
         const storedSecret = this.storage.getValue(secretKey, "");
         const secret = typeof storedSecret === "string" && storedSecret
             ? storedSecret
             : this.crypto.randomUUID?.() || `${Date.now()}-${this.crypto.getRandomValues(new Uint32Array(4)).join("-")}`;
-        if (typeof storedSecret !== "string" || !storedSecret) this.storage.setValue(secretKey, secret);
+        if (typeof storedSecret !== "string" || !storedSecret) await this.storage.setValue(secretKey, secret);
         const storedValue = this.storage.getValue(this.tokenKey, ""), current = await this.getStoredToken();
         const metadata = /** @type {{source?: string} | null} */ (this.storage.getValue(this.tokenMetaKey, null));
         if (current === source.token && typeof storedValue === "string" && storedValue.startsWith("AES:") && metadata?.source === source.source) return;
         const encrypted = "AES:" + await encryptData(source.token, secret);
-        const latest = this.getTokenFrom123Pan();
+        const latest = readLatest();
         if (generation !== this.syncGeneration || latest.token !== source.token || latest.source !== source.source
             || this.storage.getValue(this.tokenKey, "") !== storedValue || this.storage.getValue(secretKey, "") !== secret) return;
-        this.storage.setValue(this.tokenKey, encrypted);
-        this.storage.setValue(this.tokenMetaKey, { source: source.source, updatedAt: new Date().toISOString() });
+        await this.storage.setValue(this.tokenKey, encrypted);
+        await this.storage.setValue(this.tokenMetaKey, { source: source.source, updatedAt: new Date().toISOString() });
         if (current !== source.token) this.notifications.info?.(`123 云盘授权已更新：${source.source}`);
     }
 

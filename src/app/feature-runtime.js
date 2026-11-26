@@ -10,7 +10,7 @@ import { ENHANCEMENT_FEATURES, ENHANCEMENT_METADATA } from "../core/enhancement-
 export { LEGACY_PLUGIN_CONTRIBUTION_MAP, migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 
 export class FeatureRuntime {
-    /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, backgroundWork?: any, disabled?: string[], site?: string, route?: string}} options */
+    /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, backgroundWork?: any, disabled?: string[], site?: string, route?: string, enabledFeatures?: readonly string[]}} options */
     constructor(options) {
         this.backgroundWork = options.backgroundWork;
         /** @type {Record<string, unknown> | undefined} */ this.inspection = undefined;
@@ -20,6 +20,7 @@ export class FeatureRuntime {
         this.commands = options.commands;
         this.diagnostics = options.diagnostics;
         this.disabled = new Set(migrateDisabledPlugins(options.disabled));
+        this.enabledFeatures = options.enabledFeatures ? new Set(options.enabledFeatures) : null;
 
         this.configurationSnapshot = /** @type {Record<string, any>} */ ({});
         this.started = false;
@@ -59,6 +60,7 @@ export class FeatureRuntime {
 
     /** @param {Record<string, any>} manifest */
     isEligible(manifest) {
+        if (this.enabledFeatures && !this.enabledFeatures.has(manifest.id)) return false;
         if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
 
         if (manifest.id === "media-library" && !parseBooleanSetting(this.configurationSnapshot.enableMediaLibrary, false)) return false;

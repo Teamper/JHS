@@ -1,5 +1,5 @@
 import { button, el } from "../../src/app/mobile/components.js";
-import { artwork } from "./fixtures.js";
+import { artwork } from "@jhs/fixtures";
 
 export function previewImage(work, kind = "cover", index = 0) {
     if (kind === "cover" && !work.cover) return el("span", "暂无封面", "missing-art");

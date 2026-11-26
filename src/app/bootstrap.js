@@ -105,17 +105,17 @@ async function resolveLocalOrigins(storageManager) {
     return { origins: [...origins], notice: null };
 }
 
-export async function bootstrapJhs() {
+export async function bootstrapJhs(options = {}) {
     try {
         if (detectSite(window.location).isJavDB) {
             const replacement = resolveLegacyJavDbUrl(window.location);
             if (replacement) return void window.location.replace(replacement);
         }
         const bootstrapStartedAt = performance.now(), diagnostics = globalThis.__jhsBrowserDiagnostics, markPhase = (phase) => diagnostics && ((diagnostics.bootstrapPhases ||= {})[phase] = performance.now() - bootstrapStartedAt);
-        const siteContext = initializeRuntimeConstants(window.location);
+        const siteContext = initializeRuntimeConstants(options.location ?? window.location);
         const vendors = getVendorRuntime();
-        const jhsEventBus = initializeEventBus();
-        const { utils, gmHttp, storageManager, stateService, storageMutationCoordinator } = createLegacyRuntime(jhsEventBus);
+        const jhsEventBus = options.eventBus ?? initializeEventBus();
+        const { utils, gmHttp, storageManager, stateService, storageMutationCoordinator } = options.legacyRuntime ?? createLegacyRuntime(jhsEventBus);
         await assertSupportedDataVersion(storageManager);
         markPhase("legacy-runtime");
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
@@ -131,7 +131,7 @@ export async function bootstrapJhs() {
         patchLayerRuntime(vendors.layer, utils);
         // 先退出整包 IIFE 调用栈，避免首个资源请求为整包同步生成调试源位置。
         await Promise.resolve();
-        importVendorStyles(utils);
+        if (!options.bundledStyles) importVendorStyles(utils);
         markPhase("pre-settings");
         const disabledMigration = await readDisabledPluginSettings(storageManager);
         const disabled = disabledMigration.migrated;
@@ -140,7 +140,8 @@ export async function bootstrapJhs() {
             getSubjectInfo: (options) => getBlacklistSubjectInfo({ ...options, jquery: vendors.$ }),
             parseFilterPage: (options) => parseBlacklistFilterPage({ ...options, jquery: vendors.$ }),
         });
-        const javdbHostAdapter = new JavDbHostAdapter(document, window.location, blacklistParser), javbusHostAdapter = new JavBusHostAdapter(document, window.location, blacklistParser);
+        const javdbHostAdapter = options.platform?.javdbHost ?? new JavDbHostAdapter(document, window.location, blacklistParser), javbusHostAdapter = new JavBusHostAdapter(document, window.location, blacklistParser);
+        if (options.platform?.javdbHost) javdbHostAdapter.blacklistParser = blacklistParser;
         const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
@@ -148,6 +149,7 @@ export async function bootstrapJhs() {
             gmListValues: globalThis.GM_listValues, gmListenValue: globalThis.GM_addValueChangeListener, gmUnlistenValue: globalThis.GM_removeValueChangeListener,
             legacyHttp: gmHttp, legacyStorage: storageManager, legacyUtils: utils, copyToClipboard: (label, value) => utils.copyToClipboard(label, value), eventBus: jhsEventBus, storageMutationCoordinator, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
+            platform: options.platform,
         });
         if (diagnostics && globalThis.unsafeWindow === globalThis) {
             const { movie, related, review, settings, storage } = context.services;
@@ -171,7 +173,7 @@ export async function bootstrapJhs() {
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings, credentialService: context.services.credential });
-        const credentialMigration = await context.services.settings.runExclusive(async () => {
+        const credentialMigration = options.remote ? { issues: [] } : await context.services.settings.runExclusive(async () => {
             await assertSupportedDataVersion(storageManager);
             markPhase("settings-load");
             const migration = await context.services.credential.migrateLegacy(context.services.settings, { deferCleanup: true });
@@ -181,9 +183,10 @@ export async function bootstrapJhs() {
             await context.services.credential.cleanupLegacyPageStorage(migration.cleanup?.pageKeys, context.services.settings);
             return migration;
         });
-        context.services.profile.start();
+        if (options.remote) await context.services.settings.load();
+        if (!options.headless) context.services.profile.start();
         markPhase("settings-migration");
-        const logger = initializeLoggerRuntime(context.rootScope, {
+        const logger = options.headless ? { clog: Object.assign(Object.create(console), { html: console.info }), show: { error: console.error, info: console.info, ok: console.info } } : initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
         });
         context.container.register(SERVICE.clog, logger.clog);
@@ -204,19 +207,20 @@ export async function bootstrapJhs() {
         markPhase("registry");
         // Compatibility infrastructure must be ready before any feature mounts.
         // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.
-        attachCompatibilityFacade({
+        if (!options.headless) attachCompatibilityFacade({
             pluginManager: context.registries.features.runtimeLookup, utils, gmHttp, storageManager, stateService, jhsEventBus,
             clog: logger.clog, show: logger.show, loading: logger.loading, showImageViewer: logger.showImageViewer,
         }, globalThis.unsafeWindow);
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";
         // Compatibility consumers inspect these route flags during feature activation.
-        await storageMutationCoordinator.runExclusive(async () => {
+        if (!options.remote) await storageMutationCoordinator.runExclusive(async () => {
             await runDataMigrations(storageManager, storageMutationCoordinator, true);
             await storageManager._getReviewFilterKeywordListWithoutLock();
             await stateService.recoverPendingTransactionWithoutLock();
         });
         markPhase("data-prepare");
+        if (options.headless) return context;
         await context.registries.features.start(context.services.settings.snapshot());
         markPhase("feature-runtime");
         applyThemeMode(context.services.settings.snapshot().themeMode);

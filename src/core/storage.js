@@ -6,6 +6,7 @@ import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } f
 import { readReviewKeywords } from "./review-keywords.js";
 import { assertMovieStateEligible, getMovieStateEligibility } from "./movie-identity.js";
 import { cleanActressName, isSameActressProfile, normalizeActressProfileData, readVerifiedActressProfile } from "./actress-measurements.js";
+import { throwIfAborted } from "./jhs-error.js";
 
 /** Compare legacy entries structurally so a metadata-only actor update can carry them unchanged. */
 function movieRecordSignature(value) {
@@ -33,7 +34,7 @@ function newVideoKey(item) {
     return normalizeCarNum(typeof item === "string" ? item : item?.carNum);
 }
 
-function mergeScannedNewVideos(scanned, previous, decisions) {
+function mergeScannedNewVideos(scanned, previous, decisions, keepUnseen) {
     const entries = new Map();
     const queued = new Set(previous.map(newVideoKey));
     for (const item of scanned) {
@@ -42,11 +43,12 @@ function mergeScannedNewVideos(scanned, previous, decisions) {
         if (key && (decisions[key]?.action !== "dismissed" || queued.has(key))) entries.set(key, item);
     }
     for (const item of previous) {
-        if (item?.retainedAfterRebind !== true) continue;
+        const retained = item?.retainedAfterRebind === true;
+        if (!keepUnseen && !retained) continue;
         const key = newVideoKey(item);
         if (!key) continue;
         const fresh = entries.get(key);
-        entries.set(key, fresh ? { ...item, ...fresh, retainedAfterRebind: true } : item);
+        entries.set(key, fresh ? { ...(typeof item === "object" ? item : {}), ...fresh, ...(retained ? { retainedAfterRebind: true } : {}) } : item);
     }
     return [...entries.values()];
 }
@@ -75,8 +77,15 @@ let e = new WeakSet, t = async function(e, t, n) {
 };
 
 export class StorageManager {
-    constructor() {
+    /** @param {{forage?: any, now?: () => string, incrementalCarStore?: {
+     * getWorkByCarNum: (carNum: string) => Promise<Record<string, any> | null>,
+     * getWorksByCarNums: (carNums: readonly string[]) => Promise<Record<string, any>[]>,
+     * patchWorks: (upserts: readonly Record<string, any>[], deletes: readonly string[], batch: {puts: Record<string, any>, deletes?: string[]}) => Promise<boolean>
+     * }}} [options] */
+    constructor(options = {}) {
         this.stateService = globalThis.stateService ?? null;
+        this.incrementalCarStore = options.incrementalCarStore;
+        this.actorClock = options.now;
         var t, s, o;
         if (t = this, (s = e).has(t) ? a("Cannot add the same private member more than once") : s instanceof WeakSet ? s.add(t) : s.set(t, o),
         i(this, "car_list_key", "car_list"), i(this, "filter_keyword_title_key", "filter_keyword_title"),
@@ -84,7 +93,7 @@ export class StorageManager {
         i(this, "blacklist_key", "blacklist"), i(this, "blacklist_car_list_key", "blacklist_car_list"),
         i(this, "third_party_cache_key", "third_party_ttl_cache"),
         i(this, "favorite_actresses_key", "favorite_actresses"), i(this, "highlighted_tags_key", "highlighted_tags"),
-        i(this, "_actressLock", Promise.resolve()), i(this, "forage", localforage.createInstance({
+        i(this, "_actressLock", Promise.resolve()), i(this, "forage", options.forage ?? localforage.createInstance({
             driver: localforage.INDEXEDDB,
             name: "JAV-JHS",
             version: 1,
@@ -165,15 +174,18 @@ export class StorageManager {
             try { return await fn(); } finally { release(); }
         });
     }
-    async _rawUpdateFavoriteActress(e, scan = false) {
+    actorWriteTime() { return this.actorClock?.() ?? utils.getNowStr(); }
+    /** @param {any} e @param {boolean} [scan] @param {boolean} [keepUnseen] @param {AbortSignal} [signal] */
+    async _rawUpdateFavoriteActress(e, scan = false, keepUnseen = false, signal) {
+        throwIfAborted(signal);
         const t = await this.getFavoriteActressList();
         const {starId: n, name: a, allName: i, avatar: s, lastCheckTime: o, newVideoList: r, lastPublishTime: l, actressType: c, remark: d} = e;
         if (!n) throw new Error("缺失starId");
         const existing = t.find((e => e.starId === n));
-        if (!existing) return clog.error("未找到演员信息", n, a), !1;
+        if (!existing) return globalThis.clog?.error("未找到演员信息", n, a), !1;
         if (r != null && !Array.isArray(r)) throw new TypeError("新作品列表必须为数组");
         const previous = Array.isArray(existing.newVideoList) ? existing.newVideoList : [];
-        const videos = scan ? mergeScannedNewVideos(r, previous, await this.stateService.getNewVideoDecisions()) : r;
+        const videos = scan ? mergeScannedNewVideos(r, previous, await this.stateService.getNewVideoDecisions(), keepUnseen) : r;
         const newVideoList = Array.isArray(videos) ? prepareNewVideoRecords(videos, previous) : videos;
         const h = { ...existing };
         if (Object.hasOwn(e, "actressProfile")) {
@@ -188,7 +200,9 @@ export class StorageManager {
         }
         a && (h.name = a), i && (h.allName = i), s && (h.avatar = s), null != c && (h.actressType = c),
         o && (h.lastCheckTime = o), r && (h.newVideoList = newVideoList), l && (h.lastPublishTime = l),
-        d && (h.remark = d), h.updateDate = utils.getNowStr(), await this._setItemAndInvalidate(this.favorite_actresses_key, t.map((item => item === existing ? h : item)));
+        d && (h.remark = d), h.updateDate = this.actorWriteTime();
+        throwIfAborted(signal);
+        await this._setItemAndInvalidate(this.favorite_actresses_key, t.map(item => item === existing ? h : item));
         return true;
     }
     async batchUpdateFavoriteActressProfiles(updates) {
@@ -236,7 +250,9 @@ export class StorageManager {
         return value;
     }
     async getCar(e) {
-        return (await this.getCarMap()).get(normalizeCarNum(e));
+        const key = normalizeCarNum(e);
+        if (key && this.incrementalCarStore) return (await this.incrementalCarStore.getWorkByCarNum(key)) ?? undefined;
+        return (await this.getCarMap()).get(key);
     }
     _saveSingleCar(e, t) {
         let {carNum: n, url: a, names: i, actionType: s, publishTime: o, starId: r} = e;
@@ -532,13 +548,13 @@ export class StorageManager {
             i = i.replace(d, ""), s = s.map((e => e.replace(d, "")));
             let h = t.find((t => t.starId === e));
             if (h) {
-                h.avatar && h.avatar.includes("https") || o && (clog.log(o), h.avatar = o, clog.html(`<span>补全演员头像: ${escapeHtml(i)}</span>`),
-                n++), !h.actressType && c && (h.actressType = c, clog.html(`<span>补全演员类别: ${escapeHtml(i)} ${escapeHtml(c)}</span>`),
-                n++), h.name.includes(d) && (h.name = i, h.allName = s, clog.html(`<span>更正演员名字: ${escapeHtml(i)} ${escapeHtml(s)}</span>`),
+                h.avatar && h.avatar.includes("https") || o && (globalThis.clog?.log(o), h.avatar = o, globalThis.clog?.html(`<span>补全演员头像: ${escapeHtml(i)}</span>`),
+                n++), !h.actressType && c && (h.actressType = c, globalThis.clog?.html(`<span>补全演员类别: ${escapeHtml(i)} ${escapeHtml(c)}</span>`),
+                n++), h.name.includes(d) && (h.name = i, h.allName = s, globalThis.clog?.html(`<span>更正演员名字: ${escapeHtml(i)} ${escapeHtml(s)}</span>`),
                 n++);
                 continue;
             }
-            const g = utils.getNowStr();
+            const g = this.actorWriteTime();
             t.push({
                 starId: e,
                 name: i,
@@ -549,20 +565,21 @@ export class StorageManager {
                 createDate: g,
                 updateDate: g,
                 actressType: c
-            }), clog.html(`<span>同步JavDB已收藏的演员: ${escapeHtml(i)}</span>`), n++;
+            }), globalThis.clog?.html(`<span>同步JavDB已收藏的演员: ${escapeHtml(i)}</span>`), n++;
         }
-        return n > 0 ? await this._setItemAndInvalidate(this.favorite_actresses_key, t) : clog.log("信息已记录, 无需要进行同步收藏的演员"),
+        return n > 0 ? await this._setItemAndInvalidate(this.favorite_actresses_key, t) : globalThis.clog?.log("信息已记录, 无需要进行同步收藏的演员"),
         n;
         });
     }
     async removeFavoriteActress(e) {
         return this.withActressLock(async () => {
             const t = await this.getFavoriteActressList(), n = t.length, a = t.filter((t => t.starId !== e));
-            return a.length === n ? (clog.error(`移除演员失败, ${e} 不存在`), !1) : (await this._setItemAndInvalidate(this.favorite_actresses_key, a), !0);
+            return a.length === n ? (globalThis.clog?.error(`移除演员失败, ${e} 不存在`), !1) : (await this._setItemAndInvalidate(this.favorite_actresses_key, a), !0);
         });
     }
-    async updateFavoriteActress(e, { scan = false } = {}) {
-        return this.withActressLock(() => this._rawUpdateFavoriteActress(e, scan));
+    /** @param {any} e @param {{scan?: boolean, keepUnseen?: boolean, signal?: AbortSignal}} [options] */
+    async updateFavoriteActress(e, { scan = false, keepUnseen = false, signal } = {}) {
+        return this.withActressLock(() => this._rawUpdateFavoriteActress(e, scan, keepUnseen, signal));
     }
     async rebindFavoriteActress(payload) {
         return this.withActressLock(async () => {
@@ -1013,17 +1030,20 @@ export class StorageManager {
             for (const i of this._snapshotMetaKeys()) delete a[i];
             let i = 0;
             for (const s of Object.values(a)) Array.isArray(s) ? i += s.length : "object" == typeof s && s && i++;
+            const time = globalThis.utils?.getNowStr() ?? new Date().toISOString();
             const s = {
                 id: "snap_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
-                name: e || utils.getNowStr(),
+                name: e || time,
                 source: t,
-                time: utils.getNowStr(),
+                time,
                 itemCount: i,
                 data: a,
                 kind: "snapshot"
             };
             n.push(s), n.length > 10 && n.splice(0, n.length - 10);
-            return await this._saveSnapshots(n), clog.log(`创建快照: ${s.name} (${t})`), s;
+            await this._saveSnapshots(n);
+            globalThis.clog?.log(`创建快照: ${s.name} (${t})`);
+            return s;
     }
     async createSnapshot(e = "", t = "manual") {
         return this._withSnapshotLock(async () => {

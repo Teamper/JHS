@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "JHS 验收",
+    "slug": "jhs-mobile",
+    "version": "1.0.0",
+    "userInterfaceStyle": "automatic",
+    "android": { "package": "io.github.teamper.jhs.dev.native.lab" },
+    "ios": { "bundleIdentifier": "io.github.teamper.jhs.dev.native.lab" },
+    "web": { "bundler": "metro" }
+  }
+}

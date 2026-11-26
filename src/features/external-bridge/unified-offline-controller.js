@@ -6,15 +6,18 @@ import { JhsError } from "../../core/jhs-error.js";
 import { parseBooleanSetting } from "../../core/feature-helpers.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { resolveMovieContext } from "../../core/movie-context.js";
+import { extractInfoHash } from "../../services/magnet-source-registry.js";
 import { getDetailResourceAdapter } from "../../ui/detail/detail-resource-adapter.js";
 import { OfflineProviderRegistry } from "./offline-provider-registry.js";
 
 /** @typedef {any} JQueryHandle */
 /** @typedef {{provider: any, availability: any}} OfflineCandidate */
+/** @typedef {{binding:string, accountId?:string, token?:string}} SubmissionAccount */
+/** @typedef {{isActive?:()=>boolean, onMutationDispatch?:()=>void, account?:SubmissionAccount|null}} ProviderSubmitOptions */
 
 /** Owns offline providers, detail controls, and submission state inside the External Bridge Feature. */
 export class UnifiedOfflineController {
-    /** @param {{document?:Document, window?:any, route?:string, site?:string, hostAdapter:any, offline:any, submissionReceipts?:any, dialog:any, state:any, settings:any, styles:any, events:any, pan123Credential:any, ui:any, notifications:any, diagnostics:any, scope:any}} options */
+    /** @param {{document?:Document, window?:any, route?:string, site?:string, hostAdapter:any, offline:any, submissionReceipts?:any, submissionSession?:()=>number|null, dialog:any, state:any, settings:any, styles:any, events:any, pan123Credential:any, ui:any, notifications:any, diagnostics:any, scope:any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -23,6 +26,7 @@ export class UnifiedOfflineController {
         this.hostAdapter = options.hostAdapter;
         this.offline = options.offline;
         this.submissionReceipts = options.submissionReceipts;
+        this.submissionSession = options.submissionSession;
         this.dialog = options.dialog;
         this.state = options.state;
         this.settings = options.settings;
@@ -123,8 +127,8 @@ export class UnifiedOfflineController {
             getAvailability: async () => await credential.getStoredToken()
                 ? { available: true, authState: "ready", reason: "授权已同步" }
                 : { available: false, authState: "token-missing", reason: "尚未同步 123 授权" },
-            submit: async (/** @type {string} */ resource, /** @type {any} */ _info, /** @type {{isActive?: () => boolean, onMutationDispatch?: () => void}} */ options = {}) => {
-                const token = await credential.getStoredToken();
+            submit: async (/** @type {string} */ resource, /** @type {any} */ _info, /** @type {ProviderSubmitOptions} */ options = {}) => {
+                const token = options.account?.token ?? await credential.getStoredToken();
                 if (this.scope.disposed || options.isActive?.() === false) throw Object.assign(new Error("界面已关闭，未提交任务"), { code: "SUBMIT_CANCELLED" });
                 if (!parseBooleanSetting(this.getSetting("enable123Offline", true), false)) throw Object.assign(new Error("123 离线服务已关闭，未提交任务"), { code: "SERVICE_DISABLED" });
                 if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" });
@@ -139,10 +143,10 @@ export class UnifiedOfflineController {
             id: "115", name: PRODUCT_NAMES.one115, capabilities: ["magnet", "ed2k"], retryPolicy: { automaticAttempts: 0 },
             isEnabled: () => parseBooleanSetting(this.getSetting("enable115Offline", false), false),
             getAvailability: async () => ({ available: true, authState: "unknown", reason: "提交时确认登录状态" }),
-            submit: (/** @type {string} */ resource, /** @type {any} */ _info, /** @type {{isActive?: () => boolean, onMutationDispatch?: () => void}} */ options = {}) => {
+            submit: (/** @type {string} */ resource, /** @type {any} */ _info, /** @type {ProviderSubmitOptions} */ options = {}) => {
                 if (this.scope.disposed || options.isActive?.() === false) throw Object.assign(new Error("界面已关闭，未提交任务"), { code: "SUBMIT_CANCELLED" });
                 if (!parseBooleanSetting(this.getSetting("enable115Offline", false), false)) throw Object.assign(new Error("115 离线服务已关闭，未提交任务"), { code: "SERVICE_DISABLED" });
-                return this.offline.submitWithIntegration("one115", resource, { scope: this.scope, onMutationDispatch: () => {
+                return this.offline.submitWithIntegration("one115", resource, { scope: this.scope, expectedAccountId: options.account?.accountId, onMutationDispatch: () => {
                     if (!parseBooleanSetting(this.getSetting("enable115Offline", false), false)) throw new JhsError("ABORTED", "115 离线服务已关闭，未提交任务");
                     options.onMutationDispatch?.();
                 } });
@@ -222,7 +226,7 @@ export class UnifiedOfflineController {
         const mode = this.getSetting("offlineProviderMode", "ask"), preferred = candidates.find((candidate) => candidate.provider.id === mode);
         if (preferred) return preferred;
         const $ = this.getJQuery();
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const content = $('<div class="jhs-form-dialog jhs-ui"><p>选择离线服务</p><div class="jhs-toolbar"></div></div>'), toolbar = content.find(".jhs-toolbar");
             let settled = false;
             let closed = false;
@@ -241,7 +245,17 @@ export class UnifiedOfflineController {
             };
             releaseScope = this.ownCleanup(() => { close(); finish(null); });
             candidates.forEach((candidate) => toolbar.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(`${candidate.provider.name} · ${candidate.availability.authState === "ready" ? "已就绪" : "状态未知"}`).on("click", () => finish(candidate, true))));
-            index = this.dialog.open({ type: 1, title: "选择离线服务", content, ui: { size: "sm", body: "scroll" }, cancel: () => { closed = true; finish(null); }, end: () => { closed = true; finish(null); } });
+            content.hide().appendTo(this.document.body);
+            try {
+                index = this.dialog.open({ type: 1, title: "选择离线服务", content, ui: { size: "sm", body: "scroll" },
+                    success: (/** @type {unknown} */ _root, /** @type {number} */ id) => this.ui.setupEscClose?.(id),
+                    cancel: () => { closed = true; finish(null); },
+                    end: () => { content.remove(); closed = true; finish(null); } });
+            } catch (error) {
+                content.remove();
+                reject(error);
+                finish(null);
+            }
         });
     }
 
@@ -270,19 +284,90 @@ export class UnifiedOfflineController {
         return null;
     }
 
-    /** Prefer a hashed resource key while sharing the same Web Lock across same-origin tabs. @param {string} resource */
-    async getSubmissionLockName(resource) {
+    /** @param {string} subject */
+    async getSubmissionDigest(subject) {
         const crypto = this.window.crypto;
-        if (!crypto?.subtle || !this.window.TextEncoder) return `jhs_offline_submit_v1:${resource}`;
-        const digest = await crypto.subtle.digest("SHA-256", new this.window.TextEncoder().encode(resource));
-        return `jhs_offline_submit_v1:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+        if (!crypto?.subtle || !this.window.TextEncoder) return null;
+        const digest = await crypto.subtle.digest("SHA-256", new this.window.TextEncoder().encode(subject));
+        return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    /** @param {string} resource */
+    async getSubmissionLockName(resource) {
+        return `jhs_offline_submit_v1:${await this.getSubmissionDigest(resource) ?? resource}`;
     }
 
     /** Keep a cross-tab receipt outside the IndexedDB history write that may fail after cloud success. */
     /** @param {string} resource */
     async getSubmissionReceiptKey(resource) {
-        if (!this.submissionReceipts || !this.window.crypto?.subtle || !this.window.TextEncoder) return null;
-        return `jhs_offline_receipt_v1:${(await this.getSubmissionLockName(resource)).slice("jhs_offline_submit_v1:".length)}`;
+        const digest = this.submissionReceipts && await this.getSubmissionDigest(resource);
+        return digest ? `jhs_offline_receipt_v1:${digest}` : null;
+    }
+
+    /** @param {string} providerId @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope @returns {Promise<SubmissionAccount>} */
+    async getSubmissionAccount(providerId, scope) {
+        const accountId = providerId === "115" ? (await this.offline.getAccountIdentity("one115", { scope })).accountId : undefined;
+        const token = providerId === "123" ? await this.pan123Credential.getStoredToken() : undefined;
+        const identity = accountId || token;
+        if (!identity) throw new JhsError("AUTH_REQUIRED", "请先登录所选云盘");
+        const binding = await this.getSubmissionDigest(JSON.stringify(["offline-account-v1", providerId, identity]));
+        if (!binding) throw new Error("无法保存云盘账号核对信息");
+        return { binding, accountId, token };
+    }
+
+    /** @param {number|null|undefined} captured */
+    isSubmissionSession(captured) {
+        return captured !== null && this.submissionSession?.() === captured;
+    }
+
+    /** @param {string | undefined} recorded @param {string | undefined} current */
+    assertSubmissionAccount(recorded, current) {
+        if (!recorded) throw Object.assign(new Error("旧提交缺少原账号信息，请打开云盘核对"), { code: "SUBMISSION_ACCOUNT_UNVERIFIED" });
+        if (recorded !== current) throw Object.assign(new Error("当前云盘授权与提交时不同，请用原账号核对"), { code: "SUBMISSION_ACCOUNT_CHANGED" });
+    }
+
+    /** @param {string} resource @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope @param {string} [attemptId] */
+    async checkPendingSubmission(resource, scope, attemptId) {
+        const session = this.submissionSession?.();
+        const assertActive = () => {
+            scope.assertActive();
+            if (!this.isSubmissionSession(session)) throw new JhsError("ABORTED", "云盘登录已变化，请重新核对");
+        };
+        const resourceKey = resource.trim();
+        const key = await this.getSubmissionReceiptKey(resourceKey);
+        if (!key) return null;
+        const raw = this.submissionReceipts.getRaw(key);
+        const receipt = this.submissionReceipts.read(key, this.SUBMISSION_RECEIPT_MS);
+        if (receipt?.state !== "pending" || (attemptId && receipt.attemptId !== attemptId)) return null;
+        const integrationId = receipt.providerId === "115" ? "one115" : receipt.providerId === "123" ? "pan123" : null;
+        if (!integrationId) return null;
+        assertActive();
+        let token;
+        if (this.submissionSession) {
+            if (!receipt.accountBinding) this.assertSubmissionAccount(receipt.accountBinding, undefined);
+            const account = await this.getSubmissionAccount(receipt.providerId, scope);
+            this.assertSubmissionAccount(receipt.accountBinding, account.binding);
+            token = account.token;
+        } else if (integrationId === "pan123") token = await this.pan123Credential.getStoredToken();
+        assertActive();
+        const { items } = await this.offline.listTasks(integrationId, { token, page: 1, scope });
+        assertActive();
+        const hash = integrationId === "one115" ? extractInfoHash(resource) : null;
+        if (!hash || !items.some((/** @type {{id:string}} */ task) => task.id.toUpperCase() === hash)) {
+            return { raw, receipt, found: false };
+        }
+        const commit = async () => {
+            assertActive();
+            if (this.submissionReceipts.getRaw(key) !== raw || this._inFlightResources.has(resourceKey)) return false;
+            await this.state.confirmOfflineSubmission({ attemptId: receipt.attemptId, providerId: receipt.providerId, resource });
+            this.submissionReceipts.write(key, "submitted", { attemptId: receipt.attemptId, providerId: receipt.providerId, accountBinding: receipt.accountBinding }, raw);
+            return true;
+        };
+        const locks = this.window.navigator?.locks;
+        const saved = locks?.request ? await locks.request(await this.getSubmissionLockName(resourceKey), { ifAvailable: true },
+            (/** @type {any} */ lock) => lock ? commit() : false) : await commit();
+        if (!saved) throw new Error("提交状态已更新，请重新核对");
+        return { raw, receipt, found: true };
     }
 
     /** @param {any} provider @returns {Promise<boolean>} */
@@ -306,6 +391,7 @@ export class UnifiedOfflineController {
             index = this.dialog.open({
                 type: 0, title: "确认重新提交", content: content[0].outerHTML, ui: { size: "sm", body: "scroll", initialFocus: ".layui-layer-btn0" },
                 skin: "jhs-confirm-actions", scrollbar: false, anim: -1, area: [this.ui.getDialogArea?.("sm")?.[0] || "480px", ""],
+                success: (/** @type {unknown} */ _root, /** @type {number} */ id) => this.ui.setupEscClose?.(id),
                 btn: ["取消", "已核实，重新提交"],
                 yes: () => finish(false), btn2: () => { finish(true); return false; },
                 cancel: () => finish(false), end: () => finish(false),
@@ -338,7 +424,7 @@ export class UnifiedOfflineController {
         }
     }
 
-    /** @param {unknown} event @param {string} resource @param {JQueryHandle|null} [button] @param {any} [context] @param {string|null} [retryOf] @param {{forceAvailabilityRefresh?:boolean,preferredProviderId?:string,previousOutcome?:string}} [options] */
+    /** @param {unknown} event @param {string} resource @param {JQueryHandle|null} [button] @param {any} [context] @param {string|null} [retryOf] @param {{forceAvailabilityRefresh?:boolean,preferredProviderId?:string,previousOutcome?:string,expectedReceipt?:string|null}} [options] */
     async submitResource(event, resource, button = null, context = null, retryOf = null, options = {}) {
         const $ = this.getJQuery();
         button = button ?? $();
@@ -350,7 +436,9 @@ export class UnifiedOfflineController {
         this._loginLinks.delete(trigger);
         const initiallyConnected = Boolean(trigger?.isConnected);
         const original = button.text();
-        const active = () => !this.scope.disposed && (!initiallyConnected || trigger.isConnected);
+        const session = this.submissionSession?.();
+        const mounted = () => !this.scope.disposed && (!initiallyConnected || trigger.isConnected);
+        const active = () => mounted() && this.isSubmissionSession(session);
         const restoreButton = () => button.removeClass("loading").removeAttr("aria-busy aria-disabled").text(original);
         let submitted = false;
         let submissionOutcome = "";
@@ -396,24 +484,29 @@ export class UnifiedOfflineController {
                 if (!await selected.provider.isEnabled()) throw Object.assign(new Error("所选离线服务已关闭，未提交任务"), { code: "SERVICE_DISABLED" });
                 if (!active()) return false;
                 receiptKey = await this.getSubmissionReceiptKey(resourceKey);
+                let existingReceipt;
                 if (this.submissionReceipts) {
                     try {
                         if (!receiptKey) throw new Error();
-                        this.submissionReceipts.prune(this.SUBMISSION_RECEIPT_MS);
-                        previousReceipt = this.submissionReceipts.getRaw(receiptKey);
-                        const existingReceipt = this.submissionReceipts.read(receiptKey, this.SUBMISSION_RECEIPT_MS);
+                        await this.submissionReceipts.prune(this.SUBMISSION_RECEIPT_MS);
+                        previousReceipt = await this.submissionReceipts.getRaw(receiptKey);
+                        existingReceipt = await this.submissionReceipts.read(receiptKey, this.SUBMISSION_RECEIPT_MS);
+                        if (options.expectedReceipt !== undefined && previousReceipt !== options.expectedReceipt) return "changed";
                         if (confirmed && (previousReceipt !== confirmed.raw || selected.provider.id !== confirmed.providerId)) return "changed";
-                        if (!confirmed && (existingReceipt || uncertainRetry)) return { raw: previousReceipt, providerId: existingReceipt?.providerId || selected.provider.id };
                     } catch {
                         throw Object.assign(new Error("无法建立跨标签提交保护，未提交任务"), { code: "SUBMISSION_GUARD_UNAVAILABLE" });
                     }
                 }
-                if (!receiptKey && uncertainRetry && !confirmed) return { raw: null, providerId: selected.provider.id };
-                const attempt = { attemptId: this.window.crypto?.randomUUID?.() || String(Date.now()), providerId: selected.provider.id };
-                if (receiptKey) this.submissionReceipts.write(receiptKey, "pending", attempt);
+                if (!confirmed && (existingReceipt || uncertainRetry)) return { raw: previousReceipt, providerId: existingReceipt?.providerId || selected.provider.id };
+                const account = this.submissionSession ? await this.getSubmissionAccount(selected.provider.id, this.scope) : null;
+                if (!active()) return false;
+                if (account && existingReceipt?.state === "pending") this.assertSubmissionAccount(existingReceipt.accountBinding, account.binding);
+                const attempt = { attemptId: this.window.crypto?.randomUUID?.() || String(Date.now()), providerId: selected.provider.id,
+                    ...(account && { accountBinding: account.binding }) };
+                if (receiptKey) await this.submissionReceipts.write(receiptKey, "pending", attempt, previousReceipt);
                 let dispatched = false, failure;
                 try {
-                    await selected.provider.submit(resource, info, { isActive: active, onMutationDispatch: () => {
+                    await selected.provider.submit(resource, info, { isActive: active, account, onMutationDispatch: () => {
                         if (!active()) throw new JhsError("ABORTED", "界面已关闭，未提交任务");
                         dispatched = true;
                     } });
@@ -428,8 +521,8 @@ export class UnifiedOfflineController {
                 if (submitted) this._submittedResources.add(resourceKey);
                 if (receiptKey && submissionOutcome !== "unknown") {
                     try {
-                        if (submitted) this.submissionReceipts.write(receiptKey, "submitted", attempt);
-                        else this.submissionReceipts.restore(receiptKey, previousReceipt);
+                        if (submitted) await this.submissionReceipts.write(receiptKey, "submitted", attempt);
+                        else await this.submissionReceipts.restore(receiptKey, previousReceipt);
                     } catch (error) {
                         this.recordError("offline-submit-receipt", error);
                     }
@@ -496,6 +589,10 @@ export class UnifiedOfflineController {
             const code = errorRecord?.code || (error === "TOKEN_EXPIRED" ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
             const needsAuth = ["AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING"].includes(code);
             if (code === "SUBMIT_CANCELLED" || code === "ABORTED" && submissionOutcome === "failed") return;
+            if (["SUBMISSION_ACCOUNT_CHANGED", "SUBMISSION_ACCOUNT_UNVERIFIED"].includes(code)) {
+                if (active()) this.notifications.info(message);
+                return;
+            }
             this.diagnostics?.recordError?.({ source: "offline-submit", featureId: "external-bridge", message, error });
             if (code === "SERVICE_DISABLED") { if (active()) this.notifications.error("离线服务已关闭"); return; }
             if (selected && needsAuth) this.registry.updateAvailability(selected.provider.id, { available: false, authState: selected.provider.id === "115" ? "login-required" : "token-missing", reason: "授权已失效，请重新登录" });
@@ -509,10 +606,10 @@ export class UnifiedOfflineController {
             if (submitted && active()) {
                 button.text("已提交");
                 let release = () => {};
-                const timer = this.window.setTimeout(() => { release(); if (active()) restoreButton(); }, this.BUTTON_COOLDOWN_MS);
+                const timer = this.window.setTimeout(() => { release(); if (mounted()) restoreButton(); }, this.BUTTON_COOLDOWN_MS);
                 this._pendingButtonTimers.add(timer);
                 release = this.ownCleanup(() => { this.window.clearTimeout(timer); this._pendingButtonTimers.delete(timer); });
-            } else if (active()) restoreButton();
+            } else if (mounted()) restoreButton();
         }
     }
 

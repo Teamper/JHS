@@ -57,8 +57,8 @@ export class MovieListsController {
         }, {childList:true,subtree:true});
         this.scope.addCleanup(() => { for (const entry of entries.values()) entry.scope.dispose(); entries.clear(); });
     }
-    /** @param {any[]} [movies] */
-    async open(movies = []) {
+    /** @param {any[]} [movies] @param {() => Promise<boolean>} [login] */
+    async open(movies = [], login) {
         if (this.viewScope && !this.viewScope.disposed) return;
         const scope = new LifecycleScope("lists:workspace");
         this.viewScope = scope;
@@ -67,9 +67,12 @@ export class MovieListsController {
         const root = this.document.createElement("section");
         root.className = "jhs-movie-lists jhs-ui";
         const status = this.document.createElement("p"), controls = this.document.createElement("div"), directory = this.document.createElement("div"), preview = this.document.createElement("section"), taskArea = this.document.createElement("section");
+        const accountControls = this.document.createElement("div");
+        for (const element of [status, accountControls, directory, preview, taskArea]) element.setAttribute("data-content-sensitive", "");
         status.setAttribute("role", "status");
         status.textContent = "正在核对网页账号";
-        controls.className = "jhs-list-controls";
+        controls.className = accountControls.className = "jhs-list-controls";
+        controls.append(accountControls);
         directory.className = "jhs-list-directory jhs-scrollbar";
         preview.hidden = true;
         const search = this.document.createElement("input"), movieSelect = this.document.createElement("select"), mode = this.document.createElement("select");
@@ -90,10 +93,11 @@ export class MovieListsController {
             parent.append(node);
             return node;
         };
+        /** @type {any} */ let access = null;
         /** @type {Map<string, any>} */ const taskViews = new Map();
         const renderTask = (/** @type {any} */ progress) => {
-            if (scope.disposed) return;
             const task = progress.task;
+            if (scope.disposed || !access?.account || task.accountFingerprint !== access.account.fingerprint) return;
             let view = taskViews.get(task.id);
             if (!view) {
                 const section = this.document.createElement("details"), title = this.document.createElement("summary"), counts = this.document.createElement("p"), actions = this.document.createElement("div"), results = this.document.createElement("ul");
@@ -132,8 +136,12 @@ export class MovieListsController {
         };
         scope.listen(this.service, "lists.progress", event => renderTask(/** @type {CustomEvent} */ (event).detail));
         const refreshTasks = async () => {
+            const fingerprint = access?.account?.fingerprint;
+            if (!fingerprint) return;
             for (const task of await this.service.listTasks()) {
                 scope.assertActive();
+                if (fingerprint !== access?.account?.fingerprint) return;
+                if (task.accountFingerprint !== fingerprint) continue;
                 try { renderTask(await this.service.inspect(task)); }
                 catch { if (!scope.disposed) { status.className = "jhs-field-error"; status.textContent = "部分清单恢复记录无法安全读取，已保留记录"; } }
             }
@@ -143,9 +151,10 @@ export class MovieListsController {
         this.document.body.append(root);
         let closed = false, id = 0;
         scope.addCleanup(() => { if (!closed && id) this.dialog.close(id); root.remove(); });
-        try { id = this.dialog.open({type:1, title:"JavDB 现有清单", content:this.ui.jquery(root), ui:{size:"lg",body:"scroll"}, end:() => { closed = true; scope.dispose(); }}); }
+        try { id = this.dialog.open({type:1, title:login ? "JavDB 清单" : "JavDB 现有清单", content:this.ui.jquery(root), ui:{size:login ? "form" : "lg",body:"scroll"},
+            success: (/** @type {unknown} */ _root, /** @type {number} */ layerId) => this.ui.setupEscClose?.(layerId),
+            end:() => { closed = true; scope.dispose(); }}); }
         catch (error) { scope.dispose(); throw error; }
-        /** @type {any} */ let access = null;
         /** @type {any[]} */ let selectedMovies = [];
         /** @type {any[]} */ let lists = [];
         /** @type {Map<string,{label:HTMLLabelElement,input:HTMLInputElement,text:HTMLElement}>} */ const rows = new Map();
@@ -154,32 +163,52 @@ export class MovieListsController {
         const filter = () => { for (const [key, row] of rows) row.label.hidden = !lists.find(list => list.id === key)?.name.toLowerCase().includes(search.value.trim().toLowerCase()); };
         const load = async () => {
             const current = ++generation;
+            const previousFingerprint = access?.account?.fingerprint;
+            access = null;
             preview.hidden = true;
+            directory.hidden = taskArea.hidden = true;
+            taskViews.clear();
+            taskArea.replaceChildren();
+            if (signIn) signIn.hidden = refreshAccount.hidden = accountControls.hidden = true;
             status.className = "";
             status.textContent = "正在核对账号与清单目录";
             try {
                 const nextAccess = await this.service.access(scope);
                 scope.assertActive();
                 if (current !== generation) return;
-                if (access?.account?.fingerprint !== nextAccess.account?.fingerprint) selectedLists.clear();
+                if (previousFingerprint !== nextAccess.account?.fingerprint) selectedLists.clear();
                 access = nextAccess;
+                if (signIn && !access.account) {
+                    signIn.hidden = false;
+                    status.textContent = "登录 JavDB 后可查看和管理当前账号的清单";
+                    return;
+                }
                 try { selectedMovies = movies.length ? this.service.normalizeMovies(movies, access.origin) : []; }
                 catch (error) { selectedMovies = []; status.className = "jhs-field-error"; status.textContent = /** @type {Error} */ (error).message; }
                 movieSelect.replaceChildren();
                 for (const movie of selectedMovies) { const option = this.document.createElement("option"); option.value = movie.videoId; option.textContent = movie.carNum; movieSelect.append(option); }
                 movieSelect.disabled = !selectedMovies.length;
-                await loadDirectory();
+                await Promise.all([loadDirectory(), refreshTasks()]);
                 if (!scope.disposed && current === generation) {
+                    taskArea.hidden = false;
+                    if (signIn) refreshAccount.hidden = accountControls.hidden = false;
                     status.className = "";
-                    status.textContent = `${access.account?.label || "账号未核对"}。${access.reason || `已选 ${selectedMovies.length} 部影片，每部影片按所选清单依次处理`}${movies.length && !selectedMovies.length ? "。所选影片缺少当前 JavDB 链接，成员操作保持只读" : ""}`;
+                    const summary = movies.length ? `已选 ${selectedMovies.length} 部影片` : `${lists.length} 个清单`;
+                    status.textContent = `${access.account?.label || "账号未核对"}。${access.reason || summary}${movies.length && !selectedMovies.length ? "。所选影片缺少当前 JavDB 链接，成员操作保持只读" : ""}`;
                 }
-            } catch (error) { if (!scope.disposed && current === generation) { status.className = "jhs-field-error"; status.textContent = /** @type {Error} */ (error).message; } }
+            } catch (error) {
+                if (scope.disposed || current !== generation) return;
+                refreshAccount.hidden = false;
+                status.className = "jhs-field-error";
+                status.textContent = /** @type {Error} */ (error).message;
+            }
         };
         const loadDirectory = async () => {
             if (!access) return;
-            const current = ++directoryGeneration, videoId = movieSelect.value || null;
-            const result = await this.service.directory(access, videoId, scope);
-            if (scope.disposed || current !== directoryGeneration) return;
+            const requested = access, current = ++directoryGeneration, videoId = movieSelect.value || null;
+            directory.hidden = true;
+            const result = await this.service.directory(requested, videoId, scope);
+            if (scope.disposed || current !== directoryGeneration || requested !== access) return;
             lists = result;
             for (const [key,row] of rows) if (!lists.some(list => list.id === key)) { row.label.remove(); rows.delete(key); selectedLists.delete(key); }
             for (const list of lists) {
@@ -187,6 +216,7 @@ export class MovieListsController {
                 if (!row) {
                     const label = this.document.createElement("label"), input = this.document.createElement("input"), text = this.document.createElement("span");
                     input.type = "checkbox";
+                    input.hidden = !movies.length;
                     input.className = "jhs-checkbox";
                     label.append(input,text);
                     directory.append(label);
@@ -196,11 +226,12 @@ export class MovieListsController {
                 row.input.disabled = list.disabled || !access.writable || !selectedMovies.length;
                 if (row.input.disabled) selectedLists.delete(list.id);
                 row.input.checked = selectedLists.has(list.id);
-                row.text.textContent = `${list.name}${videoId ? list.checked ? " · 已加入当前影片" : " · 未加入当前影片" : ""}${list.disabled ? " · 不可操作" : ""}`;
+                row.text.textContent = `${list.name}${list.count == null ? "" : ` · ${list.count} 部`}${videoId ? list.checked ? " · 已加入当前影片" : " · 未加入当前影片" : ""}${list.disabled ? " · 不可操作" : ""}`;
             }
             filter();
+            directory.hidden = false;
         };
-        button("预览操作范围", () => {
+        if (movies.length) button("预览操作范围", () => {
             if (busy || !access?.writable || !selectedMovies.length || !selectedLists.size) throw new Error("请核对账号并选择影片与可操作清单");
             const chosen = lists.filter(list => selectedLists.has(list.id));
             const operation = mode.value === "add";
@@ -227,13 +258,23 @@ export class MovieListsController {
             preview.replaceChildren(summary,range,confirm);
             preview.hidden = false;
             confirm.focus();
-        }, controls);
-        controls.prepend(search, movieSelect, mode);
-        button("刷新账号与目录", load, controls);
-        button("刷新恢复记录", refreshTasks, controls);
+        }, accountControls);
+        accountControls.prepend(search, ...(movies.length ? [movieSelect, mode] : []));
+        const signIn = login ? button("登录 JavDB", async () => {
+            if (!signIn || signIn.disabled) return;
+            signIn.disabled = true;
+            try { if (await login() && !scope.disposed) await load(); }
+            finally { signIn.disabled = false; }
+        }, controls) : null;
+        if (signIn) {
+            signIn.classList.remove("jhs-btn--secondary");
+            signIn.classList.add("jhs-btn--primary");
+        }
+        const refreshAccount = button("刷新账号与目录", load, controls);
+        button("刷新恢复记录", refreshTasks, accountControls);
         scope.listen(search,"input",filter);
         scope.listen(movieSelect,"change",() => { preview.hidden = true; void loadDirectory().catch(error => { if (!scope.disposed) status.textContent = error.message; }); });
         scope.listen(mode,"change",() => { preview.hidden = true; });
-        await Promise.allSettled([load(), refreshTasks()]);
+        await load();
     }
 }

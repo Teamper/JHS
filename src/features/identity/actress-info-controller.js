@@ -4,7 +4,23 @@ import { cleanActressName, collectActressLookupNames, readCleanActorElementText,
 import { isAbortError, isNotFoundError } from "../../core/jhs-error.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
-export const INFO_TAG_CSS = ".info-tag{background-color:var(--jhs-accent-tint);display:inline-flex;align-items:center;min-height:var(--jhs-control-height-sm);padding:0 var(--jhs-space-2);line-height:var(--jhs-line-height-tight);font-size:var(--jhs-font-size-xs);color:var(--jhs-accent-text);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-xs);box-sizing:border-box;white-space:nowrap}";
+export const ACTRESS_INFO_CSS = `
+    .info-tag{background-color:var(--jhs-accent-tint);display:inline-flex;align-items:center;min-height:var(--jhs-control-height-sm);padding:0 var(--jhs-space-2);line-height:var(--jhs-line-height-tight);font-size:var(--jhs-font-size-xs);color:var(--jhs-accent-text);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-xs);box-sizing:border-box;white-space:nowrap}
+    .jhs-actor-profile-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--jhs-space-1) var(--jhs-space-4);
+        margin-block-start: var(--jhs-space-1);
+        min-inline-size: 0;
+        max-inline-size: 100%;
+        font-size: var(--jhs-font-size-md);
+        font-weight: 400;
+        line-height: var(--jhs-line-height-ui);
+        white-space: normal;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+`;
 
 /** Manage optional actress information and cancel lookups when the setting or feature turns off. */
 export class ActressInfoController {
@@ -211,43 +227,35 @@ export class ActressInfoController {
             requestScope,
         });
         if (!this.isStillActive(generation, requestScope)) return;
-        const body = this.document.createElement("div");
-        body.className = "jhs-layout-c0d4a511";
-        if (!info) body.textContent = "无此相关演员信息";
-        else {
-            body.append(this.createActorInfoRow([
-                [`出生日期: ${info.birthday || ""}`, "jhs-layout-dd5a75f6"],
-                [`年龄: ${info.age || ""}`, "jhs-layout-d4a09a0d"],
-                [`身高: ${info.height || ""}`, "jhs-layout-d4a09a0d"],
-            ]), this.createActorInfoRow([
-                [`体重: ${info.weight || ""}`, "jhs-layout-dd5a75f6"],
-                [`三围: ${info.threeSizeText || ""}`, "jhs-layout-d4a09a0d"],
-                [`罩杯: ${info.braSize || ""}`, "jhs-layout-d4a09a0d"],
-            ]));
+        const fields = info ? [
+            ["出生日期", info.birthday],
+            ["年龄", info.age],
+            ["身高", info.height],
+            ["体重", info.weight],
+            ["三围", info.threeSizeText],
+            ["罩杯", info.braSize],
+        ] : [];
+        const items = [];
+        for (const [label, value] of fields) {
+            const text = value?.trim();
+            if (!text) continue;
+            const item = this.document.createElement("span");
+            item.textContent = `${label}: ${text}`;
+            items.push(item);
         }
-        const result = info ? this.document.createElement("a") : body;
-        if (info) {
-            result.className = "actress-info";
+
+        const result = this.document.createElement(items.length ? "a" : "div");
+        result.className = "actress-info jhs-actor-profile-info";
+        if (items.length) {
             result.setAttribute("target", "_blank");
             result.setAttribute("rel", "noopener noreferrer");
             result.setAttribute("href", this.safeExternalUrl(info.url) || "#");
-            result.append(body);
-        } else result.classList.add("actress-info");
+            result.append(...items);
+        } else {
+            result.textContent = "无此相关演员信息";
+        }
         profile.anchorParent.append(result);
         this.ownedNodes.add(result);
-    }
-
-    /** @param {Array<[string, string]>} values */
-    createActorInfoRow(values) {
-        const row = this.document.createElement("div");
-        row.className = "jhs-layout-1b3790ef";
-        for (const [text, className] of values) {
-            const item = this.document.createElement("span");
-            item.className = className;
-            item.textContent = text;
-            row.append(item);
-        }
-        return row;
     }
 
     /** @param {unknown} value */

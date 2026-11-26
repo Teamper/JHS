@@ -77,7 +77,9 @@ export class NewVideoWorkspaceController {
             measurementsByStarId.set(starId, readStoredActressMeasurements(actress));
         }
         return {
-            actresses, carMap, decisions, items, measurementsByStarId, ruleTime: settings.checkNewVideo_ruleTime ?? 8760,
+            actresses, carMap, decisions, items, measurementsByStarId,
+            pendingCount: items.filter(item => item.decisionState === "pending").length,
+            ruleTime: settings.checkNewVideo_ruleTime ?? 8760,
             javDbUrl: this.movie.externalSiteOrigin("javDbBtn", settings),
         };
     }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import jquery from "jquery";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { CoverButtonController } from "../src/features/list/cover-button-controller.js";
@@ -9,11 +9,19 @@ import { createJavStoreAdapter } from "../src/integrations/javstore/manifest.js"
 
 const imageUrl = "https://img.javstore.net/FC2-PPV-1234567_s.jpg";
 const scopes = [];
+beforeEach(() => {
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(function (url) {
+        this.setAttribute("src", url);
+        Object.defineProperty(this, "naturalWidth", { value: 900, configurable: true });
+        queueMicrotask(() => this.dispatchEvent(new Event("load")));
+    });
+});
 afterEach(() => {
     scopes.splice(0).forEach(scope => scope.dispose());
     jquery(document).off(".jhsCoverButton");
     document.body.innerHTML = "";
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 function createScreenshotChain() {

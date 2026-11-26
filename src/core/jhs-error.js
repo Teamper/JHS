@@ -1,7 +1,7 @@
 // @ts-check
 
 export const JHS_ERROR_CODES = Object.freeze([
-    "NETWORK_ERROR", "TIMEOUT", "AUTH_REQUIRED", "NOT_FOUND", "PARSE_ERROR",
+    "NETWORK_ERROR", "TIMEOUT", "AUTH_REQUIRED", "HOST_PERMISSION_REQUIRED", "NOT_FOUND", "PARSE_ERROR",
     "RESPONSE_TOO_LARGE", "RATE_LIMITED", "ABORTED", "UNSUPPORTED", "INVALID_RESPONSE", "INVALID_URL",
     "CF_BLOCKED", "CIRCUIT_OPEN", "TASK_EXISTS", "OPERATION_FAILED",
     "MISSING_DEPENDENCY", "UNDECLARED_DEPENDENCY", "DUPLICATE_TOKEN", "BOOTSTRAP_FAILED",
@@ -36,6 +36,11 @@ export class JhsError extends Error {
 }
 
 const TRANSIENT_BLOCK_CODES = new Set(["RATE_LIMITED", "CIRCUIT_OPEN", "CF_BLOCKED"]);
+
+/** @param {AbortSignal | undefined} signal */
+export function throwIfAborted(signal) {
+    if (signal?.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
+}
 
 /** @param {unknown} error @returns {boolean} */
 export function isAbortError(error) {

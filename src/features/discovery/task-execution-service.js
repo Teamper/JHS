@@ -165,7 +165,7 @@ export class TaskExecutionService {
     /** @param {string} name @param {string} phase */
     async emitTaskStatus(name, phase) {
         try {
-            await this.getRuntimeService("events")?.emit?.("task-status-changed", { taskName: name, phase }, { broadcast: !1 });
+            await this.getRuntimeService("events")?.emit?.("task-status-changed", { taskName: name, phase }, { broadcast: this.runtimeServices.runWithoutPage === true });
         } catch (error) {
             this.logger.error(`任务状态通知失败: ${name}/${phase}`, error);
         }
@@ -260,7 +260,7 @@ export class TaskExecutionService {
                     const favoriteDue = this.taskConfig.enableCheckFavoriteActress === _ && loggedInJavDb && await this.shouldStartTask("favoriteActress");
                     const newVideoDue = this.taskConfig.enableCheckNewVideo === _ && await this.shouldStartTask("newVideo");
                     if (this.taskConfig.enableCheckFavoriteActress === _) {
-                        loggedInJavDb ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : this.logger.debug("未登录 JavDB，跳过自动同步演员");
+                        this.runtimeServices.runWithoutPage || loggedInJavDb ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : this.logger.debug("未登录 JavDB，跳过自动同步演员");
                     } else this.logger.warn("自动同步已收藏的演员-禁用");
                     this.taskConfig.enableCheckNewVideo === _ ? await this.runBackgroundTask("新作品整批检测", (() => this.checkNewVideo())) : this.logger.warn("自动检测已收藏演员的最新作品-禁用");
                     allowProfileBackfill = favoriteDue || newVideoDue;

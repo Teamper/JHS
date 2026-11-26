@@ -323,6 +323,7 @@ export class Fc2WorkspaceService {
             context.releaseScreenshotScope = parentScope.addCleanup(() => scope.dispose());
             return renderScreenshotPanel({
                 target: screenshot, carNum: context.carNum, screenshot: screenshotService,
+                title: context.summaryMovie?.originalTitle || context.summaryMovie?.title,
                 settings: settings.snapshot(), scope, isActive,
                 isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
             });

@@ -34,13 +34,14 @@ function sleepAbortable(ms, signal) {
 
 /** Converts discovered actor titles into the existing 6.5.1 actress record shape. */
 export class NewVideoScanController {
-    /** @param {{state: any, readTitleKeywords: () => Promise<string[]>, actressInfo?: any, scope?: any, logger?: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, storage?: any, preserveNewVideo?: boolean, onNewItems: (name: string, count: number) => void}} options */
+    /** @param {{state: any, readTitleKeywords: () => Promise<string[]>, actressInfo?: any, scope?: any, logger?: any, getTimestamp: () => string, backgroundWork?: any, sourceHealth?: any, storage?: any, preserveNewVideo?: boolean, allowHidden?: boolean, onNewItems: (name: string, count: number) => void}} options */
     constructor(options) {
         this.state = options.state;
         this.readTitleKeywords = options.readTitleKeywords;
         this.actressInfo = options.actressInfo;
         this.scope = options.scope;
         this.backgroundWork = options.backgroundWork;
+        this.allowHidden = options.allowHidden === true;
         this.preserveNewVideo = options.preserveNewVideo === true;
         this.sourceHealth = options.sourceHealth;
         this.storage = options.storage ?? null;
@@ -464,6 +465,7 @@ export class NewVideoScanController {
     }
 
     async waitForVisible() {
+        if (this.allowHidden) return;
         const doc = globalThis.document;
         if (!doc?.hidden) return;
         await new Promise((resolve, reject) => {

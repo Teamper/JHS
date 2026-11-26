@@ -76,4 +76,9 @@
 
 import { bootstrapJhs, mountBootstrapError } from "./app/bootstrap.js";
 
-void bootstrapJhs().catch(mountBootstrapError);
+if (document.documentElement.hasAttribute("data-jhs-runtime")) {
+    mountBootstrapError(new Error("JHS 已在此页面运行，请选择启用油猴版或扩展版"));
+} else {
+    document.documentElement.setAttribute("data-jhs-runtime", "userscript");
+    void bootstrapJhs().catch(mountBootstrapError);
+}

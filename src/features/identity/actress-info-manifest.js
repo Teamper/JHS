@@ -10,12 +10,12 @@ export default defineFeature({
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const id = "identity.actress-info";
         if (!runtime.enabledContributions.includes(id)) return { activeContributions: [] };
-        const { ActressInfoController, INFO_TAG_CSS } = await import("./actress-info-controller.js");
+        const { ActressInfoController, ACTRESS_INFO_CSS } = await import("./actress-info-controller.js");
         const controller = new ActressInfoController({
             document, location, hostAdapter: deps[PORT.host], service: deps[SERVICE.actressInfo], settings: deps[SERVICE.settings],
             state: deps[SERVICE.state], scope: runtime.scope, diagnostics: runtime.diagnostics,
         });
-        const releaseStyle = deps[PORT.style].register("feature-actress-info", INFO_TAG_CSS);
+        const releaseStyle = deps[PORT.style].register("feature-actress-info", ACTRESS_INFO_CSS);
         runtime.scope.addCleanup(releaseStyle);
         controller.start();
         return { activeContributions: [id], dispose: () => controller.dispose() };

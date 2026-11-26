@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "test": "node --import ../../scripts/register-shared-packages.mjs --test store.test.js",
     "android:add": "npm run build && cap add android",
     "android:sync": "npm run build && cap sync android"
   },

@@ -235,12 +235,19 @@ export class JavDbListService extends EventTarget {
         };
         return this.locks.request(`jhs_javdb_list_task:${task.origin}:${id}`, { ifAvailable: true }, execute);
     }
-    /** @param {string} id */
-    resume(id) {
+    /** @param {string} id @param {AbortSignal} [signal] */
+    resume(id, signal) {
         if (this.disposed || !this.locks?.request) return Promise.reject(failure("LIST_READ_ONLY", "当前环境无法安全执行跨标签清单操作"));
         if (this.runs.has(id)) return this.runs.get(id).promise;
         const run = { task: /** @type {any} */ (null), results: new Map(), stop: false, accountChanged: false, scope: new LifecycleScope(`lists:task:${id}`), promise: /** @type {Promise<any> | null} */ (null) };
-        run.promise = this.executeTask(run, id).finally(() => { run.scope.dispose(); this.runs.delete(id); });
+        const cancel = () => { run.stop = true; run.scope.dispose(); };
+        if (signal?.aborted) cancel();
+        signal?.addEventListener("abort", cancel, { once: true });
+        run.promise = this.executeTask(run, id).finally(() => {
+            signal?.removeEventListener("abort", cancel);
+            run.scope.dispose();
+            this.runs.delete(id);
+        });
         this.runs.set(id, run);
         return run.promise;
     }

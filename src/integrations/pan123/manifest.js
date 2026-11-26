@@ -8,7 +8,7 @@ const URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["123pan
 
 /** @typedef {{id: string | number, size: number}} Pan123File */
 /** @typedef {{id: string | number, files: readonly Pan123File[]}} Pan123ResolvedResource */
-/** @typedef {{token?: string, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, onMutationDispatch?: () => void}} Pan123Context */
+/** @typedef {{token?: string, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, onMutationDispatch?: () => void, onResolved?: (id: string) => void}} Pan123Context */
 
 /** @param {string} value */
 export function crc32(value) {
@@ -71,6 +71,18 @@ export function createPan123Adapter(http, runtime = {}) {
     return Object.freeze({
         contracts: ["OfflineResolvedResource", "OfflineSubmission"],
         homeUrl: "https://yun.123pan.com",
+        /** @param {Pan123Context & {page?: number, includeEvidence?: boolean}} [context] */
+        async listTasks(context = {}) {
+            if (!context.token) throw new JhsError("AUTH_REQUIRED", "尚未同步 123 授权", { source: "pan123" });
+            const page = context.page ?? 1;
+            const response = await request("/b/api/offline_download/task/list", { current_page: page, page_size: 100, status_arr: [0, 1, 2, 3] }, context.token, context.scope, "offline.list");
+            const payload = assertSuccess(parsePayload(response.data), "查询任务");
+            if (!Array.isArray(payload.data?.list)) throw new JhsError("INVALID_RESPONSE", "123 任务列表无效", { source: "pan123" });
+            return { page, total: Number(payload.data.total || 0), items: payload.data.list.map((/** @type {any} */ task) => ({
+                id: String(task.task_id), name: String(task.name || ""), status: String(task.status), progress: Number(task.progress || 0),
+                ...(context.includeEvidence && (typeof task.resource_id === "string" || typeof task.resource_id === "number") ? { resourceId: String(task.resource_id) } : {}),
+            })) };
+        },
         /** @param {string} resource @param {Pan123Context} [context] */
         async resolve(resource, context = {}) {
             const { token, scope } = context;
@@ -92,14 +104,15 @@ export function createPan123Adapter(http, runtime = {}) {
         /** @param {string} resource @param {Pan123Context} [context] */
         async submit(resource, context = {}) {
             const resolved = await this.resolve(resource, context);
+            context.onResolved?.(String(resolved.id));
             return this.submitResolved(resolved, context);
         },
     });
 }
 
 export default defineIntegration({
-    id: "pan123", trustClass: "builtin-public", hosts: ["123pan.com"], capabilities: ["offline.resolve", "offline.submit"], requires: [SERVICE.http, SERVICE.settings],
+    id: "pan123", trustClass: "builtin-public", hosts: ["123pan.com"], capabilities: ["offline.resolve", "offline.submit", "offline.list"], requires: [SERVICE.http, SERVICE.settings],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], settings: dependencies[SERVICE.settings] }),
     createAdapter: (/** @type {any} */ client) => createPan123Adapter(client.http, { getTimeout: () => Number(client.settings.snapshot().httpTimeout ?? 5000) }), createHostAdapter: null,
-    cachePolicy: { "offline.resolve": "none", "offline.submit": "none" }, quality: "silver",
+    cachePolicy: { "offline.resolve": "none", "offline.submit": "none", "offline.list": "none" }, quality: "silver",
 });

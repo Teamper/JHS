@@ -132,9 +132,11 @@ function pruneActivityLog(log, now = Date.now()) {
 }
 
 export class StateService {
-    /** @param {StateRecord} storage @param {StateRecord} eventBus @param {{runExclusive: (operation: () => any) => Promise<any>} | null} [mutationCoordinator] */
-    constructor(storage, eventBus, mutationCoordinator = null) {
+    /** @param {StateRecord} storage @param {StateRecord} eventBus @param {{runExclusive: (operation: () => any) => Promise<any>} | null} [mutationCoordinator] @param {{now?: () => string, currentUrl?: () => string}} [runtime] */
+    constructor(storage, eventBus, mutationCoordinator = null, runtime = {}) {
         /** @type {any} */ this.computation = null;
+        this.now = runtime.now ?? (() => utils.getNowStr());
+        this.currentUrl = runtime.currentUrl ?? (() => window.location.href);
         this.storage = storage, this.eventBus = eventBus, this.mutationCoordinator = mutationCoordinator, this.domains = createStateDomainRegistry(storage), this._queue = Promise.resolve(), this._recovering = !1;
         /** @type {Array<{type: string, payload: StateRecord}> | null} */ this._notificationBatch = null;
         /** @type {StateRecord | null} */ this._listSnapshot = null;
@@ -242,6 +244,21 @@ export class StateService {
             return item;
         });
     }
+    /** @param {{attemptId:string, providerId:string, resource:string}} attempt */
+    async confirmOfflineSubmission({ attemptId, providerId, resource }) {
+        return this._withLock(async () => {
+            const history = /** @type {StateRecord[]} */ (await this.getOfflineHistory());
+            const index = history.findIndex(item => item.id === attemptId && item.providerId === providerId
+                && item.resource === resource && item.submissionOutcome === "unknown");
+            if (index < 0) return false;
+            const { errorCode, errorMessage, ...item } = history[index];
+            const next = [...history];
+            next[index] = { ...item, status: "submitted", submissionOutcome: "exists" };
+            await this.domains.offlineHistory.write(next);
+            await this._notifyCommitted("offline-history-changed", { ids: [attemptId] });
+            return true;
+        });
+    }
     /** @param {string | string[]} ids */
     async removeOfflineHistory(ids) {
         return this._withLock(async () => {
@@ -259,8 +276,12 @@ export class StateService {
     async getFavoriteActressList() {
         return this.storage.getFavoriteActressList();
     }
-    /** Read the established movie map through the StateService domain boundary. */
-    async getCarMap() {
+    /** Read the established movie map through the StateService domain boundary. @param {string[]} [carNums] */
+    async getCarMap(carNums) {
+        if (carNums && this.storage.incrementalCarStore) {
+            const records = await this.storage.incrementalCarStore.getWorksByCarNums(uniqueStateKeys(carNums.map(normalizeCarNum)));
+            return new Map(records.map((/** @type {StateRecord} */ record) => [normalizeCarNum(record.carNum), record]));
+        }
         return this.storage.getCarMap();
     }
     /** Read the established blacklist records for native Feature surfaces. */
@@ -292,7 +313,7 @@ export class StateService {
         return this.storage.addFavoriteActressList(actresses);
     }
     /** Keep the existing strict starId deletion semantics under the shared mutation coordinator. @param {unknown} starId */
-    /** @param {StateRecord} update @param {{scan?: boolean}} [options] */
+    /** @param {StateRecord} update @param {{scan?: boolean, keepUnseen?: boolean, signal?: AbortSignal}} [options] */
     async updateFavoriteActress(update, options) {
         return options?.scan ? this.storage.updateFavoriteActress(update, options) : this.storage.updateFavoriteActress(update);
     }
@@ -316,11 +337,12 @@ export class StateService {
         const record = await this.storage.getCar(key);
         return record ? cloneStateValue(record) : null;
     }
-    /** @param {string[] | null} [requestedDomains] @returns {Promise<StateRecord>} */
-    async _readDomains(requestedDomains = null) {
+    /** @param {string[] | null} [requestedDomains] @param {string[]} [carNums] @returns {Promise<StateRecord>} */
+    async _readDomains(requestedDomains = null, carNums) {
         const requested = new Set(requestedDomains ?? [ "carList", "actresses", "decisions", "activity" ]), read = (/** @type {string} */ domain) => requested.has(domain) ? this.domains[domain].read() : Promise.resolve(domain === "activity" ? { entries: [] } : domain === "decisions" ? {} : []);
-        const [carList, actresses, decisions, activity, ratings] = await Promise.all([ read("carList"), read("actresses"), read("decisions"), read("activity"), requested.has("ratings") ? this.domains.ratings.read() : Promise.resolve({}) ]);
-        return { carList, actresses, decisions, ratings, activity: { ...activity, entries: Array.isArray(activity.entries) ? activity.entries : [] } };
+        const incremental = requested.has("carList") && carNums ? this.storage.incrementalCarStore : null;
+        const [carList, actresses, decisions, activity, ratings] = await Promise.all([ incremental ? incremental.getWorksByCarNums(carNums) : read("carList"), read("actresses"), read("decisions"), read("activity"), requested.has("ratings") ? this.domains.ratings.read() : Promise.resolve({}) ]);
+        return { carList, actresses, decisions, ratings, partialCarList: !!incremental, activity: { ...activity, entries: Array.isArray(activity.entries) ? activity.entries : [] } };
     }
     /** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {string[]} carNums */
     _removeHandledNewVideos(actresses, decisions, carNums) {
@@ -351,7 +373,10 @@ export class StateService {
         const clone = (/** @type {any} */ value) => this.computation ? this.computation.run("state.clone", jsonCloneSteps(value)) : Promise.resolve(cloneStateValue(value));
         const pendingActivity = await clone(activity), pendingLog = this._prepareActivity({ ...domains.activity, entries: [ ...domains.activity.entries, pendingActivity ] });
         const touched = [ ...new Set([ ...touchedDomains, "activity" ]) ];
-        if (await this._commitAtomic(next, activity, pendingLog, touched)) return;
+        const workPatch = domains.partialCarList && touched.includes("carList")
+            ? this._workPatch(activity.changes.map((/** @type {StateRecord} */ change) => change.carNum), next.carList) : undefined;
+        if (await this._commitAtomic(next, activity, pendingLog, touched, workPatch)) return;
+        if (workPatch) throw new Error("作品行更新需要原子存储事务");
         const select = async (/** @type {StateRecord} */ source, includePendingActivity = false) => {
             /** @type {StateRecord} */ const result = {};
             for (const key of touched) result[key] = await clone(key === "activity" && includePendingActivity ? pendingLog : source[key]);
@@ -373,7 +398,7 @@ export class StateService {
         // not turn that successful mutation into a failed non-idempotent toggle.
         let handedOff = true;
         try { await this.storage.syncState?.recordCommittedActivity?.(activity, pendingLog.entries); }
-        catch (error) { handedOff = false; try { clog.warn("[状态] 已提交，同步待处理证明待恢复", error); } catch {} }
+        catch (error) { handedOff = false; try { clog.warn("[状态] 已提交，同步待处理证明待恢复", error); } catch { /* A logger failure leaves the journal available for recovery. */ } }
         try { if (handedOff) await this.storage.forage.removeItem("mutation_journal"); }
         catch (error) {
             try { clog.warn("[状态] 已提交，事务日志待清理", error); } catch { /* Keep the durable result. */ }
@@ -381,31 +406,52 @@ export class StateService {
         try { this.storage._invalidateCache(); } catch { /* Cache cleanup is post-commit. */ }
         if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
     }
+    /** The same indexed rows back mutations and undo, including deletion and recreation.
+     * @param {Iterable<string>} keys @param {StateRecord[]} records */
+    _workPatch(keys, records) {
+        const byNumber = new Map(records.map(record => [normalizeCarNum(record.carNum), record]));
+        /** @type {StateRecord[]} */ const upserts = [];
+        /** @type {string[]} */ const deletes = [];
+        for (const key of new Set(keys)) {
+            const record = byNumber.get(key);
+            if (record) upserts.push(record);
+            else deletes.push(key);
+        }
+        return { upserts, deletes };
+    }
+    /** @param {StateRecord} puts @param {{upserts: StateRecord[], deletes: string[]}} [workPatch] */
+    _commitWrites(puts, workPatch) {
+        if (!workPatch) return this.storage.atomicStorage.commitLockedBatch({ puts, deletes: [] });
+        delete puts[this.domains.carList.storageKey];
+        return this.storage.incrementalCarStore.patchWorks(workPatch.upserts, workPatch.deletes, { puts });
+    }
     /** Use detached domain snapshots prepared under the shared mutation lock.
-     * @param {StateRecord} next @param {StateRecord} activity @param {StateRecord} log @param {string[]} touched */
-    async _commitAtomic(next, activity, log, touched) {
-        if (!this.mutationCoordinator || !this.storage.atomicStorage?.commitLockedBatch) return false;
+     * @param {StateRecord} next @param {StateRecord} activity @param {StateRecord} log @param {string[]} touched
+     * @param {{upserts: StateRecord[], deletes: string[]}} [workPatch] */
+    async _commitAtomic(next, activity, log, touched, workPatch) {
+        if (!this.mutationCoordinator || !(workPatch || this.storage.atomicStorage?.commitLockedBatch)) return false;
         const committed = { ...activity, commitState: "committed" };
         const committedLog = { ...log, entries: log.entries.map((/** @type {StateRecord} */ entry) => entry.id === activity.id ? committed : entry) };
         const puts = Object.fromEntries(touched.map(key => [this.domains[key].storageKey, key === "activity" ? committedLog : next[key]]));
         const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), committed, committedLog.entries);
-        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts }, deletes: [] })) return false;
+        if (!await this._commitWrites({ ...puts, ...sync?.puts }, workPatch)) return false;
         activity.commitState = "committed";
         // Post-commit bookkeeping cannot turn a durable toggle into a retry.
-        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch {} }
+        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed toggle intact. */ } }
         try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
         if (touched.includes("carList")) this._rememberListSnapshot(activity.id, activity.changes, activity);
         return true;
     }
     /** Persist an undo mutation atomically with sync receipts under the shared lock.
-     * @param {StateRecord} nextState @param {StateRecord} log @param {string[]} touchedDomains @param {string} undoJournalId */
-    async _commitUndoAtomic(nextState, log, touchedDomains, undoJournalId) {
-        if (!this.mutationCoordinator || !this.storage.atomicStorage?.commitLockedBatch) return false;
+     * @param {StateRecord} nextState @param {StateRecord} log @param {string[]} touchedDomains @param {string} undoJournalId
+     * @param {{upserts: StateRecord[], deletes: string[]}} [workPatch] */
+    async _commitUndoAtomic(nextState, log, touchedDomains, undoJournalId, workPatch) {
+        if (!this.mutationCoordinator || !(workPatch || this.storage.atomicStorage?.commitLockedBatch)) return false;
         const puts = Object.fromEntries(touchedDomains.map(key => [this.domains[key].storageKey, key === "activity" ? log : nextState[key]]));
         const undoNotice = { id: undoJournalId, changes: [], commitState: "committed" };
         const sync = await this.storage.syncState?.prepareCommittedMutation?.(Object.keys(puts), undoNotice, log.entries);
-        if (!await this.storage.atomicStorage.commitLockedBatch({ puts: { ...puts, ...sync?.puts }, deletes: [] })) return false;
-        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch {} }
+        if (!await this._commitWrites({ ...puts, ...sync?.puts }, workPatch)) return false;
+        try { sync?.committed(); } catch (error) { try { clog.warn("[状态] 撤销已提交，通知待恢复", error); } catch { /* A logger failure leaves the committed undo intact. */ } }
         try { this.storage._invalidateCache(); } catch { /* Post-commit cache cleanup. */ }
         this._listSnapshot = null;
         return true;
@@ -474,28 +520,51 @@ export class StateService {
         if (invalidFlag) throw new TypeError(`无效状态字段: ${invalidFlag}`);
         return this._withLock((() => this._patchWithoutLock(keys, patch, options)));
     }
+    /** @param {string[]} carNums @param {string} collection @param {boolean} selected @param {StateRecord} options */
+    async setCollectionMembership(carNums, collection, selected, options) {
+        if (!/^[a-z][a-z0-9-]{0,31}$/.test(collection) || typeof selected !== "boolean") throw new TypeError("清单标识或操作无效");
+        return this.patch(carNums, {}, { ...options, type: "collection-membership", existingOnly: !selected,
+            preserveNewVideo: true, collection: { id: collection, selected } });
+    }
     /** @param {string[]} keys @param {Partial<import("./state-model.js").StateFlags>} patch @param {StateRecord} options @param {StateRecord | null} [preparedDomains] */
     async _patchWithoutLock(keys, patch, options, preparedDomains = null) {
         assertStateMutationEligible(keys, options);
         keys = uniqueStateKeys(keys.map(normalizeCarNum));
         // A toggle may reuse only the domains just read under this same lock.
         if (!preparedDomains) await this._recoverWithoutLock();
-        const domains = preparedDomains ?? await this._readDomains(), map = new Map(domains.carList.map((/** @param {StateRecord} record */ record => [ normalizeCarNum(record.carNum), record ])));
+        const domains = preparedDomains ?? await this._readDomains(null, keys), map = new Map(domains.carList.map((/** @param {StateRecord} record */ record => [ normalizeCarNum(record.carNum), record ])));
         /** @type {StateRecord[]} */
         const changes = [];
         /** @type {string[]} */
         const handled = [];
         const records = Array.isArray(options.records) ? new Map(options.records.map((record => [ normalizeCarNum(record.carNum), record ]))) : new Map;
         keys.forEach((carNum => {
-            const existing = map.get(carNum), metadata = records.get(carNum) || options.record || {}, now = utils.getNowStr(), before = existing ? cloneStateValue(existing) : null;
-            const record = existing ? { ...existing, stateFlags: normalizeStateFlags(existing.stateFlags) } : { carNum, url: metadata.url || window.location.href, names: metadata.names || "", createDate: now, stateFlags: createEmptyStateFlags() };
+            const existing = map.get(carNum);
+            if (!existing && options.existingOnly === true) return;
+            const metadata = records.get(carNum) || options.record || {}, now = this.now(), before = existing ? cloneStateValue(existing) : null;
+            const record = existing ? { ...existing, stateFlags: normalizeStateFlags(existing.stateFlags) } : { carNum, url: metadata.url || this.currentUrl(), names: metadata.names || "", createDate: now, stateFlags: createEmptyStateFlags() };
             /** @type {string[]} */
             const fields = [];
-            [ "url", "names", "publishTime", "starId", "remark", "fc2Source" ].forEach((field => {
+            [ "url", "names", "title", "publishTime", "starId", "remark", "fc2Source" ].forEach((field => {
                 if ("fc2Source" === field && ![ "fc2", "123av" ].includes(metadata[field])) return;
+                if (field === "names" && options.keepExistingNames && existing?.names) return;
                 if (!Object.prototype.hasOwnProperty.call(metadata, field) || null == metadata[field] || !options.replaceMetadata && "" === metadata[field] || record[field] === metadata[field]) return;
                 record[field] = metadata[field], fields.push(field);
             }));
+            if (Array.isArray(metadata.actorNames)) {
+                const submitted = /** @type {unknown[]} */ (metadata.actorNames);
+                const incoming = submitted.filter(name => typeof name === "string").map(name => name.trim()).filter(Boolean);
+                const previous = Array.isArray(record.actorNames) ? record.actorNames : [];
+                if (incoming.some(name => !previous.includes(name))) {
+                    record.actorNames = [...new Set([...previous, ...incoming])];
+                    fields.push("actorNames");
+                }
+            }
+            const membership = options.collection;
+            if (membership && (record.collectionMembership?.[membership.id] === true) !== membership.selected) {
+                record.collectionMembership = { ...record.collectionMembership, [membership.id]: membership.selected };
+                fields.push("collectionMembership." + membership.id);
+            }
             STATE_FLAG_NAMES.forEach((flag => Object.prototype.hasOwnProperty.call(patch, flag) && record.stateFlags[flag] !== patch[flag] && (patch[flag] && !options.preserveNewVideo && handled.push(carNum), record.stateFlags[flag] = patch[flag], fields.push(`stateFlags.${flag}`))));
             if (!fields.length && existing) return;
             record.updateDate = now, syncLegacyStatus(record), map.set(carNum, record), changes.push({ carNum, operation: existing ? "patch" : "create", fields, before, after: cloneStateValue(record), undoState: "pending" });
@@ -518,7 +587,7 @@ export class StateService {
             assertStateMutationEligible([carNum], options);
             const key = /** @type {string} */ (normalizeCarNum(carNum));
             await this._recoverWithoutLock();
-            const domains = await this._readDomains();
+            const domains = await this._readDomains(null, [key]);
             let record = null;
             for (let index = domains.carList.length - 1; index >= 0; index--) if (normalizeCarNum(domains.carList[index].carNum) === key) { record = domains.carList[index]; break; }
             const flags = normalizeStateFlags(record?.stateFlags);
@@ -530,7 +599,7 @@ export class StateService {
         const keys = new Set(uniqueStateKeys((Array.isArray(carNums) ? carNums : [ carNums ]).map(normalizeCarNum)));
         return this._withLock(async () => {
             await this._recoverWithoutLock();
-            const domains = await this._readDomains(), changes = domains.carList.filter((/** @type {StateRecord} */ record) => keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))).map((/** @type {StateRecord} */ record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: [ "record" ], before: cloneStateValue(record), after: null, undoState: "pending" }));
+            const domains = await this._readDomains(null, [...keys]), changes = domains.carList.filter((/** @type {StateRecord} */ record) => keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))).map((/** @type {StateRecord} */ record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: [ "record" ], before: cloneStateValue(record), after: null, undoState: "pending" }));
             if (!changes.length) return { changed: [], transactionId: null };
             const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "record-delete", commitState: "pending", changes, createdAt: new Date().toISOString(), undoAttemptedAt: null };
             await this._commit(domains, { carList: domains.carList.filter((/** @type {StateRecord} */ record) => !keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity, ["carList", "activity"]);
@@ -593,14 +662,21 @@ export class StateService {
             await this._recoverWithoutLock();
             await this.storage.syncState?.refreshUndo?.();
             if (this.storage.syncState && !this.storage.syncState.canUndo(transactionId)) throw new Error("来自其他设备或恢复文件的操作只供查看，不能在本机撤销");
-            const before = await this._readDomains(["carList", "actresses", "decisions", "activity", "ratings"]), domains = cloneStateValue(before), transaction = domains.activity.entries.find((/** @param {StateRecord} entry */ entry => entry.id === transactionId && "committed" === entry.commitState));
+            const incremental = this.storage.incrementalCarStore;
+            const before = await this._readDomains([...(incremental ? [] : ["carList"]), "actresses", "decisions", "activity", "ratings"]);
+            const domains = cloneStateValue(before), transaction = domains.activity.entries.find((/** @param {StateRecord} entry */ entry => entry.id === transactionId && "committed" === entry.commitState));
             if (!transaction) throw new Error("操作记录不存在或尚未提交");
+            if (incremental) {
+                const keys = uniqueStateKeys(transaction.changes.map((/** @type {StateRecord} */ change) => normalizeCarNum(change.carNum)));
+                domains.carList = await incremental.getWorksByCarNums(keys);
+            }
             const carMap = new Map(domains.carList.map((/** @param {StateRecord} record */ record => [ normalizeCarNum(record.carNum), cloneStateValue(record) ]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses);
             /** @type {string[]} */
             const reverted = [];
             /** @type {string[]} */
             const conflicts = [];
             const touched = new Set(["activity"]);
+            const touchedCars = new Set();
             for (const change of transaction.changes) {
                 if ("reverted" === change.undoState) continue;
                 if ("personal-rating" === change.operation) {
@@ -625,6 +701,7 @@ export class StateService {
                 }
                 if ("delete" === change.operation) {
                     current ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (carMap.set(change.carNum, cloneStateValue(change.before)), change.undoState = "reverted", reverted.push(change.carNum), touched.add("carList"));
+                    if (!current) touchedCars.add(change.carNum);
                     continue;
                 }
                 if ("new-video-decision" === change.operation) {
@@ -653,10 +730,11 @@ export class StateService {
                         const value = getStatePath(change.before, field);
                         setStatePath(current, field, value === undefined && field.startsWith("stateFlags.") ? false : value);
                     }
-                    current.updateDate = utils.getNowStr();
+                    current.updateDate = this.now();
                     syncLegacyStatus(current);
                     carMap.set(change.carNum, current);
                 }
+                touchedCars.add(change.carNum);
                 touched.add("carList"), restoreEffect && change.newVideoEffect && (restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), touched.add("actresses"), touched.add("decisions")), change.undoState = "reverted", reverted.push(change.carNum);
             }
             transaction.undoAttemptedAt = new Date().toISOString();
@@ -666,8 +744,10 @@ export class StateService {
             /** @type {Record<string, any>} */
             const beforeMap = before;
             const journal = { schema: 2, dataVersion: CURRENT_DATA_VERSION, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(beforeMap[key])])), after: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(nextState[key])])) };
-            const committedAtomically = await this._commitUndoAtomic(nextState, log, touchedDomains, journal.id);
+            const workPatch = incremental && touchedCars.size ? this._workPatch(touchedCars, nextCars) : undefined;
+            const committedAtomically = await this._commitUndoAtomic(nextState, log, touchedDomains, journal.id, workPatch);
             if (!committedAtomically) {
+                if (workPatch) throw new Error("作品行撤销需要原子存储事务");
                 try {
                     await this.storage.forage.setItem("mutation_journal", journal);
                     for (const key of touchedDomains) {
@@ -682,6 +762,9 @@ export class StateService {
                 }
             }
             reverted.length && await this._notifyCommitted("car-state-changed", { carNums: reverted, transactionId: journal.id, undoOf: transactionId });
+            if (touched.has("actresses") || touched.has("decisions")) {
+                await this._notifyCommitted("new-video-changed", { carNums: reverted, reason: "undo", transactionId: journal.id, undoOf: transactionId });
+            }
             if (touched.has("ratings")) await this._notifyCommitted("personal-rating-changed", { carNums: reverted, transactionId: journal.id, undoOf: transactionId });
             await this._notifyCommitted("activity-log-changed", { transactionId, undo: !0 });
             return { reverted, conflicts };

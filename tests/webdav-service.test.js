@@ -21,13 +21,13 @@ function downloadFixture(responses) {
 it("returns a direct backup download as a string using manual redirects", async () => {
     const { client, request } = downloadFixture([{}]);
     await expect(client.getFileContent("backup.json")).resolves.toBe("portable-backup");
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ redirect: "manual", timeout: 10_000, headers: { Authorization: `Basic ${btoa("user:pass")}`, Depth: "1", Accept: "application/octet-stream" } }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ redirect: "manual", timeout: 10_000, headers: { Authorization: `Basic ${btoa("user:pass")}`, Accept: "application/octet-stream" } }));
 });
 
 it.each([301, 302, 303, 307, 308])("follows a relative same-origin %i download redirect with existing authentication", async status => {
     const { client, request } = downloadFixture([{ status, responseHeaders: "lOcAtIoN: ../download.json\r\n" }, {}]);
     await expect(client.getFileContent("backup.json")).resolves.toBe("portable-backup");
-    expect(request.mock.calls[1][0]).toMatchObject({ url: "https://dav.example.test/dav/download.json", method: "GET", headers: { Authorization: `Basic ${btoa("user:pass")}`, Depth: "1" } });
+    expect(request.mock.calls[1][0]).toMatchObject({ url: "https://dav.example.test/dav/download.json", method: "GET", headers: { Authorization: `Basic ${btoa("user:pass")}` } });
 });
 
 it("isolates every public CDN hop and never restores credentials on returning to the origin", async () => {
@@ -92,10 +92,11 @@ it("routes WebDAV requests through HttpService with an exact user-local origin",
     await client.backup("JHS", "backup.json", "payload");
     expect(request).toHaveBeenNthCalledWith(1, expect.objectContaining({
         providerId: "webdav", method: "MKCOL", url: "http://192.168.1.10:5244/dav/JHS",
+        headers: { Authorization: `Basic ${btoa("user:pass")}` },
         cacheScope: "none", urlPolicy: { trustClass: "user-local", expectedOrigin: "http://192.168.1.10:5244" },
     }));
     expect(request).toHaveBeenNthCalledWith(2, expect.objectContaining({
-        method: "PUT", body: "payload", headers: expect.objectContaining({ Authorization: `Basic ${btoa("user:pass")}` }),
+        method: "PUT", body: "payload", headers: { Authorization: `Basic ${btoa("user:pass")}`, "Content-Type": "text/plain" },
     }));
 });
 
@@ -123,7 +124,7 @@ it("parses portable WebDAV file metadata without exposing credentials", async ()
 it("uses a 10-second WebDAV deadline without changing ordinary request settings", async () => {
     const calls = [];
     const adapter = new UserscriptHttpAdapter(options => {
-        calls.push({ method: options.method, timeout: options.timeout });
+        calls.push({ method: options.method, timeout: options.timeout, depth: options.headers?.Depth });
         options.onload({ status: options.method === "MKCOL" ? 405 : 200, responseText: "", finalUrl: options.url });
         return { abort: vi.fn() };
     });
@@ -131,13 +132,15 @@ it("uses a 10-second WebDAV deadline without changing ordinary request settings"
     const http = new HttpService(adapter, policy, { settings: { snapshot: () => ({ httpTimeout: 5_000 }) } });
     const client = new WebDavService(http).createClient({ url: "https://dav.example.test/dav", username: "user", password: "pass" });
     await client.backup("JHS", "backup.json", "payload");
-    await client.request("PROPFIND", "JHS");
+    await client.request("propfind", "JHS");
+    await client.request("PROPFIND", "", { Depth: "0" });
     await client.request("GET", "JHS/backup.json");
     await client.request("DELETE", "JHS/backup.json");
     await http.request({ providerId: "ordinary", method: "GET", url: "https://api.example.test/data", cacheScope: "none", urlPolicy: { trustClass: "builtin-public", hosts: ["example.test"] } });
     expect(calls).toEqual([
         { method: "MKCOL", timeout: 10_000 }, { method: "PUT", timeout: 10_000 },
-        { method: "PROPFIND", timeout: 10_000 }, { method: "GET", timeout: 10_000 },
+        { method: "PROPFIND", timeout: 10_000, depth: "1" },
+        { method: "PROPFIND", timeout: 10_000, depth: "0" }, { method: "GET", timeout: 10_000 },
         { method: "DELETE", timeout: 10_000 }, { method: "GET", timeout: 5_000 },
     ]);
 });

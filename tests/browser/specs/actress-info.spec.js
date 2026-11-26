@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
@@ -105,6 +106,7 @@ test("uses stored actressProfile without network lookup, strips actor-page badge
   await injectUserscriptRuntime(page, { preserveStorage: true });
   await page.waitForFunction(() => window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]);
   await expect(page.locator(".actress-info")).toContainText("出生日期: 1995年1月2日");
+  await expect(page.locator(".actress-info")).toContainText("体重: 46kg");
   await expect(page.locator(".actress-info")).toHaveAttribute("href", "https://ja.wikipedia.org/wiki/Actor_One");
   expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.requests.filter((r) => r.url.includes("wikipedia.org")))).toEqual([]);
 
@@ -153,4 +155,78 @@ test("uses stored actressProfile without network lookup, strips actor-page badge
   });
   expect(overflow.boxOverflow).toBeLessThanOrEqual(0);
   expect(overflow.panelOverflow).toBeLessThanOrEqual(0);
+});
+
+test("actor profile wraps whole fields on narrow pages and omits missing values", async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "explicit viewport matrix owner");
+  await fulfillHostFixtures(context);
+  const url = "https://ja.wikipedia.org/wiki/Actor_Layout_Fixture";
+  await page.goto("https://javdb.com/actors/actor-layout-fixture");
+  await page.evaluate(() => {
+    document.body.innerHTML = `<main><section class="section"><div class="container">
+      <header class="section-title" id="actor-profile-header">
+        <div class="title main-title section-columns">
+          <div class="actor-section-name">示例演员, Example Actor</div>
+          <div class="section-meta">315 部影片</div>
+        </div>
+      </header>
+    </div></section></main>`;
+  });
+  await page.addStyleTag({ path: fileURLToPath(new URL("../fixtures/javdb-app-11569924.css", import.meta.url)) });
+  await injectUserscriptRuntime(page, {
+    settingOverrides: { enableLoadActressInfo: "yes", enableLoadReview: "no" },
+    beforeUserscriptInjection: (host) => host.evaluate(async (sourceUrl) => {
+      const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
+      await forage.setItem("favorite_actresses", [{
+        starId: "actor-layout-fixture",
+        name: "示例演员",
+        allName: ["示例演员", "Example Actor"],
+        actressProfileVerifiedUrl: sourceUrl,
+        actressProfile: {
+          url: sourceUrl,
+          matchedName: "示例演员",
+          birthday: "1996年12月24日",
+          age: "29岁",
+          height: "153cm",
+          weight: "",
+          threeSizeText: "80 - 54 - 80",
+          braSize: "E",
+        },
+      }]);
+    }, url),
+  });
+
+  const header = page.locator("#actor-profile-header");
+  const profile = header.locator(".actress-info");
+  await expect(profile).toHaveAttribute("href", url);
+  await expect(profile).toHaveAttribute("target", "_blank");
+
+  for (const width of [681, 320, 1440]) {
+    await test.step(`${width}px`, async () => {
+      await page.setViewportSize({ width, height: 640 });
+      await expect(profile).toHaveCSS("font-size", "14px");
+      await expect(profile).toHaveCSS("font-weight", "400");
+      await expect(profile.locator("span")).toHaveText([
+        "出生日期: 1996年12月24日", "年龄: 29岁", "身高: 153cm", "三围: 80 - 54 - 80", "罩杯: E",
+      ]);
+
+      const layout = await profile.evaluate((element) => ({
+        fields: Array.from(element.querySelectorAll("span"), (field) => field.getBoundingClientRect().toJSON()),
+        lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+        profileOverflow: element.scrollWidth - element.clientWidth,
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      }));
+      expect(layout.profileOverflow).toBeLessThanOrEqual(1);
+      expect(layout.pageOverflow).toBeLessThanOrEqual(1);
+      for (const [index, field] of layout.fields.entries()) {
+        expect(field.height).toBeLessThanOrEqual(layout.lineHeight + 1);
+        const previous = layout.fields[index - 1];
+        if (!previous) continue;
+        if (field.top === previous.top) expect(field.left).toBeGreaterThan(previous.right);
+        else expect(field.top).toBeGreaterThan(previous.bottom);
+      }
+      if (width === 320) expect(layout.fields.at(-1).top).toBeGreaterThan(layout.fields[0].top);
+      await header.screenshot({ path: testInfo.outputPath(`actor-profile-${width}.png`), animations: "disabled" });
+    });
+  }
 });

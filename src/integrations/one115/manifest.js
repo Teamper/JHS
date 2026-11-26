@@ -43,6 +43,16 @@ export function createOne115Adapter(http) {
     return Object.freeze({
         contracts: ["AccountStatus", "CloudFile", "OfflineSubmission"],
         homeUrl: HOME_URL,
+        /** @param {{page?: number, scope?: any}} [options] */
+        async listTasks(options = {}) {
+            const page = options.page ?? 1;
+            const response = await request(`https://lixian.115.com/lixian/?ct=lixian&ac=task_lists&page=${page}`, { method: "POST", capability: "offline.list", scope: options.scope });
+            const payload = /** @type {any} */ (parsePayload(response.data));
+            if (!payload?.state) throw new JhsError("AUTH_REQUIRED", String(payload?.error_msg || "请先登录 115"), { source: "one115" });
+            if (!Array.isArray(payload.tasks)) throw new JhsError("INVALID_RESPONSE", "115 任务列表无效", { source: "one115" });
+            const labels = new Map([[0, "等待"], [1, "下载中"], [2, "完成"], [-1, "失败"]]);
+            return { page, total: Number(payload.total || 0), items: payload.tasks.map((/** @type {any} */ task) => ({ id: String(task.info_hash), name: String(task.name || ""), status: labels.get(task.status) || String(task.status), progress: Number(task.percentDone || 0) })) };
+        },
         /** @param {string} folderId @param {any} [options] */
         listDirectory(folderId, options) { return list115Directory(http, folderId, options); },
         /** @param {any} file @param {any} [options] */
@@ -84,12 +94,15 @@ export function createOne115Adapter(http) {
         },
         /** @param {string} keyword @param {{scope?: any, offset?: number, limit?: number, ttlMs?: number, force?: boolean}} [options] */
         async searchFiles(keyword, options = {}) { return (await this.searchFilePage(keyword, options)).items; },
-        /** @param {string} resource @param {{scope?: any, folderId?: string, onMutationDispatch?: () => void}} [options] */
+        /** @param {string} resource @param {{scope?: any, folderId?: string, expectedAccountId?: string, onMutationDispatch?: () => void}} [options] */
         async submit(resource, options = {}) {
             if (!/^magnet:/i.test(resource) && !/^ed2k:/i.test(resource)) throw new JhsError("UNSUPPORTED", "Unsupported offline URL", { source: "one115" });
             const infoResponse = await request(`https://115.com/?ct=offline&ac=space&_=${Date.now()}`, { capability: "offline.submit", scope: options.scope });
             const info = /** @type {any} */ (infoResponse.data);
             if (!info?.sign) throw new JhsError("AUTH_REQUIRED", "115 未登录或离线空间信息获取失败", { source: "one115" });
+            if (options.expectedAccountId && String(info.uid) !== options.expectedAccountId) {
+                throw Object.assign(new Error("115 账号已切换，请重新核对任务"), { code: "SUBMISSION_ACCOUNT_CHANGED" });
+            }
             const body = new URLSearchParams({ url: resource, wp_path_id: options.folderId || "", uid: String(info.uid || ""), sign: info.sign, time: String(info.time || "") }).toString();
             const response = await request("https://115.com/web/lixian/?ct=lixian&ac=add_task_url", { capability: "offline.submit", scope: options.scope, method: "POST", body, responseType: "text", headers: { "Content-Type": "application/x-www-form-urlencoded" }, onDispatch: options.onMutationDispatch });
             const payload = /** @type {any} */ (parsePayload(response.data));
@@ -119,8 +132,8 @@ export function createOne115Adapter(http) {
 
 export default defineIntegration({
     id: "one115", trustClass: "builtin-public", hosts: ["115.com", "aliyuncs.com"],
-    capabilities: ["account.status", "file.search", "file.rename", "file.list", "file.upload", "offline.submit"], requires: [SERVICE.http],
+    capabilities: ["account.status", "file.search", "file.rename", "file.list", "file.upload", "offline.submit", "offline.list"], requires: [SERVICE.http],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }),
     createAdapter: (/** @type {any} */ client) => createOne115Adapter(client.http), createHostAdapter: null,
-    cachePolicy: { "account.status": "none", "file.search": "none", "file.rename": "none", "file.list": "none", "file.upload": "none", "offline.submit": "none" }, quality: "silver",
+    cachePolicy: { "account.status": "none", "file.search": "none", "file.rename": "none", "file.list": "none", "file.upload": "none", "offline.submit": "none", "offline.list": "none" }, quality: "silver",
 });

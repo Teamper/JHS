@@ -17,21 +17,22 @@ export class WebDavClient {
     /** @type {Set<string>} */
     #deletableBackupNames = new Set();
 
-    /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password @param {any} [scope] */
-    constructor(http, davUrl, username, password, scope = undefined) {
+    /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password @param {any} [scope] @param {(xml: string) => Document} [parseXml] */
+    constructor(http, davUrl, username, password, scope = undefined, parseXml = xml => new DOMParser().parseFromString(xml, "text/xml")) {
         this.http = http;
         this.baseUrl = new URL(davUrl.endsWith("/") ? davUrl : `${davUrl}/`);
         this.username = username;
         this.password = password;
         this.folderName = null;
         this.scope = scope;
+        this.parseXml = parseXml;
     }
     authHeaders() {
         // TextEncoder 编码后再 btoa，兼容非 Latin1（中文）用户名/密码
         const bytes = new TextEncoder().encode(`${this.username}:${this.password}`);
         let binary = "";
         for (const byte of bytes) binary += String.fromCharCode(byte);
-        return { Authorization: `Basic ${btoa(binary)}`, Depth: "1" };
+        return { Authorization: `Basic ${btoa(binary)}` };
     }
     /** @param {string} method @param {string} path @param {Record<string, string>} [headers] @param {unknown} [body] @param {Record<string, unknown>} [requestOptions] */
     async request(method, path, headers = {}, body, requestOptions = {}) {
@@ -41,8 +42,13 @@ export class WebDavClient {
     }
     /** Return response metadata while isolating anonymous download hops. @param {string} method @param {URL} url @param {Record<string, string>} headers @param {unknown} body @param {Record<string, unknown>} requestOptions @param {boolean} [anonymous] */
     async #requestResponse(method, url, headers, body, requestOptions, anonymous = false) {
+        const requestHeaders = anonymous ? headers : {
+            ...this.authHeaders(),
+            ...(method.toUpperCase() === "PROPFIND" ? { Depth: "1" } : {}),
+            ...headers,
+        };
         const options = {
-            providerId: "webdav", method, url: url.href, headers: anonymous ? headers : { ...this.authHeaders(), ...headers }, body,
+            providerId: "webdav", method, url: url.href, headers: requestHeaders, body,
             responseType: "text", cacheScope: "none", ...requestOptions, timeout: 10_000,
             urlPolicy: { trustClass: anonymous ? "custom-public" : "user-local", expectedOrigin: anonymous ? url.origin : this.baseUrl.origin },
         };
@@ -83,7 +89,7 @@ export class WebDavClient {
         const directory = new URL(directoryPath, this.baseUrl);
         const parentSegments = directory.pathname.split("/").slice(0, -1).map(segment => decodeURIComponent(segment));
         const xml = String(await this.request("PROPFIND", directoryPath, { Depth: "1", "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:resourcetype/></d:prop></d:propfind>'));
-        const document = new DOMParser().parseFromString(xml, "text/xml");
+        const document = this.parseXml(xml);
         if (document.getElementsByTagName("parsererror").length || document.documentElement?.localName !== "multistatus" || document.documentElement.namespaceURI !== "DAV:") throw new Error("WebDAV 备份列表格式无效");
         /** @type {Map<string, {fileId: string, name: string, size: number, createTime: string, canDelete?: false}>} */
         const files = new Map();
@@ -154,7 +160,7 @@ export class WebDavClient {
     async listManagedBackups(folder, sourceId) {
         const directory = new URL(`${encodeBackupFileName(folder)}/`, this.baseUrl);
         const xml = String(await this.request("PROPFIND", encodeBackupFileName(folder), { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>'));
-        const document = new DOMParser().parseFromString(xml, "text/xml");
+        const document = this.parseXml(xml);
         if (document.getElementsByTagName("parsererror").length || document.documentElement?.localName !== "multistatus" || document.documentElement?.namespaceURI !== "DAV:") throw new Error("WebDAV 备份列表格式无效");
         const files = new Set();
         for (const response of document.getElementsByTagNameNS("DAV:", "response")) {
@@ -190,7 +196,7 @@ export class WebDavClient {
     async listSyncFiles() {
         const folder = encodeBackupFileName(SYNC_FOLDER), directory = new URL(`${folder}/`, this.baseUrl);
         const xml = String(await this.request("PROPFIND", folder, { Depth: "1", "Cache-Control": "no-cache", "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>'));
-        const document = new DOMParser().parseFromString(xml, "text/xml");
+        const document = this.parseXml(xml);
         if (document.getElementsByTagName("parsererror").length || document.documentElement?.localName !== "multistatus" || document.documentElement.namespaceURI !== "DAV:") throw new Error("同步目录列表格式无效");
         /** @type {Map<string, any>} */ const files = new Map();
         for (const response of document.getElementsByTagNameNS("DAV:", "response")) {
@@ -269,15 +275,16 @@ export class WebDavClient {
 }
 
 export class WebDavService {
-    /** @param {import("./http-service.js").HttpService} http @param {import("./credential-service.js").CredentialService} [credential] @param {import("./settings-service.js").SettingsService} [settings] @param {string} [pageOrigin] */
-    constructor(http, credential = undefined, settings = undefined, pageOrigin = globalThis.location?.origin) {
+    /** @param {import("./http-service.js").HttpService} http @param {import("./credential-service.js").CredentialService} [credential] @param {import("./settings-service.js").SettingsService} [settings] @param {string} [pageOrigin] @param {(xml: string) => Document} [parseXml] */
+    constructor(http, credential = undefined, settings = undefined, pageOrigin = globalThis.location?.origin, parseXml = undefined) {
         this.http = http; this.credential = credential; this.settings = settings;
+        this.parseXml = parseXml;
         const origin = pageOrigin ? new URL(pageOrigin).origin : null;
         this.passwordKey = origin && origin !== "null" ? `${CREDENTIAL_KEYS.webDavPassword}:origin:${encodeURIComponent(origin)}` : null;
         /** @type {import("./webdav-shared-profile.js").WebDavSharedProfile | null} */ this.sharedProfile = null;
     }
     /** @param {{url: string, username: string, password: string}} config @param {{scope?: any}} [options] */
-    createClient(config, options = {}) { return new WebDavClient(this.http, config.url, config.username, config.password, options.scope); }
+    createClient(config, options = {}) { return new WebDavClient(this.http, config.url, config.username, config.password, options.scope, this.parseXml); }
     async getProfileSnapshot() {
         if (this.sharedProfile) return this.sharedProfile.snapshot();
         if (!this.settings) return { profile: await this.getProfile(), revision: "" };

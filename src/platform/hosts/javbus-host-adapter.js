@@ -1,5 +1,6 @@
 // @ts-check
 import { privacySelectors } from "../../contracts/privacy-targets.js";
+import { findJavBusDetailRoot, readJavBusDetailImageSequence } from "../../core/javbus-detail-images.js";
 
 import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie-identity.js";
@@ -10,7 +11,7 @@ const JAVBUS_LIST_PREFIXES = new Set([ "star", "genre", "maker", "actress", "ser
 export class JavBusHostAdapter {
     getPrivacySelectors() { return privacySelectors({ title: ".movie-box .photo-info span,.container > h3,.container > .row > h3", code: ".movie-box date,.info .header + span,.info p", actors: ".star-box,.star-name,.info a[href*='/star/']", images: ".movie-box img,.bigImage img,.sample-box img,.star-box img" }); }
     locateMediaLibraryDetailRoot() { return this.detectRoute() === "detail" ? this.document.querySelector(".container .info") : null; }
-    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
+    /** @param {Document} [documentRuntime] @param {Location | URL} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
     constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) { this.site = "javbus"; this.document = documentRuntime; this.location = locationRuntime; this.blacklistParser = blacklistParser; }
     getBlacklistSubjectInfo() {
         if (!this.blacklistParser) throw new Error("黑名单页面解析器尚未配置");
@@ -103,7 +104,8 @@ export class JavBusHostAdapter {
         const actress = [...this.document.querySelectorAll('span[onmouseover*="star_"] a')].map((element) => element.textContent?.trim()).filter(Boolean).join(" ");
         const release = [...this.document.querySelectorAll("span.header")].find((element) => element.textContent?.includes("發行日期:"));
         const publishTime = release?.parentElement?.textContent?.replace("發行日期:", "").trim() ?? "";
-        return Object.freeze({ ...ref, actress, actors: "", publishTime });
+        const title = this.document.querySelector(".container > h3, .container > .row > h3")?.textContent?.trim() ?? "";
+        return Object.freeze({ ...ref, title, actress, actors: "", publishTime });
     }
     locateListRoot() { return this.document.querySelector(".masonry"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item, :scope > .movie-box") ?? [])]; }
@@ -121,7 +123,7 @@ export class JavBusHostAdapter {
         root.classList.add("masonry", ...classes);
         return root;
     }
-    locateDetailRoot() { return this.locateNativeMagnets()?.closest(".container") ?? this.document.querySelector(".container .row.movie")?.parentElement ?? null; }
+    locateDetailRoot() { return findJavBusDetailRoot(this.document); }
     locateDetailSlots() {
         const root = this.locateDetailRoot();
         return Object.freeze({
@@ -140,19 +142,7 @@ export class JavBusHostAdapter {
     }
     locateNativeGallery() { return this.document.querySelector("#sample-waterfall, .sample-box"); }
     getDetailImageSequence() {
-        const root = this.locateDetailRoot();
-        return [...(root?.querySelectorAll("#sample-waterfall a.sample-box") ?? [])].flatMap(trigger => {
-            if (trigger.closest(".screen-container")) return [];
-            const image = trigger.querySelector("img");
-            if (!image) return [];
-            let url;
-            try { url = new URL(trigger.getAttribute("href") || image.currentSrc || image.src, this.document.baseURI); } catch { return []; }
-            if (url.origin === "https://www.prestige-av.com" && !url.username && !url.password && url.pathname.startsWith("/images/corner/goods/")) {
-                url.hostname = "image.mgstage.com";
-                url.pathname = "/images/" + url.pathname.slice("/images/corner/goods/".length);
-            }
-            return ["https:","http:"].includes(url.protocol) ? [{ trigger, image, url:url.href }] : [];
-        });
+        return readJavBusDetailImageSequence(this.locateDetailRoot(), this.location.href);
     }
     locateNativeMagnets() { return this.document.querySelector("#magnet-table"); }
     getDetailResourceBoundary() {

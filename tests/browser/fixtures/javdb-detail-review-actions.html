@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>JavDB review actions fixture</title></head>
+<body>
+  <main class="container video-detail">
+    <h2 class="video-title"><strong>ABC-123</strong> Browser Fixture</h2>
+    <div class="video-meta-panel">
+      <nav class="panel movie-panel-info">
+        <div class="review-buttons" data-review-submissions="0">
+          <div class="panel-block">
+            <div class="buttons are-small review-buttons">
+              <form class="button_to" method="post" action="/v/abc-123/reviews/want_to_watch" data-remote="true">
+                <button class="button" type="submit" aria-pressed="false">想看</button>
+              </form>
+              <button class="button modal-button" type="button">看過</button>
+              <button class="button modal-button" type="button">存入清單</button>
+            </div>
+          </div>
+          <div class="panel-block">
+            <div class="buttons are-small review-buttons">
+              <a class="button is-info is-outlined" href="#magnets-content">下載</a>
+              <a class="button is-info is-outlined" href="/v/test-id/corrections/new">訂正</a>
+            </div>
+          </div>
+          <div class="panel-block" data-review-count>1555 人想看，60 人看過</div>
+          <div class="modal"><button class="button is-small" type="button">查看賬戶狀態</button></div>
+        </div>
+      </nav>
+    </div>
+  </main>
+  <template id="marked-review">
+    <div>
+      <div class="panel-block">
+        <div>
+          <div class="review-title"><a href="/users/want_watch_videos"><span class="tag is-info is-light">我想看這部影片</span></a></div>
+          <div class="buttons are-small review-buttons">
+            <a class="button" href="/v/abc-123/reviews/1/edit" data-remote="true">修改</a>
+            <a class="button is-danger" href="/v/abc-123/reviews/1" data-method="delete" data-remote="true">刪除</a>
+            <button class="button modal-button" type="button">存入清單</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+  <script>
+    const original = document.querySelector("[data-review-submissions]").cloneNode(true);
+    const markedReview = document.querySelector("#marked-review");
+    let submissions = Number(sessionStorage.getItem("fixture-review-submissions") || 0);
+
+    function renderReview() {
+      const replacement = original.cloneNode(true);
+      replacement.dataset.reviewSubmissions = submissions;
+      if (submissions % 2 === 1) {
+        replacement.firstElementChild.replaceWith(markedReview.content.cloneNode(true));
+        replacement.querySelector("[data-review-count]").textContent = "1556 人想看，60 人看過";
+      }
+      document.querySelector("[data-review-submissions]").replaceWith(replacement);
+    }
+
+    function submitReview(event) {
+      event.preventDefault();
+      sessionStorage.setItem("fixture-review-submissions", String(++submissions));
+      renderReview();
+    }
+
+    renderReview();
+    document.addEventListener("submit", (event) => {
+      if (event.target.matches(".review-buttons .button_to[data-remote]")) submitReview(event);
+    });
+    document.addEventListener("click", (event) => {
+      if (event.target.closest('.review-buttons a[data-method="delete"]')) submitReview(event);
+    });
+  </script>
+</body>
+</html>

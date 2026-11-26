@@ -49,7 +49,7 @@ function createController({ screenshotAvailable = true, settings: settingValues 
     const scope = new LifecycleScope("cover-button-test");
     const controller = new CoverButtonController({
         document: doc, window: win, list, settings, state,
-        screenshot: { resolve: vi.fn(async () => ({ url: "https://images.example.test/screenshot.jpg" })) },
+        screenshot: { resolvePreview: vi.fn(async () => ({ url: "https://images.example.test/screenshot.jpg", match: "confirmed" })) },
         storage: {}, movie: { externalSiteOrigin: (key) => `https://${key}.example.test`, providerOrigin: () => "https://123av.example.test" },
         scope, ui, clipboard: { copyText: vi.fn(async () => true) }, notifications, diagnostics, navigation,
         screenshotAvailable, isJavBus: false,
@@ -147,9 +147,9 @@ describe("native list card actions Feature", () => {
 
         current.document.querySelector(".screenSvg").click();
 
-        await vi.waitFor(() => expect(current.controller.screenshot.resolve).toHaveBeenCalledWith(
-            { carNum: "ABC-123" },
-            expect.objectContaining({ allowWhenDisabled: true, scope: current.scope }),
+        await vi.waitFor(() => expect(current.controller.screenshot.resolvePreview).toHaveBeenCalledWith(
+            { carNum: "ABC-123", title: "ABC-123 Test title" },
+            expect.objectContaining({ allowWhenDisabled: true, scope: expect.any(LifecycleScope) }),
         ));
         expect(current.ui.openImageViewer).toHaveBeenCalledOnce();
         expect(current.ui.openImageViewer.mock.calls[0][0]).toBe("https://images.example.test/screenshot.jpg");
@@ -158,7 +158,7 @@ describe("native list card actions Feature", () => {
     it("keeps the clicked screenshot button through asynchronous resolution and later delegated handlers", async () => {
         current = createController();
         let resolveScreenshot;
-        current.controller.screenshot.resolve.mockImplementation(() => new Promise(resolve => { resolveScreenshot = resolve; }));
+        current.controller.screenshot.resolvePreview.mockImplementation(() => new Promise(resolve => { resolveScreenshot = resolve; }));
         await current.controller.start();
         const trigger = current.document.querySelector(".screenSvg"), card = trigger.closest(".item");
         current.$(current.document).on("click.screenshotTriggerTest", ".item", () => {});

@@ -13,14 +13,18 @@ const injectRuntime = async (page, options) => {
   try { return await injectUserscriptRuntime(page, options); } finally { page.addScriptTag = original; }
 };
 
-async function boot(page, context, { hiddenVideo = false, iframe = false, disabledPlugins = [], realLayer = false } = {}) {
+async function boot(page, context, { hiddenVideo = false, iframe = false, disabledPlugins = [], realLayer = false, fixture = "javdb-detail-interactions.html" } = {}) {
   await fulfillHostFixtures(context);
-  const base = await readFile(new URL("../fixtures/javdb-detail-interactions.html", import.meta.url), "utf8");
+  const base = await readFile(new URL(`../fixtures/${fixture}`, import.meta.url), "utf8");
   await context.route("https://javdb.com/v/**", route => route.fulfill({ contentType: "text/html", body: base }));
   await page.goto(iframe ? "https://javdb.com/" : "https://javdb.com/v/test-id");
   await injectRuntime(page, { disabledPlugins, beforeUserscriptInjection: realLayer ? injectRealLayer : undefined, settingOverrides: { enableLoadPreviewVideo: "no", enableLoadReview: "no", enableMagnetsFilter: "no", needClosePage: "no" } });
   await page.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
   if (!iframe) return page;
+  return openDetailFrame(page);
+}
+
+async function openDetailFrame(page) {
   const navigation = page.waitForEvent("framenavigated", { predicate: frame => frame !== page.mainFrame() && frame.url().includes("/v/") });
   await page.locator(".movie-list .video-title").click();
   const frame = await navigation;
@@ -28,6 +32,60 @@ async function boot(page, context, { hiddenVideo = false, iframe = false, disabl
   await frame.waitForFunction(() => Boolean(window.__jhsBrowserDiagnostics.bootstrapPhases["first-ready"]));
   return frame;
 }
+
+test("native review actions keep their style after reopening an already marked detail", async ({ page, context }, testInfo) => {
+  const hostCss = fileURLToPath(new URL("../fixtures/javdb-app-11569924.css", import.meta.url));
+  let frame = await boot(page, context, { iframe: true, fixture: "javdb-detail-review-actions.html" });
+  await frame.addStyleTag({ path: hostCss });
+  const { height, radius, accent } = await frame.evaluate(() => {
+    const tokens = getComputedStyle(document.documentElement);
+    const probe = document.createElement("span");
+    probe.style.color = "var(--jhs-accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      height: tokens.getPropertyValue("--jhs-control-height"),
+      radius: tokens.getPropertyValue("--jhs-radius-sm"),
+      accent,
+    };
+  });
+
+  const group = () => frame.locator("[data-review-submissions]");
+  const want = () => group().getByRole("button", { name: "想看", exact: true });
+  const checkActions = async (submissions, labels, count, screenshot) => {
+    await expect(group()).toHaveAttribute("data-review-submissions", String(submissions));
+    await expect(group().locator("[data-review-count]")).toHaveText(`${count} 人想看，60 人看過`);
+    const actions = group().locator(".buttons .button");
+    await expect(actions).toHaveText(labels);
+    for (const action of await actions.all()) {
+      await expect(action).toHaveCSS("height", height);
+      await expect(action).toHaveCSS("border-radius", radius);
+    }
+    await expect(group().locator(".modal .button")).toHaveCSS("border-radius", "0px");
+    await page.mouse.move(1, 1);
+    await group().screenshot({ path: testInfo.outputPath(screenshot), animations: "disabled" });
+    await actions.first().hover();
+    await expect(actions.first()).toHaveCSS("border-top-color", accent);
+  };
+
+  const unmarkedLabels = ["想看", "看過", "存入清單", "下載", "訂正"];
+  const markedLabels = ["修改", "刪除", "存入清單", "下載", "訂正"];
+  await checkActions(0, unmarkedLabels, 1555, "01-before-mark.png");
+  await want().click();
+  await expect(group().locator(".review-title")).toHaveText("我想看這部影片");
+  await checkActions(1, markedLabels, 1556, "02-after-mark.png");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".layui-layer iframe")).toHaveCount(0);
+
+  frame = await openDetailFrame(page);
+  await frame.addStyleTag({ path: hostCss });
+  const remove = group().getByRole("link", { name: "刪除" });
+  await checkActions(1, markedLabels, 1556, "03-reopened-marked.png");
+  await expect(remove).toHaveCSS("background-color", "rgb(241, 70, 104)");
+  await remove.click();
+  await checkActions(2, unmarkedLabels, 1555, "04-after-delete.png");
+});
 
 async function nativePlayer(frame) {
   await frame.evaluate(() => {

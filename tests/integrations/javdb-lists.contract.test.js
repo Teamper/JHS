@@ -59,4 +59,19 @@ describe("JavDB webpage list protocol", () => {
         await expect(adapter.readWebAccount(origin, "https://foreign.example/users/edit")).rejects.toThrow();
         expect(request).toHaveBeenCalledTimes(3);
     });
+
+    it("recognizes the real profile-to-login redirect without following other targets", async () => {
+        const request = vi.fn().mockResolvedValue({ status: 302, data: "", responseHeaders: `Content-Type: text/html\r\nLocation: ${origin}/login\r\n` });
+        const adapter = createJavDbAdapter({ request });
+        const profile = origin + "/users/profile";
+        await expect(adapter.readWebAccount(origin, profile)).resolves.toBeNull();
+        expect(request).toHaveBeenCalledWith(expect.objectContaining({
+            requestOptions: { redirect: "manual", cache: "no-store" },
+            urlPolicy: expect.objectContaining({ expectedUrl: profile }),
+        }), undefined);
+        request.mockResolvedValueOnce({ status: 302, data: account, responseHeaders: "Location: https://other.example/login\r\n" });
+        await expect(adapter.readWebAccount(origin, profile)).rejects.toThrow("无法核对");
+        request.mockResolvedValueOnce({ status: 200, data: account });
+        await expect(adapter.readWebAccount(origin, profile)).resolves.toMatchObject({ identity: "id:fixture-user-17" });
+    });
 });

@@ -60,17 +60,18 @@ import { parseDetailPage } from "../integrations/host-list/parser.js";
 export function createAppContext(runtime) {
     const diagnostics = new DiagnosticsService({ legacyHttp: runtime.legacyHttp });
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
-    const backgroundWork = new BackgroundWork({ document: runtime.hostAdapter?.document ?? document, window, scope: rootScope });
+    const platform = /** @type {any} */ (runtime).platform ?? {};
+    const backgroundWork = platform.backgroundWork ?? new BackgroundWork({ document: runtime.hostAdapter?.document ?? document, window, scope: rootScope });
     const container = new DependencyContainer(diagnostics);
-    const navigation = new BrowserNavigationAdapter();
-    const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
-    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue, runtime.gmDeleteValue);
+    const navigation = platform.navigation ?? new BrowserNavigationAdapter();
+    const httpPort = platform.http ?? new UserscriptHttpAdapter(runtime.gmRequest);
+    const storagePort = platform.storage ?? new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue, runtime.gmDeleteValue);
     const mutationCoordinator = runtime.storageMutationCoordinator ?? new StorageMutationCoordinator();
     const gmRuntime = /** @type {any} */ (runtime);
     storagePort.gmListValues = gmRuntime.gmListValues;
     storagePort.gmListenValue = gmRuntime.gmListenValue;
     storagePort.gmUnlistenValue = gmRuntime.gmUnlistenValue;
-    const dialog = new LayerDialogAdapter(runtime.layer);
+    const dialog = platform.dialog ?? new LayerDialogAdapter(runtime.layer);
     const styles = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
     const storage = new StorageService(storagePort);
@@ -80,7 +81,7 @@ export function createAppContext(runtime) {
     const settingsRegistry = new SettingsRegistry();
     registerDefaultSettings(settingsRegistry);
     const validateSetting = (/** @type {string} */ key, /** @type {any} */ value) => settingsRegistry.validateSync(key, value);
-    const settings = new SettingsService(storage, { mutationCoordinator, afterPersist: async (_snapshot, changedNames) => {
+    const settings = platform.settings ?? new SettingsService(storage, { mutationCoordinator, afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     }, normalizers: settingsRegistry.normalizers() });
@@ -115,15 +116,15 @@ export function createAppContext(runtime) {
     diagnostics.setNetworkController(http);
     const privacy = new PrivacyService({ storage, settings });
     rootScope.addCleanup(() => privacy.dispose());
-    const credential = new CredentialService(storage, runtime.localStorage);
+    const credential = platform.credential ?? new CredentialService(storage, runtime.localStorage);
     rootScope.addCleanup(() => credential.dispose());
     const pan123Credential = new Pan123CredentialService(storage, notifications);
     const webdav = new WebDavService(http, credential, settings);
     mutationCoordinator.diagnostics = diagnostics;
     if (runtime.stateService) runtime.stateService.computation = new ComputationBudget({ diagnostics });
-    const computation = new SyncComputation({ createWorker: createSyncWorker, diagnostics });
+    const computation = new SyncComputation({ createWorker: platform.createWorker ?? createSyncWorker, diagnostics });
     rootScope.addCleanup(() => computation.dispose());
-    const syncState = new WebDavSyncStore({ computation, forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting, diagnostics, backgroundWork });
+    const syncState = platform.syncState ?? new WebDavSyncStore({ computation, forage: runtime.storageForage, coordinator: mutationCoordinator, storage: runtime.legacyStorage, settings, events: runtime.eventBus, validateSetting, diagnostics, backgroundWork });
     rootScope.addCleanup(() => syncState.dispose());
     for (const type of ["car-state-changed", "offline-history-changed", "actress-changed", "settings-changed"]) {
         const unsubscribe = runtime.eventBus?.on?.(type, () => syncState.requestReconciliation());
@@ -132,13 +133,13 @@ export function createAppContext(runtime) {
     mutationCoordinator.observer = syncState;
     mutationCoordinator.beforeMutation = syncState.recoverBeforeMutation;
     if (runtime.legacyStorage) runtime.legacyStorage.syncState = syncState;
-    storagePort.beforeSet = key => syncState.capture(key);
+    storagePort.beforeSet = (/** @type {string} */ key) => syncState.capture(key);
     const sharedProfile = new WebDavSharedProfile({ credential, storage, origin: globalThis.location?.origin || "", readLegacy: () => settings.runExclusive(() => webdav.readProfileWithoutLock()) });
     webdav.sharedProfile = sharedProfile;
     const preferences = new PersonalPreferencesService(settings, runtime.localStorage, message => notifications.error(message));
     storage.preferences = preferences;
     /** @type {import("../contracts/webdav-sync.js").WebDavSync} */
-    const webdavSync = new WebDavSyncService({ computation, diagnostics, backgroundWork, webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
+    const webdavSync = platform.webdavSync ?? new WebDavSyncService({ computation, diagnostics, backgroundWork, webdav, shared: sharedProfile, store: syncState, settings, storage: runtime.legacyStorage, urlPolicy, preferences, validateSetting });
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;
@@ -177,7 +178,7 @@ export function createAppContext(runtime) {
     const related = { list: (/** @type {Record<string, unknown>} */ movieRef, /** @type {Record<string, any>} */ options = {}) => integrations.invokeList("movie.related", "listRelated", movieRef, options) };
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations, diagnostics);
-    const translation = new TranslationService(integrations, storage, {credential,settings,urlPolicy,enabled:true});
+    const translation = new TranslationService(integrations, storage, {credential,settings,urlPolicy,enabled:true,googleOnly:platform.googleTranslationOnly});
     rootScope.addCleanup(() => translation.dispose());
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations, javdbLists);
@@ -188,7 +189,7 @@ export function createAppContext(runtime) {
     const offline = new OfflineService(providers, integrations);
     const one115Match = new OneOneFiveMatchService(offline);
     const subtitleUpload = new SubtitleUploadService({ offline, storage, matching: one115Match, events: runtime.eventBus });
-    const offlineSubmissionReceipts = new OfflineSubmissionReceiptService(runtime.localStorage);
+    const offlineSubmissionReceipts = platform.receipts ?? new OfflineSubmissionReceiptService(runtime.localStorage);
     const busImageLayout = new BusImageLayoutService();
     const libraryStats = new LibraryStatsService({ storage: runtime.legacyStorage, state: runtime.stateService });
     const hostListParser = Object.freeze({ parseDetailPage });
@@ -212,10 +213,11 @@ export function createAppContext(runtime) {
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.subtitleUpload, subtitleUpload).register(SERVICE.account, account).register(SERVICE.hostListParser, hostListParser)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
+    if (platform.taskExecution) container.register(SERVICE.taskExecution, platform.taskExecution);
     if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
     if (runtime.hostAdapters?.javbus) container.register(PORT.javbusHost, runtime.hostAdapters.javbus);
 
-    const features = new FeatureRuntime({ backgroundWork, container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
+    const features = new FeatureRuntime({ backgroundWork, container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route, enabledFeatures: platform.enabledFeatures });
 
     rootScope.listen(settings, "settings.changed", event => {
         const names = /** @type {any} */ (event).detail?.names || [];

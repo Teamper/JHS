@@ -29,7 +29,7 @@ describe("NewVideoWorkspaceController", () => {
     });
 
     it("loads a single consistent workspace snapshot from injected services", async () => {
-        const actresses = [{ starId: "actor-1", newVideoList: ["ABC-001"] }], carMap = new Map([["ABC-001", { stateFlags: {} }]]), settings = { javDbBtn: "https://mirror.example" };
+        const actresses = [{ starId: "actor-1", newVideoList: ["ABC-001"] }], carMap = new Map([["ABC-001", { stateFlags: { favorite: true } }]]), settings = { javDbBtn: "https://mirror.example" };
         const state = {
             getFavoriteActressList: vi.fn(async () => actresses),
             getCarMap: vi.fn(async () => carMap),
@@ -41,7 +41,7 @@ describe("NewVideoWorkspaceController", () => {
         const controller = new NewVideoWorkspaceController({ state, settings: settingsService, movie });
 
         expect(await controller.loadWorkspace()).toEqual({
-            actresses, carMap, decisions, ruleTime: 720, javDbUrl: "https://mirror.example",
+            actresses, carMap, decisions, pendingCount: 1, ruleTime: 720, javDbUrl: "https://mirror.example",
             items: [expect.objectContaining({ carNum: "ABC-001", starId: "actor-1", decisionState: "pending" })],
             measurementsByStarId: expect.any(Map),
         });

@@ -185,6 +185,24 @@ describe("unified offline button state", () => {
         await plugin.submitResource({}, "magnet:?xt=cancel", button, {carNum:"ABC-1"});
         expect(submit).not.toHaveBeenCalled(); expect(button.hasClass("loading")).toBe(false);
     });
+
+    it("restores the mounted button when authorization changes before submission", async () => {
+        const submit = vi.fn(), { plugin, button, context } = loadOfflinePlugin(submit);
+        const candidates = await plugin.registry.getCandidates();
+        let session = 1;
+        plugin.submissionSession = () => session;
+        let releaseCandidates;
+        plugin.registry.getCandidates.mockImplementation(() => new Promise(resolve => { releaseCandidates = resolve; }));
+        const pending = plugin.submitResource({}, "magnet:?xt=switched", button, { carNum: "ABC-1" });
+        expect(button.attr("aria-busy")).toBe("true");
+        session += 1;
+        releaseCandidates(candidates);
+        await pending;
+        expect(submit).not.toHaveBeenCalled();
+        expect(context.show.error).not.toHaveBeenCalled();
+        expect(button.text()).toBe("离线");
+        expect(button.attr("aria-busy")).toBeUndefined();
+    });
     it("keeps cloud success when local history fails and never records a false failure", async () => {
         const submit = vi.fn(async()=>{}), history = vi.fn(async()=>{throw new Error("disk");});
         const {plugin,button,context}=loadOfflinePlugin(submit,history);
@@ -343,12 +361,15 @@ describe("unified offline button state", () => {
         expect(layer.close).toHaveBeenCalledWith(7);
     });
 
-    it("keeps focusable success feedback busy and then restores the original idle state", async () => {
+    it.each([false, true])("restores focusable success feedback after cooldown (account changed: %s)", async accountChanged => {
         vi.useFakeTimers();
         try {
             let resolveSubmit;
             const submit = vi.fn(() => new Promise(resolve => { resolveSubmit = resolve; }));
             const { button, history, plugin } = loadOfflinePlugin(submit);
+            let session = 1;
+            plugin.submissionSession = () => session;
+            plugin.getSubmissionAccount = async () => ({ binding: "first-account" });
             const pending = plugin.submitResource({}, "magnet:?xt=ok", button, { carNum: "ABC-1" });
             await vi.waitFor(() => expect(submit).toHaveBeenCalled());
             expect(button.text()).toBe("提交中");
@@ -364,6 +385,7 @@ describe("unified offline button state", () => {
             expect(history).toHaveBeenCalledOnce();
             expect(history.mock.calls[0][0].status).toBe("submitted");
 
+            if (accountChanged) session += 1;
             await vi.advanceTimersByTimeAsync(1800);
             expect(button.text()).toBe("离线");
             expect(button.prop("disabled")).toBe(false);

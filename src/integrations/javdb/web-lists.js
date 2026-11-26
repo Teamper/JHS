@@ -2,6 +2,8 @@
 import { detectSite } from "../../core/site-context.js";
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** @param {string} html @param {string} _url */
+const browserDocument = (html, _url) => new DOMParser().parseFromString(html, "text/html");
 /** @param {string} origin */
 function webOrigin(origin) {
     const url = new URL(origin);
@@ -10,8 +12,8 @@ function webOrigin(origin) {
 }
 
 /** @param {string} html @param {string} origin */
-export function parseJavDbWebAccount(html, origin) {
-    const base = webOrigin(origin), doc = new DOMParser().parseFromString(html, "text/html");
+export function parseJavDbWebAccount(html, origin, documentFrom = browserDocument) {
+    const base = webOrigin(origin), doc = documentFrom(html, base);
     if (doc.querySelector('#navbar-menu-user a[href="/login"],.navbar-menu-user a[href="/login"],form[action="/login"]')) return null;
     const ids = new Set([...doc.querySelectorAll('meta[name="current-user-id"],[data-current-user-id],#navbar-menu-user [data-user-id]')]
         .map(node => node.getAttribute("content") || node.getAttribute("data-current-user-id") || node.getAttribute("data-user-id") || "")
@@ -38,11 +40,11 @@ export function parseJavDbWebAccount(html, origin) {
 }
 
 /** @param {any} payload @param {string} currentUrl @param {string | null} videoId */
-export function parseJavDbListPage(payload, currentUrl, videoId) {
+export function parseJavDbListPage(payload, currentUrl, videoId, documentFrom = browserDocument) {
     const base = new URL(currentUrl);
     webOrigin(base.origin);
     if (!payload || typeof payload.lists !== "string" || payload.page != null && typeof payload.page !== "string") throw new Error("清单目录响应格式无效");
-    const doc = new DOMParser().parseFromString(payload.lists, "text/html");
+    const doc = documentFrom(payload.lists, base.href);
     const inputs = [...doc.querySelectorAll('input[type="checkbox"][data-list-id]')];
     if (payload.lists.trim() && !inputs.length || doc.querySelector('form[action="/login"],form[action="/users/sign_in"]')) throw new Error("未读取到有效清单，请确认网页登录状态");
     const lists = inputs.map(input => {
@@ -57,7 +59,7 @@ export function parseJavDbListPage(payload, currentUrl, videoId) {
         if (!name) throw new Error("清单条目缺少名称");
         return { id, name, count: number && Number.isSafeInteger(Number(number)) ? Number(number) : null, checked: input.hasAttribute("checked"), disabled: input.hasAttribute("disabled") };
     });
-    const pagination = new DOMParser().parseFromString(payload.page || "", "text/html");
+    const pagination = documentFrom(payload.page || "", base.href);
     const links = [...pagination.querySelectorAll('a[rel~="next"][href]')];
     if (links.length > 1) throw new Error("清单分页存在多个下一页");
     let nextUrl = null;
@@ -75,7 +77,7 @@ export function parseJavDbListPage(payload, currentUrl, videoId) {
 }
 
 /** Native webpage session operations share the existing HTTP boundary. @param {any} http */
-export function createJavDbWebLists(http) {
+export function createJavDbWebLists(http, documentFrom = browserDocument) {
     /** @param {string} origin @param {URL} url @param {any} options @param {any} scope */
     const request = (origin, url, options, scope) => {
         const base = webOrigin(origin);
@@ -92,9 +94,19 @@ export function createJavDbWebLists(http) {
     return {
         /** @param {string} origin @param {string} accountUrl @param {{scope?: any}} [options] */
         async readWebAccount(origin, accountUrl, options = {}) {
-            const response = await request(origin, new URL(accountUrl), { responseType: "text", headers: { Accept: "text/html" } }, options.scope);
+            const url = new URL(accountUrl), profile = url.pathname === "/users/profile";
+            const response = await request(origin, url, {
+                responseType: "text", headers: { Accept: "text/html" },
+                ...(profile && { requestOptions: { redirect: "manual", cache: "no-store" } }),
+            }, options.scope);
+            if (profile && (response.status < 200 || response.status >= 300)) {
+                const location = String(response.responseHeaders || "").match(/^location:[ \t]*([^\r\n]+)/im)?.[1].trim();
+                const target = location && URL.canParse(location, url) ? new URL(location, url) : null;
+                if (response.status === 302 && target?.origin === url.origin && target.pathname === "/login" && !target.username && !target.password) return null;
+                throw new Error("无法核对 JavDB 账号页的跳转");
+            }
             if (typeof response.data !== "string") throw new Error("网页账号响应无效");
-            return parseJavDbWebAccount(response.data, origin);
+            return parseJavDbWebAccount(response.data, origin, documentFrom);
         },
         /** @param {string} origin @param {string | null} videoId @param {{url?: string, scope?: any}} [options] */
         async readListPage(origin, videoId, options = {}) {
@@ -103,7 +115,7 @@ export function createJavDbWebLists(http) {
             if (url.pathname !== "/users/simple_lists") throw new Error("清单目录地址无效");
             if (videoId) url.searchParams.set("vid", videoId);
             const response = await request(origin, url, { headers: { Accept: "application/json" } }, options.scope);
-            return parseJavDbListPage(response.data, url.href, videoId);
+            return parseJavDbListPage(response.data, url.href, videoId, documentFrom);
         },
         /** @param {string} origin @param {{videoId: string, listId: string, checked: boolean, csrf: string}} input @param {{scope?: any}} [options] */
         async setListMember(origin, input, options = {}) {

@@ -5,7 +5,7 @@ import { catalogOrders, libraryOrders, newOrders, orderMovies } from "../../src/
 import { button, el, input, movieTitle, select, sheet, STATE_LABELS } from "../../src/app/mobile/components.js";
 import { mountLiquidNavigation } from "../../src/app/mobile/liquid-navigation.js";
 import { renderMoviePoster } from "../../src/app/mobile/movie-poster.js";
-import { actors, byId, categories, collections, followLabels, taskLabels, tasks, works } from "./fixtures.js";
+import { actors, byId, categories, collections, followLabels, taskLabels, tasks, works } from "@jhs/fixtures";
 import { mediaStrip, previewImage } from "./media.js";
 import { createNavigation, defaultFilters, icons, tabs } from "./navigation.js";
 import { createStore, flags } from "./store.js";

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark light">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; media-src 'self' https: blob:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>JHS</title>
+    <link rel="stylesheet" href="vendor.css">
+    <link rel="stylesheet" href="app.css">
+    <script defer src="vendors.js"></script>
+    <script defer src="main.js"></script>
+</head>
+<body>
+    <header class="mobile-top">
+        <button type="button" id="back" hidden aria-label="返回">‹</button>
+        <div><h1 id="title">发现</h1></div>
+        <button type="button" id="privacy">隐私</button>
+    </header>
+    <div class="mobile-privacy-tools">
+        <button type="button" id="privacy-reveal" hidden>临时查看 10 秒</button>
+    </div>
+    <p id="status" role="status"></p>
+    <main id="main" class="jhs-ui"></main>
+    <nav class="mobile-tabs" aria-label="主导航"></nav>
+</body>
+</html>

@@ -7,23 +7,29 @@ import { parseProjectJavImages, parseProjectJavSearch } from "./parser.js";
 export function createProjectJavAdapter(http) {
     /** @param {string} url @param {any} options @param {(response: any) => boolean} cacheAccept */
     const request = (url, options, cacheAccept) => http.request({ providerId: "projectjav", capability: "movie.images", method: "GET", url, responseType: "text", cacheAccept, refreshCache: options.refreshCache === true, urlPolicy: { trustClass: "builtin-public", hosts: ["projectjav.com"] } }, options.scope);
+    /** @param {{carNum?: string}} movie */
+    const getSearchUrl = (movie) => `https://projectjav.com/?searchTerm=${encodeURIComponent(movie.carNum || "")}`;
+    /** @param {{carNum: string}} movie @param {any} [options] */
+    async function* getImageBatches(movie, options = {}) {
+        const searchUrl = getSearchUrl(movie), response = await request(searchUrl, options, response => parseProjectJavSearch(response.data, movie.carNum, response.finalUrl || searchUrl).length > 0);
+        for (const candidate of parseProjectJavSearch(response.data, movie.carNum, response.finalUrl || searchUrl).slice(0, 5)) {
+            options.scope?.assertActive();
+            try {
+                const detail = await request(candidate, options, response => parseProjectJavImages(response.data, movie.carNum, response.finalUrl || candidate).length > 0);
+                const images = parseProjectJavImages(detail.data, movie.carNum, detail.finalUrl || candidate);
+                if (images.length) yield images;
+            } catch (error) {
+                if (options.scope?.disposed || /** @type {any} */ (error)?.code !== "NOT_FOUND") throw error;
+            }
+        }
+    }
     return Object.freeze({
         contracts: ["Screenshot"],
-        /** @param {{carNum?: string}} movie */
-        getSearchUrl(movie) { return `https://projectjav.com/?searchTerm=${encodeURIComponent(movie.carNum || "")}`; },
+        getSearchUrl,
+        getImageBatches,
         /** @param {{carNum: string}} movie @param {any} [options] */
         async getImages(movie, options = {}) {
-            const searchUrl = this.getSearchUrl(movie), response = await request(searchUrl, options, response => parseProjectJavSearch(response.data, movie.carNum, response.finalUrl || searchUrl).length > 0);
-            for (const candidate of parseProjectJavSearch(response.data, movie.carNum, response.finalUrl || searchUrl).slice(0, 5)) {
-                options.scope?.assertActive();
-                try {
-                    const detail = await request(candidate, options, response => parseProjectJavImages(response.data, movie.carNum, response.finalUrl || candidate).length > 0);
-                    const images = parseProjectJavImages(detail.data, movie.carNum, detail.finalUrl || candidate);
-                    if (images.length) return images;
-                } catch (error) {
-                    if (options.scope?.disposed || /** @type {any} */ (error)?.code !== "NOT_FOUND") throw error;
-                }
-            }
+            for await (const images of getImageBatches(movie, options)) return images;
             return [];
         },
     });

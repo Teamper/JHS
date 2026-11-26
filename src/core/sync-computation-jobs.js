@@ -1,8 +1,29 @@
 // @ts-check
 import { ComputationBudget } from "./cooperative-work.js";
-import { SYNC_DOMAINS, historyRank, joinSyncModelsAsync, materializeSyncDataAsync, maximumClockAsync, projectSyncDataAsync, pruneSyncHistoryAsync, syncJsonAsync, syncLayout, versionSyncDiffAsync } from "./webdav-sync-model.js";
+import { SYNC_DOMAINS, compareVersion, historyRank, joinSyncModelsAsync, materializeSyncDataAsync, maximumClockAsync, projectSyncDataAsync, pruneSyncHistoryAsync, syncJsonAsync, syncLayout, versionSyncDiffAsync } from "./webdav-sync-model.js";
 import { equalSyncValuesAsync, stringifySyncDataAsync, needsHistoryPruneAsync, changedSyncKeysAsync } from "./webdav-sync-model.js";
 /** @typedef {Record<string, any>} Dict */
+
+/** Old local replicas could encode an absent preference as an undefined field.
+ * Preserve its deletion clock without changing validation of remote records.
+ * @param {Dict} records @param {Dict} before */
+function* repairUndefinedSettings(records, before) {
+    let changed = false;
+    for (const [key, record] of Object.entries(records)) {
+        yield;
+        if (!key.startsWith("setting/")) continue;
+        const field = record.fields.value;
+        if (!field || field.unset === true || field.value !== undefined) continue;
+        const boundary = compareVersion(record.birth, record.death) > 0 ? record.birth : record.death;
+        const death = compareVersion(field.v, boundary) > 0 ? field.v : boundary;
+        const fields = { ...record.fields };
+        delete fields.value;
+        records[key] = { ...record, death, fields };
+        delete before[key];
+        changed = true;
+    }
+    return changed;
+}
 
 /** @param {any} payload @param {ComputationBudget} work */
 async function reconcile({ state, data, pruned, touched, lastPendingAt = 0, now }, work) {
@@ -23,6 +44,7 @@ async function reconcile({ state, data, pruned, touched, lastPendingAt = 0, now 
         const domain = key.split("/")[0];
         return selected(key) && (!["activity_log", "offline_history"].includes(domain) || historyRank(/** @type {Dict} */ (fields).value) > (model.frontiers[domain] || ""));
     }));
+    const repaired = domains.has("setting") && await work.run("sync.repairUndefinedSettings", repairUndefinedSettings(model.records, before));
     const clock = Math.max(state.counter, (await maximumClockAsync(model, work))) + 1;
     if (!Number.isSafeInteger(clock)) throw new Error("同步逻辑版本已超出安全范围");
     const difference = (await versionSyncDiffAsync(model, before, next, [clock, state.replicaId], work, true));
@@ -30,9 +52,10 @@ async function reconcile({ state, data, pruned, touched, lastPendingAt = 0, now 
     const result = (domains.has("activity_log") || domains.has("offline_history")) && await needsHistoryPruneAsync(difference.model, work) ? (await pruneSyncHistoryAsync(difference.model, data, now, work)) : difference.model;
     const layout = domains.has("setting") ? syncLayout(data.setting) : state.layout;
     const prunedProjection = beforeFrontiers === (await syncJsonAsync(result.frontiers, work)) ? next : (await projectSyncDataAsync(data, result.frontiers, work));
-    const changed = difference.changed || (await syncJsonAsync(layout, work)) !== (await syncJsonAsync(state.layout, work)) || beforeFrontiers !== (await syncJsonAsync(result.frontiers, work)) || beforeCount !== Object.keys(result.records).length;
+    const changed = repaired || difference.changed || (await syncJsonAsync(layout, work)) !== (await syncJsonAsync(state.layout, work)) || beforeFrontiers !== (await syncJsonAsync(result.frontiers, work)) || beforeCount !== Object.keys(result.records).length;
     if (changed) {
-        state.counter = difference.changed ? clock : state.counter;
+        if (difference.changed) state.counter = clock;
+        else if (repaired) state.counter = clock - 1;
         if (touched) {
             for (const key of Object.keys(state.model.records)) if (selected(key)) delete state.model.records[key];
             Object.assign(state.model.records, result.records); state.model.frontiers = result.frontiers;

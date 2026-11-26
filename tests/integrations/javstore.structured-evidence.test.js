@@ -3,15 +3,19 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import jquery from "jquery";
 import { expect, it, vi } from "vitest";
-import { inspectJavStoreSearch, parseJavStoreSearch, parseJavStorePreview } from "../../src/integrations/javstore/parser.js";
+import { inspectJavStorePreviews, inspectJavStoreSearch, parseJavStoreSearch, parseJavStorePreview } from "../../src/integrations/javstore/parser.js";
 import { createJavStoreAdapter } from "../../src/integrations/javstore/manifest.js";
 
 const fixture = name => readFileSync(join(import.meta.dirname, "../fixtures/integrations/javstore", name), "utf8");
 const msfh = fixture("msfh-search.html");
 const tenn = fixture("tenn-search.html");
+const gana = fixture("gana-search.html");
+const ganaDetail = fixture("gana-detail.html");
 const urls = (html, code) => parseJavStoreSearch(html, code);
 const msfhImage = "https://img.javstore.net/images/2025/12/04/MOSAIC-ARCHIVE-msfh-021_s.jpg";
 const tennImage = "https://img2.javstore.net/images/2026/09/12/TENN-052.1080p_s.jpg";
+const ganaArticle = new URL("/599547-200GANA-3471-サンプル-460-pn.html", "https://javstore.net").href;
+const ganaImage = "https://img2.javstore.net/images/2026/11/24/200GANA-3471_s.jpg";
 
 it.each(["MSFH-021", "TENN-052"])("recognizes all actual search cards for %s in every supported document form", code => {
     const html = code === "MSFH-021" ? msfh : tenn;
@@ -59,6 +63,79 @@ it.each([["MSFH-021", msfh, 3, msfhImage, "msfh"], ["TENN-052", tenn, 1, tennIma
     const request = vi.fn(async options => ({ data: options.url.includes("/search?") ? html : fixture(`${prefix}-detail-${candidates.indexOf(options.url) + 1}.html`), finalUrl: options.url }));
     await expect(createJavStoreAdapter({ request }).getImages({ carNum: code })).resolves.toEqual([{ url: image, providerId: "javstore" }]);
     expect(request.mock.calls.map(([options]) => options.url)).toEqual([`https://javstore.net/search?q=${code}`, ...candidates.slice(0, detailCount)]);
+});
+
+it.each(["GANA-3471", "200GANA-3471"])("resolves the MGS cover and JavStore article for %s", async carNum => {
+    const request = vi.fn(async options => ({
+        data: options.url === ganaArticle ? ganaDetail : gana,
+        finalUrl: options.url,
+    }));
+    await expect(createJavStoreAdapter({ request }).getImages({ carNum })).resolves.toEqual([{ url: ganaImage, providerId: "javstore" }]);
+    expect(request.mock.calls.map(([options]) => options.url)).toEqual([`https://javstore.net/search?q=${carNum}`, ganaArticle]);
+});
+
+it.each([
+    ["adjacent cover code", gana.replace("/3471/pake-03_sp-200gana-3471.jpg", "/3472/pake-03_sp-200gana-3472.jpg")],
+    ["mismatched cover directory and filename", gana.replace("/3471/pake-03_sp-", "/3472/pake-03_sp-")],
+    ["lookalike cover host", gana.replace("image.mgstage.com", "image.mgstage.com.example.test")],
+    ["different numeric prefix", gana.replaceAll("200GANA", "201GANA").replaceAll("200gana", "201gana")],
+])("rejects GANA cards with %s", (_case, html) => {
+    expect(urls(html, "GANA-3471")).toEqual([]);
+});
+
+it("rejects a different GANA code in the explicit preview link", () => {
+    expect(parseJavStorePreview(ganaDetail.replace("200GANA-3471_s.jpg", "200GANA-3472_s.jpg"), ganaArticle, "GANA-3471")).toBeNull();
+});
+
+it("ranks complete code evidence over an original title match and drops adjacent codes", () => {
+    const search = fixture("first-open-search.html");
+    const { candidates } = inspectJavStoreSearch(search, "ABC-170", undefined, { title: "探索用プレビュー" });
+    expect(candidates.map(({ articleCode, rank }) => ({ articleCode, rank }))).toEqual([
+        { articleCode: "ABC170", rank: 4 }, { articleCode: "XYZ987", rank: 1 },
+    ]);
+    expect(parseJavStoreSearch(search, "ABC-170")).toEqual([]);
+    const article = candidates[1];
+    expect(inspectJavStorePreviews(fixture("first-open-detail.html"), article.url, "ABC-170", article).previews).toEqual([
+        { url: "https://img.javstore.net/XYZ-987_s.jpg", match: "candidate", rank: 1 },
+    ]);
+});
+
+it("accepts an unfamiliar maker prefix as a candidate and rejects the neighboring full identifier", () => {
+    const search = '<a href="/300GANA-3471-pn.html"><h3>300GANA-3471 Fixture</h3></a><a href="/300GANA-3472-pn.html"><h3>300GANA-3472 Fixture</h3></a><a href="/200GANA-3471-pn.html"><h3>200GANA-3471 Fixture</h3></a>';
+    const { candidates } = inspectJavStoreSearch(search, "GANA-3471", undefined, {});
+    expect(candidates.map(candidate => candidate.articleCode)).toEqual(["GANA3471", "300GANA3471"]);
+    const detail = '<main><article><h1>300GANA-3471 Fixture</h1><a href="/300GANA-3471_s.jpg">CLICK HERE!</a></article></main>';
+    expect(inspectJavStorePreviews(detail, candidates[1].url, "GANA-3471", candidates[1]).previews[0].match).toBe("candidate");
+});
+
+it("handles the known GANA alias as confirmed in the first-open pipeline", async () => {
+    const request = vi.fn(async options => ({
+        data: options.url === ganaArticle ? ganaDetail : gana,
+        finalUrl: options.url,
+    }));
+    const adapter = createJavStoreAdapter({ request });
+    const choices = adapter.getImageBatches({ carNum: "GANA-3471" }, { preview: { visitedArticles: new Set() } });
+    expect((await choices.next()).value).toEqual([{ url: ganaImage, providerId: "javstore", match: "confirmed" }]);
+    await choices.return();
+});
+
+it("uses no more than five distinct detail pages in a search pass and omits visited URLs on title search", async () => {
+    const title = "探索用プレビュー";
+    const articles = Array.from({ length: 6 }, (_, index) => `<a href="/${700 + index}-ABC-170-pn.html"><h3>ABC-170 ${title}</h3></a>`);
+    articles.splice(1, 0, articles[0].replace('.html"', '.html?from=search#card"'));
+    const search = `<main><div class="grid">${articles.join("")}</div></main>`;
+    const request = vi.fn(async options => ({ data: options.url.includes("/search?") ? search : "<main><article></article></main>", finalUrl: options.url }));
+    const { getImageBatches } = createJavStoreAdapter({ request });
+    const preview = { visitedArticles: new Set() };
+    const movie = { carNum: "ABC-170", title };
+    for await (const images of getImageBatches(movie, { preview })) expect(images).toHaveLength(0);
+    expect(preview.visitedArticles.size).toBe(5);
+    for await (const images of getImageBatches(movie, { preview: { ...preview, titleQuery: true } })) expect(images).toHaveLength(0);
+    expect(preview.visitedArticles.size).toBe(6);
+    expect(request.mock.calls.map(([options]) => new URL(options.url).searchParams.get("q")).filter(Boolean)).toEqual(["ABC-170", title]);
+    const details = request.mock.calls.map(([options]) => new URL(options.url).pathname).filter(path => path.endsWith("-pn.html"));
+    expect(details).toHaveLength(6);
+    expect(new Set(details).size).toBe(6);
 });
 
 it.each(["<h1>MSFH-021 Fixture</h1>", ""])("verifies opaque covers with article or image identity before accepting a preview %s", async title => {

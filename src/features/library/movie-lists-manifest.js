@@ -11,6 +11,7 @@ export default defineFeature({
         const controller = new MovieListsController({host:deps[PORT.host], service:deps[SERVICE.javdbLists], dialog:deps[SERVICE.dialog], ui:deps[SERVICE.domUi], scope:runtime.scope});
         controller.start();
         runtime.scope.addCleanup(() => { void deps[SERVICE.javdbLists].stopAll(); });
-        return {commands:{"library.lists.open":(/** @type {any[]} */ movies) => controller.open(movies)}};
+        return {commands:{"library.lists.open":(/** @type {any[]|{movies:any[],login:()=>Promise<boolean>}} */ input = []) =>
+            Array.isArray(input) ? controller.open(input) : controller.open(input.movies, input.login)}};
     },
 });

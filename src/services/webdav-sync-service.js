@@ -27,15 +27,16 @@ export class WebDavSyncService extends EventTarget {
         this.needsReconcile = true; this.waitingForBackground = false; this.manualRequested = false;
         /** @type {LifecycleScope | null} */ this.operation = null;
         /** @type {LifecycleScope | null} */ this.owner = null;
-        /** @type {Document | null} */ this.document = null;
+        /** @type {(EventTarget & {hidden: boolean}) | null} */ this.document = null;
     }
     async initialize() {
         await this.deps.preferences?.migrate();
         await this.deps.store.initialize();
     }
-    /** @param {LifecycleScope} scope @param {Document} document */
-    start(scope, document) {
+    /** @param {LifecycleScope} scope @param {EventTarget & {hidden: boolean}} document @param {() => boolean} [canRun] */
+    start(scope, document, canRun) {
         this.owner = scope; this.document = document; this.deps.store.enabled = true;
+        this.canRun = canRun;
         this.deps.shared.watch(scope);
         scope.listen(this.deps.shared, "changed", () => { this.cancel(); this.rerun = true; this.schedule(0); });
         scope.listen(this.deps.store, "changes", () => { void this.reschedule(); });
@@ -53,7 +54,7 @@ export class WebDavSyncService extends EventTarget {
     }
     /** @param {number} delay @param {boolean} [force] @param {boolean} [manual] */
     schedule(delay, force = false, manual = false) {
-        if (this.suspended || this.owner?.disposed) return;
+        if (this.suspended || this.owner?.disposed || this.canRun?.() === false) return;
         this.scheduleGeneration++;
         this.window?.clearTimeout(this.timer); this.nextDueAt = this.clock() + delay;
         this.timer = this.window?.setTimeout(() => { this.timer = 0; void (manual ? this.check() : this.check(force ? { scheduled: true, force: true } : { scheduled: true })); }, delay) ?? 0;
@@ -79,7 +80,7 @@ export class WebDavSyncService extends EventTarget {
         let configured = false, profileMessage = "", profileConflict = false;
         try { const { profile } = await this.deps.shared.snapshot(); configured = !!(profile.url && profile.username && profile.password); } catch (error) { profileMessage = /** @type {Error} */ (error).message; profileConflict = /** @type {any} */ (error).code === "SYNC_PROFILE_CONFLICT"; }
         const locallyPaused = await this.deps.shared.paused();
-        return { profileConflict, busy: this.running, enabled: configured && !locallyPaused, paused: locallyPaused || state.paused, lastSuccessAt: state.lastSuccessAt, retryAt: state.retryAt, cleanupError: state.cleanupError, nextDueAt: this.nextDueAt, pendingChanges: Math.max(state.dirty || state.pending ? 1 : 0, (state.localRevision || 0) - (state.publishedRevision || 0)), message: profileMessage || this.deps.store.error || this.deps.store.notificationError || this.message || state.error || (!configured ? "保存有效 WebDAV 连接后将自动接入同步" : ""), replicas: Object.keys(state.confirmed || {}).length };
+        return { configured, profileConflict, busy: this.running, enabled: configured && !locallyPaused, paused: locallyPaused || state.paused, lastSuccessAt: state.lastSuccessAt, retryAt: state.retryAt, cleanupError: state.cleanupError, nextDueAt: this.nextDueAt, pendingChanges: Math.max(state.dirty || state.pending ? 1 : 0, (state.localRevision || 0) - (state.publishedRevision || 0)), message: profileMessage || this.deps.store.error || this.deps.store.notificationError || this.message || state.error || (!configured ? "保存有效 WebDAV 连接后将自动接入同步" : ""), replicas: Object.keys(state.confirmed || {}).length };
     }
     /** Explicit retry is not an opt-in upload or a second backup engine. */
     async enable() { return this.retry(); }
@@ -100,6 +101,7 @@ export class WebDavSyncService extends EventTarget {
     }
     /** @param {import("../contracts/webdav-sync.js").SyncCheckOptions} [options] */
     async check(options = {}) {
+        if (this.suspended || this.owner?.disposed || this.canRun?.() === false) return;
         if (this.running) {
             if (!options.scheduled) {
                 this.manualRequested = true;
@@ -107,7 +109,6 @@ export class WebDavSyncService extends EventTarget {
             }
             this.rerun = true; return;
         }
-        if (this.suspended || this.owner?.disposed) return;
         this.running = true; this.rerun = false; this.message = ""; this.manualRequested = !options.scheduled;
         const scope = new LifecycleScope("webdav-sync"); this.operation = scope;
         /** @type {any} */ const round = { active: true, signal: scope.signal, binding: "", proof: null };

@@ -2,7 +2,7 @@
 
 /** Stores offline submission receipts separately from IndexedDB history; pending receipts require manual verification. */
 export class OfflineSubmissionReceiptService {
-    /** @param {Storage} storage */
+    /** @param {Pick<Storage, "getItem"|"setItem"|"removeItem"|"key"|"length">} storage */
     constructor(storage) { this.storage = storage; }
 
     /** @param {string} key */
@@ -27,8 +27,11 @@ export class OfflineSubmissionReceiptService {
         }
     }
 
-    /** @param {string} key @param {"pending"|"submitted"} state @param {{attemptId?: string, providerId?: string}} [attempt] */
-    write(key, state, attempt = {}) { this.storage.setItem(key, JSON.stringify({ ...attempt, state, at: Date.now() })); }
+    /** @param {string} key @param {"pending"|"submitted"} state @param {{attemptId?: string, providerId?: string, accountBinding?: string, resource?: string, carNum?: string, resolutionId?: string}} [attempt] @param {string|null} [expectedRaw] */
+    write(key, state, attempt = {}, expectedRaw) {
+        if (expectedRaw !== undefined && this.getRaw(key) !== expectedRaw) throw Object.assign(new Error("其他页面已更新提交状态，请重新核实"), { code: "SUBMISSION_CHANGED" });
+        this.storage.setItem(key, JSON.stringify({ ...attempt, state, at: Date.now() }));
+    }
 
     /** @param {string} key @param {string|null} previous */
     restore(key, previous) {

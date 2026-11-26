@@ -30,3 +30,13 @@ it("rejects an unconfirmed identity and a rename bound to another account", asyn
     expect(request).toHaveBeenCalledTimes(1);
     expect(request.mock.calls.every(([options]) => options.method === "GET")).toBe(true);
 });
+
+it("stops a bound offline submit if 115's final signing response belongs to another account", async () => {
+    const request = vi.fn(async () => ({ data: { sign: "fixture", uid: 2 } }));
+    const onMutationDispatch = vi.fn();
+    await expect(createOne115Adapter({ request }).submit("magnet:?xt=urn:btih:abc", { expectedAccountId: "1", onMutationDispatch }))
+        .rejects.toMatchObject({ code: "SUBMISSION_ACCOUNT_CHANGED" });
+    expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0][0].method).toBe("GET");
+    expect(onMutationDispatch).not.toHaveBeenCalled();
+});

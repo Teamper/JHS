@@ -23,7 +23,13 @@ function createHarness({ site = "javdb", route = "detail", resolve = vi.fn(async
     const screenshot = Object.assign(new ScreenshotService({}), {
         isEnabled: (snapshot) => snapshot.enableLoadScreenShot !== "no",
         normalizeAssetUrl: normalizeJavStoreAssetUrl,
-        resolve,
+        async resolvePreview(movie, context) {
+            const [asset] = await resolve(movie, context) ?? [];
+            if (!asset) return null;
+            const image = dom.window.document.createElement("img");
+            image.src = asset.url;
+            return { ...asset, match: "confirmed", image };
+        },
         getSearchUrl: () => "https://javstore.net/search/ABC-123",
     });
     const scope = new LifecycleScope("detail-test");
@@ -55,9 +61,9 @@ describe("ScreenshotController", () => {
     it("ignores errors from replaced images and offers retry for the current image", () => {
         const {dom,controller,gallery,scope} = createHarness();
         const container=dom.window.document.createElement('a');gallery.append(container);
-        controller.renderImage(container,'缩略图','https://img.javstore.net/old.jpg');
-        const old=container.querySelector('img');
-        controller.renderImage(container,'缩略图','https://img.javstore.net/current.jpg');
+        const [old, current] = ["old", "current"].map(name => Object.assign(dom.window.document.createElement("img"), { src: `https://img.javstore.net/${name}.jpg` }));
+        controller.renderImage(container, "缩略图", old);
+        controller.renderImage(container, "缩略图", current);
         old.dispatchEvent(new dom.window.Event('error'));
         expect(container.querySelector('img').src).toContain('current.jpg');
         container.querySelector('img').dispatchEvent(new dom.window.Event('error'));

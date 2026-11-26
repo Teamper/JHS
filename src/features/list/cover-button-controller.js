@@ -1,6 +1,8 @@
 // @ts-check
 import { OwnedPopover } from "../../core/owned-popover.js";
 import { MediaPreviewSession } from "../../core/media-preview-session.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
+import { CANDIDATE_SCREENSHOT_LABEL, loadScreenshotImage } from "../../ui/detail/screenshot-panel.js";
 import { invalidateDmmPreview, isDmmEnabled } from "../../services/preview-service.js";
 
 import { PRODUCT_NAMES } from "../../core/product-names.js";
@@ -59,6 +61,7 @@ export class CoverButtonController {
         /** @type {number} */ this.previewGeneration = 0;
         /** @type {any} */ this.activePreview = null;
         /** @type {OwnedPopover | null} */ this.activeCardPopover = null;
+        /** @type {(() => void) | null} */ this.releaseScreenshot = null;
         this.started = false;
     }
     getStyles() { return `<style>${COVER_BUTTON_STYLES}${this.isJavBus ? ".jhs-cover-tools .icon, .setting-label .icon{height:var(--jhs-icon-lg);width:var(--jhs-icon-lg)}" : ""}${COVER_MENU_STYLES}</style>`; }
@@ -71,6 +74,7 @@ export class CoverButtonController {
         const settingsService = this.settings;
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
+            if (names.some(name => ["enableScreenSvg", "enableLoadScreenShot", "screenshotProviders", "screenshotMode"].includes(name))) this.releaseScreenshot?.();
             if (names.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) {
                 this.previewGeneration++;
                 if (canUseCardPreview(settingsService.snapshot())) void this.addSvgBtn().catch((error => this.recordError("卡片预览重新挂载失败", error)));
@@ -219,7 +223,7 @@ export class CoverButtonController {
                 const owner = trigger.closest(".item")[0];
                 menu.data("jhsCardOwner", owner);
                 /** @type {Record<string, boolean>} */ let flags = {};
-                try { flags = JSON.parse(owner?.getAttribute?.("data-jhs-flags") || "{}"); } catch {}
+                try { flags = JSON.parse(owner?.getAttribute?.("data-jhs-flags") || "{}"); } catch { /* Malformed card data leaves the action flags unset. */ }
                 menu.find(".filterBtn").attr("aria-pressed", String(!!flags.blocked));
                 menu.find(".favoriteBtn").attr("aria-pressed", String(!!flags.favorite));
                 menu.find(".hasDownBtn").attr("aria-pressed", String(!!flags.downloaded));
@@ -248,21 +252,38 @@ export class CoverButtonController {
         }));
         documentRoot.on("click.jhsCoverButton", ".screenSvg", (async (/** @type {CardActionEvent} */ event) => {
             event.preventDefault();
-            const trigger = event.currentTarget;
+            const trigger = /** @type {HTMLElement} */ (event.currentTarget);
+            this.releaseScreenshot?.();
+            const request = new LifecycleScope("list-screenshot");
+            const release = scope.addCleanup(() => request.dispose());
+            this.releaseScreenshot = release;
             const loading = this.ui.loading();
+            request.addCleanup(() => loading.close?.());
+            request.listen(this.window, "pagehide", () => request.dispose());
+            request.observe(this.document.body, () => { if (!trigger.isConnected) request.dispose(); }, { childList: true, subtree: true });
             try {
                 const card = $(event.currentTarget).closest(".item");
-                const { carNum } = list.findCarNumAndHref(card), settings = this.settings.snapshot();
-                const result = await this.screenshot.resolve({ carNum }, { allowWhenDisabled: true, scope, settings });
-                if (scope.disposed) return;
-                const image = Array.isArray(result) ? result[0] : result;
-                if (image?.url) {
-                    this.ui.openImageViewer(image.url, {imageKind:"contact-sheet", owner:card[0], trigger, scope});
+                const { carNum, title } = list.findCarNumAndHref(card), settings = this.settings.snapshot();
+                const preview = await this.screenshot.resolvePreview({ carNum, title }, {
+                    allowWhenDisabled: true, scope: request, settings,
+                    loadImage: (/** @type {string} */ url) => loadScreenshotImage(this.document, url, request.signal, settings.httpTimeout),
+                });
+                if (request.disposed || !trigger.isConnected) return;
+                if (preview) {
+                    const candidate = preview.match === "candidate";
+                    this.ui.openImageViewer(preview.url, {
+                        imageKind: "contact-sheet", owner: card[0], trigger, scope,
+                        ...(candidate ? { caption: CANDIDATE_SCREENSHOT_LABEL } : {}),
+                    });
                 } else this.notifications.info("暂无长缩略图");
             } catch (error) {
+                if (request.disposed) return;
                 this.recordError("图片预览出错", error);
                 this.notifications.error("图片预览失败，请重试");
-            } finally { loading.close?.(); }
+            } finally {
+                release();
+                if (this.releaseScreenshot === release) this.releaseScreenshot = null;
+            }
         }));
         documentRoot.on("click.jhsCoverButton", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", ((/** @type {CardActionEvent} */ event) => {
             event.preventDefault(); event.stopPropagation();

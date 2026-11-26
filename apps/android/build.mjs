@@ -6,7 +6,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const output = new URL("./www/", import.meta.url);
 const sources = new Set([
     "apps/android/main.js",
-    "apps/android/fixtures.js",
+    "packages/shared-fixtures/fixtures.js",
     "apps/android/media.js",
     "apps/android/navigation.js",
     "apps/android/store.js",
@@ -22,6 +22,7 @@ const sources = new Set([
 ]);
 const bundled = await build({
     absWorkingDir: root,
+    alias: { "@jhs/fixtures": "./packages/shared-fixtures/fixtures.js" },
     entryPoints: ["apps/android/main.js"],
     bundle: true,
     format: "esm",
@@ -36,6 +37,6 @@ await Promise.all([
     copyFile(new URL("./index.html", import.meta.url), new URL("index.html", output)),
     copyFile(new URL("../../src/app/mobile/app.css", import.meta.url), new URL("app.css", output)),
     copyFile(new URL("./product.css", import.meta.url), new URL("product.css", output)),
-    copyFile(new URL("./trailer.mp4", import.meta.url), new URL("trailer.mp4", output)),
+    copyFile(new URL("../../packages/shared-fixtures/trailer.mp4", import.meta.url), new URL("trailer.mp4", output)),
     writeFile(new URL("main.js", output), bundled.outputFiles[0].contents),
 ]);

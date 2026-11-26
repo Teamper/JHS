@@ -92,7 +92,7 @@ test('contact sheet source removal and failure retry release the preview owner',
 
 test('list screenshot uses contact-sheet zoom for the real sub-2 dimensions',async({page,context})=>{
  await routes(context);await page.goto('https://javdb.com/');await page.locator('.tags').evaluateAll(nodes=>nodes.forEach(n=>n.style.removeProperty('display')));await injectUserscriptRuntime(page,{...config('dark'),settingOverrides:{...config('dark').settingOverrides,enableScreenSvg:'yes'}});
- await page.evaluate(()=>{window.unsafeWindow.pluginManager.getBean('CoverButtonPlugin').screenshot.resolve=async()=>({url:'https://images.example.test/sheet.svg'});});
+ await page.evaluate(()=>{window.unsafeWindow.pluginManager.getBean('CoverButtonPlugin').screenshot.resolvePreview=async()=>({url:'https://images.example.test/sheet.svg',match:'confirmed'});});
  const trigger=page.locator('.screenSvg').first();await trigger.click();await expectSheet(page);await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
 });
 
@@ -102,7 +102,7 @@ for(const source of ['fc2','123av'])test(`${source} photographs and contact shee
   const fc2=window.unsafeWindow.pluginManager.getBean('Fc2Plugin'),get=fc2.getRuntimeService.bind(fc2);
   const movie=get('movie');movie.detail=async()=>({title:'Gallery fixture',carNum:'FC2-4959150',imageUrls:['https://images.example.test/full-0.svg','https://images.example.test/1.svg']});movie.images=async()=>[{url:'https://images.example.test/full-0.svg'},{url:'https://images.example.test/1.svg'}];movie.people=async()=>({actors:[]});movie.resolve=async()=>({movieId:'fixture-id'});
   fc2.fetchAndRenderNativeMagnets=async()=>{};fc2.configureJavDbWantButton=async()=>{};
-  fc2.getRuntimeService=name=>name==='screenshot'?{isEnabled:()=>true,getScreenshotSettings:()=>({mode:'auto'}),getEnabledProviders:()=>[{id:'javstore'}],resolve:async()=>[{url:'https://images.example.test/sheet.svg'}]}:get(name);
+  fc2.getRuntimeService=name=>name==='screenshot'?{isEnabled:()=>true,getScreenshotSettings:()=>({mode:'auto'}),getEnabledProviders:()=>[{id:'javstore'}],resolvePreview:async(_movie,{loadImage})=>{const url='https://images.example.test/sheet.svg';return {url,match:'confirmed',image:await loadImage(url)};}}:get(name);
   window.unsafeWindow.settingsService.set('enableLoadScreenShot','yes');fc2.openFc2Dialog('fixture-id','FC2-4959150','https://javdb.com/v/fc2-fixture',{source});
  },source);
  const photo=page.getByRole('button',{name:'查看剧照 2',exact:true}),sheet=page.getByRole('button',{name:'查看缩略图大图',exact:true});await expect(sheet).toBeVisible();
@@ -116,7 +116,13 @@ for(const frame of [false,true])test(`detail screenshot retry stays at the curre
  await detail.evaluate(async()=>{
   const screenshot=window.unsafeWindow.pluginManager.getBean('Fc2Plugin').getRuntimeService('screenshot');
   window.__sheetAttempts=0;
-  screenshot.resolve=()=>{window.__sheetAttempts++;return window.__sheetAttempts===1?Promise.resolve(null):new Promise((resolve,reject)=>{window.__finishSheet=resolve;window.__failSheet=reject;});};
+  screenshot.resolvePreview=(_movie,{loadImage})=>{
+   window.__sheetAttempts++;
+   return window.__sheetAttempts===1?Promise.resolve(null):new Promise((resolve,reject)=>{
+    window.__finishSheet=async url=>resolve(url?{url,match:'confirmed',image:await loadImage(url)}:null);
+    window.__failSheet=reject;
+   });
+  };
   const gallery=document.querySelector('.columns.preview'),space=document.createElement('div');space.style.height='1800px';gallery.before(space);const after=space.cloneNode();after.style.height='1400px';gallery.after(after);
   await window.unsafeWindow.settingsService.set('enableLoadScreenShot','yes');
  });
@@ -127,7 +133,7 @@ for(const frame of [false,true])test(`detail screenshot retry stays at the curre
  expect(await detail.evaluate(()=>({y:scrollY,hash:location.hash}))).toEqual(before);
  await detail.evaluate(()=>window.__finishSheet(null));await expect(tile.getByRole('status')).toHaveText('暂无缩略图');await expect(tile.getByRole('button',{name:'重试',exact:true})).toBeFocused();
  await tile.getByRole('button',{name:'重试',exact:true}).click();await detail.evaluate(()=>window.__failSheet(new Error('offline')));await expect(tile.getByRole('status')).toHaveText('缩略图加载失败');
- await tile.getByRole('button',{name:'重试',exact:true}).click();await detail.evaluate(()=>window.__finishSheet([{url:'https://images.example.test/sheet.svg'}]));
+ await tile.getByRole('button',{name:'重试',exact:true}).click();await detail.evaluate(()=>window.__finishSheet('https://images.example.test/sheet.svg'));
  const open=tile.getByRole('button',{name:'查看缩略图',exact:true});await expect(open).toBeVisible();await expect(open).toBeFocused();expect(await detail.evaluate(()=>location.hash)).toBe(before.hash);
  await open.click();await expectSheet(page);await page.keyboard.press('Escape');await expect(open).toBeFocused();
 });

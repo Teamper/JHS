@@ -1,0 +1,4 @@
+{
+  "platforms": ["android"],
+  "android": { "modules": ["io.github.teamper.jhs.device.JhsDeviceModule"] }
+}

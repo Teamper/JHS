@@ -31,7 +31,7 @@ npm run android:add --prefix apps/android
 ## 回归验证
 
 ```sh
-node --test apps/android/store.test.js
+npm --prefix apps/android test
 npm ci --prefix tests/browser
 node apps/android/preview.browser.mjs
 ```

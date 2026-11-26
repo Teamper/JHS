@@ -2,7 +2,7 @@
 
 import { normalizeCarNum } from "../../core/constants.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
-import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
+import { CANDIDATE_SCREENSHOT_LABEL, renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
 import { screenshotErrorMessage } from "../../ui/detail/screenshot-error.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
@@ -131,19 +131,21 @@ export class ScreenshotController {
     /** @param {Element} container @param {number} generation @param {boolean} [refreshCache] */
     async loadIntoContainer(container, generation, refreshCache = false) {
         this.abortActiveRequest();
-        const rawCarNum = new URL(this.window.location.href).searchParams.get("jhsCarNum") ?? this.hostAdapter.readMovieRef?.()?.carNum ?? null;
+        const movie = this.hostAdapter.readMovieInfo?.() ?? this.hostAdapter.readMovieRef?.();
+        const rawCarNum = new URL(this.window.location.href).searchParams.get("jhsCarNum") ?? movie?.carNum ?? null;
         const carNum = normalizeCarNum(rawCarNum);
         if (!carNum) return this.showErrorFallback(container, rawCarNum, null);
+        const title = normalizeCarNum(movie?.carNum) === carNum ? movie?.title : undefined;
         const requestScope = new LifecycleScope(`detail-screenshot:${generation}`);
         this.releaseRequestScope = this.scope.addCleanup(() => requestScope.dispose());
         this.requestScope = requestScope;
         const manual = this.screenshot.getScreenshotSettings(this.settings.snapshot()).mode === "manual";
         try {
             await renderScreenshotPanel({
-                target: container, carNum, screenshot: this.screenshot, settings: this.settings.snapshot(),
+                target: container, carNum, title, screenshot: this.screenshot, settings: this.settings.snapshot(),
                 scope: requestScope, refreshCache, isActive: () => this.isCurrent(container, generation),
                 ...(!manual ? {
-                    renderImage: url => this.renderImage(container, "缩略图", url),
+                    renderImage: (image, alt) => this.renderImage(container, alt, image),
                     renderError: error => { if (error) this.report(error); this.showErrorFallback(container, rawCarNum, error); },
                     renderLoading: retry => { if (!retry) { const status = this.document.createElement("div"); status.setAttribute("role", "status"); status.textContent = "加载中…"; container.replaceChildren(status); } },
                 } : {}),
@@ -159,11 +161,8 @@ export class ScreenshotController {
         return !this.disposed && !this.scope.disposed && generation === this.generation && container.isConnected;
     }
 
-    /** @param {Element} container @param {string} alt @param {string} rawUrl */
-    renderImage(container, alt, rawUrl) {
-        const url = this.screenshot.normalizeAssetUrl(rawUrl, this.window.location.href);
-        if (!url) return false;
-        const image = this.document.createElement("img");
+    /** @param {Element} container @param {string} alt @param {HTMLImageElement} image */
+    renderImage(container, alt, image) {
         const generation = this.generation;
         (this.requestScope ?? this.scope).listen(image,"error",() => {
             if (!this.isCurrent(container,generation) || !container.contains(image)) return;
@@ -171,9 +170,7 @@ export class ScreenshotController {
             this.report(error);
             this.showErrorFallback(container,this.hostAdapter.readMovieRef?.()?.carNum ?? null,error);
         },{once:true});
-        image.src = url;
         image.alt = alt;
-        image.loading = "lazy";
         if (this.hostAdapter.site === "javbus") {
             image.title = alt;
             image.classList.add("jhs-layout-d4a575e8");
@@ -183,7 +180,7 @@ export class ScreenshotController {
         const frame = this.document.createElement("button");
         frame.type = "button";
         frame.className = this.hostAdapter.site === "javbus" ? "photo-frame jhs-screenshot-open" : "jhs-screenshot-open";
-        frame.setAttribute("aria-label", "查看缩略图");
+        frame.setAttribute("aria-label", `查看${alt}`);
         frame.append(image);
         const restoreFocus = container.contains(this.document.activeElement);
         container.replaceChildren(frame);
@@ -248,7 +245,11 @@ export class ScreenshotController {
         if (target?.closest(".jhs-screenshot-open") || (this.hostAdapter.site !== "javbus" && target?.matches("img"))) {
             event.preventDefault();
             event.stopPropagation();
-            try { this.ui.openImageViewer(container, { imageKind:"contact-sheet", trigger: target.closest("button,a") || container, owner: container, scope: this.scope }); }
+            const candidate = container.querySelector("img")?.alt === CANDIDATE_SCREENSHOT_LABEL;
+            try { this.ui.openImageViewer(container, {
+                imageKind: "contact-sheet", trigger: target.closest("button,a") || container, owner: container, scope: this.scope,
+                ...(candidate ? { caption: CANDIDATE_SCREENSHOT_LABEL } : {}),
+            }); }
             catch (error) { this.report(error); }
         }
     }

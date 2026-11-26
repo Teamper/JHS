@@ -22,6 +22,7 @@ describe("javbus normalized contract", () => {
     it("normalizes remote detail and cover contracts", () => {
         expect(parseJavBusMovieDetail(fixture, "https://www.javbus.com/ABC-123")).toMatchObject({
             carNum: "ABC-123", title: "ABC-123 Fixture title", coverUrl: "https://www.javbus.com/covers/abc-123.jpg", providerId: "javbus",
+            stills: [{ url: "https://image.mgstage.com/images/sample.jpg", thumbnail: "https://www.javbus.com/thumbs/sample.jpg" }],
         });
     });
 

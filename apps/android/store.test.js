@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { actors, byId, works } from "./fixtures.js";
+import { actors, byId, works } from "@jhs/fixtures";
 import { createStore } from "./store.js";
 
 function device() {

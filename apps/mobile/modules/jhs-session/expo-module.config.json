@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["JhsSessionModule"] },
+  "android": { "modules": ["io.github.teamper.jhs.session.JhsSessionModule"] }
+}

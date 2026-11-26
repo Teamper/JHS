@@ -85,6 +85,9 @@ export function registerDefaultSettings(registry) {
         description: "翻译列表与详情页标题",
         surfaces: ["full", "quick"],
     });
+    toggle("androidTranslateTitle", "TranslateFeature", "标题翻译", { defaultValue: yes, surfaces: [] });
+    registry.register({ key: "androidCatalogLayout", owner: "PersonalPreferencesFeature", label: "作品视图", type: "select", defaultValue: "grid",
+        options: [["grid", "海报墙"], ["list", "列表"]], surfaces: [], effect: "live", validate: (/** @type {unknown} */ value) => value === "grid" || value === "list" });
     registry.register({key:"translationPrompt",owner:"TranslateFeature",label:"翻译提示模板",type:"text",defaultValue:DEFAULT_TRANSLATION_PROMPT,effect:"live",surfaces:[],normalize:normalizeTranslationPrompt,validateSync:(/** @type {any} */ value) => typeof value === "string" && value.includes("{text}") && value.length <= 16000 && !value.includes("\0")});
     for (const [key,label,defaultValue,min,max] of /** @type {Array<[string,string,number,number,number]>} */ ([
         ["translationConcurrency","翻译并发",2,1,10],

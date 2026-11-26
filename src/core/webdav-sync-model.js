@@ -259,7 +259,7 @@ function* projectSyncDataSteps(data, frontiers) {
         const entries = ["setting", "new_video_decisions", "personal_ratings"].includes(domain) ? Object.entries(raw || {}) : (domain === "activity_log" ? raw?.entries || [] : raw || []).map((/** @type {any} */ item) => [identity(domain, item), item]);
         for (const [id, item] of entries) {
             yield;
-            if (domain === "setting" && !isSharedSetting(id)) continue;
+            if (domain === "setting" && (item === undefined || !isSharedSetting(id))) continue;
             if (HISTORY.has(domain) && (domain === "activity_log" && item.commitState !== "committed" || historyRank(item) <= (frontiers[domain] || ""))) continue;
             if (id == null || id === "") throw new Error(`同步记录缺少稳定标识：${domain}`);
             const key = `${domain}/${encodeURIComponent(id)}`;

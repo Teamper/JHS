@@ -64,6 +64,7 @@ export async function mountEnhancementSettings(options) {
     await Promise.all(mounts.map(async ([kind, id]) => {
         const host = root.querySelector(`#${id}`);
         if (!host) return;
+        if (kind === "translation" && translation?.googleOnly) { host.remove(); return; }
         host.querySelector("[data-jhs-open]")?.remove();
         const container = document.createElement("div"), content = document.createElement("div");
         const status = document.createElement("p"), actions = document.createElement("div");

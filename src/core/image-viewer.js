@@ -120,6 +120,12 @@ export function createImageViewer(runtimeScope) {
             root.setAttribute("role", "dialog"); root.setAttribute("aria-label", "图片预览"); root.setAttribute("aria-modal", "true");
             root.removeAttribute("aria-labelledby");
             toolbar.className = "jhs-image-viewer-toolbar";
+            if (options.caption) {
+                const caption = document.createElement("span");
+                caption.className = "jhs-badge";
+                caption.textContent = options.caption;
+                toolbar.appendChild(caption);
+            }
             /** @param {string} label @param {string} text @param {string} className @param {()=>void} action @param {any} [target] */
             const button = (label, text, className, action, target = toolbar) => {
                 const control = document.createElement("button");

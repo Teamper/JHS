@@ -1,0 +1,9 @@
+{
+  "name": "@jhs/fixtures",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./fixtures.js",
+    "./trailer.mp4": "./trailer.mp4"
+  }
+}

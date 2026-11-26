@@ -94,7 +94,7 @@ describe("new video and scheduler feature lifecycle", () => {
         expect(scanController).toBeDefined();
         await expect(scanController.scanActresses({ baseUrl: "https://javdb.com", concurrency: 2, sleepMs: 0, intervalHours: 12, ruleHours: 8760, force: false, isUnnecessaryCheck: () => false, isNetworkBlocked: () => false, sleep: async () => {} })).resolves.toMatchObject({ actressCount: 0, eligibleCount: 0 });
         expect(await workspaceController.getPendingSummary()).toEqual({ count: 0, decisions: {} });
-        expect(await workspaceController.loadWorkspace()).toEqual({ actresses: [], carMap: expect.any(Map), decisions: {}, items: [], measurementsByStarId: expect.any(Map), ruleTime: 8760, javDbUrl: "https://javdb.com" });
+        expect(await workspaceController.loadWorkspace()).toEqual({ actresses: [], carMap: expect.any(Map), decisions: {}, items: [], measurementsByStarId: expect.any(Map), pendingCount: 0, ruleTime: 8760, javDbUrl: "https://javdb.com" });
         expect(movie.externalSiteOrigin).toHaveBeenCalledWith("javDbBtn", { checkNewVideo_ruleTime: 8760 });
         expect(plugin.initializeLocalState).toHaveBeenCalledOnce();
         await vi.waitFor(() => expect(plugin.showNewVideoCount).toHaveBeenCalledOnce());

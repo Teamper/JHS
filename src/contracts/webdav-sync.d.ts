@@ -43,7 +43,7 @@ export interface SyncCheckOptions {
 /** Feature and settings surfaces depend on this API, not storage or transport internals. */
 export interface WebDavSync extends EventTarget {
     initialize(): Promise<void>;
-    start(scope: LifecycleScope, document: Document): void;
+    start(scope: LifecycleScope, document: Document, canRun?: () => boolean): void;
     getStatus(): Promise<SyncStatus>;
     check(options?: SyncCheckOptions): Promise<void>;
     retry(): Promise<void>;

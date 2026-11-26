@@ -4,7 +4,7 @@ import { subtitleFilename } from "../../core/subtitle-asset.js";
 import { createSubtitleWorkspace } from "../../ui/detail/subtitle-workspace.js";
 
 export class SubtitleWorkspaceController {
-    /** @param {{document: Document, scope: LifecycleScope, subtitle: any, dialog: any, ui: any, upload?: any, uploadRecords?: any, uploadEnabled?:()=>boolean}} options */
+    /** @param {{document: Document, scope: LifecycleScope, subtitle: any, dialog: any, ui: any, upload?: any, uploadRecords?: any, uploadEnabled?:()=>boolean, download?: (bytes: ArrayBuffer, name: string) => Promise<void>}} options */
     constructor(options) { this.options = options; }
 
     /** @param {{carNum: string, scope?: LifecycleScope, trigger?: HTMLElement, owner?: Element}} movie */
@@ -44,6 +44,11 @@ export class SubtitleWorkspaceController {
                     if (!upload) throw new TypeError("115 字幕上传尚不可用");
                     await upload({ movie, record, asset, filename, scope, owner: view.root, trigger });
                 } else {
+                    if (this.options.download) {
+                        await this.options.download(asset.bytes, filename);
+                        if (!scope.disposed) view.message(`已下载 ${filename}`);
+                        return;
+                    }
                     const url = URL.createObjectURL(new Blob([asset.bytes], { type: "application/octet-stream" }));
                     const anchor = document.createElement("a");
                     anchor.href = url;

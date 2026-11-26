@@ -74,6 +74,9 @@ function parseJavDbMovieActors(root, baseUrl) {
 }
 
 export class JavDbHostAdapter {
+    getDetailReviewActionSelector() {
+        return '[data-jhs-workspace-site="javdb"] .video-meta-panel .movie-panel-info > .review-buttons :is(a.button, button.button):not(.review-buttons :is(.modal, [role="dialog"]) *, .jhs-btn, [id^="jhs-"])';
+    }
     getWebAccountContext() {
         const current = new URL(this.location.href);
         const links = [...this.document.querySelectorAll("#navbar-menu-user a[href],.navbar-menu-user a[href]")];
@@ -83,7 +86,7 @@ export class JavDbHostAdapter {
     }
     getPrivacySelectors() { return privacySelectors({ title: ".video-title,.video-detail h2,.video-detail h1,.title.is-4,.column-video-info h1,.column-video-info h2", code: ".video-title strong,.video-id,#video_id,.column-video-info [data-clipboard-text]", actors: '.tags a[href^="/actors/"],.column-video-info a[href^="/actors/"],.actor-avatar,.actor-box', images: ".actor-avatar img,.actor-box img,.movie-list img,.video-detail img,.column-video-cover img,.tile-images img,.preview-images img" }); }
     locateMediaLibraryDetailRoot() { return this.detectRoute() === "detail" ? this.document.querySelector(".column-video-info,.video-detail .panel") : null; }
-    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
+    /** @param {Document} [documentRuntime] @param {Location | URL} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
     constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) {
         this.site = "javdb";
         /** @type {WeakSet<Element>} */ this.ownedListRoots = new WeakSet();
@@ -253,7 +256,8 @@ export class JavDbHostAdapter {
         const { actors } = this.readMovieActors();
         const dateLabel = [...this.document.querySelectorAll("strong")].find((element) => element.textContent?.includes("日期:"));
         const publishTime = dateLabel?.parentElement?.querySelector(".value")?.textContent?.trim() ?? "";
-        return Object.freeze({ ...ref, actress: actors.filter(actor => actor.role === "actress").map(actor => actor.name).join(" "), actors: actors.filter(actor => actor.role === "actor").map(actor => actor.name).join(" "), publishTime });
+        const title = this.document.querySelector(".column-video-info h1, .video-detail h1, .video-title, h2.title")?.textContent?.trim() ?? "";
+        return Object.freeze({ ...ref, title, actress: actors.filter(actor => actor.role === "actress").map(actor => actor.name).join(" "), actors: actors.filter(actor => actor.role === "actor").map(actor => actor.name).join(" "), publishTime });
     }
     /** Resolve native result ownership equally for live and fetched documents. @param {Document | Element} [sourceRoot] */
     resolveListBoundary(sourceRoot = this.document) {
@@ -393,10 +397,24 @@ export class JavDbHostAdapter {
             const href = trigger.getAttribute("href");
             if (!href) return [];
             let url;
-            try { url = new URL(href || image.currentSrc || image.src, this.document.baseURI); } catch { return []; }
+            try { url = new URL(href, this.location.href); } catch { return []; }
             if (url.origin === this.location.origin && /^\/v\//.test(url.pathname)) return [];
             return ["https:","http:"].includes(url.protocol) ? [{ trigger, image, url:url.href }] : [];
         });
+    }
+    /** Read the site's preview marker without treating its poster as a video source. */
+    readDetailPreview() {
+        const root = this.locateDetailRoot();
+        const trigger = root?.querySelector(".preview-video-container");
+        const video = root?.querySelector("video#preview-video") ?? this.document.querySelector("video#preview-video");
+        if (!trigger && !video) return null;
+        const image = trigger?.querySelector("img");
+        return {
+            poster: image?.getAttribute("data-src") || image?.getAttribute("src") || video?.getAttribute("poster") || null,
+            video: video?.getAttribute("src") || video?.querySelector("source[src]")?.getAttribute("src") || null,
+            endpoint: video?.getAttribute("data-url") || null,
+            requiresLogin: Boolean(trigger?.hasAttribute("data-auth-open") || trigger?.querySelector("[data-auth-open]")),
+        };
     }
     getNativeGalleryRegion() { return this.locateDetailRoot()?.querySelector('.columns.preview, .preview-images') ?? null; }
     /** @param {Element} element */

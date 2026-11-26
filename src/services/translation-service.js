@@ -6,12 +6,13 @@ import { DEFAULT_TRANSLATION_PROMPT, GOOGLE_TRANSLATION_PROFILE, TRANSLATION_CON
 const CACHE_TTL = 2_592_000_000, CACHE_LIMIT = 1_000, CACHE_KEY = "translation_cache_v2", V1_PREFIX = "translation:v1:";
 
 export class TranslationService extends EventTarget {
-    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./storage-service.js").StorageService | null} [storage] @param {{credential?:any, settings?:any, urlPolicy?:any, enabled?:boolean}} [options] */
+    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./storage-service.js").StorageService | null} [storage] @param {{credential?:any, settings?:any, urlPolicy?:any, enabled?:boolean, googleOnly?:boolean}} [options] */
     constructor(integrations, storage = null, options = {}) {
         super();
         this.integrations = integrations, this.storage = storage, this.memoryCache = new Map, this.inflight = new Map,
         this.legacyCache = null, this.hydrationPromise = null, this.cacheGeneration = 0, this.persistTimer = null;
-        this.credential = options.credential;
+        this.googleOnly = options.googleOnly === true;
+        this.credential = this.googleOnly ? undefined : options.credential;
         this.settings = options.settings;
         this.urlPolicy = options.urlPolicy;
         this.enabled = options.enabled ?? true;
@@ -29,7 +30,7 @@ export class TranslationService extends EventTarget {
         this.active = 0;
         this.onCredential = (/** @type {any} */ event) => { if (event.detail?.key === TRANSLATION_CONNECTIONS_KEY) void this.reloadConfiguration().catch(() => {}); };
         this.onSettings = (/** @type {any} */ event) => { if (event.detail?.names?.some((/** @type {string} */ name) => ["translationPrompt","translationConcurrency"].includes(name))) this.configurationChanged(); };
-        this.listener = storage?.listenValue?.(TRANSLATION_CONNECTIONS_KEY, () => { void this.reloadConfiguration().catch(() => {}); });
+        this.listener = this.googleOnly ? null : storage?.listenValue?.(TRANSLATION_CONNECTIONS_KEY, () => { void this.reloadConfiguration().catch(() => {}); });
         this.credential?.addEventListener("credentials.changed",this.onCredential);
         this.settings?.addEventListener("settings.changed",this.onSettings);
     }
@@ -84,11 +85,12 @@ export class TranslationService extends EventTarget {
     }
     /** @param {any} value @param {string[]} revisions */
     async resolveConfiguration(value, revisions) {
+        if (!this.credential) throw new JhsError("UNSUPPORTED","当前环境无法保存加密翻译连接");
         const next = normalizeTranslationConfiguration(value);
         await this.credential.setVersioned(TRANSLATION_CONNECTIONS_KEY, JSON.stringify(next), revisions);
         await this.reloadConfiguration();
     }
-    prompt() { return normalizeTranslationPrompt(this.settings?.snapshot().translationPrompt ?? DEFAULT_TRANSLATION_PROMPT); }
+    prompt() { return this.googleOnly ? DEFAULT_TRANSLATION_PROMPT : normalizeTranslationPrompt(this.settings?.snapshot().translationPrompt ?? DEFAULT_TRANSLATION_PROMPT); }
     /** @param {() => Promise<any>} run @param {LifecycleScope} scope */
     schedule(run,scope) {
         scope.assertActive();
@@ -137,6 +139,7 @@ export class TranslationService extends EventTarget {
     }
     /** Connection tests temporarily pin only the submitted endpoint origin. @param {any} value @param {LifecycleScope} scope */
     async testConnection(value,scope) {
+        if (this.googleOnly) throw new JhsError("UNSUPPORTED", "当前环境使用 Google 翻译");
         const profile = normalizeTranslationProfile(value), owner = `translation-test:${crypto.randomUUID()}`;
         const requestScope = new LifecycleScope(owner), release = scope.addCleanup(() => { requestScope.dispose(); this.urlPolicy?.setLocalOriginOwner(owner,[]); });
         this.urlPolicy?.setLocalOriginOwner(owner,[new URL(profile.endpoint).origin]);
@@ -171,7 +174,7 @@ export class TranslationService extends EventTarget {
                     migrated.push(key), changed = !0;
                 }
                 if (generation === this.cacheGeneration && (this.prune() || changed)) void this.persistNow(generation).then((() => Promise.all(migrated.map((key => storage.remove(key)))))).catch((() => {}));
-            } catch {}
+            } catch { /* Translations still work with an empty in-memory cache. */ }
         })();
     }
     prune() {
@@ -200,7 +203,7 @@ export class TranslationService extends EventTarget {
         this.cancelAll();
         this.cacheGeneration += 1, null !== this.persistTimer && clearTimeout(this.persistTimer), this.persistTimer = null,
         this.memoryCache.clear(), this.legacyCache = {}, this.storage?.removeLocal?.("jhs_translate");
-        if (this.storage) { const storage = this.storage; try { const keys = /** @type {string[]} */ (await storage.keys()); await storage.remove(CACHE_KEY), await Promise.all(keys.filter((key => key.startsWith(V1_PREFIX))).map((key => storage.remove(key)))); } catch {} }
+        if (this.storage) { const storage = this.storage; try { const keys = /** @type {string[]} */ (await storage.keys()); await storage.remove(CACHE_KEY), await Promise.all(keys.filter((key => key.startsWith(V1_PREFIX))).map((key => storage.remove(key)))); } catch { /* A persistent cache failure leaves the in-memory cache cleared. */ } }
         this.hydrationPromise = Promise.resolve();
     }
     async inspectCache() { return await this.hydrate(), this.prune(), { version: 2, size: this.memoryCache.size, entries: Object.fromEntries(this.memoryCache) }; }

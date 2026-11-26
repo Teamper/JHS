@@ -72,6 +72,19 @@ describe("Actress info Feature", () => {
         loaded.controller.dispose();
     });
 
+    it("shows the actor-page empty state when a matched profile contains only blank fields", async () => {
+        const loaded = createController({
+            html: '<div class="actor-section-name">演员甲</div>',
+            url: "https://javdb.com/actors/actor1",
+            lookup: vi.fn(async () => ({ url: "https://profiles.example/actor", birthday: "", weight: "  " })),
+        });
+        await loaded.controller.mount();
+        const info = document.querySelector(".actress-info");
+        expect(info?.tagName).toBe("DIV");
+        expect(info?.textContent).toBe("无此相关演员信息");
+        loaded.controller.dispose();
+    });
+
     it("cancels late lookups on OFF and remounts once when switched back ON", async () => {
         let resolveInfo;
         const pending = new Promise((resolve) => { resolveInfo = resolve; });

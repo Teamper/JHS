@@ -1,4 +1,4 @@
-import { byId, collections, tasks } from "./fixtures.js";
+import { byId, collections, tasks } from "@jhs/fixtures";
 
 export const storageKey = "jhs.android.preview.v1";
 export const flags = ["favorite", "downloaded", "watched", "blocked"];

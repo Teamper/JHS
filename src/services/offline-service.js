@@ -1,8 +1,16 @@
 // @ts-check
 
 export class OfflineService {
+    /** @param {string} integrationId @param {Record<string, any>} [context] */
+    listTasks(integrationId, context = {}) { return this.integrations.getAdapter(integrationId).listTasks(context); }
     /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry} integrations */
     constructor(providers, integrations) { this.providers = providers; this.integrations = integrations; }
+    /** @param {string} integrationId @param {string} resource @param {Record<string, any>} [context] */
+    resolveWithIntegration(integrationId, resource, context = {}) {
+        const adapter = this.integrations.getAdapter(integrationId);
+        if (typeof adapter.resolve !== "function") throw new TypeError(`Integration ${integrationId} does not support offline resolution`);
+        return adapter.resolve(resource, context);
+    }
     /** @param {string} integrationId @param {unknown} resource @param {Record<string, any>} [context] */
     submitWithIntegration(integrationId, resource, context = {}) {
         const adapter = this.integrations.getAdapter(integrationId);
