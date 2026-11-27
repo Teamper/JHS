@@ -242,7 +242,7 @@ export class JavDbPreviewController {
         this.dmmRequestScope?.dispose();
         this.dmmPreviewPromise = null;
         session.scope.dispose();
-        $(session.host).find("#video-bottom-toolbar").remove();
+        session.host.querySelector("#video-bottom-toolbar")?.remove();
         const player = session.host.querySelector("#jhs-preview-video");
         if (player) { player.pause(); player.removeAttribute("src"); player.load(); player.remove(); }
         session.native?.classList.remove("jhs-native-preview-hidden");

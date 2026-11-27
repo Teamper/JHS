@@ -6,14 +6,17 @@ import { createDevTransforms, readDevIdentity } from "./dev-metadata.mjs";
 import { sha256, writeFrozenFiles } from "./delivery-artifact.mjs";
 
 export { readDevIdentity };
+export function verifyDevBytes(bytes, expectedSha256) {
+    const digest = sha256(bytes);
+    if (digest !== expectedSha256) throw new Error(`Dev 交付与当前源码不一致：${digest} != ${expectedSha256}`);
+    return digest;
+}
 export async function verifyDevDelivery(path) {
     const bytes = await readFile(path), source = bytes.toString("utf8");
     const identity = readDevIdentity(source);
     const transforms = createDevTransforms(identity.version, identity.buildId);
     const candidate = await buildUserscript({ outputPaths: [], ...transforms, packStaticResources: true });
-    const digest = sha256(bytes);
-    if (digest !== candidate.analysis.sha256) throw new Error(`Dev 交付与当前源码不一致：${digest} != ${candidate.analysis.sha256}`);
-    return { path, ...identity, sha256: digest, bytes: bytes.length };
+    return { path, ...identity, sha256: verifyDevBytes(bytes, candidate.analysis.sha256), bytes: bytes.length };
 }
 export async function freezeDevCandidate(path) {
     const verified = await verifyDevDelivery(path);
