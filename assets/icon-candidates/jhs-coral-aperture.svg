@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">JHS · 朱砂光圈</title>
+  <desc id="desc">三片朱红胶片围成旋转的镜头光圈，中央留出播放符号，代表影像与多来源汇聚。</desc>
+  <defs>
+    <linearGradient id="paper" x1="18" y1="0" x2="234" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#fffaf3"/><stop offset=".5" stop-color="#f9eee2"/><stop offset="1" stop-color="#ecd7c7"/></linearGradient>
+    <linearGradient id="rim" x1="32" y1="8" x2="226" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset=".52" stop-color="#efded0"/><stop offset="1" stop-color="#c9a993"/></linearGradient>
+    <linearGradient id="petal-one" x1="82" y1="42" x2="168" y2="123" gradientUnits="userSpaceOnUse"><stop stop-color="#ffb18d"/><stop offset=".32" stop-color="#f16c54"/><stop offset=".67" stop-color="#cf3432"/><stop offset="1" stop-color="#8e202b"/></linearGradient>
+    <linearGradient id="petal-two" x1="76" y1="39" x2="171" y2="124" gradientUnits="userSpaceOnUse"><stop stop-color="#f9815e"/><stop offset=".4" stop-color="#df4335"/><stop offset=".8" stop-color="#b12e34"/><stop offset="1" stop-color="#7d2431"/></linearGradient>
+    <linearGradient id="petal-three" x1="85" y1="41" x2="166" y2="122" gradientUnits="userSpaceOnUse"><stop stop-color="#ffcba0"/><stop offset=".3" stop-color="#f99c6f"/><stop offset=".66" stop-color="#e65f46"/><stop offset="1" stop-color="#bd3033"/></linearGradient>
+    <radialGradient id="shade"><stop stop-color="#9d5549" stop-opacity=".27"/><stop offset="1" stop-color="#b17858" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="-.4" y="-.4" width="1.8" height="1.9" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="7" stdDeviation="5" flood-color="#89443a" flood-opacity=".21"/></filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#paper)"/>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="none" stroke="url(#rim)"/>
+  <ellipse cx="130" cy="182" rx="91" ry="42" fill="url(#shade)"/>
+  <g filter="url(#shadow)">
+    <path d="M78 48c42-26 96-15 123 24l-51 30c-11-15-27-16-42-7l-40 23-14-25c-8-16 4-33 24-45Z" fill="url(#petal-one)"/>
+    <path d="M78 48c42-26 96-15 123 24l-51 30c-11-15-27-16-42-7l-40 23-14-25c-8-16 4-33 24-45Z" fill="url(#petal-two)" transform="rotate(120 128 128)"/>
+    <path d="M78 48c42-26 96-15 123 24l-51 30c-11-15-27-16-42-7l-40 23-14-25c-8-16 4-33 24-45Z" fill="url(#petal-three)" transform="rotate(240 128 128)"/>
+    <path d="M79 49c40-24 93-14 120 23m-90 24-40 23" fill="none" stroke="#ffd0b1" stroke-opacity=".7" stroke-width="1.2"/>
+    <path d="M79 49c40-24 93-14 120 23m-90 24-40 23" fill="none" stroke="#ffb391" stroke-opacity=".65" stroke-width="1.2" transform="rotate(120 128 128)"/>
+    <path d="M79 49c40-24 93-14 120 23m-90 24-40 23" fill="none" stroke="#ffe0bd" stroke-opacity=".8" stroke-width="1.2" transform="rotate(240 128 128)"/>
+    <path d="m113 107 39 22-39 22Z" fill="#792936" fill-opacity=".35"/>
+    <path d="m111 104 39 23-39 22Z" fill="url(#paper)"/>
+    <path d="m112 106 36 21-36 20" fill="none" stroke="#fff5e7" stroke-width="1.2" stroke-linejoin="round"/>
+  </g>
+</svg>

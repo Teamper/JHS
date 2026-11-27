@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">JHS · 聚合卡片</title>
+  <desc id="desc">蓝青色的叠放影片卡片与前景播放标记，代表多来源影片信息的聚合与浏览。</desc>
+  <rect width="256" height="256" rx="56" fill="#102c36"/>
+  <g transform="rotate(-12 134 128)">
+    <rect x="71" y="43" width="137" height="156" rx="22" fill="#246a7d"/>
+  </g>
+  <g transform="rotate(9 139 139)">
+    <rect x="68" y="61" width="142" height="154" rx="22" fill="#48b6c5"/>
+  </g>
+  <rect x="42" y="84" width="157" height="128" rx="22" fill="#c6eff4"/>
+  <path d="M101 108a4 4 0 0 0-6 3.5v48a4 4 0 0 0 6 3.5l40-24a4 4 0 0 0 0-7Z" fill="#163e4c"/>
+  <path d="M74 183h93" fill="none" stroke="#3d95a6" stroke-width="10" stroke-linecap="round"/>
+</svg>

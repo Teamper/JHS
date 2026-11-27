@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">JHS · 流光胶片</title>
+  <desc id="desc">蓝青色的立体胶片卷成流动的 J，曲面反光和卷边将影片与收藏融入同一轮廓。</desc>
+  <defs>
+    <linearGradient id="ground" x1="27" y1="0" x2="223" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#1b3354"/><stop offset=".5" stop-color="#0d1a30"/><stop offset="1" stop-color="#080e1b"/></linearGradient>
+    <radialGradient id="light" cx=".22" cy=".13" r=".88"><stop stop-color="#4b91ba" stop-opacity=".27"/><stop offset="1" stop-color="#3c70a2" stop-opacity="0"/></radialGradient>
+    <linearGradient id="edge" x1="43" y1="9" x2="215" y2="248" gradientUnits="userSpaceOnUse"><stop stop-color="#bddbf4" stop-opacity=".5"/><stop offset=".45" stop-color="#6c8cbb" stop-opacity=".06"/><stop offset="1" stop-color="#6997c3" stop-opacity=".23"/></linearGradient>
+    <linearGradient id="under" x1="61" y1="151" x2="189" y2="200" gradientUnits="userSpaceOnUse"><stop stop-color="#227588"/><stop offset=".4" stop-color="#277b9a"/><stop offset=".75" stop-color="#2447a2"/><stop offset="1" stop-color="#101c56"/></linearGradient>
+    <linearGradient id="hook" x1="85" y1="193" x2="182" y2="86" gradientUnits="userSpaceOnUse"><stop stop-color="#b3fff1"/><stop offset=".24" stop-color="#64e7ea"/><stop offset=".58" stop-color="#49a7e2"/><stop offset=".82" stop-color="#5f72d3"/><stop offset="1" stop-color="#34468c"/></linearGradient>
+    <linearGradient id="crest" x1="76" y1="60" x2="194" y2="101" gradientUnits="userSpaceOnUse"><stop stop-color="#c7faff"/><stop offset=".25" stop-color="#7ed9ff"/><stop offset=".57" stop-color="#7bafff"/><stop offset=".85" stop-color="#c1c9fa"/><stop offset="1" stop-color="#d4c9f2"/></linearGradient>
+    <linearGradient id="shine" x1="99" y1="184" x2="180" y2="117" gradientUnits="userSpaceOnUse"><stop stop-color="#e4fff8" stop-opacity=".8"/><stop offset=".5" stop-color="#cff8ff" stop-opacity=".12"/><stop offset="1" stop-color="#e4e5ff" stop-opacity=".63"/></linearGradient>
+    <filter id="shadow" x="-.3" y="-.3" width="1.6" height="1.7" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#030818" flood-opacity=".5"/></filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#ground)"/>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="url(#light)" stroke="url(#edge)"/>
+  <g filter="url(#shadow)">
+    <path d="M58 160c7 39 36 61 73 56 38-5 62-34 58-72l-5-55-7-7 1 63c2 35-19 59-51 61-30 2-54-15-64-46Z" fill="url(#under)"/>
+    <path d="m146 83 34 1 4 59c3 36-18 61-51 65-34 4-61-15-72-45l31-16c5 20 18 31 35 28 17-2 24-14 23-34Z" fill="url(#hook)"/>
+    <path d="M62 163c12 26 36 41 64 38 32-3 51-27 49-58l-3-52" fill="none" stroke="url(#shine)" stroke-width="1.4"/>
+    <path d="M75 100v9c32-19 69-23 108-6l4-9c-37-19-76-16-112 6Z" fill="#355490"/>
+    <path d="M65 79c34-28 86-40 132-17l-14 36c-33-17-72-13-108 8Z" fill="url(#crest)"/>
+    <path d="M66 79c35-27 86-39 130-17" fill="none" stroke="#e1f5ff" stroke-opacity=".75" stroke-width="1.2"/>
+    <path d="m83 78 12-6 3 9-12 6Zm23-10 13-4 2 10-13 4Zm25-5 13-1v10l-12 1Z" fill="#173754" fill-opacity=".7"/>
+    <path d="m146 73 10 .8v10l-10-1Z" fill="#3e5990" fill-opacity=".45"/>
+    <path d="M78 103c34-19 70-22 104-7" fill="none" stroke="#dff7ff" stroke-opacity=".7" stroke-width="1.1"/>
+    <path d="m64 162 28-15 1 8-25 17Z" fill="#d3fff3" fill-opacity=".65"/>
+  </g>
+</svg>

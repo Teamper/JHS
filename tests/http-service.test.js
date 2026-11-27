@@ -7,6 +7,32 @@ import { canonicalizeUrl, createRequestKey, HttpService, isCloudflareChallenge }
 import { SettingsService } from "../src/services/settings-service.js";
 
 describe("HTTP, URL and settings contracts", () => {
+    it("clears transport circuits after reconnection and disregards late transport failures from the old connection", async () => {
+        const delayed = Promise.withResolvers();
+        const port = { request: vi.fn()
+            .mockRejectedValueOnce(new Error("connection lost"))
+            .mockResolvedValueOnce({ status: 503, data: "" })
+            .mockResolvedValueOnce({ status: 403, data: "<title>Just a moment...</title>" })
+            .mockReturnValueOnce(delayed.promise)
+            .mockResolvedValue({ status: 200, data: "ok" }) };
+        const http = new HttpService(port, new ExternalUrlPolicy());
+        const request = subdomain => http.request({ url: `https://${subdomain}.example.test/`, retryCount: 0, circuitThreshold: 1,
+            urlPolicy: { trustClass: "builtin-public", hosts: ["example.test"] } });
+
+        await expect(request("dropped")).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+        await expect(request("server")).rejects.toMatchObject({ details: { status: 503 } });
+        await expect(request("challenge")).rejects.toMatchObject({ code: "CF_BLOCKED" });
+        const pending = expect(request("old")).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+        http.resetConnectionFailures();
+        delayed.reject(new Error("old connection"));
+        await pending;
+
+        await expect(request("dropped")).resolves.toMatchObject({ status: 200 });
+        await expect(request("old")).resolves.toMatchObject({ status: 200 });
+        await expect(request("server")).rejects.toMatchObject({ code: "CIRCUIT_OPEN" });
+        await expect(request("challenge")).rejects.toMatchObject({ code: "CIRCUIT_OPEN" });
+        expect(port.request).toHaveBeenCalledTimes(6);
+    });
     it("isolates authoritative account reads from advisory and mutation failures", async () => {
         const port = {request:vi.fn().mockResolvedValueOnce({status:500,data:{}}).mockResolvedValueOnce({status:500,data:{}}).mockImplementation(async options=>({status:200,data:{},finalUrl:options.url}))};
         const service = new HttpService(port,new ExternalUrlPolicy());

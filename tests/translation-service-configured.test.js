@@ -24,6 +24,16 @@ function setup(config={schema:1,profiles:[],primary:"google",fallbacks:[]}, over
 const configured=(primary="first",fallbacks=[])=>({schema:1,profiles:[profile("first"),profile("second")],primary,fallbacks});
 
 describe("configured translation orchestration",()=>{
+    it("pins Google on Android and reads its cache without dispatch when offline", async () => {
+        const { service, credential, google, translateDetailed } = setup(configured("first", ["second"]), { googleOnly: true });
+        const options = { sourceLanguage: "auto", targetLanguage: "zh-CN" };
+        await expect(service.translate("テスト", options)).resolves.toBe("Google 译文");
+        await expect(service.translate("テスト", { ...options, canDispatch: () => false })).resolves.toBe("Google 译文");
+        await expect(service.testConnection(profile("first"), new LifecycleScope("test"))).rejects.toMatchObject({code:"UNSUPPORTED"});
+        expect(credential.readEntry).not.toHaveBeenCalled();
+        expect(google).toHaveBeenCalledOnce();
+        expect(translateDetailed).not.toHaveBeenCalled();
+    });
     it("hydrates the first request without presenting it as a user configuration switch",async()=>{
         const {service}=setup(configured());const changed=vi.fn();service.addEventListener("translation.changed",changed);
         expect(await service.translate("首次原文")).toBe("first 译文");expect(changed).not.toHaveBeenCalled();

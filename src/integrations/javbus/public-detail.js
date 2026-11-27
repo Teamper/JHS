@@ -46,3 +46,4 @@ export function parseJavBusMovieDetail(page, url) {
     })).map(entry => ({ ...entry, thumbnail: entry.thumbnail ? new URL(entry.thumbnail, url).href : null })) : [];
     return defineMovieDetail({ ...movieRef, title, coverUrl: coverValue ? new URL(coverValue, url).href : null, stills, providerId: "javbus" });
 }
+

@@ -8,3 +8,11 @@ CLAUDE.md
 *.bundle
 .playwright-cli/
 tests/browser/debug.log
+/android/.gradle/
+/android/local.properties
+/android/capacitor-cordova-android-plugins/
+/android/app/build/
+/android/app/src/main/assets/
+/android/app/src/main/res/xml/config.xml
+/android/*.keystore
+/android/*.jks

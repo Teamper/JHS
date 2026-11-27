@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">JHS · 斜向回卷</title>
+  <desc id="desc">蓝青胶片向右上方扬起，再沿倾斜长弧回卷，收紧的内侧弧线和上挑端部形成更强的方向感。</desc>
+  <defs>
+    <linearGradient id="ground" x1="32" y1="0" x2="215" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#19304b"/><stop offset=".5" stop-color="#0c192b"/><stop offset="1" stop-color="#070f1d"/></linearGradient>
+    <radialGradient id="ambience" cx=".28" cy=".2" r=".85"><stop stop-color="#4097bc" stop-opacity=".16"/><stop offset="1" stop-color="#27729e" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rim" x1="31" y1="2" x2="222" y2="252" gradientUnits="userSpaceOnUse"><stop stop-color="#b2d5ed" stop-opacity=".44"/><stop offset=".4" stop-color="#5a85ad" stop-opacity=".05"/><stop offset="1" stop-color="#72a0c6" stop-opacity=".2"/></linearGradient>
+    <linearGradient id="thickness" x1="91" y1="204" x2="195" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#249b99"/><stop offset=".42" stop-color="#237db4"/><stop offset=".8" stop-color="#39478e"/><stop offset="1" stop-color="#282b58"/></linearGradient>
+    <linearGradient id="ribbon" x1="87" y1="200" x2="165" y2="48" gradientUnits="userSpaceOnUse"><stop stop-color="#a4fff0"/><stop offset=".2" stop-color="#61e5ed"/><stop offset=".46" stop-color="#4bb5e9"/><stop offset=".72" stop-color="#7db4ff"/><stop offset="1" stop-color="#b8c8ff"/></linearGradient>
+    <linearGradient id="silk" x1="63" y1="92" x2="195" y2="71" gradientUnits="userSpaceOnUse"><stop stop-color="#c9fcff" stop-opacity=".8"/><stop offset=".56" stop-color="#c9dfff" stop-opacity="0"/><stop offset="1" stop-color="#5a64ae" stop-opacity=".46"/></linearGradient>
+    <linearGradient id="inner-line" x1="78" y1="145" x2="176" y2="84" gradientUnits="userSpaceOnUse"><stop stop-color="#e7fff7" stop-opacity=".82"/><stop offset=".45" stop-color="#baf1ff" stop-opacity=".12"/><stop offset="1" stop-color="#ecedff" stop-opacity=".84"/></linearGradient>
+    <radialGradient id="hook-light" cx=".13" cy=".78" r=".85"><stop stop-color="#c9fff3" stop-opacity=".53"/><stop offset=".6" stop-color="#a4f8f3" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="-.3" y="-.25" width="1.6" height="1.65" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#020713" flood-opacity=".52"/></filter>
+    <path id="contour" d="M55 96c37-25 88-71 124-53 25 13 25 59 9 96-17 40-43 70-75 75-29 4-53-16-62-42l28-27c10 26 25 41 42 36 23-7 41-35 49-63 6-21 9-41-1-44-23-7-65 19-99 41Z"/>
+    <clipPath id="face"><path d="M55 96c37-25 88-71 124-53 25 13 25 59 9 96-17 40-43 70-75 75-29 4-53-16-62-42l28-27c10 26 25 41 42 36 23-7 41-35 49-63 6-21 9-41-1-44-23-7-65 19-99 41Z"/></clipPath>
+    <mask id="perforations"><rect width="256" height="256" fill="#fff"/><g fill="#000"><rect x="80" y="82" width="10" height="8" rx="1.4" transform="rotate(-35 85 86)"/><rect x="102" y="66" width="10" height="8" rx="1.4" transform="rotate(-33 107 70)"/><rect x="125" y="52" width="10" height="8" rx="1.4" transform="rotate(-25 130 56)"/><rect x="150" y="45" width="10" height="8" rx="1.4" transform="rotate(-2 155 49)"/></g></mask>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#ground)"/>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="url(#ambience)" stroke="url(#rim)"/>
+  <g filter="url(#shadow)">
+    <use href="#contour" transform="translate(2 5)" fill="url(#thickness)"/>
+    <g mask="url(#perforations)">
+      <use href="#contour" fill="url(#ribbon)"/>
+      <g clip-path="url(#face)">
+        <rect x="45" y="34" width="164" height="184" fill="url(#silk)"/>
+        <rect x="45" y="34" width="164" height="184" fill="url(#hook-light)"/>
+        <path d="M71 114c34-22 75-47 98-40 10 3 7 23 1 44-8 28-26 56-49 63-17 5-32-10-42-36" fill="none" stroke="url(#inner-line)" stroke-width="1.5"/>
+        <path d="M56 96c36-25 87-70 123-53 24 13 24 59 9 96-17 39-43 70-75 75-28 4-52-16-61-42" fill="none" stroke="#d4f9ff" stroke-opacity=".34" stroke-width="1.1"/>
+      </g>
+    </g>
+    <path d="m52 172 27-27 2 6-26 28Z" fill="#c9fff3" fill-opacity=".68"/>
+  </g>
+</svg>

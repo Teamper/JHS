@@ -42,7 +42,9 @@
     "check:full": "npm run check:release",
     "check:mobile": "npm --prefix apps/mobile run check && npm --prefix apps/mobile test",
     "build:extension": "node scripts/build-extension.mjs",
+    "start:javdb-api": "node scripts/javdb-api.mjs",
     "build:android:web": "node scripts/build-android-web.mjs",
+    "build:android:sync": "npm run build:android:web && cap sync android",
     "check:extension:chrome": "node tests/browser/scripts/extension-smoke.mjs --chrome",
     "check:extension:edge": "node tests/browser/scripts/extension-smoke.mjs"
   },

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">JHS · 组合字标</title>
+  <desc id="desc">蓝底白色胶片边框中的几何 JHS 字母，直接呈现 JAV Helper Suite 的项目名称。</desc>
+  <rect width="256" height="256" rx="56" fill="#285f9d"/>
+  <rect x="29" y="60" width="198" height="136" rx="22" fill="#f0f7ff"/>
+  <rect x="42" y="92" width="172" height="72" rx="8" fill="#285f9d"/>
+  <path d="M48 72h17v10H48Zm35 0h17v10H83Zm36 0h17v10h-17Zm36 0h17v10h-17Zm36 0h17v10h-17ZM48 174h17v10H48Zm35 0h17v10H83Zm36 0h17v10h-17Zm36 0h17v10h-17Zm36 0h17v10h-17Z" fill="#285f9d"/>
+  <path d="M57 109h24v30c0 10-5 15-13 15-9 0-14-5-15-13m54-32v44m30-44v44m-30-22h30m55-22h-19c-8 0-12 4-12 11s5 11 14 11h4c9 0 14 4 14 11s-6 12-14 12h-19" fill="none" stroke="#f0f7ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
