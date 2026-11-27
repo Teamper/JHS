@@ -39,9 +39,11 @@ describe("settings invalidation ownership", () => {
     it.each([".clean-btn", "#clean-all"])("clears actress profile attempts from %s", async selector => {
         const dom = new JSDOM('<main><button class="clean-btn" data-key="jhs_actress_info"></button><button id="clean-all"></button></main>');
         const $ = jqueryFactory(dom.window);
-        const local = new Map([["jhs_actress_info", "{}"], ["jhs_actress_profile_attempts_v1", "{}"]]);
+        const local = new Map([["jhs_actress_info", "{}"]]);
+        const clearActressProfileBackfillAttempts = vi.fn();
         const services = {
             storage: { removeLocal: key => local.delete(key) },
+            state: { clearActressProfileBackfillAttempts },
             cache: { clearNamespace: vi.fn(), clearAll: vi.fn(), clearThirdPartyCache: vi.fn() },
             translation: { clearCache: vi.fn() },
         };
@@ -51,7 +53,7 @@ describe("settings invalidation ownership", () => {
             cacheItems: [{ key: "jhs_actress_info" }], notifications: { ok: vi.fn() },
         }, $("main"));
         $(selector).trigger("click");
-        await vi.waitFor(() => expect(local.has("jhs_actress_profile_attempts_v1")).toBe(false));
+        await vi.waitFor(() => expect(clearActressProfileBackfillAttempts).toHaveBeenCalledOnce());
         expect(local.has("jhs_actress_info")).toBe(false);
         dom.window.close();
     });

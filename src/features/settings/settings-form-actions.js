@@ -211,13 +211,26 @@ export function bindClick(owner, layerRoot = null) {
     }));
     root.find(".clean-btn").on("click", (async (/** @type {JQueryEvent} */ e) => {
         const key = owner.jquery(e.currentTarget).data("key");
-        key === THIRD_PARTY_CACHE_KEY ? (await owner.getRuntimeService("cache").clearThirdPartyCache(), await owner.getRuntimeService("cache").clearNamespace("external-detail-v1")) : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : "jhs_translate" === key ? await translation.clearCache() : "jhs_actress_info" === key ? (await owner.getRuntimeService("cache").clearNamespace("actress-info"), await storage.removeLocal(key), storage.removeLocal("jhs_actress_profile_attempts_v1")) : "jhs_screenShot" === key ? (await owner.getRuntimeService("cache").clearNamespace("screenshot"), await storage.removeLocal(key)) : storage.removeLocal(key);
+        if (key === "jhs_actress_info") {
+            await owner.getRuntimeService("cache").clearNamespace("actress-info");
+            storage.removeLocal(key);
+            await owner.getRuntimeService("state").clearActressProfileBackfillAttempts();
+        } else {
+            key === THIRD_PARTY_CACHE_KEY ? (await owner.getRuntimeService("cache").clearThirdPartyCache(), await owner.getRuntimeService("cache").clearNamespace("external-detail-v1")) : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : "jhs_translate" === key ? await translation.clearCache() : "jhs_screenShot" === key ? (await owner.getRuntimeService("cache").clearNamespace("screenshot"), await storage.removeLocal(key)) : storage.removeLocal(key);
+        }
         owner.notifications.ok("已清理所选缓存"), root.find("#cache-data-display").addClass("jhs-is-hidden");
         "jhs_dmm_video" === key && storage.removeLocal("jhs_other_site_dmm");
     }));
     root.find("#clean-all").on("click", (async () => {
-        owner.cacheItems.forEach((item => "jhs_translate" !== item.key && storage.removeLocal(item.key))), await translation.clearCache(), await owner.getRuntimeService("cache").clearAll(), owner.notifications.ok("已清理全部缓存");
-        root.find("#cache-data-display").addClass("jhs-is-hidden"), storage.removeLocal("jhs_other_site_dmm"), storage.removeLocal("jhs_actress_profile_attempts_v1"), await owner.getRuntimeService("cache").clearThirdPartyCache();
+        for (const item of owner.cacheItems) if (item.key !== "jhs_translate") storage.removeLocal(item.key);
+        await translation.clearCache();
+        const cache = owner.getRuntimeService("cache");
+        await cache.clearAll();
+        await owner.getRuntimeService("state").clearActressProfileBackfillAttempts();
+        await cache.clearThirdPartyCache();
+        storage.removeLocal("jhs_other_site_dmm");
+        root.find("#cache-data-display").addClass("jhs-is-hidden");
+        owner.notifications.ok("已清理全部缓存");
     }));
     root.find(".view-btn").on("click", (async (/** @type {JQueryEvent} */ e) => {
         const key = owner.jquery(e.currentTarget).data("key");

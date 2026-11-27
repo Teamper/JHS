@@ -38,7 +38,6 @@ export class TaskExecutionService {
         this.notifications = options.notifications;
         this.storageQueue = options.storageQueue ?? new StorageQueue(options.logger);
         this.singleTaskKey = "checkNewActressActorFilterCar";
-        this.profileBackfillLockKey = "jhsBackfillActressProfiles";
         /** @type {any} */ this.taskConfig = null;
         this.lastCheckFavoriteActressTimeKey = "jhs_time_checkFavoriteActress";
         this.lastCheckBlacklistTimeKey = "jhs_time_checkBlacklist";
@@ -261,28 +260,31 @@ export class TaskExecutionService {
                 if (this.getHostListPageFlag() && (this.taskConfig.enableCheckBlacklist === _ ? await this.runBackgroundTask("黑名单整批检测", (() => this.checkBlacklist())) : this.logger.warn("自动检测屏蔽黑名单-禁用"),
                 !l)) {
                     const loggedInJavDb = this.jquery('a[href*="/users/profile"]').length > 0;
-                    const favoriteDue = this.taskConfig.enableCheckFavoriteActress === _ && loggedInJavDb && await this.shouldStartTask("favoriteActress");
-                    const newVideoDue = this.taskConfig.enableCheckNewVideo === _ && await this.shouldStartTask("newVideo");
+                    const favoriteEnabled = this.taskConfig.enableCheckFavoriteActress === _ && (this.runtimeServices.runWithoutPage || loggedInJavDb);
+                    const newVideoEnabled = this.taskConfig.enableCheckNewVideo === _;
+                    const favoriteDue = favoriteEnabled && await this.shouldStartTask("favoriteActress");
+                    const newVideoDue = newVideoEnabled && await this.shouldStartTask("newVideo");
                     if (this.taskConfig.enableCheckFavoriteActress === _) {
                         this.runtimeServices.runWithoutPage || loggedInJavDb ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : this.logger.debug("未登录 JavDB，跳过自动同步演员");
                     } else this.logger.warn("自动同步已收藏的演员-禁用");
                     this.taskConfig.enableCheckNewVideo === _ ? await this.runBackgroundTask("新作品整批检测", (() => this.checkNewVideo())) : this.logger.warn("自动检测已收藏演员的最新作品-禁用");
-                    allowProfileBackfill = favoriteDue || newVideoDue;
+                    allowProfileBackfill = favoriteDue || newVideoDue || ((favoriteEnabled || newVideoEnabled)
+                        && Boolean(await this.featureNewVideoScanController?.needsProfileBackfillInit?.()));
                 }
             } else this.logger.debug("争夺任务锁失败, 跳过执行");
         })).catch((e => {
             this.isNetworkBlocked(e) ? this.logger.warn(`后台检测已停止: ${e.message}`) : this.logger.error("锁任务出现错误:", e);
         }));
         if (!allowProfileBackfill || this.disposed || !this.getHostListPageFlag()) return;
-        return this.window.navigator.locks.request(this.profileBackfillLockKey, {
-            ifAvailable: !0
-        }, (async lock => {
-            if (lock && !this.disposed && this.getHostListPageFlag()) {
-                await this.runBackgroundTask("演员身材资料补齐", (() => this.backfillFavoriteActressProfiles()));
-            }
-        })).catch((e => {
-            this.isNetworkBlocked(e) ? this.logger.warn(`演员身材资料补齐已停止: ${e.message}`) : this.logger.error("演员身材资料补齐出现错误:", e);
-        }));
+        return this.triggerProfileBackfill({ requireListPage: true });
+    }
+
+    /** @param {Record<string, any>} [options] */
+    async triggerProfileBackfill(options = {}) {
+        const scanner = this.featureNewVideoScanController;
+        if (this.disposed || !scanner) return null;
+        const scope = await this.runtimeServices.scope?.();
+        return scanner.triggerProfileBackfill(options, { signal: scope?.signal, isListPage: () => Boolean(this.getHostListPageFlag()) });
     }
     async loadConfig() {
         if (this.configLoadPromise) return this.configLoadQueued = !0, this.configLoadPromise;
@@ -733,24 +735,5 @@ export class TaskExecutionService {
         catch (error) { this.reportCompletedNoticeFailure("单个演员新作品检测", error); }
         try { await this.emitNewVideoChanged("single-actress-check"); }
         catch (error) { this.reportCompletedNoticeFailure("单个演员新作品检测", error); }
-    }
-    async backfillFavoriteActressProfiles() {
-        const backfill = this.featureNewVideoScanController?.backfillFavoriteProfiles;
-        if (typeof backfill !== "function") return null;
-        const summary = await backfill.call(this.featureNewVideoScanController, {
-            onProgress: (/** @type {{ processed: number, total: number }} */ { processed, total }) => {
-                this.jquery("#checkNewVideoMsg").text(`正在补齐演员资料 (${processed}/${total})…`);
-            },
-        });
-        if (summary?.total > 0) {
-            this.jquery("#checkNewVideoMsg").text(
-                `演员资料补齐：更新 ${summary.updated}，未变 ${summary.unchanged}，失败 ${summary.failed}${summary.rateLimited ? `，限流 ${summary.rateLimited}` : ""}`
-            );
-        }
-        if (summary?.updated > 0) {
-            try { await this.emitNewVideoChanged("favorite-profile-backfill"); }
-            catch (error) { this.reportCompletedNoticeFailure("演员身材资料补齐", error); }
-        }
-        return summary;
     }
 }

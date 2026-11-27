@@ -32,11 +32,12 @@ import { closeRebindDialogs, parseActorIdInput, resolveActorBaseUrl, applyActorR
 
 /** @template {(...args: any[]) => unknown} F @typedef {Parameters<F> extends [any, ...infer Args] ? Args : never} ActionArgs */
 export class NewVideoWorkspaceService {
-    /** @param {{runtimeServices?: Record<string, any>, task?: {available: () => boolean, current: () => any, activate: () => Promise<any>}, openTaskSettings?: (callback: () => void) => unknown, batchController?: any, workspaceController?: any, loadStyles?: () => Promise<void>, startLoading?: () => {close?: () => void}, jquery: (value: any) => any, utilities: any, notifications: any, logger: any, events: any, createImageHoverPreview: (config: Record<string, any>) => any, document: Document, window: Window & typeof globalThis}} options */
+    /** @param {{runtimeServices?: Record<string, any>, task?: {available: () => boolean, current: () => any, activate: () => Promise<any>}, requestProfileBackfill?: (options: Record<string, any>) => unknown, openTaskSettings?: (callback: () => void) => unknown, batchController?: any, workspaceController?: any, loadStyles?: () => Promise<void>, startLoading?: () => {close?: () => void}, jquery: (value: any) => any, utilities: any, notifications: any, logger: any, events: any, createImageHoverPreview: (config: Record<string, any>) => any, document: Document, window: Window & typeof globalThis}} options */
     constructor(options) {
         this.runtimeServices = options.runtimeServices ?? {};
         this.openTaskSettings = options.openTaskSettings;
         this.task = options.task;
+        this.requestProfileBackfill = options.requestProfileBackfill;
         this.jquery = options.jquery;
         this.utils = options.utilities;
         this.notifications = options.notifications;
@@ -119,6 +120,17 @@ export class NewVideoWorkspaceService {
         catch (error) {
             try { this.logger.warn("新作品记录已保存，但跨标签通知失败", error); }
             catch { /* A failed diagnostic must not reclassify a committed write. */ }
+        }
+    }
+    /** @param {{clearStarIds?: string[], backfillOptions?: Record<string, any> | null}} [options] */
+    async requestActressProfileBackfill({ clearStarIds, backfillOptions = {} } = {}) {
+        if (this.disposed) return;
+        try {
+            if (clearStarIds) await this.getRuntimeService("state").clearActressProfileBackfillAttempts(clearStarIds);
+            if (backfillOptions && !this.disposed) await this.requestProfileBackfill?.(backfillOptions);
+        } catch (error) {
+            try { this.logger.warn("演员资料补齐未启动", error); }
+            catch { /* 已提交的编辑保持成功。 */ }
         }
     }
     prepareFeatureActivation() {

@@ -1,6 +1,9 @@
 import { memoryAtomicStorage, storageFromForage } from "./helpers/atomic-storage.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PortableBackupService } from "../src/services/portable-backup-service.js";
+import { StateService } from "../src/core/state-service.js";
+import { ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState } from "../src/core/actress-profile-backfill-state.js";
+import { NewVideoScanController } from "../src/features/discovery/new-video-scan-controller.js";
 import { runDataMigrations } from "../src/core/migration.js";
 import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 import { SettingsService } from "../src/services/settings-service.js";
@@ -78,12 +81,13 @@ describe("portable import atomicity", () => {
         sync.dispose();
     });
 
-    it.each(["data_version", "car_list", "setting", "favorite_actresses"])("keeps the pre-import data when persisting %s fails", async (failKey) => {
+    it.each(["data_version", "car_list", "setting", "favorite_actresses", ACTRESS_PROFILE_BACKFILL_KEY])("keeps the pre-import data when persisting %s fails", async (failKey) => {
         vi.stubGlobal("utils", { getNowStr: () => "2026-09-26 00:00:00" });
         vi.stubGlobal("clog", { log: vi.fn(), warn: vi.fn() });
         vi.stubGlobal("navigator", {});
         const version = failKey === "data_version" ? 2 : 3;
-        const { backup, data, coordinator, writes } = createStorage({ failKey, initial: { data_version: version } });
+        const checkpoint = { ...createActressProfileBackfillState("before"), initialized: true, entries: { "old-star": 1000 } };
+        const { backup, data, coordinator, writes } = createStorage({ failKey, initial: { data_version: version, [ACTRESS_PROFILE_BACKFILL_KEY]: checkpoint } });
 
         await expect(backup.importData({
             data_version: 3,
@@ -95,10 +99,43 @@ describe("portable import atomicity", () => {
         expect(data.get("car_list")).toEqual([{ carNum: "OLD-1", url: "/v/old" }]);
         expect(data.get("setting")).toEqual({ themeMode: "light", webDavPassword: "AES:local" });
         expect(data.get("favorite_actresses")).toEqual([{ starId: "old-star", name: "Old" }]);
+        expect(data.get(ACTRESS_PROFILE_BACKFILL_KEY)).toEqual(checkpoint);
         expect(data.get("data_version")).toBe(version);
         expect(data.has("snapshots")).toBe(false);
         expect(coordinator.entries).toBe(1);
         expect(writes.every((write) => write.depth === 1)).toBe(true);
+    });
+
+    it.each(["import", "snapshot"])("rejects in-flight actress profile writes after a portable %s", async mode => {
+        const { backup, storage, data, coordinator } = createStorage({
+            initial: { [ACTRESS_PROFILE_BACKFILL_KEY]: { ...createActressProfileBackfillState("before"), initialized: true, entries: { "old-star": 1000 } } },
+        });
+        const state = new StateService(storage, {}, coordinator);
+        const url = "https://ja.wikipedia.org/wiki/Old";
+        let release;
+        const lookupAny = vi.fn(() => new Promise(resolve => { release = resolve; }));
+        const controller = new NewVideoScanController({ state, actressInfo: { lookupAny }, getTimestamp: () => "", onNewItems() {} });
+        const inFlight = controller.backfillFavoriteProfiles({ now: 2000, delayMs: 0, force: true });
+        const cancelled = expect(inFlight).rejects.toMatchObject({ name: "AbortError" });
+        await vi.waitFor(() => expect(lookupAny).toHaveBeenCalledOnce());
+
+        const restored = {
+            data_version: 3,
+            favorite_actresses: [{ starId: "old-star", name: "Old", actressProfile: { url, matchedName: "Old", height: "170cm" }, actressProfileVerifiedUrl: url }],
+        };
+        if (mode === "snapshot") {
+            vi.spyOn(backup, "getSnapshot").mockResolvedValue({ data: restored });
+            await backup.restoreSnapshot("restore-point");
+        } else await backup.importData(restored);
+        const checkpoint = await state.getActressProfileBackfillState();
+        expect(checkpoint).toEqual(createActressProfileBackfillState(expect.any(String)));
+        expect(checkpoint.generation).not.toBe("before");
+        release({ info: { url, height: "150cm" }, matchedName: "Old" });
+        await cancelled;
+        expect(await state.getActressProfileBackfillState()).toEqual(checkpoint);
+        expect(data.get("favorite_actresses")[0].actressProfile.height).toBe("170cm");
+        expect(await controller.needsProfileBackfillInit()).toBe(true);
+        expect(await backup.exportPortableData()).not.toHaveProperty(ACTRESS_PROFILE_BACKFILL_KEY);
     });
 
     it("restores all data when the destination migration fails before applying the import", async () => {

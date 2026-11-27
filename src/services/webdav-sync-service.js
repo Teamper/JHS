@@ -345,6 +345,7 @@ export class WebDavSyncService extends EventTarget {
         if (scope) await this.assertConnectionCurrent(scope, revision);
         await this.deps.backup.importDataWithGuard({ data_version: CURRENT_DATA_VERSION }, {
             assertActive: () => this.assertConnectionCurrent(scope ?? { assertActive() {} }, revision),
+            resetActressProfileBackfill: Boolean(selection.data),
             prepareData: async () => {
                 const local = await this.deps.store.readData(), restored = materializeSyncData(envelope.state, local);
                 /** @type {Record<string, any>} */ const data = { data_version: CURRENT_DATA_VERSION };

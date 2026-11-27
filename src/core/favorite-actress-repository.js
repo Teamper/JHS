@@ -2,12 +2,14 @@
 
 import { A, D, escapeHtml, normalizeCarNum } from "./constants.js";
 import { cleanActressName, isSameActressProfile, normalizeActressProfileData, readVerifiedActressProfile } from "./actress-measurements.js";
+import { ACTRESS_PROFILE_BACKFILL_KEY, createActressProfileBackfillState, readActressProfileBackfillState } from "./actress-profile-backfill-state.js";
 import { assertMovieStateEligible, getMovieStateEligibility } from "./movie-identity.js";
 import { throwIfAborted } from "./jhs-error.js";
 import { formatUiDateTime } from "./ui-date-time.js";
 
 /** @typedef {Record<string, any>} Actress */
 /** @typedef {import("../services/storage-service.js").StorageService} StorageService */
+/** @typedef {import("./actress-profile-backfill-state.js").ActressProfileBackfillProgress} ActressProfileBackfillProgress */
 /** @typedef {{error?: Function, log?: Function, html?: Function}} Logger */
 
 const ACTRESSES = "favorite_actresses";
@@ -72,7 +74,7 @@ function mergeRemark(left, right) {
 
 /** StateService holds the shared mutation lock for every write. */
 export class FavoriteActressRepository {
-    /** @param {Pick<StorageService, "get"|"set">} storage @param {Logger} [logger] @param {() => string} [clock] */
+    /** @param {StorageService} storage @param {Logger} [logger] @param {() => string} [clock] */
     constructor(storage, logger, clock = () => formatUiDateTime(new Date())) {
         this.storage = storage;
         this.logger = logger;
@@ -153,25 +155,75 @@ export class FavoriteActressRepository {
         return true;
     }
 
-    /** @param {Array<{starId: string, actressProfile: Actress}>} updates */
-    async updateProfiles(updates) {
+    async readBackfillState() {
+        return readActressProfileBackfillState(await this.storage.get(ACTRESS_PROFILE_BACKFILL_KEY));
+    }
+
+    async readBackfillSnapshot() {
+        const snapshot = await this.storage.readAtomicSnapshot([ACTRESSES, ACTRESS_PROFILE_BACKFILL_KEY]);
+        return {
+            actresses: list(snapshot[ACTRESSES].value),
+            state: readActressProfileBackfillState(snapshot[ACTRESS_PROFILE_BACKFILL_KEY].value),
+        };
+    }
+
+    /** @param {string[]} [starIds] */
+    async clearBackfillAttempts(starIds) {
+        const ids = starIds?.map(id => id.trim()).filter(Boolean);
+        if (ids?.length === 0) return;
+        const expected = await this.storage.readAtomicSnapshot([ACTRESS_PROFILE_BACKFILL_KEY]);
+        const current = readActressProfileBackfillState(expected[ACTRESS_PROFILE_BACKFILL_KEY].value);
+        const revision = crypto.randomUUID();
+        const next = ids ? { ...current, entries: { ...current.entries } } : createActressProfileBackfillState(revision);
+        if (ids) {
+            for (const id of ids) delete next.entries[id];
+            next.actorRevisions = { ...current.actorRevisions, ...Object.fromEntries(ids.map(id => [id, revision])) };
+        }
+        await this.storage.commitAtomicBatch({ expected, puts: { [ACTRESS_PROFILE_BACKFILL_KEY]: next }, deletes: [] });
+    }
+
+    /** @param {Array<{starId: string, actressProfile: Actress}>} updates @param {ActressProfileBackfillProgress} [progress] */
+    async updateProfiles(updates, progress) {
+        throwIfAborted(progress?.signal);
         const profiles = new Map();
         for (const entry of updates) {
             const starId = String(entry?.starId || "").trim(), profile = normalizeActressProfileData(entry?.actressProfile);
             if (starId && profile) profiles.set(starId, profile);
         }
-        if (!profiles.size) return 0;
-        const current = await this.read(), now = this.clock();
+        if (!progress && !profiles.size) return 0;
+        const expected = progress && await this.storage.readAtomicSnapshot([ACTRESSES, ACTRESS_PROFILE_BACKFILL_KEY]);
+        const checkpoint = expected && readActressProfileBackfillState(expected[ACTRESS_PROFILE_BACKFILL_KEY].value);
+        if (checkpoint && checkpoint.generation !== progress.generation) {
+            throw new DOMException("演员资料补齐已被恢复或缓存清理重置", "AbortError");
+        }
+        const isCurrent = (/** @type {string} */ id) => !checkpoint || checkpoint.actorRevisions[id] === progress.actorRevisions[id];
+        const current = expected ? list(expected[ACTRESSES].value) : await this.read(), now = this.clock();
+        const currentIds = new Set();
         let changed = 0;
         const next = current.map(actress => {
-            const profile = profiles.get(String(actress?.starId || "").trim());
-            if (!profile) return actress;
+            const id = String(actress?.starId || "").trim();
+            if (id) currentIds.add(id);
+            const profile = profiles.get(id);
+            if (!profile || !isCurrent(id)) return actress;
             const updated = { ...actress, actressProfile: profile, actressProfileVerifiedUrl: profile.url };
             if (!readVerifiedActressProfile(updated) || isSameActressProfile(readVerifiedActressProfile(actress), profile)) return actress;
             changed++;
             return { ...updated, updateDate: now };
         });
-        if (changed) await this.storage.set(ACTRESSES, next);
+        if (checkpoint) {
+            const entries = new Map(Object.entries(checkpoint.entries).filter(([id]) => currentIds.has(id)));
+            for (const [id, time] of progress.attempts) {
+                if (currentIds.has(id) && isCurrent(id)) entries.set(id, time);
+            }
+            const initialized = checkpoint.initialized || (progress.completeInitialRun && [...currentIds].every(isCurrent));
+            /** @type {Record<string, unknown>} */
+            const puts = { [ACTRESS_PROFILE_BACKFILL_KEY]: { ...checkpoint, initialized, entries: Object.fromEntries(entries) } };
+            if (changed) {
+                await this.storage.beforeWrite?.(ACTRESSES);
+                puts[ACTRESSES] = next;
+            }
+            await this.storage.commitAtomicBatch({ expected, puts, deletes: [], signal: progress.signal });
+        } else if (changed) await this.storage.set(ACTRESSES, next);
         return changed;
     }
 

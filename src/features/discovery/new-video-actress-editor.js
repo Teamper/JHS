@@ -157,8 +157,11 @@ export async function editActress(owner, /** @type {ActorRecord} */ record) {
             root.find("#edit-actress-error").prop("hidden", !!name).text(name ? "" : "请输入演员主名称");
             if (!name) { root.find("#edit-actress-name").trigger("focus"); return false; }
             const split = (/** @type {string} */ text) => text.split(/[，,]/).map(item => item.trim()).filter(Boolean);
+            const allName = split(value("#edit-actress-allname"));
+            const previousAliases = Array.isArray(record.allName) ? record.allName.map(name => String(name || "").trim()).filter(Boolean) : split(String(record.allName || ""));
+            const namesChanged = String(record.name || "").trim() !== name || JSON.stringify(previousAliases) !== JSON.stringify(allName);
             const { actressProfile: _ignoredProfile, actressProfileVerifiedUrl: _ignoredVerification, ...editableBase } = record;
-            const updated = { ...editableBase, avatar: value("#edit-actress-avatar"), name, allName: split(value("#edit-actress-allname")), newVideoList: split(value("#edit-actress-newvideolist")).map((/** @type {string} */ car) => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
+            const updated = { ...editableBase, avatar: value("#edit-actress-avatar"), name, allName, newVideoList: split(value("#edit-actress-newvideolist")).map((/** @type {string} */ car) => (Array.isArray(record.newVideoList) ? record.newVideoList.find(item => (typeof item === "string" ? item : item?.carNum) === car) : null) || car), actressType: value("#actressType"), remark: value("#edit-remark") };
             editor.savePending = true; editor.layer?.find(".layui-layer-btn1").attr("aria-disabled", "true");
             try {
                 const saved = await owner.getRuntimeService("state").updateFavoriteActress(updated);
@@ -174,6 +177,10 @@ export async function editActress(owner, /** @type {ActorRecord} */ record) {
             }
             // The committed change must still invalidate the workspace when the editor closed during its write.
             if (owner.isEditorCurrent(editor)) Object.assign(record, updated);
+            if (namesChanged && record.starId) void owner.requestActressProfileBackfill({
+                clearStarIds: [record.starId],
+                backfillOptions: { starIds: [record.starId], force: true, refresh: true },
+            });
             await owner.notifyCommittedNewVideoChange("favorite-actress-edited");
             if (!owner.isEditorCurrent(editor)) return false;
             try { owner.notifications.ok("已更新演员信息"); }

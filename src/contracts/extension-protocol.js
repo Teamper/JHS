@@ -3,8 +3,8 @@ import { JhsError, JHS_ERROR_CODES } from "../core/jhs-error.js";
 export const CHANNEL = "jhs-extension-v1";
 export const EXTENSION_STATE_METHODS = Object.freeze([
     "addBlacklistItem", "addFavoriteActressList", "appendOfflineHistory", "batchSaveBlacklistCarList",
-    "batchUpdateFavoriteActressProfiles", "clearPersonalRating", "confirmOfflineSubmission",
-    "getActivityLog", "getBlacklist", "getBlacklistCarList", "getBlacklistMap", "getCarList", "getCarMap",
+    "batchUpdateFavoriteActressProfiles", "clearActressProfileBackfillAttempts", "clearPersonalRating", "confirmOfflineSubmission",
+    "getActivityLog", "getActressProfileBackfillSnapshot", "getActressProfileBackfillState", "getBlacklist", "getBlacklistCarList", "getBlacklistMap", "getCarList", "getCarMap",
     "getFavoriteActressList", "getListActivity", "getNewVideoDecisions", "getOfflineHistory",
     "getPersonalRatings", "getState", "patch", "rebindFavoriteActress", "remove", "removeBlacklistActor",
     "removeFavoriteActress", "removeFromNewVideoList", "removeOfflineHistory", "setCollectionMembership",

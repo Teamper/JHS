@@ -285,10 +285,14 @@ export function bindClick(owner) {
     owner.jquery("#checkFavoriteActress").on("click", ((/** @type {JQueryEvent} */ event) => {
         void owner.runManualTask(owner.jquery(event.currentTarget), "同步中…", (async task => {
             if (!owner.jquery('a[href*="/users/profile"]').length) return void owner.notifications.error(`请先登录 ${PRODUCT_NAMES.javdb}`);
-            await task.checkFavoriteActress(true);
+            const result = await task.checkFavoriteActress(true);
+            if (!result?.fatal) void owner.requestActressProfileBackfill();
         }));
     })), owner.jquery("#checkNewVideo").on("click", ((/** @type {JQueryEvent} */ event) => {
-        void owner.runManualTask(owner.jquery(event.currentTarget), "检测中…", task => task.checkNewVideo(true));
+        void owner.runManualTask(owner.jquery(event.currentTarget), "检测中…", async task => {
+            const result = await task.checkNewVideo(true);
+            if (!result?.fatal) void owner.requestActressProfileBackfill();
+        });
     })), owner.jquery("#paramActressType,#paramSortBy,#nvSortBy,#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").off("change.jhsNvFilter").on("change.jhsNvFilter", refreshView),
     owner.jquery("#nv-filter-panel").off("change.jhsNvBody").on("change.jhsNvBody", ".jhs-nv-cup-checkbox", refreshView),
     owner.nvBodyFilterDebounced?.cancel?.(), owner.nvBodyFilterDebounced = debounce(refreshView, 200),

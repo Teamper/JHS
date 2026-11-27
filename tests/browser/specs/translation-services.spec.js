@@ -45,7 +45,7 @@ async function boot(page,context,theme,mode="detail",sharedGm=null) {
   return errors;
 }
 
-test("keeps one automatic translation when the original detail title becomes visible", async ({ page, context }) => {
+test("keeps one automatic translation when the original detail title becomes visible", async ({ page, context }, info) => {
   const errors = await boot(page, context, "light");
   await seed(page);
   const heading = page.locator(".column-video-info h1");
@@ -65,6 +65,7 @@ test("keeps one automatic translation when the original detail title becomes vis
   await expect(heading.locator(".origin-title + .translated-title")).toHaveText("服务译文 ABC-123");
   await expect(translation).toHaveCount(1);
   expect(await page.evaluate(() => window.translationCalls.length)).toBe(1);
+  await heading.screenshot({ path: info.outputPath("single-detail-translation.png") });
 
   await page.evaluate(() => window.settingsService.set("translateTitle", "no"));
   await expect(translation).toHaveCount(0);

@@ -36,6 +36,9 @@ const resourceOwners = new Set([
     "src/ui/detail/fc2-workspace-styles.js", "src/ui/detail/panel-styles.js",
     "src/ui/detail/related-panel.js", "src/ui/detail/fc2-workspace-view.js",
     "src/ui/detail/screenshot-panel.js", "src/ui/detail/magnet-results.js", "src/ui/detail/fc2-detail-workspace.js",
+    "src/ui/detail/one115-rename-preview.js", "src/ui/detail/subtitle-workspace.js",
+    "src/ui/settings/enhancement-settings.js", "src/ui/settings/media-connections.js",
+    "src/ui/settings/privacy-controls.js", "src/ui/settings/translation-connections.js",
     "src/ui/settings/setting-control-renderer.js", "src/features/settings/setting-backup.js", "src/ui/detail/review-panel.js", "src/ui/settings/shortcut-recorder.js",
 ]);
 
