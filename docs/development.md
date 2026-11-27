@@ -30,10 +30,15 @@ npm run check
 - `npm run check` 覆盖单元测试、构建、类型、架构、集成和发布契约。包体大小由 `release-invariants.mjs` 检查，Dev 预算为 1.6 MB 软限和 2.0 MB 硬限。`npm run analyze:bundle` 用于查看静态资源和模块贡献。
 - 用已安装的 Edge 或 Chrome 做本地网页回归。PowerShell 中设置 `$env:JHS_BROWSER_CHANNEL = 'chrome'` 可选择 Chrome。`npm --prefix tests/browser run test:startup` 和 `npm --prefix tests/browser run test:functional` 可分别运行。开发分支 CI 独立保留启动和功能结果。
 - Windows 视觉门禁在 GitHub runner 使用仓库锁定的 Playwright Chromium 和所需字体。审阅实际截图、基线和差异后，仅更新预期变化的基线。
-- `npm run check:extension:chrome` 或 `npm run check:extension:edge` 使用隔离配置，验证开发扩展加载、重启后数据和模拟 WebDAV。
 - `npm run check:performance:serial` 按当前参考值记录固定环境下的 P50/P95。隔离机器负载及报告目录，保留实际采样、阈值和结果。说明样本、真实账号和实机分别覆盖了哪些场景。
 
 用 `JHS_TEST_BUNDLE_PATH` 指定冻结包，使用 `JHS_BROWSER_OUTPUT_DIR` 和 `JHS_BROWSER_REPORT_DIR` 分开保存证据。
+
+### 扩展开发预览
+
+`npm run build:extension` 构建 Manifest V3 开发扩展。用 Chrome 或 Edge 的扩展管理页加载 `dist/extension/dev`。扩展有独立工作台、跨站本地数据库和侧栏，使用用户授权的站点访问与连接。可用便携备份在不同安装之间迁移数据。
+
+`npm run check:extension:chrome` 或 `npm run check:extension:edge` 在已安装的浏览器中使用隔离配置，验证扩展加载、重启后数据和模拟 WebDAV。7.0 RC 流程交付用户脚本，扩展预览由本地构建提供。
 
 ### 页面诊断
 
@@ -51,4 +56,4 @@ console.log(diagnostics.performanceSnapshot());
 
 RC 候选构建、核验和标签流程统一见 [RC 发布流程](../release-notes/README.md#70-rc-候选与发布)。正式版同步更新版本元数据、CHANGELOG 的正式版本区段和对应发布说明，由 `npm run build:release` 生成正式用户脚本。在 `main` 的正式发布门禁通过后，由 CI 创建标签和 Release。
 
-各端验证入口见 [移动端](../apps/mobile/README.md) 和 [Android 离线预览](../apps/android/README.md)。对外商店文案以 [Sleazy Fork 中文介绍](sleazyfork.zh-CN.md) 为源，随正式版本更新。
+7.0 的 [累计 Changelog](../CHANGELOG.md#unreleased) 从 6.5.2 起记录用户可见变化。每个 RC 的发布说明采用上一个已发布版本为比较基点。各端验证入口见 [移动端](../apps/mobile/README.md) 和 [Android 离线预览](../apps/android/README.md)。[Sleazy Fork 中文介绍](sleazyfork.zh-CN.md) 的正式版正文随正式版本更新。

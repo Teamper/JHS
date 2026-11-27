@@ -4,6 +4,7 @@ GitHub Release 正文来自本目录的版本说明。从 [模板](TEMPLATE.md) 
 
 | 发行 | 比较基点 |
 | --- | --- |
+| Changelog 的 7.0 `Unreleased` | 正式版 `v6.5.2`，累计到当前 `develop` |
 | 首个 RC | 上一个正式版本 |
 | 后续 RC | 同系列上一个 RC |
 | 正式版 | 上一个正式版本，包含已验收的 RC 变化 |
@@ -11,11 +12,15 @@ GitHub Release 正文来自本目录的版本说明。从 [模板](TEMPLATE.md) 
 核对比较基点和目标的完整提交、祖先关系和真实差异。说明用户可感知的变化、触发条件和升级事项。核实 PR 或 Issue 再署名，区分直接代码贡献、手动适配和问题反馈。
 
 ```powershell
-node scripts/release-notes-context.mjs --base v7.0.0-rc.2 --target HEAD --version 7.0.0-rc.3
+git log --oneline v6.5.2..HEAD
+git log --oneline v7.0.0-rc.2..HEAD
+git diff --stat v7.0.0-rc.2 HEAD
 npm run check:release:notes -- 7.0.0-rc.3
 ```
 
-上下文报告保存在忽略目录。只有实际核对后才用 `--adopted-pr` 确认手动采纳的提交。仅修订已发布版本的正文时，走单独授权的 `notes-v<版本>-r<编号>` 标签工作流，它会校验原标签、附件、渠道和 Latest。
+维护 [Changelog](../CHANGELOG.md#unreleased) 时保留 6.5.2 以来各阶段的用户可见变化。准备 7.0.0 正式版时，以同一基点整理正式版本区段和累计发布说明。
+
+需要 GitHub 贡献上下文时可运行 `node scripts/release-notes-context.mjs --base v7.0.0-rc.2 --target HEAD --version 7.0.0-rc.3`。报告写入忽略目录。历史引用在 GitHub 不可用时，按 Git 差异和可访问的记录核对。实际核对后用 `--adopted-pr` 记录手动采纳。修订已发布版本的正文走单独授权的 `notes-v<版本>-r<编号>` 标签工作流，校验原标签、附件、渠道和 Latest。
 
 ## 7.0 RC 候选与发布
 

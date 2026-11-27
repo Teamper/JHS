@@ -1,8 +1,8 @@
 # JHS Android 与 iOS 验收工程
 
-这是在线原生工程的构建与验收入口。网页用户脚本的 RC 发布通过独立工作流交付。需要在浏览器体验内置样片时，使用 [Android 离线预览](../android/README.md)。
+这是 Android / iOS 原生工程的构建与验收入口。在线构建包含公开目录、作品详情、追新、片库和备份，可按需接入站点账号、云盘、媒体库与 WebDAV。用户脚本 RC 由其发布流程单独交付。
 
-Expo SDK 57 和 React Native 0.86.3 共用一套原生页面。Android 样片包的应用 ID 为 `io.github.teamper.jhs.dev.native.lab`。样片和在线运行各自使用独立的 SQLite 数据库。浏览器预览固定使用中性样片。
+Expo SDK 57 和 React Native 0.86.3 共用一套原生页面。默认 Android 验收包的应用 ID 为 `io.github.teamper.jhs.dev.native.lab`。样片模式和在线运行各自使用独立的 SQLite 数据库。此工程的浏览器预览固定使用中性样片。另有独立的 [Android 离线预览](../android/README.md)。
 
 ## 开发与验收
 
@@ -46,7 +46,7 @@ Windows 构建可将 `GRADLE_USER_HOME` 指向较短的目录，例如工作区�
 - 本地备份沿用桌面数据格式，支持旧版本导入、导入前恢复点和未来版本拒绝。在线构建装配现有 WebDAV 服务、同步模型和凭证服务。Android 连接复用既有包内 Keystore 数据，iOS 使用本机 Keychain。
 - Android 的 JHS 原生模块用隔离的同源 WebView 读取旧 `JAV-JHS/appData`。SQLite 先校验并暂存原始业务键和同步证据，恢复旧事务后启用。系统导出选择器只持有缓存文件名，文件内容留在 App 私有缓存中。
 
-## 候选边界
+## 原生设备验收
 
 V28 同签名构建的入口是 `-PjhsV28Upgrade=true`，由部署侧注入 `JHS_V28_KEYSTORE`、`JHS_V28_STORE_PASSWORD`、`JHS_V28_KEY_ALIAS`、`JHS_V28_KEY_PASSWORD`。启用此入口前需完成隔离设备上的升级、退回 V28 和数据读回。当前实现含正向迁移，V28 回退包仍待补齐。
 
