@@ -11,7 +11,7 @@ GitHub Release 正文来自本目录的版本说明。从 [模板](TEMPLATE.md) 
 核对比较基点和目标的完整提交、祖先关系和真实差异。说明用户可感知的变化、触发条件和升级事项。核实 PR 或 Issue 再署名，区分直接代码贡献、手动适配和问题反馈。
 
 ```powershell
-npm run release:notes:context -- --base v7.0.0-rc.2 --target HEAD --version 7.0.0-rc.3
+node scripts/release-notes-context.mjs --base v7.0.0-rc.2 --target HEAD --version 7.0.0-rc.3
 npm run check:release:notes -- 7.0.0-rc.3
 ```
 
@@ -25,7 +25,7 @@ RC 名称为 `JHS RC 7.0`，namespace 为 `https://github.com/Teamper/JHS/rc/7.0
 
 ```powershell
 npm run build:rc -- 7.0.0-rc.3
-npm run check:rc:delivery -- dist/rc/7.0.0-rc.3/JHS-7.0.rc.user.js --freeze
+node scripts/check-rc-delivery.mjs dist/rc/7.0.0-rc.3/JHS-7.0.rc.user.js --freeze
 ```
 
 RC 构建生成用户脚本、元数据、SHA256SUMS 和 release-manifest.json。同一版本的本地文件只有字节一致才复用。浏览器复验将 `JHS_TEST_CHANNEL` 设为 `rc`，并用 `JHS_TEST_BUNDLE_PATH` 指向冻结包。记录隔离 Tampermonkey 中的 RC 更新、失败更新、备份导入和本安装的凭证保留。保留常规 CI 与隔离候选测试的对应提交和结果。

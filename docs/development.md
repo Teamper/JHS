@@ -14,7 +14,7 @@ npm run check
 | --- | --- |
 | `npm run build` | 生成 `dist/dev/JHS-7.0.dev.user.js`，可用于本地测试 |
 | `npm run build:dev:deliver` | 同时生成根目录和 dist 内的 Dev 脚本 |
-| `npm run check:dev:delivery -- JHS-7.0.dev.user.js --freeze` | 从当前源码重建并核对交付脚本的完整 SHA-256，在忽略目录冻结候选 |
+| `node scripts/check-dev-delivery.mjs JHS-7.0.dev.user.js --freeze` | 从当前源码重建并核对交付脚本的完整 SHA-256，在忽略目录冻结候选 |
 | `npm run build:extension` | 生成 `dist/extension/dev`，供 Chrome / Edge 加载 |
 | `npm run build:android:web` | 构建 Capacitor Android WebView 前端 |
 | `npm run check:mobile` | 检查 Expo 工程并运行其单元测试 |
