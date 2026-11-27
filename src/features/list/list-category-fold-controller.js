@@ -58,7 +58,7 @@ export class ListCategoryFoldController {
         const width = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1;
         const rawColor = typeof settings.highlightedTagColor === "string" ? settings.highlightedTagColor : "";
         const color = /^#[\da-f]{3,8}$/iu.test(rawColor) ? rawColor : "var(--jhs-danger)";
-        const css = `#tags a.tag,.tags a.tag{position:relative}.highlight-btn{position:absolute;top:calc(-1 * var(--jhs-space-2));right:calc(-1 * var(--jhs-space-2));padding:0;background-color:var(--jhs-success);color:var(--jhs-success-text-on);border:0;border-radius:50%;width:var(--jhs-icon-lg);height:var(--jhs-icon-lg);min-width:var(--jhs-icon-lg);min-height:var(--jhs-icon-lg);line-height:var(--jhs-line-height-tight);text-align:center;cursor:pointer;box-shadow:var(--jhs-shadow-xs);display:none;z-index:var(--jhs-z-dropdown)}.highlighted .highlight-btn{background-color:var(--jhs-warning);color:var(--jhs-warning-text-on)}#tags a.tag:hover .highlight-btn,#tags a.tag:focus-within .highlight-btn,.tags a.tag:hover .highlight-btn,.tags a.tag:focus-within .highlight-btn{display:inline-flex}.highlighted{border:${width}px solid ${color}}@media(max-width:767px),(pointer:coarse){.highlight-btn{width:var(--jhs-touch-target);height:var(--jhs-touch-target);min-width:var(--jhs-touch-target);min-height:var(--jhs-touch-target)}}`;
+        const css = `#tags a.tag,.tags a.tag{position:relative}.highlight-btn{position:absolute;top:calc(-1 * var(--jhs-space-2));right:calc(-1 * var(--jhs-space-2));padding:0;background-color:var(--jhs-success);color:var(--jhs-success-text-on);border:0;border-radius:50%;width:var(--jhs-icon-lg);height:var(--jhs-icon-lg);min-width:var(--jhs-icon-lg);min-height:var(--jhs-icon-lg);line-height:var(--jhs-line-height-tight);text-align:center;cursor:pointer;box-shadow:var(--jhs-shadow-xs);display:none;z-index:var(--jhs-z-dropdown)}.highlighted .highlight-btn{background-color:var(--jhs-warning);color:var(--jhs-warning-text-on)}#tags a.tag:hover .highlight-btn,#tags a.tag:focus-within .highlight-btn,.tags a.tag:hover .highlight-btn,.tags a.tag:focus-within .highlight-btn{display:inline-flex}.highlighted{outline:${width}px solid ${color}}`;
         try { this.releaseStyles = this.styles.register("jhs-list-category-fold-feature", css); }
         catch (error) { this.reportError("分类高亮样式注册失败", error); }
     }
@@ -191,7 +191,7 @@ export class ListCategoryFoldController {
         const tabs = this.document.querySelector(".tabs");
         if (tabs) {
             const toolbar = this.document.createElement("div");
-            toolbar.className = "jhs-layout-8453d189 jhs-fold-category-toolbar";
+            toolbar.className = "jhs-fold-category-toolbar";
             const label = this.document.createElement("div");
             label.append(this.document.createTextNode("已选分类: "));
             const value = this.document.createElement("span");
@@ -232,7 +232,7 @@ export class ListCategoryFoldController {
     createFoldButton(sectionButton) {
         const button = this.document.createElement("button");
         button.type = "button";
-        button.className = `jhs-btn jhs-btn--ghost ${sectionButton ? "jhs-layout-2100e73d" : ""} jhs-fold-category-btn`;
+        button.className = `jhs-btn jhs-btn--ghost ${sectionButton ? "jhs-fold-category-btn--section" : ""} jhs-fold-category-btn`;
         button.setAttribute("aria-label", "折叠已选分类");
         const label = this.document.createElement("span"), icon = this.document.createElement("span");
         label.className = "jhs-fold-label";

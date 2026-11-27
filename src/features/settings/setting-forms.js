@@ -1,9 +1,11 @@
 // @ts-check
+import { normalizeSharedWebDavProfile } from "../../services/webdav-shared-profile.js";
+import { MANUAL_SETTINGS } from "../../contracts/manual-settings.js";
 
 import { getIcon } from "../../core/icons.js";
 import { C, _, r, escapeHtml } from "../../core/constants.js";
 import { parseNumberSetting } from "../../core/feature-helpers.js";
-import { applyImageMode } from "../../ui/settings/setting-styles.js";
+import { applyImageMode } from "../../services/layout-settings-service.js";
 import { normalizeQuickFilterKey } from "../../core/list-filters.js";
 import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
 import { SYNC_DEFAULTS, syncRetention } from "../../core/webdav-sync-model.js";
@@ -11,93 +13,8 @@ import { SettingsDraft } from "../../ui/settings/settings-draft.js";
 
 /** @typedef {Record<string, any>} SettingDependencies */
 
-/**
- * Explicit ownership whitelist for the bottom "保存设置" button.
- *
- * These are the only keys the full settings form is allowed to write on a
- * manual save. Descriptor controls are captured separately from the instance session.
- */
-export const MANUAL_FORM_SETTING_KEYS = Object.freeze([
-    ...Object.keys(SYNC_DEFAULTS),
-    "videoQuality",
-    "reviewCount",
-    "tagPosition",
-    "waitCheckCount",
-    "highlightedTagNumber",
-    "highlightedTagColor",
-    "checkConcurrencyCount",
-    "checkRequestSleep",
-    "enableCheckBlacklist",
-    "checkBlacklist_intervalTime",
-    "checkBlacklist_ruleTime",
-    "enableCheckFavoriteActress",
-    "checkFavoriteActress_IntervalTime",
-    "enableCheckNewVideo",
-    "checkNewVideo_intervalTime",
-    "checkNewVideo_ruleTime",
-    "httpTimeout",
-    "httpRetryCount",
-    "circuitBreakerThreshold",
-    "circuitBreakerCooldown",
-    "clogMsgCount",
-    "webDavUrl",
-    "webDavUsername",
-    "webDavPassword",
-    "missAvUrl",
-    "jableUrl",
-    "avgleUrl",
-    "javTrailersUrl",
-    "av123Url",
-    "javDbUrl",
-    "javBusUrl",
-    "supJavUrl",
-    "enableTitleSelectFilter",
-    "enableFavoriteActresses",
-    "enableSaveActressCarInfo",
-    "autoRemoveNewVideoMarkAfterBrowse",
-]);
-
-
-/** Selector map used to track dirty manual fields on the full settings form. */
-export const MANUAL_FORM_SELECTORS = Object.freeze({
-    ...Object.fromEntries(Object.keys(SYNC_DEFAULTS).map(key => [key, `#${key}`])),
-    videoQuality: "#videoQuality",
-    reviewCount: "#reviewCount",
-    tagPosition: "#tagPosition",
-    waitCheckCount: "#waitCheckCount",
-    highlightedTagNumber: "#highlightedTagNumber",
-    highlightedTagColor: "#highlightedTagColor",
-    checkConcurrencyCount: "#checkConcurrencyCount",
-    checkRequestSleep: "#checkRequestSleep",
-    enableCheckBlacklist: "#enableCheckBlacklist",
-    checkBlacklist_intervalTime: "#checkBlacklist_intervalTime",
-    checkBlacklist_ruleTime: "#checkBlacklist_ruleTime",
-    enableCheckFavoriteActress: "#enableCheckFavoriteActress",
-    checkFavoriteActress_IntervalTime: "#checkFavoriteActress_IntervalTime",
-    enableCheckNewVideo: "#enableCheckNewVideo",
-    checkNewVideo_intervalTime: "#checkNewVideo_intervalTime",
-    checkNewVideo_ruleTime: "#checkNewVideo_ruleTime",
-    httpTimeout: "#httpTimeout",
-    httpRetryCount: "#httpRetryCount",
-    circuitBreakerThreshold: "#circuitBreakerThreshold",
-    circuitBreakerCooldown: "#circuitBreakerCooldownSec",
-    clogMsgCount: "#clogMsgCount",
-    webDavUrl: "#webDavUrl",
-    webDavUsername: "#webDavUsername",
-    webDavPassword: "#webDavPassword",
-    missAvUrl: "#missAvUrl",
-    jableUrl: "#jableUrl",
-    avgleUrl: "#avgleUrl",
-    javTrailersUrl: "#javTrailersUrl",
-    av123Url: "#av123Url",
-    javDbUrl: "#javDbUrl",
-    javBusUrl: "#javBusUrl",
-    supJavUrl: "#supJavUrl",
-    enableTitleSelectFilter: "#enableTitleSelectFilter",
-    enableFavoriteActresses: "#enableFavoriteActresses",
-    enableSaveActressCarInfo: "#enableSaveActressCarInfo",
-    autoRemoveNewVideoMarkAfterBrowse: "#autoRemoveNewVideoMarkAfterBrowse",
-});
+export const MANUAL_FORM_SETTING_KEYS = Object.freeze(MANUAL_SETTINGS.map(descriptor => descriptor.key));
+export const MANUAL_FORM_SELECTORS = Object.freeze(Object.fromEntries(MANUAL_SETTINGS.map(descriptor => [descriptor.key, descriptor.formSelector])));
 
 /** @param {any} root */
 function bindManualDirtyTracking(root) {
@@ -127,35 +44,16 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     if (dependencies.isActive?.() === false) return;
     const root = formRoot(dependencies, layerRoot);
     const e = dependencies.settings.snapshot();
-    root.find("#videoQuality").val(e.videoQuality || "");
-    root.find("#reviewCount").val(e.reviewCount || 20);
-    root.find("#tagPosition").val(e.tagPosition || "rightTop");
-    // BindingHub-owned live/nextNavigation fields are intentionally NOT hydrated
-    // here: they are owned by SettingPlugin.hydrateLiveSettings().
-    root.find("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e.autoRemoveNewVideoMarkAfterBrowse && e.autoRemoveNewVideoMarkAfterBrowse === _);
-    root.find("#waitCheckCount").val(e.waitCheckCount || 5);
-    root.find("#checkConcurrencyCount").val(parseNumberSetting(e.checkConcurrencyCount, 2, { min: 2, max: 5 }));
-    root.find("#checkRequestSleep").val(parseNumberSetting(e.checkRequestSleep, 100, { min: 0, max: 3e3 }));
-    root.find("#enableCheckBlacklist").prop("checked", (e.enableCheckBlacklist || _) === _);
-    root.find("#checkBlacklist_intervalTime").val(e.checkBlacklist_intervalTime || 12);
-    root.find("#checkBlacklist_ruleTime").val(parseNumberSetting(e.checkBlacklist_ruleTime, 8760, { min: 0 }));
-    root.find("#enableCheckFavoriteActress").prop("checked", (e.enableCheckFavoriteActress || _) === _);
-    root.find("#checkFavoriteActress_IntervalTime").val(e.checkFavoriteActress_IntervalTime || 24);
-    root.find("#enableCheckNewVideo").prop("checked", (e.enableCheckNewVideo || _) === _);
-    root.find("#checkNewVideo_intervalTime").val(e.checkNewVideo_intervalTime || 12);
-    root.find("#checkNewVideo_ruleTime").val(parseNumberSetting(e.checkNewVideo_ruleTime, 8760, { min: 0 }));
-    const t = e.highlightedTagNumber || 1, n = e.highlightedTagColor || "#ce2222";
-    root.find("#highlightedTagNumber").val(e.highlightedTagNumber || 1);
-    root.find("#highlightedTagColor").val(e.highlightedTagColor || "#ce2222");
-    root.find("#highlightedTagLabel").css("border", `${t}px solid ${n}`);
-    root.find("#clogMsgCount").val(e.clogMsgCount || 2e3);
-    root.find("#httpTimeout").val(e.httpTimeout || 5e3);
-    root.find("#httpRetryCount").val(e.httpRetryCount || 3);
-    // Seed manual fields before the draft snapshot, ahead of diagnostic rendering.
-    root.find("#circuitBreakerThreshold").val(e.circuitBreakerThreshold ?? 3);
-    root.find("#circuitBreakerCooldownSec").val(Number(e.circuitBreakerCooldown ?? 60000) / 1000);
-    root.find("#webDavUrl").val(e.webDavUrl || "");
-    root.find("#webDavUsername").val(e.webDavUsername || "");
+    for (const definition of MANUAL_SETTINGS) {
+        const descriptor = dependencies.settingsRegistry?.get?.(definition.key) || definition;
+        if (descriptor.sensitive) continue;
+        const field = root.find(descriptor.formSelector);
+        const value = e[descriptor.key] ?? descriptor.defaultValue;
+        if (descriptor.type === "boolean") field.prop("checked", (descriptor.normalize?.(value) ?? value) === "yes");
+        else if (descriptor.siteId) field.val(descriptor.key === "av123Url" ? dependencies.movie.providerOrigin("av123") || value : dependencies.movie.externalSiteOrigin(descriptor.siteId, e) || value);
+        else field.val(descriptor.type === "number" ? Number(descriptor.normalize?.(value) ?? value) / descriptor.formScale : value);
+    }
+    root.find("#highlightedTagLabel").css("border", root.find("#highlightedTagNumber").val() + "px solid " + root.find("#highlightedTagColor").val());
     const webdav = dependencies.webdav;
     let profile = { url: e.webDavUrl, username: e.webDavUsername, password: "" };
     try {
@@ -171,20 +69,7 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#webDavUrl").val(profile.url || "");
     root.find("#webDavUsername").val(profile.username || "");
     root.find("#webDavPassword").val(profile.password || "");
-    for (const [key, fallback] of Object.entries(SYNC_DEFAULTS)) root.find(`#${key}`).val(e[key] ?? fallback);
     root.trigger("jhsAutoBackupFormLoaded");
-    root.find("#enableTitleSelectFilter").prop("checked", !e.enableTitleSelectFilter || e.enableTitleSelectFilter === _);
-    root.find("#enableFavoriteActresses").prop("checked", !e.enableFavoriteActresses || e.enableFavoriteActresses === _);
-    root.find("#enableSaveActressCarInfo").prop("checked", !!e.enableSaveActressCarInfo && e.enableSaveActressCarInfo === _);
-    const movie = dependencies.movie;
-    root.find("#missAvUrl").val(movie.externalSiteOrigin("missAvBtn", e));
-    root.find("#jableUrl").val(movie.externalSiteOrigin("jableBtn", e));
-    root.find("#avgleUrl").val(movie.externalSiteOrigin("avgleBtn", e));
-    root.find("#javTrailersUrl").val(movie.externalSiteOrigin("javTrailersBtn", e));
-    root.find("#av123Url").val(movie.providerOrigin("av123") || "");
-    root.find("#javDbUrl").val(movie.externalSiteOrigin("javDbBtn", e));
-    root.find("#javBusUrl").val(movie.externalSiteOrigin("javBusBtn", e));
-    root.find("#supJavUrl").val(movie.externalSiteOrigin("supJavBtn", e));
     let g = await dependencies.keywordRules.getReviewKeywords(), p = await dependencies.keywordRules.getTitleKeywords();
     if (dependencies.isActive?.() === false) return;
     // “重试加载”会重跑本函数：先清空标签容器并解绑旧事件，否则关键词显示两份、添加事件翻倍
@@ -228,7 +113,7 @@ function bindLayoutRangeEvents(root, hostAdapter, utilities) {
 /** Applies a persisted layout value to the control while preserving the mobile host layout. @param {any} root @param {any} hostAdapter @param {"containerColumns" | "containerWidth"} key @param {unknown} value @param {boolean} [mobile] */
 export function applyLayoutRangeValue(root, hostAdapter, key, value, mobile = false) {
     if (key === "containerColumns") {
-        const columns = Math.min(10, Math.max(2, Math.round(Number(value) || 5)));
+        const columns = Math.min(8, Math.max(2, Math.round(Number(value) || 5)));
         root.find("#containerColumns").val(String(columns));
         root.find("#showContainerColumns").text(String(columns));
         const listRoot = hostAdapter?.locateListRoot?.();
@@ -274,7 +159,7 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
             const currentBinding = host.data("jhsQuickSettingBinding");
             await currentBinding?.flush?.();
             host.hide();
-            await openSettingDialogFn("base-panel");
+            await openSettingDialogFn("appearance-panel");
         }));
 }
 
@@ -310,8 +195,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
             }
             // Only locally edited profile fields may be submitted; other entries can change externally.
         }
-        const patch = { ...sessionSubmitted, ...await collectManualSettingPatch(root, dirtyKeys, submitted?.fields) };
-        for (const [key, value] of Object.entries(patch)) dependencies.settingsRegistry?.validateSync(key, value);
+        const patch = { ...sessionSubmitted, ...collectManualSettingPatch(root, dependencies.settingsRegistry, dirtyKeys, submitted?.fields) };
         if (dependencies.isActive?.() === false) return { canceled: true };
         if (Object.keys(SYNC_DEFAULTS).some(key => Object.hasOwn(patch, key))) {
             try { syncRetention({ ...dependencies.settings.snapshot(), ...patch }); }
@@ -325,6 +209,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
             }
             root.find("#webDavSyncKeepCount,#webDavSyncHistoryDays").removeAttr("aria-invalid aria-describedby");
         }
+        for (const [key, value] of Object.entries(patch)) dependencies.settingsRegistry?.validateSync?.(key, value);
         /** @type {string | null} */
         let nextWebDavUrl = null;
         /** @type {string | null} */
@@ -334,13 +219,8 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         if (!dirtyKeys || dirtyKeys.has("webDavUrl")) {
             nextWebDavUrl = String(submitted?.fields.webDavUrl ?? root.find("#webDavUrl").val() ?? "").trim();
             if (nextWebDavUrl) {
-                try {
-                    const parsed = new URL(nextWebDavUrl);
-                    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocol");
-                    nextWebDavOrigin = parsed.origin;
-                } catch {
-                    throw new Error("WebDAV 地址必须是有效的 HTTP/HTTPS URL");
-                }
+                nextWebDavUrl = normalizeSharedWebDavProfile({ url: nextWebDavUrl }).url;
+                nextWebDavOrigin = new URL(nextWebDavUrl).origin;
             }
             const currentTrusted = new Set(Array.isArray(dependencies.settings.snapshot().trustedLocalOrigins) ? dependencies.settings.snapshot().trustedLocalOrigins : []);
             if (nextWebDavOrigin && !currentTrusted.has(nextWebDavOrigin)) {
@@ -446,77 +326,21 @@ function bindKeywordDirtyTracking(root) {
     root.data("jhsDirtyTitleKeywords", false);
 }
 
-/** @param {any} root @param {Set<string> | null | undefined} [dirtyKeys] */
-/** @param {any} root @param {Set<string>|null} dirtyKeys @param {Record<string, any>|null} submitted */
-async function collectManualSettingPatch(root, dirtyKeys = null, submitted = null) {
-    const read = (/** @type {string} */ selector) => {
-        const key = Object.entries(MANUAL_FORM_SELECTORS).find(([, value]) => value === selector)?.[0];
-        return submitted && key && Object.hasOwn(submitted, key) ? submitted[key] : root.find(selector).val();
-    };
-    const checked = (/** @type {string} */ selector) => {
-        const key = Object.entries(MANUAL_FORM_SELECTORS).find(([, value]) => value === selector)?.[0];
-        return submitted && key && Object.hasOwn(submitted, key) ? Boolean(submitted[key]) : root.find(selector).is(":checked");
-    };
-    const clamp = (/** @type {unknown} */ value, /** @type {number} */ fallback, /** @type {number} */ min, /** @type {number} */ max) => Math.min(max, Math.max(min, Number(value) || fallback));
-    const configuredUrl = (/** @type {unknown} */ value, { allowLocalHttp = !1 } = {}) => {
-        const raw = String(value || "").trim().replace(/\/$/, "");
-        if (!raw) return "";
-        let url;
-        try { url = new URL(raw); } catch { throw new TypeError(`无效 URL：${raw}`); }
-        const local = [ "localhost", "127.0.0.1", "[::1]" ].includes(url.hostname);
-        if (url.protocol !== "https:" && !(allowLocalHttp && local && url.protocol === "http:")) throw new TypeError(`仅允许 HTTPS URL${allowLocalHttp ? "（本机地址可使用 HTTP）" : ""}：${raw}`);
-        return url.href.replace(/\/$/, "");
-    };
-    /** @type {Record<string, () => unknown | Promise<unknown>>} */
-    const getters = {
-        videoQuality: () => read("#videoQuality"),
-        reviewCount: () => read("#reviewCount"),
-        tagPosition: () => read("#tagPosition"),
-        autoRemoveNewVideoMarkAfterBrowse: () => checked("#autoRemoveNewVideoMarkAfterBrowse") ? _ : C,
-        waitCheckCount: () => read("#waitCheckCount"),
-        highlightedTagNumber: () => read("#highlightedTagNumber"),
-        highlightedTagColor: () => read("#highlightedTagColor"),
-        checkConcurrencyCount: () => read("#checkConcurrencyCount"),
-        checkRequestSleep: () => read("#checkRequestSleep"),
-        enableCheckBlacklist: () => checked("#enableCheckBlacklist") ? _ : C,
-        checkBlacklist_intervalTime: () => read("#checkBlacklist_intervalTime"),
-        checkBlacklist_ruleTime: () => read("#checkBlacklist_ruleTime"),
-        enableCheckFavoriteActress: () => checked("#enableCheckFavoriteActress") ? _ : C,
-        checkFavoriteActress_IntervalTime: () => read("#checkFavoriteActress_IntervalTime"),
-        enableCheckNewVideo: () => checked("#enableCheckNewVideo") ? _ : C,
-        checkNewVideo_intervalTime: () => read("#checkNewVideo_intervalTime"),
-        checkNewVideo_ruleTime: () => read("#checkNewVideo_ruleTime"),
-        httpTimeout: () => clamp(read("#httpTimeout"), 5e3, 1e3, 120e3),
-        httpRetryCount: () => clamp(read("#httpRetryCount"), 3, 1, 10),
-        circuitBreakerThreshold: () => clamp(read("#circuitBreakerThreshold"), 3, 1, 20),
-        circuitBreakerCooldown: () => clamp(Number(read("#circuitBreakerCooldownSec")) * 1e3, 6e4, 1e3, 3600e3),
-        clogMsgCount: () => read("#clogMsgCount"),
-        webDavUrl: () => configuredUrl(read("#webDavUrl"), { allowLocalHttp: !0 }),
-        webDavUsername: () => String(read("#webDavUsername") ?? ""),
-        missAvUrl: () => configuredUrl(read("#missAvUrl")),
-        jableUrl: () => configuredUrl(read("#jableUrl")),
-        avgleUrl: () => configuredUrl(read("#avgleUrl")),
-        javTrailersUrl: () => configuredUrl(read("#javTrailersUrl")),
-        av123Url: () => configuredUrl(read("#av123Url")),
-        javDbUrl: () => configuredUrl(read("#javDbUrl")),
-        javBusUrl: () => configuredUrl(read("#javBusUrl")),
-        supJavUrl: () => configuredUrl(read("#supJavUrl")),
-        enableTitleSelectFilter: () => checked("#enableTitleSelectFilter") ? _ : C,
-        enableFavoriteActresses: () => checked("#enableFavoriteActresses") ? _ : C,
-        enableSaveActressCarInfo: () => checked("#enableSaveActressCarInfo") ? _ : C,
-    };
-    for (const [key, fallback] of Object.entries(SYNC_DEFAULTS)) getters[key] = () => {
-        const field = root.find(`#${key}`);
-        if (!field.length) return fallback;
-        return typeof fallback === "number" ? Number(read(`#${key}`)) : checked(`#${key}`) ? "yes" : "no";
-    };
-    const keys = dirtyKeys instanceof Set
-        ? MANUAL_FORM_SETTING_KEYS.filter((key) => dirtyKeys.has(key)).filter((key) => !["webDavUrl", "webDavUsername", "webDavPassword"].includes(key))
-        : MANUAL_FORM_SETTING_KEYS.filter((key) => !["webDavUrl", "webDavUsername", "webDavPassword"].includes(key));
+/** @param {any} root @param {any} registry @param {Set<string>|null} dirtyKeys @param {Record<string, any>|null} [submitted] */
+function collectManualSettingPatch(root, registry, dirtyKeys, submitted) {
     const patch = /** @type {Record<string, unknown>} */ ({});
-    for (const key of keys) {
-        const getter = getters[key];
-        if (getter) patch[key] = await getter();
+    for (const definition of MANUAL_SETTINGS) {
+        const { key } = definition;
+        const descriptor = registry?.get?.(key) || definition;
+        if (descriptor.sensitive || dirtyKeys && !dirtyKeys.has(key)) continue;
+        const field = root.find(descriptor.formSelector);
+        if (!field.length) continue;
+        const raw = submitted && Object.hasOwn(submitted, key) ? submitted[key]
+            : descriptor.type === "boolean" ? field.is(":checked") : field.val();
+        const retention = Object.hasOwn(SYNC_DEFAULTS, key);
+        const value = descriptor.type === "number" ? (String(raw ?? "").trim() ? Number(raw) * descriptor.formScale : NaN) : raw;
+        const normalize = descriptor.readFormValue ?? descriptor.normalize;
+        patch[key] = retention ? value : normalize?.(value) ?? value;
     }
     return patch;
 }

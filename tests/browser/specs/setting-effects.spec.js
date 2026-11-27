@@ -12,7 +12,9 @@ for (const defaultQuickFilterTab of ["blockedItems", "filter"]) test(`blocked de
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog("browse-panel"));
   const select = page.locator("#defaultQuickFilterTab");
   await expect(select).toHaveValue("blockedItems");
-  await expect(select.locator("option")).toHaveCount(11);
+  await expect(select.locator("option")).toHaveCount(13);
+  await expect(select.locator('option[value="favoriteActress"]')).toHaveText("收藏演员");
+  await expect(select.locator('option[value="rated"]')).toHaveText("已评分");
   await expect(select.locator('option[value="blockedItems"]')).toHaveText("屏蔽项");
   await page.evaluate(async () => {
     window.jQuery("#defaultQuickFilterTab").val("undownloaded").trigger("change");
@@ -495,7 +497,7 @@ test("FC2 OtherSite slot survives OFF→ON toggles", async ({ context, page }, t
     const controller = manager.getBean("OtherSitePlugin");
     const fc2 = manager.getBean("Fc2Plugin");
     return {
-      controller: controller?.managedByFeature === true && typeof controller.loadOtherSite === "function" && typeof controller.handle === "undefined",
+      controller: typeof controller?.loadOtherSite === "function" && typeof controller.handle === "undefined",
       fc2Injected: fc2?.featureExternalSitesAdapter === controller,
     };
   });

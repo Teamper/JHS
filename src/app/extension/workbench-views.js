@@ -1167,7 +1167,7 @@ export async function renderPermissionsView(host, app) {
 export async function renderSidePanelCurrentView(host, app) {
     const version = app.nextVersion();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const response = tab?.id ? await chrome.tabs.sendMessage(tab.id, { channel: "jhs-current-movie" }, { frameId: 0 }).catch(() => null) : null;
+    const response = tab?.id ? await chrome.tabs.sendMessage(tab.id, { channel: "jhs-current-movie" }, { frameId: 0 }).catch(error => { if (!/receiving end does not exist|could not establish connection/i.test(error.message)) throw error; return null; }) : null;
     if (!app.isCurrentVersion(version)) return;
 
     host.replaceChildren();
@@ -1245,7 +1245,7 @@ export async function renderSidePanelCurrentView(host, app) {
                 const codeBtn = el("button", item.carNum, "jhs-ext-code-btn");
                 codeBtn.type = "button";
                 scope.listen(codeBtn, "click", () => {
-                    if (tab?.id) void chrome.tabs.sendMessage(tab.id, { channel: "jhs-current-movie", action: "focus-car", carNum: item.carNum }, { frameId: 0 }).catch(() => {});
+                    if (tab?.id) void chrome.tabs.sendMessage(tab.id, { channel: "jhs-current-movie", action: "focus-car", carNum: item.carNum }, { frameId: 0 }).catch(error => { if (!/receiving end does not exist|could not establish connection/i.test(error.message)) app.setStatus(error.message); });
                     void app.openMovieDrawer(item);
                 });
                 const flagsWrap = el("div", undefined, "jhs-ext-side-item__flags");

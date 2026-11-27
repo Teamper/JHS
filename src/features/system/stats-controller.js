@@ -14,7 +14,7 @@ function escapeHtml(value, document) {
 
 /** Feature-owned statistics surface; storage and cross-feature actions enter through explicit capabilities. */
 export class StatsController {
-    /** @param {{document: Document, libraryStats: any, diagnostics: any, notifications: any, movie: any, settings: any, dialog: any, events: any, ui: any, styles: any, scope: any, getPendingNewVideoTotal: () => Promise<number>, getCurrentPageSummary: () => Promise<any>, setQuickFilter: (filter: string) => Promise<unknown>, openNewVideo?: () => Promise<unknown>}} dependencies */
+    /** @param {{document: Document, libraryStats: any, diagnostics: any, notifications: any, movie: any, settings: any, dialog: any, events: any, ui: any, styles: any, scope: any, getPendingNewVideoTotal: () => Promise<number>, getCurrentPageSummary: () => Promise<any>, setQuickFilter: (filter: string) => Promise<unknown>, openNewVideo?: () => Promise<unknown>, site?: string, isList?: boolean, openMetric?: (action:string) => Promise<unknown>}} dependencies */
     constructor(dependencies) {
         this.document = dependencies.document;
         this.libraryStats = dependencies.libraryStats;
@@ -31,6 +31,9 @@ export class StatsController {
         this.getCurrentPageSummary = dependencies.getCurrentPageSummary;
         this.setQuickFilter = dependencies.setQuickFilter;
         this.openNewVideo = dependencies.openNewVideo ?? null;
+        this.site = dependencies.site ?? "javdb";
+        this.isList = dependencies.isList ?? true;
+        this.openMetric = dependencies.openMetric;
         this.dialogId = null;
         this.dialogGeneration = 0;
         this.pendingOpen = null;
@@ -59,7 +62,9 @@ export class StatsController {
 
     start() {
         const css = `
-            .jhs-stats { height:100%; padding:var(--jhs-space-4); overflow:auto; }
+            .jhs-stats { box-sizing:border-box; display:grid; align-content:start; gap:var(--jhs-space-5); height:100%; padding:var(--jhs-space-4); overflow:auto; }
+            .jhs-stats__metrics { grid-template-columns:repeat(auto-fill,minmax(min(180px,100%),1fr)); }
+            .jhs-stats__metrics.jhs-metric-grid--single { grid-template-columns:minmax(0,1fr); }
             .jhs-stats__rows { display:grid; gap:var(--jhs-space-2); }
             .jhs-stats__row { display:grid; grid-template-columns:90px minmax(0,1fr) 76px; align-items:center; gap:var(--jhs-space-3); min-height:32px; }
             .jhs-stats__label { overflow:hidden; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); text-align:right; text-overflow:ellipsis; white-space:nowrap; }
@@ -123,24 +128,24 @@ export class StatsController {
         const topActresses = [...actressCounts.values()].sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)).slice(0, 10);
         const topValue = topActresses[0]?.count || 1;
         const settings = this.settings.snapshot();
-        const javDbUrl = this.movie.externalSiteOrigin("javDbBtn", settings);
+        const origin = this.movie.externalSiteOrigin(this.site === "javbus" ? "javBusBtn" : "javDbBtn", settings);
         const [newVideos, pageSummary] = await Promise.all([
             this.getPendingNewVideoTotal(),
             this.getCurrentPageSummary(),
         ]);
         if (this.scope.disposed || generation !== this.dialogGeneration) return;
         const metrics = [
-            { label: "总记录", value: total, action: null },
-            { label: "收藏", value: stats.favoriteRaw, action: null },
-            { label: "已下载", value: stats.downloadedRaw, action: null },
-            { label: "已观看", value: stats.watchedRaw, action: null },
-            { label: "手动屏蔽", value: stats.blocked, action: null },
-            { label: "待鉴定", value: stats.pending, action: null },
+            { label: "总记录", value: total, action: "history-all" },
+            { label: "收藏", value: stats.favoriteRaw, action: "history-favorite" },
+            { label: "已下载", value: stats.downloadedRaw, action: "history-hasDown" },
+            { label: "已观看", value: stats.watchedRaw, action: "history-hasWatch" },
+            { label: "手动屏蔽", value: stats.blocked, action: "history-filter" },
+            { label: "待鉴定", value: stats.pending, action: "history-waitCheck" },
             { label: "收藏演员", value: actresses.length, action: null },
-            { label: "黑名单演员", value: blacklist.length, action: null },
-            { label: "新作品待处理", value: newVideos, action: "new-video" },
+            { label: "黑名单演员", value: blacklist.length, action: "blacklist" },
+            { label: "新作品待处理", value: newVideos, action: this.site === "javdb" && this.openNewVideo ? "new-video" : null },
             { label: "活跃功能", value: diagnostics.activeFeatures.length, action: null },
-            { label: "运行错误", value: diagnostics.errors.length, action: null },
+            { label: "运行错误", value: diagnostics.errors.length, action: "errors" },
         ];
         /** @type {Array<[string, number, number, string]>} */
         const statusRows = [
@@ -165,15 +170,15 @@ export class StatsController {
         };
         const trend7 = trend(7), trend30 = trend(30);
         const coverageNote = activity.coverageStart ? `活动记录仅覆盖自 ${escapeHtml(activity.coverageStart, this.document)} 起` : "仅统计 6.4.0 及之后产生的操作记录";
-        const renderMetric = (/** @type {StatsRecord} */ metric) => metric.action
+        const renderMetric = (/** @type {StatsRecord} */ metric) => metric.action && (!metric.action.startsWith("history-") && !["blacklist", "errors"].includes(metric.action) || this.openMetric)
             ? `<button type="button" class="jhs-btn jhs-metric jhs-stats__metric" data-action="${metric.action}"><strong>${metric.value}</strong><span>${metric.label}</span></button>`
             : `<div class="jhs-metric jhs-stats__metric"><strong>${metric.value}</strong><span>${metric.label}</span></div>`;
         const dialogHtml = `<div class="jhs-stats jhs-scrollbar jhs-ui">
             <section class="jhs-stats__group"><h3>全库概览</h3><div class="jhs-metric-grid jhs-stats__metrics">${metrics.map(renderMetric).join("")}</div></section>
-            <section class="jhs-stats__group"><h3>当前页面</h3><div class="jhs-metric-grid jhs-metric-grid--single jhs-stats__metrics">${renderMetric({ label: "屏蔽项", value: pageSummary.blockedItems, action: "filter" })}</div></section>
+            <section class="jhs-stats__group"><h3>当前页面</h3><div class="jhs-metric-grid jhs-metric-grid--single jhs-stats__metrics">${renderMetric({ label: "屏蔽项", value: pageSummary.blockedItems, action: this.isList ? "filter" : null })}</div></section>
             <section class="jhs-stats__group"><h3>状态分布</h3><div class="jhs-stats__rows">${statusRows.map((item) => row(item[0], item[1], item[2], item[3], "", true)).join("")}</div></section>
             <section class="jhs-stats__group"><h3>活动趋势</h3><p class="jhs-helper-text">${coverageNote}</p><div class="jhs-metric-grid jhs-stats__metrics"><div class="jhs-metric jhs-stats__metric"><strong>${trend7.identified}</strong><span>近 7 天新增鉴定</span></div><div class="jhs-metric jhs-stats__metric"><strong>${trend7.downloaded}</strong><span>近 7 天标记下载</span></div><div class="jhs-metric jhs-stats__metric"><strong>${trend7.watched}</strong><span>近 7 天标记观看</span></div><div class="jhs-metric jhs-stats__metric"><strong>${trend30.identified}</strong><span>近 30 天新增鉴定</span></div><div class="jhs-metric jhs-stats__metric"><strong>${trend30.downloaded}</strong><span>近 30 天标记下载</span></div><div class="jhs-metric jhs-stats__metric"><strong>${trend30.watched}</strong><span>近 30 天标记观看</span></div></div></section>
-            ${topActresses.length ? `<section class="jhs-stats__group"><h3>演员前 10 名</h3><div class="jhs-stats__rows">${topActresses.map((item) => row(item.name, item.count, topValue, "var(--jhs-accent)", javDbUrl ? new URL(item.starId ? `/actors/${encodeURIComponent(item.starId)}` : `/search?q=${encodeURIComponent(item.name)}`, javDbUrl).href : "")).join("")}</div></section>` : ""}
+            ${topActresses.length ? `<section class="jhs-stats__group"><h3>演员前 10 名</h3><div class="jhs-stats__rows">${topActresses.map((item) => row(item.name, item.count, topValue, "var(--jhs-accent)", origin ? new URL(this.site === "javbus" ? "/search/" + encodeURIComponent(item.name) : item.starId ? "/actors/" + encodeURIComponent(item.starId) : "/search?q=" + encodeURIComponent(item.name), origin).href : "")).join("")}</div></section>` : ""}
         </div>`;
         const dialogId = this.dialog.open({
             type: 1, title: "统计", content: dialogHtml, scrollbar: false,
@@ -192,7 +197,8 @@ export class StatsController {
                     this.dialog.close(layerIndex);
                     this.dialogId = null;
                     if (action === "new-video") return void Promise.resolve(this.openNewVideo?.()).catch((error) => this.reportFailure(error));
-                    if (action === "filter") void this.setQuickFilter("blockedItems");
+                    if (action === "filter") return void this.setQuickFilter("blockedItems");
+                    if (action) void this.openMetric?.(action).catch(error => this.reportFailure(error));
                 }));
             },
             end: () => {

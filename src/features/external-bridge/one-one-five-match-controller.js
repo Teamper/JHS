@@ -6,6 +6,7 @@ import { create115RenamePreview } from "../../ui/detail/one115-rename-preview.js
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 
 import { escapeHtml, normalizeCarNum } from "../../core/constants.js";
+import { readListItem } from "../../core/list-item-reader.js";
 import { mapLimit, parseBooleanSetting } from "../../core/feature-helpers.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { format115Size, normalize115Keyword, preview115Rename } from "./one-one-five-utils.js";
@@ -106,17 +107,41 @@ export class OneOneFiveMatchController {
     /** @param {LifecycleScope} scope */
     async mountMatching(scope) {
         if (scope.disposed || this.lifecycleScope !== scope) return;
-        if (this.route === "detail") return this.mountDetailMatching(scope);
-        if (this.route !== "list") return;
-        await this.mountListMatching(scope);
+        this.watchOwnedDetails(scope);
+        if (this.route === "detail") await this.mountDetailMatching(scope);
+        if (this.route === "list") await this.mountListMatching(scope);
     }
 
-    /** @param {LifecycleScope} scope @param {any} [continuation] */
-    async mountDetailMatching(scope, continuation = null) {
-        const movie = this.host.readMovieRef?.(), carNum = movie?.carNum, keyword = normalize115Keyword(carNum);
+    /** @param {LifecycleScope} scope */
+    watchOwnedDetails(scope) {
+        const selector = ".jhs-fc2-workspace[data-jhs-movie-code]";
+        /** @type {Map<Element, LifecycleScope>} */ const surfaces = new Map();
+        const refresh = () => {
+            for (const [root, owned] of surfaces) if (!root.isConnected) { owned.dispose(); surfaces.delete(root); }
+            for (const root of this.document.querySelectorAll(selector)) {
+                const summary = root.querySelector(".jhs-fc2-resource-stack");
+                if (!summary || surfaces.has(root)) continue;
+                const movie = { carNum: root.getAttribute("data-jhs-movie-code") };
+                if (!normalize115Keyword(movie.carNum)) continue;
+                const owned = new LifecycleScope("115-match:fc2");
+                const release = scope.addCleanup(() => owned.dispose());
+                owned.addCleanup(release);
+                surfaces.set(root, owned);
+                void this.mountDetailMatching(scope, null, { movie, summary, owned });
+            }
+        };
+        refresh();
+        scope.observe(this.document.body, refresh, { childList: true, subtree: true });
+    }
+
+    /** @param {LifecycleScope} scope @param {any} [continuation] @param {{movie: any, summary: Element, owned: LifecycleScope}} [surface] */
+    async mountDetailMatching(scope, continuation = null, surface) {
+        const movie = surface?.movie ?? this.host.readMovieRef(), carNum = movie?.carNum, keyword = normalize115Keyword(carNum);
         if (!keyword) return;
-        const summary = this.host.locateDetailSlots?.()?.summary;
+        const summary = surface?.summary ?? this.host.locateDetailSlots()?.summary;
         if (!summary) return;
+        const owner = surface?.owned ?? scope;
+        const current = () => this.isCurrent(scope) && !owner.disposed && summary.isConnected;
         const block = this.document.createElement("div");
         block.className = "panel-block jhs-115-match";
         const label = this.document.createElement("strong");
@@ -128,8 +153,8 @@ export class OneOneFiveMatchController {
         summary.append(block);
         try {
             const cacheMinutes = this.readCacheMinutes();
-            const result = await this.match.matchMovie(movie, { scope, ttlMs: cacheMinutes * 60_000, continuation });
-            if (!this.isCurrent(scope)) return;
+            const result = await this.match.matchMovie(movie, { scope: owner, ttlMs: cacheMinutes * 60_000, continuation });
+            if (!current()) return;
             const matches = result.matches;
             block.replaceChildren(label);
             if (!result.complete) {
@@ -138,19 +163,19 @@ export class OneOneFiveMatchController {
                 more.className = "jhs-btn jhs-btn--secondary";
                 more.textContent = "结果未完整 · 继续加载";
                 more.addEventListener("click", () => {
-                    if (this.isCurrent(scope)) void this.mountDetailMatching(scope, result.continuation);
+                    if (current()) void this.mountDetailMatching(scope, result.continuation, surface);
                 });
                 block.append(more);
             }
             if (!matches.length) {
-                block.append(this.document.createTextNode(result.complete ? "未匹配 " : "尚未匹配 "), this.createRetryButton());
+                block.append(this.document.createTextNode(result.complete ? "未匹配 " : "尚未匹配 "), this.createRetryButton(surface && (() => this.mountDetailMatching(scope, null, surface))));
                 return;
             }
             const renameSelected = this.document.createElement("button");
             renameSelected.type = "button";
             renameSelected.className = "jhs-btn jhs-btn--secondary";
             renameSelected.textContent = "预览与批量重命名";
-            scope.listen(renameSelected, "click", () => this.openRenamePreview(matches, carNum, renameSelected));
+            renameSelected.addEventListener("click", () => this.openRenamePreview(matches, carNum, renameSelected));
             block.append(renameSelected);
             for (const match of matches) {
                 const row = this.document.createElement("span");
@@ -159,7 +184,7 @@ export class OneOneFiveMatchController {
                 const url = this.safePlayUrl(match);
                 if (url) {
                     const link = this.document.createElement("a");
-                    link.className = "jhs-btn jhs-btn--secondary";
+                    link.className = "jhs-btn jhs-btn--secondary jhs-115-match-filename";
                     link.href = url;
                     link.target = "_blank";
                     link.rel = "noopener noreferrer";
@@ -167,6 +192,7 @@ export class OneOneFiveMatchController {
                     row.append(link);
                 } else {
                     const unavailable = this.document.createElement("span");
+                    unavailable.className = "jhs-115-match-filename";
                     unavailable.textContent = `${match.name}（${format115Size(match.size)}） · 不可播放`;
                     row.append(unavailable);
                 }
@@ -174,7 +200,7 @@ export class OneOneFiveMatchController {
                 block.append(row);
             }
         } catch (error) {
-            if (!this.isCurrent(scope)) return;
+            if (!current()) return;
             block.replaceChildren(label, this.document.createTextNode("匹配失败，请登录后重试 "));
             const login = this.document.createElement("a");
             login.className = "jhs-btn jhs-btn--ghost";
@@ -182,10 +208,10 @@ export class OneOneFiveMatchController {
             login.target = "_blank";
             login.rel = "noopener noreferrer";
             login.textContent = "去登录";
-            block.append(login, this.createRetryButton());
+            block.append(login, this.createRetryButton(surface && (() => this.mountDetailMatching(scope, null, surface))));
             this.report("115 匹配失败", error);
         } finally {
-            if (restoreFocus && this.isCurrent(scope) && this.document.activeElement === this.document.body) {
+            if (restoreFocus && current() && this.document.activeElement === this.document.body) {
                 /** @type {HTMLElement | null} */ (block.querySelector("button,a[href]") || null)?.focus({ preventScroll: true });
             }
         }
@@ -249,7 +275,7 @@ export class OneOneFiveMatchController {
     /** @param {Element} element @param {LifecycleScope} scope @param {boolean} [force] @param {any} [continuation] */
     async matchCard(element, scope, force = false, continuation = null) {
         if (!this.isCurrent(scope)) return;
-        const carNum = normalizeCarNum(element.querySelector(".video-title strong")?.textContent);
+        const { carNum } = readListItem(element, this.ui.jquery);
         if (!carNum || element.getAttribute("data-jhs115-state") === "pending") return;
         try {
             element.setAttribute("data-jhs115-state", "pending");
@@ -341,7 +367,8 @@ export class OneOneFiveMatchController {
                     } catch (error) {
                         if (scope.disposed) break;
                         failed++;
-                        entry.status.textContent = `失败 ${error instanceof Error ? error.message : String(error)}`;
+                        entry.status.textContent = ["AUTH_REQUIRED", "LOGIN_REQUIRED"].includes(/** @type {any} */ (error)?.code) ? "登录失效，请登录 115" : "网络或服务错误，请重试";
+                        this.report("115 批量重命名失败", error);
                     }
                     view.progress.textContent = `成功 ${succeeded} · 失败 ${failed} · 未开始 ${selected.length - succeeded - failed}`;
                 }
@@ -382,6 +409,7 @@ export class OneOneFiveMatchController {
     renameWithPreview(event, match, carNum) {
         const trigger = /** @type {Element | null} */ (event.currentTarget);
         const nextName = preview115Rename(match.name, carNum, { uppercase: true, keepSuffix: true });
+        if (nextName === match.name) return void this.notifications.info("名称已规范，无需修改");
         this.ui.confirm({ clientX: event.clientX, clientY: event.clientY + 80 }, `重命名此文件？<br>${escapeHtml(match.name)}<br>→ ${escapeHtml(nextName)}`, async () => {
             const scope = this.lifecycleScope;
             if (!this.isCurrent(scope)) return;
@@ -397,17 +425,18 @@ export class OneOneFiveMatchController {
             } catch (error) {
                 if (!this.isCurrent(scope)) return;
                 this.report("115 重命名失败", error);
-                this.notifications.error("重命名失败，请重试");
+                this.notifications.error(["AUTH_REQUIRED", "LOGIN_REQUIRED"].includes(/** @type {any} */ (error)?.code) ? "115 登录失效，请重新登录" : "重命名失败，请重试");
             }
         }, { confirmText: "重命名" });
     }
 
-    createRetryButton() {
+    /** @param {() => Promise<void>} [retry] */
+    createRetryButton(retry = () => this.configureMatching()) {
         const button = this.document.createElement("button");
         button.type = "button";
         button.className = "jhs-btn jhs-btn--ghost";
         button.textContent = "重试";
-        button.addEventListener("click", () => { this.match.clear(); void this.configureMatching().catch(error => this.report("115 匹配重试失败", error)); });
+        button.addEventListener("click", () => { this.match.clear(); void retry().catch(error => this.report("115 匹配重试失败", error)); });
         return button;
     }
 

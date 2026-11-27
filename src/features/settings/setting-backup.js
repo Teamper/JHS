@@ -3,7 +3,7 @@ import { getNowStr } from "../../core/ui-date-time.js";
 
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { escapeHtml } from "../../core/constants.js";
-import { decryptCredential, decryptPortableBackup, encryptPortableBackup } from "../../core/credential-crypto.js";
+import { decryptPortableBackup, encryptPortableBackup } from "../../core/credential-crypto.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { formatUiDateTime } from "../../core/ui-date-time.js";
@@ -49,13 +49,6 @@ async function measureBackupStage(stage, action, dependencies) {
         throw error;
     }
 }
-/** @param {any} webdavService @param {BackupUiDependencies} dependencies */
-async function resolveWebDavProfile(webdavService, dependencies) {
-    if (typeof webdavService?.getProfile === "function") return webdavService.getProfile();
-    const settings = dependencies.settings.snapshot();
-    return { url: settings.webDavUrl, username: settings.webDavUsername, password: await decryptCredential(settings.webDavPassword || "") };
-}
-
 /** Handle JSON file import via file input, run diff analysis, show preview. */
 /** @param {ShowDiffPreview} showDiffPreviewFn @param {BackupUiDependencies} dependencies */
 export async function importSettingData(showDiffPreviewFn, dependencies) {
@@ -124,7 +117,7 @@ export async function backupDataByWebDav(folderName, webdavService, dependencies
     const startedAt = window.performance.now();
     let result = "error", bytes;
     try {
-        const t = await measureBackupStage("读取凭据", () => resolveWebDavProfile(webdavService, dependencies), dependencies), n = t.url;
+        const t = await measureBackupStage("读取凭据", () => webdavService.getProfile(), dependencies), n = t.url;
         if (dependencies.isActive?.() === false) return;
         if (!n) return void show.error("请填写并保存服务地址");
         const a = t.username;
@@ -172,14 +165,14 @@ export async function backupListBtnByWebDav(folderName, openFileListDialogFn, we
     const loading = domUi.loading();
     scope.addCleanup(() => loading.close());
     try {
-        const t = await resolveWebDavProfile(webdavService, dependencies), n = t.url;
+        const t = await webdavService.getProfile(), n = t.url;
         if (!active()) return;
         if (!n) return void show.error("请填写并保存服务地址");
         const a = t.username;
         if (!a) return void show.error("请填写并保存用户名");
         if (!t.password) return void show.error("请填写并保存密码");
         const i = t.password;
-        const e = webdavService.createClient({ url: n, username: a, password: i }), files = await e.getBackupList(folderName);
+        const e = webdavService.createClient({ url: n, username: a, password: i }, { scope: dependencies.scope }), files = await e.getBackupList(folderName);
         if (active()) openFileListDialogFn(files, e, PRODUCT_NAMES.webdav);
     } catch (o) {
         if (active()) { clog.error(o); show.error("备份列表加载失败，请重试"); }

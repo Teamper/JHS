@@ -662,7 +662,8 @@ describe("new video interaction ownership", () => {
         root.find("#nvFilterToggle").trigger("click"); expect(root.find("#nv-filter-panel").prop("hidden")).toBe(false);
         expect(root.find("#nvFilterToggle").attr("aria-label")).toContain("决策：已忽略");
         profile = "wide"; runtimeServices.profile.dispatchEvent(new dom.window.Event("profile.changed"));
-        expect(root.find(".jhs-new-video-toolbar__actions button")).toHaveLength(4);
+        expect(root.find(".jhs-new-video-toolbar__actions button")).toHaveLength(5);
+        expect(root.find(".jhs-new-video-toolbar__actions #nvBackfillProfiles")).toHaveLength(1);
         profile = "compact"; runtimeServices.profile.dispatchEvent(new dom.window.Event("profile.changed"));
         expect(root.find("#nvDecisionFilter")[0]).toBe(filter); expect($(filter).val()).toBe("ignored");
         expect(root.find("#nv-filter-panel").prop("hidden")).toBe(false);

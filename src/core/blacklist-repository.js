@@ -80,12 +80,14 @@ export class BlacklistRepository {
     /** @param {RecordData[]} inputs */
     async addMovies(inputs) {
         inputs.forEach(assertMovieStateEligible);
+        const actors = await this.readActors();
+        const excluded = new Map(actors.map(actor => [actor.starId, new Set(actor.excludedCarNums || [])]));
         const movies = await this.readMovies(), known = new Set(movies.map(item => normalizeCarNum(item.carNum)));
         const added = [];
         for (const input of inputs) {
             const carNum = normalizeCarNum(input.carNum);
             if (!carNum) throw new Error("番号无效");
-            if (known.has(carNum)) continue;
+            if (known.has(carNum) || excluded.get(input.starId)?.has(carNum)) continue;
             added.push(this.buildMovie(input, carNum));
             known.add(carNum);
         }
@@ -117,15 +119,30 @@ export class BlacklistRepository {
     }
 
     /** @param {string} starId */
-    async removeActor(starId) {
+    async removeActor(starId) { return this.removeActors([starId]); }
+
+    /** @param {string[]} ids */
+    async removeActors(ids) {
+        const targets = new Set(ids);
         const [actors, movies] = await Promise.all([this.readActors(), this.readMovies()]);
-        const nextActors = actors.filter(item => item.starId !== starId), nextMovies = movies.filter(item => item.starId !== starId);
+        const nextActors = actors.filter(item => !targets.has(item.starId)), nextMovies = movies.filter(item => !targets.has(item.starId));
         const removedCarRecords = movies.length - nextMovies.length, removedActor = actors.length !== nextActors.length;
         const changes = [];
         if (removedCarRecords) changes.push({ key: MOVIES, before: movies, after: nextMovies });
         if (removedActor) changes.push({ key: ACTORS, before: actors, after: nextActors });
         await this.persist(changes, "移除黑名单失败且自动回滚不完整");
         return { removedActor, removedCarRecords };
+    }
+
+    /** @param {string} starId @param {string} carNum */
+    async removeMovie(starId, carNum) {
+        const [actors, movies] = await Promise.all([this.readActors(), this.readMovies()]);
+        const after = movies.filter(movie => movie.starId !== starId || movie.carNum !== carNum);
+        if (after.length === movies.length) return false;
+        const nextActors = actors.map(actor => actor.starId === starId
+            ? { ...actor, excludedCarNums: [...new Set([...(actor.excludedCarNums || []), carNum])] } : actor);
+        await this.persist([{ key: MOVIES, before: movies, after }, { key: ACTORS, before: actors, after: nextActors }], "解除番号屏蔽失败");
+        return true;
     }
 
     /** Retain the original blobs for a storage failure after partial persistence.

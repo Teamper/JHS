@@ -86,7 +86,11 @@ export class WebDavSyncService extends EventTarget {
         let configured = false, profileMessage = "", profileConflict = false;
         try { const { profile } = await this.deps.shared.snapshot(); configured = !!(profile.url && profile.username && profile.password); } catch (error) { profileMessage = /** @type {Error} */ (error).message; profileConflict = /** @type {any} */ (error).code === "SYNC_PROFILE_CONFLICT"; }
         const locallyPaused = await this.deps.shared.paused();
-        return { configured, profileConflict, busy: this.running, enabled: configured && !locallyPaused, paused: locallyPaused || state.paused, lastSuccessAt: state.lastSuccessAt, retryAt: state.retryAt, cleanupError: state.cleanupError, nextDueAt: this.nextDueAt, pendingChanges: Math.max(state.dirty || state.pending ? 1 : 0, (state.localRevision || 0) - (state.publishedRevision || 0)), message: profileMessage || this.deps.store.error || this.deps.store.notificationError || this.message || state.error || (!configured ? "保存有效 WebDAV 连接后将自动接入同步" : ""), replicas: Object.keys(state.confirmed || {}).length };
+        const settings = this.deps.settings.snapshot();
+        const existingLibrary = state.joined || Object.keys(state.confirmed || {}).length > 0;
+        const retention = syncRetention(withSyncRetentionDefaults(settings, existingLibrary));
+        const legacyRetention = existingLibrary && ["webDavSyncKeepCount", "webDavSyncHistoryDays"].some(key => !Object.hasOwn(settings, key));
+        return { configured, profileConflict, retention, legacyRetention, busy: this.running, enabled: configured && !locallyPaused, paused: locallyPaused || state.paused, lastSuccessAt: state.lastSuccessAt, retryAt: state.retryAt, cleanupError: state.cleanupError, nextDueAt: this.nextDueAt, pendingChanges: Math.max(state.dirty || state.pending ? 1 : 0, (state.localRevision || 0) - (state.publishedRevision || 0)), message: profileMessage || this.deps.store.error || this.deps.store.notificationError || this.message || state.error || (!configured ? "保存有效 WebDAV 连接后将自动接入同步" : ""), replicas: Object.keys(state.confirmed || {}).length };
     }
     /** Explicit retry is not an opt-in upload or a second backup engine. */
     async enable() { return this.retry(); }
@@ -334,24 +338,48 @@ export class WebDavSyncService extends EventTarget {
         if (scope) await this.assertConnectionCurrent(scope, revision);
         return files;
     }
-    /** Restore values as a new local mutation, never the old replica/clock/queue. @param {string} name @param {boolean} [layout] @param {any} [scope] @param {{data?: boolean, preferences?: boolean}} [selection] */
-    async restore(name, layout = false, scope = this.owner, selection = { data: true, preferences: true }) {
-        if (!selection.data && !selection.preferences && !layout) throw new Error("请至少选择数据、偏好或布局中的一项");
-        const file = parseSyncFileName(name); if (!file) throw new Error("恢复文件名无效");
+    /** @param {string} name @param {any} scope */
+    async recoveryEnvelope(name, scope) {
+        const file = parseSyncFileName(name);
+        if (!file) throw new Error("恢复文件名无效");
         const { profile, revision } = await this.deps.shared.snapshot();
         this.deps.urlPolicy?.authorizeLocalOrigin(new URL(profile.url).origin);
-        const client = this.deps.webdav.createClient(profile, { scope });
-        const envelope = await this.readEnvelope(client, file, scope);
+        const envelope = await this.readEnvelope(this.deps.webdav.createClient(profile, { scope }), file, scope);
         if (scope) await this.assertConnectionCurrent(scope, revision);
+        return { envelope, revision };
+    }
+    /** @param {any} envelope @param {any} local @param {boolean} layout @param {{data?:boolean,preferences?:boolean}} selection */
+    recoveryData(envelope, local, layout, selection) {
+        const restored = materializeSyncData(envelope.state, local);
+        /** @type {Record<string, any>} */ const data = { data_version: CURRENT_DATA_VERSION };
+        if (selection.data) for (const key of Object.keys(restored)) if (key !== "setting") data[key] = restored[key];
+        if (selection.preferences || layout) data.setting = selection.preferences ? withSyncRetentionDefaults(restored.setting, true) : { ...local.setting };
+        if (layout) Object.assign(data.setting, syncLayout(envelope.recovery?.layout));
+        return data;
+    }
+    /** @param {string} name @param {boolean} layout @param {any} scope @param {{data?:boolean,preferences?:boolean}} selection */
+    async previewRecovery(name, layout, scope, selection) {
+        if (!selection.data && !selection.preferences && !layout) throw new Error("请至少选择数据、偏好或布局中的一项");
+        const { envelope, revision } = await this.recoveryEnvelope(name, scope);
+        const local = await this.deps.store.readData();
+        scope?.assertActive();
+        const data = this.recoveryData(envelope, local, layout, selection);
+        const diff = this.deps.backup.diffData({ data_version: CURRENT_DATA_VERSION, ...local }, { ...local, ...data });
+        return { diff, apply: (/** @type {any} */ previewScope) => this.restore(name, layout, previewScope, selection, { envelope, revision, local }) };
+    }
+    /** @param {string} name @param {boolean} [layout] @param {any} [scope] @param {{data?: boolean, preferences?: boolean}} [selection] @param {{envelope:any,revision:string,local:any}} [preview] */
+    async restore(name, layout = false, scope = this.owner, selection = { data: true, preferences: true }, preview) {
+        if (!selection.data && !selection.preferences && !layout) throw new Error("请至少选择数据、偏好或布局中的一项");
+        const { envelope, revision } = preview ?? await this.recoveryEnvelope(name, scope);
         await this.deps.backup.importDataWithGuard({ data_version: CURRENT_DATA_VERSION }, {
             assertActive: () => this.assertConnectionCurrent(scope ?? { assertActive() {} }, revision),
             resetActressProfileBackfill: Boolean(selection.data),
+            snapshotSource: "auto-restore",
+            signal: scope?.signal,
             prepareData: async () => {
-                const local = await this.deps.store.readData(), restored = materializeSyncData(envelope.state, local);
-                /** @type {Record<string, any>} */ const data = { data_version: CURRENT_DATA_VERSION };
-                if (selection.data) for (const key of Object.keys(restored)) if (key !== "setting") data[key] = restored[key];
-                if (selection.preferences || layout) data.setting = selection.preferences ? withSyncRetentionDefaults(restored.setting, true) : { ...local.setting };
-                if (layout) Object.assign(data.setting, syncLayout(envelope.recovery?.layout));
+                const local = await this.deps.store.readData();
+                const data = this.recoveryData(envelope, local, layout, selection);
+                if (preview && Object.keys(data).some(key => key !== "data_version" && syncJson(local[key]) !== syncJson(preview.local[key]))) throw new Error("本地数据已更新，请重新预览差异");
                 return data;
             },
         });

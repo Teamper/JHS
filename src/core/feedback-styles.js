@@ -73,7 +73,8 @@ export function buildFeedbackCss() {
     .console-logger-entry[data-type="debug"] { border-left-color:var(--jhs-border-strong); background:var(--jhs-surface-2); }
     .console-logger-timestamp { margin-right:var(--jhs-space-1); color:var(--jhs-text-muted); font-family:var(--jhs-font-mono); font-size:var(--jhs-font-size-xs); font-variant-numeric:tabular-nums; line-height:var(--jhs-line-height-tight); }
     .console-logger-message[data-type="json"] { white-space:pre-wrap; font-family:var(--jhs-font-mono); }
-    @media (max-width:767px) { .console-logger-container { right:var(--jhs-space-2); bottom:var(--jhs-space-2); } .console-logger-window,.console-logger-window.maximized { width:calc(100vw - var(--jhs-space-4))!important; height:320px; } }
+    .jhs-logger-dialog :is(.console-logger-title,.console-logger-maximize-toggle) { display:none; }
+    @media (max-width:767px) { .console-logger-toggle { display:none; } .console-logger-container { right:var(--jhs-space-2); bottom:var(--jhs-space-2); } .console-logger-window,.console-logger-window.maximized { width:calc(100vw - var(--jhs-space-4))!important; height:320px; } }
     @media (max-width:767px),(pointer:coarse) { .jhs-toast .toast-close,.console-logger-toggle,.console-logger-controls button,.console-logger-scroll-to-bottom,.console-logger-filter { min-width:var(--jhs-touch-target); min-height:var(--jhs-touch-target); } }
     @media (prefers-reduced-motion:reduce) { .loading-animation,.loading-animation::before,.loading-animation::after { animation:none; } .console-logger-toggle,.console-logger-toggle .jhs-icon,.console-logger-window,.console-logger-controls button,.console-logger-filter,.console-logger-scroll-to-bottom { transition:none; } }
 `;

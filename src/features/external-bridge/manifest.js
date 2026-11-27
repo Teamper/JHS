@@ -10,7 +10,7 @@ export default defineFeature({
     requires: [PORT.style, SERVICE.notifications, SERVICE.clog, SERVICE.storage, SERVICE.http, SERVICE.magnet, SERVICE.clipboard, SERVICE.domUi, SERVICE.dialog, SERVICE.offline, SERVICE.state, SERVICE.settings, SERVICE.events],
     optionalRequires: [PORT.host],
     contributionAvailability: {
-        "external-bridge.offline": { sites: ["javdb", "javbus"], routes: ["detail", "list"] },
+        "external-bridge.offline": { sites: ["javdb", "javbus"], routes: ["detail", "list", "owned-detail"] },
         "external-bridge.123pan": { sites: ["javdb", "javbus", "123pan"] },
         "external-bridge.javtrailers": { sites: ["javtrailers"] },
         "external-bridge.subtitle": { sites: ["subtitlecat"] },

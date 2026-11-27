@@ -118,7 +118,11 @@ for (const theme of ["light", "dark"]) {
         const trigger = page.locator("#control-probe .jhs-select-trigger"), source = page.locator("#source");
         await expect(trigger).toHaveAccessibleName("来源选择"); await expect(trigger).toHaveAttribute("aria-describedby", "select-help"); await expect(trigger).toHaveAttribute("aria-required", "true");
         await trigger.focus(); await page.keyboard.press("ArrowDown"); await page.keyboard.press("ArrowDown");
-        await expect(trigger).toBeFocused(); await expect(source).toHaveValue("a"); await expect(page.getByRole("option", { name: "Delta" })).toHaveAttribute("aria-selected", "true");
+        await expect(trigger).toBeFocused(); await expect(source).toHaveValue("a");
+        await expect(page.getByRole("option", { name: "Alpha" })).toHaveAttribute("aria-selected", "true");
+        const delta = page.getByRole("option", { name: "Delta" });
+        await expect(delta).toHaveAttribute("aria-selected", "false");
+        await expect(trigger).toHaveAttribute("aria-activedescendant", await delta.getAttribute("id"));
         await page.keyboard.press("Escape"); await expect(source).toHaveValue("a"); expect(await page.evaluate(() => window.__controlChanges)).toBe(0);
         await trigger.press("End"); await trigger.press("Tab"); await expect(page.locator("#after-select")).toBeFocused(); await expect(source).toHaveValue("e"); expect(await page.evaluate(() => window.__controlChanges)).toBe(1);
         await trigger.press("Home"); await page.locator("#after-select").click(); await expect(source).toHaveValue("e");

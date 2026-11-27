@@ -20,7 +20,6 @@ export default defineFeature({
     contributionAvailability: {
         "detail.javdb-native": { sites: ["javdb"] },
         "detail.javdb-preview": { sites: ["javdb"] },
-        "detail.related": { sites: ["javdb"] },
         "detail.javbus-preview": { sites: ["javbus"] },
         "detail.shortcuts": { routes: ["list", "detail", "owned-detail"] },
         "detail.screenshot": { routes: ["list", "detail"] },
@@ -49,7 +48,6 @@ export default defineFeature({
         const controller = new DetailController({
             hostAdapter: deps[PORT.host], scope: runtime.scope, enabledContributions: controllerContributions,
             state: deps[SERVICE.state], settings: deps[SERVICE.settings], diagnostics: runtime.diagnostics,
-            movie: deps[SERVICE.movie], ui: deps[SERVICE.domUi],
             pageActions, workspaceUi, styles: deps[PORT.style], eventBus: deps[SERVICE.events],
             onWorkspaceError: (error) => runtime.diagnostics.recordError({ source: "detail-feature", featureId: "detail", contributionId: "detail.workspace", message: error instanceof Error ? error.message : String(error) }),
         });
@@ -145,7 +143,7 @@ export default defineFeature({
         }));
         if (runtime.enabledContributions.includes("detail.related")) optionalStarts.push(mountContribution(runtime, "detail.related", async (scope) => {
             const related = new RelatedController({
-                document, hostAdapter: deps[PORT.host], route: runtime.route, related: deps[SERVICE.detailContent].related,
+                document, hostAdapter: deps[PORT.host], route: runtime.route, related: deps[SERVICE.detailContent].related, movie: deps[SERVICE.movie],
                 settings: deps[SERVICE.settings], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, scope,
             });
             if (!await related.start() || scope.disposed) return false;

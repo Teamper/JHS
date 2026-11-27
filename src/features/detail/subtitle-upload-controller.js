@@ -80,12 +80,18 @@ export class SubtitleUploadController {
             finally { if (!scope.disposed) loadMore.disabled = false; }
         };
         const loadMore = view.button("继续加载匹配目录", () => void load());
+        view.button("匹配选中视频文件名", () => {
+            const [match, ...other] = view.selected();
+            if (!match || other.length) return view.message("请先勾选一个匹配视频");
+            view.filename.value = subtitleFilename(String(match.name || "").replace(/\.[^.]+$/u, ""), input.asset.extension);
+            view.filename.dispatchEvent(new Event("input", { bubbles: true }));
+        });
         const preview = view.button("预览上传范围", () => {
             const selected = view.selected();
             const filename = view.filename.value.trim();
             if (!selected.length) return view.message("请勾选目标目录");
             if (subtitleFilename(filename, input.asset.extension) !== filename) return view.message("文件名含无效字符或扩展名不一致");
-            previewed = JSON.stringify([filename, selected.map(item => [item.accountId, item.folderId])]);
+            previewed = JSON.stringify([filename, selected.map(item => [item.accountId, item.folderId, item.fileId ?? item.name])]);
             view.results.replaceChildren();
             for (const match of selected) view.result(`目录 ${match.folderId} · ${match.name} → ${filename}`);
             view.message(`确认后向 ${selected.length} 个目录逐项上传，文件 ${(input.asset.size / 1024).toFixed(1)} KiB`);
@@ -94,7 +100,7 @@ export class SubtitleUploadController {
         const confirm = view.button("确认上传至所选目录", async () => {
             if (running) return;
             const selected = view.selected(), filename = view.filename.value.trim();
-            if (previewed !== JSON.stringify([filename, selected.map(item => [item.accountId, item.folderId])])) { confirm.hidden = true; return view.message("范围或文件名已变更，请重新预览"); }
+            if (previewed !== JSON.stringify([filename, selected.map(item => [item.accountId, item.folderId, item.fileId ?? item.name])])) { confirm.hidden = true; return view.message("范围或文件名已变更，请重新预览"); }
             running = true;
             view.lock();
             confirm.disabled = preview.disabled = loadMore.disabled = true;

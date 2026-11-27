@@ -165,16 +165,17 @@ const RESPONSIVE_SHELL_STYLES = `
             .jhs-fab-status-dot--down.is-active { background: var(--jhs-status-down); }
             .jhs-fab-status-dot--watch.is-active { background: var(--jhs-status-watch); }
             .jhs-fab-menu-item.jhs-state-action[aria-pressed="true"] {
-                border-color: var(--jhs-btn-fg, var(--jhs-accent));
-                box-shadow: var(--jhs-shadow-md), inset 0 0 0 1px var(--jhs-btn-fg, var(--jhs-accent));
+                border-color: currentColor;
+                box-shadow: var(--jhs-shadow-md), inset 0 0 0 1px currentColor;
             }
 
             .jhs-page-commandbar {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                flex-wrap:wrap;
                 overflow: visible;
-                gap:var(--jhs-space-3);
+                gap:var(--jhs-space-2) var(--jhs-space-3);
                 width: 100%;
                 margin:var(--jhs-space-3) 0;
             }
@@ -183,14 +184,13 @@ const RESPONSIVE_SHELL_STYLES = `
             .jhs-commandbar__context, .jhs-commandbar__view {
                 display: flex;
                 align-items: center;
-                gap:var(--jhs-space-1);
+                flex-wrap:wrap;
+                gap:var(--jhs-space-2) var(--jhs-space-1);
                 min-width: 0;
                 white-space: nowrap;
             }
             .jhs-commandbar__left { flex: 1 1 auto; overflow:visible; }
             .jhs-commandbar__right { flex: 0 0 auto; overflow:visible; }
-            .jhs-page-commandbar:has(> .jhs-commandbar__utilities) { flex-wrap:wrap; }
-            .jhs-commandbar__utilities { flex-basis:100%; justify-content:flex-end; }
             .jhs-commandbar__filters { overflow:visible; }
             .jhs-commandbar__batch, .jhs-commandbar__more, .jhs-sort-control { position:relative; }
             .jhs-commandbar__menu { min-width:220px; }
@@ -217,6 +217,9 @@ const RESPONSIVE_SHELL_STYLES = `
             .jhs-mobile-batch-menu .jhs-btn { width:100%; justify-content:flex-start; }
             .jhs-fab-menu.jhs-fab-batch-open > .jhs-fab-group, .jhs-fab-menu.jhs-fab-batch-open > .jhs-fab-divider { display:none; }
             .jhs-fab-menu.jhs-fab-batch-open > .jhs-mobile-batch-menu { display:grid; gap:var(--jhs-space-1); }
+            .jhs-fab-group:not(:has(button:not([hidden]))) { display:none; }
+            html.jhs-fab-mounted body { padding-bottom:calc(var(--jhs-touch-target) + var(--jhs-space-5)); }
+            .jhs-sort-control .jhs-btn[aria-disabled="true"],.jhs-sort-control .jhs-btn:disabled { color:var(--jhs-text-muted); background:var(--jhs-surface-2); border:1px solid var(--jhs-border-strong); }
             html.jhs-fab-mounted .console-logger-container { display:none!important; }
         `;
 
@@ -336,14 +339,13 @@ export class ResponsiveShellController {
             if (reveal) bindReveal(reveal);
             return;
         }
+        const fc2Toolbar = this.services.host.detectRoute?.() === "owned-detail" ? this.document.querySelector(".jhs-fc2-workspace .jhs-fc2-toolbar") : null;
         const toolbar = ["#jhs-page-commandbar .jhs-commandbar__right", "#top-right-box", "[data-jhs-detail-actions]", "#navbar-menu-user .navbar-end"]
             .map(selector => this.document.querySelector(selector)).find(element => element && element.getClientRects().length);
-        const commandbar = toolbar?.closest("#jhs-page-commandbar");
-        const host = commandbar || toolbar || this.services.host.locateDetailRoot?.() || this.document.body;
+        const host = fc2Toolbar ?? toolbar ?? this.services.host.locateDetailRoot?.() ?? this.document.body;
         const root = this.document.createElement("div");
         root.id = "jhs-private-tools";
         root.className = "jhs-privacy-tools jhs-ui";
-        if (commandbar) root.classList.add("jhs-commandbar__utilities");
         const add = (/** @type {string} */ text, /** @type {() => any} */ action, keepOpen = false) => {
             const button = this.document.createElement("button");
             button.type = "button";
@@ -457,11 +459,11 @@ export class ResponsiveShellController {
             const view = this.jquery('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
             remember(sort[0]), sort.detach().appendTo(view), right.append(view);
         }
-        if (!commandbar.find(".jhs-commandbar__batch").length && ![ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].every(isCollected)) {
+        if (!commandbar.find(".jhs-commandbar__batch").length && Boolean(this.capabilities.listActions || this.getPageActions)) {
             right.append('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
         }
         const batch = commandbar.find(".jhs-commandbar__batch"), batchMenu = menuFor(batch);
-        [ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].forEach((selector => {
+        [ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo", "#hasWatchAllVideo" ].forEach((selector => {
             if (isCollected(selector)) return;
             const item = this.jquery(selector).first();
             item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batchMenu));
@@ -492,7 +494,7 @@ export class ResponsiveShellController {
         const selectors = [
             "#waitCheckBtn", "#newVideoBtn", "#historyBtn",
             "#statsBtn", "#blacklistBtn", "#jhs-quick-filter", "#addBlacklistBtn",
-            ".jhs-sort-control", "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo",
+            ".jhs-sort-control", "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo", "#hasWatchAllVideo",
         ];
         const collected = [];
         for (const selector of selectors) {
@@ -561,23 +563,28 @@ export class ResponsiveShellController {
         return null;
     }
     createMenu() {
-        const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" tabindex="-1" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
+        const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" tabindex="-1" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => content ? `<div class="jhs-fab-group">${content}</div>` : "", divider = '<div class="jhs-fab-divider" role="separator"></div>';
         const listPage = this.capabilities.listPage, quickFilters = listPage?.getQuickFilterCatalog?.();
         const hasListPageButton = !!this.capabilities.listActions, hasListPage = !!listPage && !!quickFilters, hasNewVideo = this.newVideoAvailable(), hasBlacklist = this.blacklist?.available(), hasSetting = !!this.capabilities.settings, hasDetailPageButton = !!this.capabilities.detailActions, hasHighlightMagnet = this.magnetActions?.filterAvailable(), hasMagnetHub = this.magnetActions?.hubAvailable(), hasHistory = this.history?.available();
+        const back = '<button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" tabindex="-1" data-jhs-menu-back>← 返回</button>';
         let items;
         if (this.window.isListPage) {
             const sortMethod = this.currentSort(), sortLabel = SORT_LABELS[sortMethod], activeFilter = quickFilters?.normalize(listPage.activeQuickFilter) ?? "waitCheck",
                 filterOptions = quickFilters ? [ ...quickFilters.primary, ...quickFilters.secondary ].map(((filter, index) => `${index === quickFilters.primary.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${quickFilters.labels[filter]}</button>`)).join("") : "",
-                sortOptions = Object.entries(SORT_LABELS).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
-            items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序：${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${quickFilters.labels[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
+                sortOptions = Object.entries(SORT_LABELS).filter(([value]) => value !== "rateCount" || this.services.host.site !== "javbus").map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
+            items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序：${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${quickFilters.labels[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${back}${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${back}${sortOptions}</div>` : "");
             if (this.getPageActions && hasListPageButton) items += group(item("batch", "批量操作", 'hidden aria-haspopup="menu" aria-expanded="false"')) + '<div class="jhs-fab-group jhs-fab-context"></div><div class="jhs-mobile-batch-menu" role="menu" aria-label="批量操作"></div>';
         } else if (this.window.isDetailPage) {
             const statusDefs = [ { action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" } ];
             items = group(hasDetailPageButton ? statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("") : "") + divider + group((hasHighlightMagnet ? item("magnetFilter", "磁力过滤") : "") + (hasMagnetHub ? item("magnet", "磁力搜索") : "") + (hasDetailPageButton ? item("subtitle", "字幕") : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
         } else items = group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
         if (this.privacyActions && this.privacyActions.available?.() !== false) items += divider + group(item("privacy", this.privacyActions.enabled() ? "关闭隐私遮罩" : "隐私遮罩", `data-jhs-privacy-toggle aria-pressed="${this.privacyActions.enabled()}"`) + item("privacyReveal", "按住临时查看") + item("privacyConfigure", "遮罩偏好"));
+        if (this.capabilities.openStats) items += group(item("stats", "统计"));
         if (this.mediaActions && this.mediaActions.available?.() !== false) items += group(item("mediaConfigure", "媒体库"));
         const menu = this.jquery(`<div id="jhs-fab-menu" class="jhs-fab-menu jhs-ui" role="menu" aria-hidden="true" inert>${items}</div>`);
+        menu.find(".jhs-fab-divider").each((/** @type {number} */ _index, /** @type {Element} */ node) => {
+            if (!node.previousElementSibling || !node.nextElementSibling || node.previousElementSibling.matches(".jhs-fab-divider")) node.remove();
+        });
         menu.find(".jhs-fab-status-dot").each((/** @type {number} */ _, /** @type {HTMLElement} */ element) => {
             this.jquery(element).closest(".jhs-fab-menu-item").addClass(`jhs-state-action jhs-btn--${element.dataset.statusKey}`);
         });
@@ -622,7 +629,9 @@ export class ResponsiveShellController {
                 if (action.group === "batch") batch.append(button.attr("data-jhs-batch-action", ""));
                 else context.append(button.addClass("jhs-fab-menu-item jhs-fab-item-visible"));
             }
-            menu.find('[data-action="batch"]').prop("hidden", !batch.children().length);
+            const hasBatch = batch.children().length > 0;
+            if (hasBatch) batch.prepend('<button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" tabindex="-1" data-jhs-menu-back>← 返回</button>');
+            menu.find('[data-action="batch"]').prop("hidden", !hasBatch);
         } catch (error) { this.services.logger.warn("移动端列表操作加载失败", error); }
     }
     /** @param {any} fab @param {any} backdrop */
@@ -635,7 +644,10 @@ export class ResponsiveShellController {
         let sortRevision = 0;
         const syncSort = () => {
             const value = this.currentSort();
-            menu.find('[data-action="sort"]').text(`排序：${SORT_LABELS[value]}`);
+            const reason = this.capabilities.listActions?.sortUnavailableReason?.() || "";
+            sortTrigger.text(reason || `排序：${SORT_LABELS[value]}`)
+                .attr("aria-disabled", String(Boolean(reason))).attr("title", reason);
+            if (reason) closeSortMenu();
             sortMenu.find(".jhs-mobile-sort-option").each((/** @type {number} */ _index, /** @type {HTMLElement} */ item) => item.setAttribute("aria-checked", String(item.dataset.jhsSort === value)));
         };
         const batchMenu = menu.find(".jhs-mobile-batch-menu"), batchTrigger = menu.find('[data-action="batch"]');
@@ -697,7 +709,13 @@ export class ResponsiveShellController {
             items.eq(next).trigger("focus")[0]?.scrollIntoView?.({ block: "nearest" });
         });
         bindKeys(menu, ".jhs-fab-menu-item", closeMenu);
-        bindKeys(batchMenu, "[data-page-action]", closeBatchMenu);
+        bindKeys(batchMenu, "button", closeBatchMenu);
+        menu.on("click", "[data-jhs-menu-back]", (/** @type {MouseEvent} */ event) => {
+            event.stopPropagation();
+            if (menu.hasClass("jhs-fab-filter-open")) closeFilterMenu(true);
+            else if (menu.hasClass("jhs-fab-sort-open")) closeSortMenu(true);
+            else closeBatchMenu(true);
+        });
         menu.on("click", "[data-page-action]", (/** @type {any} */ event) => {
             event.preventDefault(); event.stopImmediatePropagation();
             const action = this.jquery(event.currentTarget).attr("data-page-action");
@@ -705,7 +723,10 @@ export class ResponsiveShellController {
             closeMenu(true);
             void this.executePageAction?.(action).catch(error => this.services.logger.error("移动端列表操作失败", error));
         });
-        bindKeys(filterMenu, "button", closeFilterMenu).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
+        filterMenu.on("keydown", ".jhs-media-filter button,[data-jhs-menu-back]", (/** @type {any} */ event) => {
+            if (event.key === "Escape") { event.preventDefault(); closeFilterMenu(true); }
+        });
+        bindKeys(filterMenu, ".jhs-mobile-filter-option", closeFilterMenu).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             event.stopPropagation(), this.capabilities.listPage?.setQuickFilter?.(this.jquery(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
         bindKeys(sortMenu, ".jhs-mobile-sort-option", closeSortMenu).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
@@ -738,7 +759,9 @@ export class ResponsiveShellController {
                 return void (selected.length ? selected.first() : filterMenu.find(".jhs-mobile-filter-option").first()).trigger("focus");
             }
             if ("sort" === action) {
-                e.stopPropagation(), menu.addClass("jhs-fab-sort-open"), sortTrigger.attr("aria-expanded", "true");
+                e.stopPropagation();
+                if (sortTrigger.attr("aria-disabled") === "true") return;
+                 menu.addClass("jhs-fab-sort-open"), sortTrigger.attr("aria-expanded", "true");
                 const selected = sortMenu.find('[aria-checked="true"]');
                 return void (selected.length ? selected.first() : sortMenu.find(".jhs-mobile-sort-option").first()).trigger("focus");
             }
@@ -792,6 +815,9 @@ export class ResponsiveShellController {
             // 通用
             case "setting":
                 await this.capabilities.settings?.openQuickSetting();
+                break;
+            case "stats":
+                await this.capabilities.openStats?.();
                 break;
             case "logger":
                 this.services.logger.openDialog?.();

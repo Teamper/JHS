@@ -35,6 +35,7 @@ export function buildListFilterContext(sources, { now = Date.now(), onMissingBla
     return { ...createListEvaluationContext({
         titleKeywords: sources.titleKeywords,
         settings: sources.settings,
+        ratings: sources.ratings,
         carMap: sources.carMap,
         recentCarNums,
         actorCarNumToNameMap,

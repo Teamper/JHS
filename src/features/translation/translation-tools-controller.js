@@ -7,7 +7,7 @@ import { getIcon } from "../../core/icons.js";
 import { translationErrorLabel } from "../../core/translation-model.js";
 import { createTranslationConnections } from "../../ui/settings/translation-connections.js";
 export class TranslationToolsController {
-    /** @param {{host:any,service:any,settings:any,privacy:any,dialog:any,ui:any,scope:LifecycleScope,configure?:()=>any}} options */
+    /** @param {{host:any,service:any,settings:any,privacy:any,dialog:any,ui:any,scope:LifecycleScope,clipboard?:any,configure?:()=>any}} options */
     constructor(options) {
         this.configureCommand = options.configure;
         this.host = options.host;
@@ -16,6 +16,7 @@ export class TranslationToolsController {
         this.privacy = options.privacy;
         this.dialog = options.dialog;
         this.ui = options.ui;
+        this.clipboard = options.clipboard;
         this.scope = options.scope;
         this.document = /** @type {Document} */ (options.host.document);
         this.configurationScope = /** @type {LifecycleScope|null} */ (null);
@@ -45,8 +46,11 @@ export class TranslationToolsController {
                     const context = readOwnedMovieContext(element) || this.host.readMovieRef();
                     const titleRoot = readOwnedMovieContext(element) ? element : this.document;
                     const titleNode = titleRoot.querySelector(".origin-title") || titleRoot.querySelector(".jhs-fc2-original-title") || titleRoot.querySelector(".current-title") || titleRoot.querySelector("h1,.title.is-4,h3");
-                    const title = titleNode?.textContent?.trim() || "";
-                    void this.open([{ ...context, title }]).catch(error => { if (!scope.disposed)
+                    const heading = titleNode?.textContent?.trim() || "";
+                    const [prefix] = heading.split(/\s+/u, 1);
+                    const code = normalizeCarNum(context?.carNum)?.replace(/^FC2-PPV-/u, "FC2-");
+                    const title = code && normalizeCarNum(prefix)?.replace(/^FC2-PPV-/u, "FC2-") === code ? heading.slice(prefix.length).trim() : heading;
+                    void this.open([{ ...context, title }], titleNode, scope).catch(error => { if (!scope.disposed)
                         this.dialog.alert(error.message || "无法打开翻译"); });
                 });
                 mountEnhancementAction(element, button, scope);
@@ -96,8 +100,8 @@ export class TranslationToolsController {
             throw error;
         }
     }
-    /** @param {any[]} movies */
-    async open(movies) {
+    /** @param {any[]} movies @param {Element | null} [titleNode] @param {LifecycleScope} [titleScope] */
+    async open(movies, titleNode, titleScope) {
         if (this.workspaceScope && !this.workspaceScope.disposed)
             return;
         const unique = new Map(movies.map(movie => [normalizeCarNum(movie?.carNum), movie]));
@@ -180,7 +184,7 @@ export class TranslationToolsController {
                     row.meta.classList.remove("jhs-field-error");
                     row.meta.textContent = "翻译中…";
                     try {
-                        const result = await this.service.translateDetailed(`${row.carNum} ${row.title}`, { cacheAlias: row.carNum, scope: owner });
+                        const result = await this.service.translateDetailed(row.title, { cacheAlias: row.carNum, scope: owner });
                         if (scope.disposed || owner.disposed)
                             return;
                         row.output.textContent = result.text;
@@ -211,10 +215,31 @@ export class TranslationToolsController {
             } });
         });
         actions.append(start, stop, configure);
+        if (titleNode && rows.length === 1) {
+            const copy = this.document.createElement("button"), apply = this.document.createElement("button"), row = rows[0];
+            for (const button of [copy, apply]) { button.type = "button"; button.className = "jhs-btn jhs-btn--secondary"; }
+            copy.textContent = "复制译文";
+            apply.textContent = "应用到当前标题";
+            copy.disabled = apply.disabled = true;
+            scope.observe(row.output, () => { copy.disabled = apply.disabled = !row.output.textContent; }, { childList: true, characterData: true, subtree: true });
+            scope.listen(copy, "click", async () => {
+                try { await this.clipboard.copyText("译文", row.output.textContent); }
+                catch (error) { if (!scope.disposed) status.textContent = translationErrorLabel(error); }
+            });
+            scope.listen(apply, "click", () => {
+                if (!titleNode.isConnected || titleScope?.disposed || !row.output.textContent) return;
+                const title = this.ui.jquery(titleNode), current = title.nextAll(".translated-title").first();
+                const text = current.length ? current : this.ui.jquery('<div class="translated-title"></div>').insertAfter(title);
+                text.removeClass("is-error").text(row.output.textContent);
+                status.textContent = "已应用译文";
+            });
+            actions.append(copy, apply);
+        }
         root.append(summary, actions, status, range);
         update();
         try {
             this.mount(root, "标题翻译", scope);
+            if (titleNode && rows.length === 1) start.click();
         }
         catch (error) {
             scope.dispose();

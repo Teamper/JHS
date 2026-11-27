@@ -1,4 +1,5 @@
 // @ts-check
+import { mountPageJump } from "../../ui/table/page-jump.js";
 
 /** Own the native next-page jump control for list routes. */
 export class ListPaginationController {
@@ -46,52 +47,23 @@ export class ListPaginationController {
 
     mountIfAvailable() {
         const document = this.document;
+        if (this.root?.isConnected || document.getElementById("gemini-jump-page-control")) return false;
+        const boundary = this.hostAdapter.getPaginationBoundary?.();
+        if (boundary) {
+            this.root = mountPageJump(boundary.list, boundary.page, page => this.navigation.assign(boundary.target(page)), this.scope);
+            return true;
+        }
+        if (this.hostAdapter.getPaginationBoundary) return false;
         const region = this.hostAdapter.resolveListBoundary ? this.hostAdapter.resolveListBoundary()?.pagination : document;
-        if (!document || !region || this.root?.isConnected || document.getElementById("gemini-jump-page-control") || !region.querySelector(".pagination-link.is-current")) return false;
+        if (!region?.querySelector(".pagination-link.is-current")) return false;
         const pagination = region.matches?.(".pagination-list") ? region : region.querySelector(".pagination-list");
         if (!pagination) return false;
-
         const currentUrl = new URL(this.hostAdapter.location.href);
-        const input = document.createElement("input");
-        input.type = "number";
-        input.className = "jhs-field jhs-jump-page-input";
-        input.id = "jumpPageInput";
-        input.placeholder = "页码";
-        input.min = "1";
-        input.value = String(Number(currentUrl.searchParams.get("page") || "1") + 1);
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "jhs-btn jhs-btn--secondary jhs-jump-page-btn";
-        button.textContent = "跳转";
-        const root = document.createElement("li");
-        root.id = "gemini-jump-page-control";
-        root.append(input, button);
-
-        const submit = () => {
-            const page = Number.parseInt(input.value, 10);
-            if (!Number.isInteger(page) || page < 1) {
-                input.focus();
-                return;
-            }
+        this.root = mountPageJump(pagination, Number(currentUrl.searchParams.get("page")) || 1, page => {
             const target = new URL(this.hostAdapter.location.href);
             target.searchParams.set("page", String(page));
             this.navigation.assign(target.href);
-        };
-        const onKeypress = (/** @type {KeyboardEvent} */ event) => {
-            if (event.key !== "Enter") return;
-            submit();
-            event.preventDefault();
-        };
-        button.addEventListener("click", submit);
-        input.addEventListener("keypress", onKeypress);
-        pagination.append(root);
-        this.root = root;
-        this.scope.addCleanup(() => {
-            button.removeEventListener("click", submit);
-            input.removeEventListener("keypress", onKeypress);
-            root.remove();
-            if (this.root === root) this.root = null;
-        });
+        }, this.scope);
         return true;
     }
 
@@ -105,4 +77,4 @@ export class ListPaginationController {
     }
 }
 
-export const LIST_PAGINATION_STYLES = `.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}`;
+export const LIST_PAGINATION_STYLES = `.jhs-jump-page-input{width:84px;margin-inline-start:var(--jhs-space-2)}.jhs-jump-page-btn{margin-inline-start:var(--jhs-space-1)}`;

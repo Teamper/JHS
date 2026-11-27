@@ -8,7 +8,7 @@ import { classifyJavDbPage } from "../../core/site-context.js";
 import { isBatchRunCancelled, isActiveBatchRun, requestCancelBatchRun, tryBeginBatchRun, endBatchRun } from "./batch-coordinator.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
-import { QUICK_FILTER_LABELS, normalizeQuickFilterKey } from "../../core/list-filters.js";
+import { QUICK_FILTER_LABELS, isCardVisible, normalizeQuickFilterKey } from "../../core/list-filters.js";
 
 /** Feature-owned cross-page batch operations over injected evaluation and presentation capabilities. */
 export class ListBatchController {
@@ -47,14 +47,12 @@ export class ListBatchController {
         const pageKind = pageContext?.kind ?? "unknown";
         const isRankingPage = ["movie-ranking", "playback-ranking", "top250-ranking"].includes(pageKind);
         const isExternalCatalog = pageKind === "external-fc2-catalog";
-        const isPageScopedList = isRankingPage || isExternalCatalog;
-        const pageName = isExternalCatalog ? "当前片库页" : "当前榜单页";
-        const subtitleFilter = pageKind === "top250-ranking" ? new URLSearchParams(this.location?.search ?? "").get("jhs_subtitle") : null;
-        const subtitleWarning = subtitleFilter === "with" || subtitleFilter === "without"
-            ? " 当前字幕筛选只影响显示，不限制批量处理范围。" : "";
-        const confirmText = (isPageScopedList
-            ? (normalized === "all" ? `将处理${pageName}内的所有影片，包括屏蔽项。` : `将处理${pageName}内符合「${filterLabel}」筛选的影片。`)
-            : (normalized === "all" ? "将处理当前搜索全部分页的所有影片，包括屏蔽项。" : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的影片。`)) + subtitleWarning;
+        const mediaRestricted = Boolean(this.document.querySelector(".jhs-media-filter button[data-media-filter]:not([data-media-filter='all'])[aria-pressed='true']"));
+        const isPageScopedList = isRankingPage || isExternalCatalog || mediaRestricted;
+        const pageName = isExternalCatalog ? "当前片库页" : isRankingPage ? "当前榜单页" : "当前页";
+        const confirmText = isPageScopedList
+            ? `将处理${pageName}内符合「${filterLabel}」筛选的可见影片。`
+            : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的影片。`;
         const actionText = { blocked: "屏蔽", favorite: "收藏", downloaded: "标记已下载", watched: "标记已观看" }[stateFlag];
         if (confirm && !await this.ui.confirm(confirmText, { confirmText: actionText })) return { cancelled: true };
         if (this.disposed || this.scope.disposed) return { cancelled: true };
@@ -104,7 +102,8 @@ export class ListBatchController {
                     return { ...parsed, sourceCard: item, ...(actorScope ? {} : { names: readCardNames(item) }) };
                 },
                 evaluate: (/** @type {any} */ item) => {
-                    if (!getMovieStateEligibility(item).eligible) return { matchesCurrentFilter: false };
+                    const card = item.sourceCard?.nodeType ? item.sourceCard : item.sourceCard?.[0];
+                    if (!getMovieStateEligibility(item).eligible || card?.isConnected && !isCardVisible(card)) return { matchesCurrentFilter: false };
                     return evaluateListItem(item, context, { filter: normalized });
                 },
                 isCancelled,

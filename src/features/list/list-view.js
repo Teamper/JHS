@@ -4,7 +4,7 @@ import { OwnedPopover } from "../../core/owned-popover.js";
 import { normalizeStateFlags } from "../../core/state-model.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { getIcon } from "../../core/icons.js";
-import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey, shouldShowItem } from "../../core/list-filters.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isCardVisible, normalizeQuickFilterKey, shouldShowItem } from "../../core/list-filters.js";
 
 /** @param {string} value @param {any} fallback */
 function parseData(value, fallback) {
@@ -55,7 +55,8 @@ export class ListView {
                 this.cardStates.set(element, cached);
             }
             const { flags, visibilityReasons } = cached, recent = element.getAttribute("data-jhs-recent") === "yes";
-            const visible = shouldShowItem({ filter: normalizedFilter, flags, visibilityReasons, recent });
+            const visible = shouldShowItem({ filter: normalizedFilter, flags, visibilityReasons, recent,
+                favoriteActress: element.hasAttribute("data-jhs-collected-actress"), rated: element.hasAttribute("data-jhs-rated") });
             const style = /** @type {HTMLElement} */ (element).style;
             if (style.display !== "none") this.cardDisplays.set(element, style.display);
             return { element, visible, display: visible ? this.cardDisplays.get(element) || "" : "none" };
@@ -63,7 +64,7 @@ export class ListView {
         for (const { element, visible, display } of changes) {
             const style = /** @type {HTMLElement} */ (element).style;
             if (style.display !== display) style.display = display;
-            onVisibility?.(element, visible);
+            onVisibility?.(element, visible && isCardVisible(element));
         }
     }
 

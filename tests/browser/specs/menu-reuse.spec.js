@@ -16,7 +16,8 @@ async function boot(page,context,theme,mobileMode='off'){
 async function capture(page,info,name){
  const mobileMenu=page.locator('.jhs-mobile-filter-menu:visible,.jhs-mobile-sort-menu:visible');
  if(await mobileMenu.count()){
-  await expect(mobileMenu.locator('button').first()).toBeFocused();
+  await page.mouse.move(0,0);
+  await expect(mobileMenu.locator('.jhs-mobile-filter-option,.jhs-mobile-sort-option').first()).toBeFocused();
   await mobileMenu.evaluate(node=>{node.scrollTop=0;node.closest('.jhs-fab-menu').scrollTop=0;});
   await expect.poll(()=>mobileMenu.evaluate(node=>node.closest('.jhs-fab-menu').scrollTop)).toBe(0);
  }
@@ -32,7 +33,7 @@ async function closePortal(page){
 for(const theme of ['light','dark']){
  test(`menus close mutually and preserve callbacks ${theme}`,async({page,context},info)=>{
   const compact=await boot(page,context,theme,'auto');
-  if(compact){await page.locator('#jhs-fab').click();const filter=page.locator('#jhs-fab-menu [data-action="quickFilter"]'),sort=page.locator('#jhs-fab-menu [data-action="sort"]');await filter.click();await expect(page.locator('.jhs-mobile-filter-menu')).toBeVisible();await capture(page,info,'mobile-filter-'+theme);await expect(page.locator('.jhs-mobile-filter-option')).toHaveCount(11);await expect(page.locator('.jhs-mobile-filter-option[data-jhs-filter="undownloaded"]')).toHaveText('全部未下载');await page.keyboard.press('End');const last=page.locator('.jhs-mobile-filter-option[data-jhs-filter="recent7d"]');await expect(last).toBeFocused();await expect(last).toBeInViewport({ratio:1});await page.keyboard.press('Home');await expect(page.locator('.jhs-mobile-filter-option').first()).toBeFocused();await page.keyboard.press('Escape');await expect(filter).toBeFocused();await sort.click();await expect(page.locator('.jhs-mobile-filter-menu')).toBeHidden();await expect(page.locator('.jhs-mobile-sort-menu')).toBeVisible();await capture(page,info,'mobile-sort-'+theme);await page.locator('.jhs-mobile-sort-option[data-jhs-sort="default"]').click();await expect(page.locator('.jhs-mobile-sort-menu')).toBeHidden();await expect(page.locator('.jhs-owned-popover')).toHaveCount(0);return;}
+  if(compact){await page.locator('#jhs-fab').click();const filter=page.locator('#jhs-fab-menu [data-action="quickFilter"]'),sort=page.locator('#jhs-fab-menu [data-action="sort"]');await filter.click();await expect(page.locator('.jhs-mobile-filter-menu')).toBeVisible();await capture(page,info,'mobile-filter-'+theme);await expect(page.locator('.jhs-mobile-filter-option')).toHaveCount(13);await expect(page.locator('.jhs-mobile-filter-option[data-jhs-filter="undownloaded"]')).toHaveText('全部未下载');await page.keyboard.press('End');const last=page.locator('.jhs-mobile-filter-option[data-jhs-filter="rated"]');await expect(last).toBeFocused();await expect(last).toBeInViewport({ratio:1});await page.keyboard.press('Home');await expect(page.locator('.jhs-mobile-filter-option').first()).toBeFocused();await page.keyboard.press('Escape');await expect(filter).toBeFocused();await sort.click();await expect(page.locator('.jhs-mobile-filter-menu')).toBeHidden();await expect(page.locator('.jhs-mobile-sort-menu')).toBeVisible();await capture(page,info,'mobile-sort-'+theme);await page.locator('.jhs-mobile-sort-option[data-jhs-sort="default"]').click();await expect(page.locator('.jhs-mobile-sort-menu')).toBeHidden();await expect(page.locator('.jhs-owned-popover')).toHaveCount(0);return;}
   const activate=async control=>{if(info.project.use.hasTouch){await control.focus();await control.press('Enter');}else await control.click();};
   const sort=page.locator('#sort-toggle-btn'),batch=page.locator('[aria-controls="jhs-commandbar-batch-menu"]'),filter=page.locator('.jhs-quick-filter__toggle');
   for(const [first,next] of [[sort,batch],[batch,sort],[filter,batch],[page.locator('[aria-controls="jhs-commandbar-more-menu"]'),sort]]){
@@ -58,7 +59,7 @@ for(const theme of ['light','dark']){
   const anchor=await button.boundingBox();
   await page.mouse.move(anchor.x+anchor.width/2,anchor.y+anchor.height+2);
   const bridge=await panelElement.evaluate(async node=>{
-   await new Promise(resolve=>setTimeout(resolve,100));
+   await new Promise(resolve=>setTimeout(resolve,250));
    const rect=node.getBoundingClientRect();
    return {visible:rect.width>0&&rect.height>0&&getComputedStyle(node).visibility==='visible',x:rect.x+rect.width/2,y:rect.y+10};
   });

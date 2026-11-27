@@ -1,4 +1,5 @@
 // @ts-check
+import { findMatchedTitleKeyword } from "../../core/keyword-match.js";
 
 import { isMissingActorSource } from "./actor-source-health.js";
 import { collectActressLookupNames, isSameActressProfile, normalizeActressProfileData, readVerifiedActressProfile } from "../../core/actress-measurements.js";
@@ -142,7 +143,7 @@ export class NewVideoScanController {
         this.assertActive();
         const sorted = sortActresses(actresses), result = {
             actressCount: sorted.length, eligibleCount: 0, success: 0, parseFailed: 0,
-            networkFailed: 0, unavailable: 0, skippedUnavailable: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, fatal: false,
+            networkFailed: 0, unavailable: 0, skippedUnavailable: 0, skippedUnreliable: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, fatal: false,
         };
         /** @type {any[]} */
         const eligible = [];
@@ -193,7 +194,7 @@ export class NewVideoScanController {
                     continue;
                 }
                 try {
-                    await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet);
+                    await this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet, skipped => { result.skippedUnreliable += skipped; });
                     this.sourceHealth?.clear(options.baseUrl, starId);
                     result.success++;
                 } catch (error) {
@@ -219,27 +220,30 @@ export class NewVideoScanController {
         return { ...result, blockedError };
     }
 
-    /** @param {any[]} items @param {string} starId @param {string} name @param {string[]} titleKeywords @param {Set<string>} blacklistSet */
-    async parseActorMovies(items, starId, name, titleKeywords, blacklistSet) {
+    /** @param {any[]} items @param {string} starId @param {string} name @param {string[]} titleKeywords @param {Set<string>} blacklistSet @param {(count: number) => void} [onSkipped] */
+    async parseActorMovies(items, starId, name, titleKeywords, blacklistSet, onSkipped = count => this.logger?.warn?.("已跳过番号待确认的作品", count)) {
         this.assertActive();
-        if (items.some(item => !getMovieStateEligibility(item).eligible)) throw Object.assign(new Error("部分影片番号无法确认，本次未更新检测结果"), { code: "INCOMPLETE_MOVIE_IDENTITY" });
         if (!items.length) {
             const saved = await this.state.updateFavoriteActress({ starId, lastCheckTime: this.getTimestamp(), newVideoList: [] }, { scan: true });
             if (saved === false) throw new Error("演员记录已不存在");
             return 0;
         }
 
-        const publishTimes = items.map((item) => item.publishTime).filter(Boolean);
-        const candidates = items.filter((item) => {
+        const verified = items.filter(item => getMovieStateEligibility(item).eligible);
+        const incomplete = verified.length < items.length;
+        if (incomplete) onSkipped(items.length - verified.length);
+        if (!verified.length) return 0;
+        const publishTimes = verified.map((item) => item.publishTime).filter(Boolean);
+        const candidates = verified.filter((item) => {
             if (!item.carNum || blacklistSet.has(item.carNum)) return false;
-            return !titleKeywords.some((keyword) => item.title?.includes(keyword) || item.carNum.includes(keyword));
+            return !findMatchedTitleKeyword(titleKeywords, item.title || "", item.carNum);
         }).map((item) => ({
             carNum: item.carNum, coverUrl: item.coverUrl || "", title: item.title || "", publishTime: item.publishTime || "",
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
         const [carMap, decisions, actresses] = await Promise.all([
             this.state.getCarMap(), this.state.getNewVideoDecisions(),
-            this.preserveNewVideo ? this.state.getFavoriteActressList() : [],
+            this.preserveNewVideo || incomplete ? this.state.getFavoriteActressList() : [],
         ]);
         this.assertActive();
         const previous = actresses.find((/** @type {any} */ actress) => actress.starId === starId);
@@ -247,9 +251,12 @@ export class NewVideoScanController {
             normalizeMovieCarNum(typeof entry === "string" ? entry : entry.carNum)));
         const freshItems = candidates.filter((item) => !carMap.has(item.carNum) || queued.has(normalizeMovieCarNum(item.carNum)));
         const fresh = freshItems.filter((item) => !carMap.has(item.carNum) && decisions[item.carNum]?.action !== "dismissed");
+        const verifiedCodes = new Set(verified.map(item => normalizeMovieCarNum(item.carNum)));
+        const retained = incomplete ? (previous?.newVideoList ?? []).filter((/** @type {any} */ entry) =>
+            !verifiedCodes.has(normalizeMovieCarNum(typeof entry === "string" ? entry : entry.carNum))) : [];
         const saved = await this.state.updateFavoriteActress({
-            starId, lastCheckTime: this.getTimestamp(), newVideoList: freshItems,
-            lastPublishTime: selectLatestPublishTime(publishTimes),
+            starId, ...(!incomplete && { lastCheckTime: this.getTimestamp() }), newVideoList: [...freshItems, ...retained],
+            lastPublishTime: selectLatestPublishTime(incomplete ? [...publishTimes, previous?.lastPublishTime].filter(Boolean) : publishTimes),
         }, { scan: true });
         if (saved === false) throw new Error("演员记录已不存在");
         if (!this.disposed && fresh.length) {

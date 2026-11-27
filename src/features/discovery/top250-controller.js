@@ -68,6 +68,8 @@ export class Top250Controller {
             button.classList.toggle("active", selected);
         });
         this.hostAdapter.syncTop250SubtitleLinks?.(value);
+        const document = controls.ownerDocument;
+        if (document.defaultView) document.dispatchEvent(new document.defaultView.Event("jhs-card-visibility-changed"));
     }
 
     handleClick = (/** @type {Event} */ event) => {

@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { assertMovieStateEligible, normalizeCarNum } from "../core/movie-identity.js";
 import { MEDIA_CONNECTIONS_KEY, normalizeMediaConnection, mediaConnectionErrorLabel, mediaItemCode, mediaItemLink } from "../core/media-library-model.js";
@@ -30,8 +31,8 @@ export class MediaLibraryService extends EventTarget {
         this.configurationFailure = /** @type {any} */ (null);
         this.configurationRevision = /** @type {string|null} */ (null);
         this.disposed = false;
-        this.listener = storage.listenValue(MEDIA_CONNECTIONS_KEY, () => { void this.reload().catch(() => {}); });
-        this.onCredential = (/** @type {any} */ event) => { if (event.detail?.key === MEDIA_CONNECTIONS_KEY) void this.reload().catch(() => {}); };
+        this.listener = storage.listenValue(MEDIA_CONNECTIONS_KEY, () => { void waitForSettlement(this.reload()); });
+        this.onCredential = (/** @type {any} */ event) => { if (event.detail?.key === MEDIA_CONNECTIONS_KEY) void waitForSettlement(this.reload()); };
         credential.addEventListener("credentials.changed", this.onCredential);
         this.onSettings = (/** @type {any} */ event) => { if (event.detail?.names?.includes("enableMediaLibrary")) this.invalidate(); };
         settings.addEventListener("settings.changed", this.onSettings);
@@ -40,7 +41,7 @@ export class MediaLibraryService extends EventTarget {
     listConnections() { return this.connections.map(item => ({ ...item })); }
     async initialize() {
         let pending;
-        do { pending = this.ready || this.reload(); await pending.catch(() => {}); } while (pending !== this.ready);
+        do { pending = this.ready || this.reload(); await waitForSettlement(pending); } while (pending !== this.ready);
     }
     reload() {
         const operation = this.loadConfiguration();

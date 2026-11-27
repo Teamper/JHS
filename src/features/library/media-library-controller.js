@@ -2,24 +2,24 @@
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { getMovieStateEligibility, normalizeCarNum } from "../../core/movie-identity.js";
-import { createMediaConnections, createMediaStatus } from "../../ui/settings/media-connections.js";
+import { createMediaStatus } from "../../ui/settings/media-connections.js";
 
 /** Own media-library badges without mutating JHS state flags or list order. */
 export class MediaLibraryController {
-    /** @param {{host: any, service: any, scope: LifecycleScope, settings: any, dialog: any, ui: any}} options */
+    /** @param {{host: any, service: any, scope: LifecycleScope, dialog: any, ui: any}} options */
     constructor(options) {
         this.host = options.host;
         this.service = options.service;
         this.scope = options.scope;
-        this.settings = options.settings;
         this.dialog = options.dialog;
         this.ui = options.ui;
         this.document = /** @type {Document} */ (this.host.document);
         this.window = /** @type {Window & typeof globalThis} */ (this.document.defaultView);
         /** @type {Map<Element, any>} */ this.cards = new Map();
         this.mountScope = /** @type {LifecycleScope | null} */ (null);
-        this.configScope = /** @type {LifecycleScope | null} */ (null);
         this.filter = "all";
+        /** @type {HTMLElement | null} */ this.filterStatus = null;
+        this.queryingFilter = false;
         this.pendingReconfigure = false;
         this.refreshFocusHost = /** @type {Element | null} */ (null);
         this.refreshFocusPrevious = /** @type {Element | null} */ (null);
@@ -32,7 +32,7 @@ export class MediaLibraryController {
             this.pendingReconfigure = true;
             queueMicrotask(() => { this.pendingReconfigure = false; if (!this.scope.disposed) this.reconfigure(); });
         });
-        this.scope.addCleanup(() => { this.mountScope?.dispose(); this.configScope?.dispose(); });
+        this.scope.addCleanup(() => this.mountScope?.dispose());
         this.reconfigure();
     }
     reconfigure() {
@@ -73,6 +73,7 @@ export class MediaLibraryController {
                 this.query(card);
             }
             this.mountFilter(scope);
+            this.runFilterQueries(scope);
         };
         const native = this.host.readMovieRef();
         const detailHost = this.host.locateMediaLibraryDetailRoot();
@@ -102,7 +103,7 @@ export class MediaLibraryController {
         return card;
     }
     /** @param {any} card */
-    query(card) {
+    async query(card) {
         if (card.scope.disposed) return;
         card.started = true;
         const update = (/** @type {any} */ result) => {
@@ -116,9 +117,29 @@ export class MediaLibraryController {
                 this.refreshFocusPrevious = null;
             }
         };
-        void this.service.queryMovie(card.movie, { scope: card.scope, onUpdate: update }).then(update).catch(() => {
-            if (!card.scope.disposed) card.view.render({ status: "unknown", hits: [], servers: [{ status: "error", name: "媒体库", error: "查询失败" }] });
-        });
+        try {
+            update(await this.service.queryMovie(card.movie, { scope: card.scope, onUpdate: update }));
+        } catch {
+            update({ status: "unknown", hits: [], servers: [{ status: "error", name: "媒体库", error: "查询失败" }] });
+        }
+    }
+    /** @param {LifecycleScope} scope */
+    async runFilterQueries(scope) {
+        if (this.queryingFilter || !["present", "absent"].includes(this.filter) || scope.disposed) return;
+        this.queryingFilter = true;
+        try {
+            while (!scope.disposed && ["present", "absent"].includes(this.filter)) {
+                const cards = [...this.cards.values()].filter(card => card.list);
+                const pending = cards.filter(card => !card.started);
+                if (!pending.length) break;
+                if (this.filterStatus) this.filterStatus.textContent = `正在筛选媒体库 ${cards.length - pending.length}/${cards.length}`;
+                await Promise.all(pending.slice(0, 24).map(card => this.query(card)));
+            }
+        } finally {
+            this.queryingFilter = false;
+            if (this.filterStatus) this.filterStatus.textContent = "";
+            if (this.mountScope && scope !== this.mountScope) void this.runFilterQueries(this.mountScope);
+        }
     }
     /** Refresh shared indexes once, then requery every mounted consumer through the existing scheduler. @param {any} card */
     refresh(card) {
@@ -128,7 +149,14 @@ export class MediaLibraryController {
         this.service.invalidate();
     }
     /** @param {any} card */
-    applyFilter(card) { if (card.list) card.host.toggleAttribute("data-jhs-media-filtered", this.filter !== "all" && card.result.status !== this.filter && !(this.filter === "unknown" && ["unknown", "loading"].includes(card.result.status))); }
+    applyFilter(card) {
+        if (!card.list) return;
+        const filtered = this.filter !== "all" && card.result.status !== this.filter
+            && !(this.filter === "unknown" && ["unknown", "loading"].includes(card.result.status));
+        if (card.host.hasAttribute("data-jhs-media-filtered") === filtered) return;
+        card.host.toggleAttribute("data-jhs-media-filtered", filtered);
+        this.document.dispatchEvent(new this.window.Event("jhs-card-visibility-changed"));
+    }
     /** @param {LifecycleScope} scope */
     mountFilter(scope) {
         const existing = this.document.querySelector(".jhs-media-filter");
@@ -151,20 +179,23 @@ export class MediaLibraryController {
             const button = this.document.createElement("button");
             button.type = "button";
             button.className = "jhs-btn jhs-btn--secondary jhs-btn--sm";
+            button.dataset.mediaFilter = value;
             button.setAttribute("aria-pressed", String(this.filter === value));
             button.textContent = text;
             scope.listen(button, "click", () => {
                 this.filter = value;
                 root.querySelectorAll("button").forEach(node => node.setAttribute("aria-pressed", String(node === button)));
                 for (const card of this.cards.values()) this.applyFilter(card);
+                void this.runFilterQueries(scope);
             });
             root.append(button);
         }
         const hint = this.document.createElement("span");
-        hint.textContent = "未查询的影片归入结果未知";
+        hint.setAttribute("role", "status");
+        this.filterStatus = hint;
         root.append(hint);
         (menu || this.document.querySelector("#jhs-quick-filter") || list.parentElement).append(root);
-        scope.addCleanup(() => root.remove());
+        scope.addCleanup(() => { root.remove(); if (this.filterStatus === hint) this.filterStatus = null; });
     }
     /** Always choose explicitly when several servers or versions match. @param {any} result */
     openHits(result) {
@@ -182,17 +213,6 @@ export class MediaLibraryController {
             root.append(row);
         }
         this.openDialog(root, "媒体库版本", this.scope);
-    }
-    configure() {
-        if (this.configScope && !this.configScope.disposed) return;
-        const scope = new LifecycleScope("media:connections");
-        this.configScope = scope;
-        let revision = this.service.configurationRevision;
-        const root = createMediaConnections({ document: this.document, scope, connections: this.service.listConnections(), enabled: this.service.enabled(),
-            onSave: async (connections, enabled) => { scope.assertActive(); await this.service.saveConnections(connections, revision); revision = this.service.configurationRevision; scope.assertActive(); await this.settings.set("enableMediaLibrary", enabled); },
-            onTest: (connection, testScope) => this.service.testConnection(connection, testScope),
-        });
-        this.openDialog(root, "Emby / Jellyfin", scope);
     }
     /** @param {HTMLElement} root @param {string} title @param {LifecycleScope} owner */
     openDialog(root, title, owner) {

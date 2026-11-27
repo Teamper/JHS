@@ -11,16 +11,13 @@
 import { PRODUCT_NAMES } from "../core/product-names.js";
 import { DEFAULT_QUICK_FILTER_OPTIONS } from "../core/list-filters.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
-import { SYNC_DEFAULTS } from "../core/webdav-sync-model.js";
+import { MANUAL_SETTINGS } from "../contracts/manual-settings.js";
 import { stringList, booleanMap, resourceValidators } from "./settings-sync-validation.js";
 import { DEFAULT_TRANSLATION_PROMPT, normalizeTranslationPrompt } from "../core/translation-model.js";
 
 /** @param {import("./settings-registry.js").SettingsRegistry} registry */
 export function registerDefaultSettings(registry) {
-    Object.entries(SYNC_DEFAULTS).forEach(([key, defaultValue], index) => registry.register({
-        key, defaultValue, label: ["最近同步版本", "每日版本保留天数"][index], owner: "WebDavSyncFeature", section: "backup", effect: "manual", surfaces: ["full"],
-        type: "number", min: index ? 0 : 3, max: index ? 365 : 1e6, step: 1,
-    }));
+    for (const descriptor of MANUAL_SETTINGS) registry.register(descriptor);
     for (const [key, label, type, defaultValue] of /** @type {Array<[string, string, string, any]>} */ ([
         ["enabledExternalSites", "外部站点选择", "json", []], ["imageSearchSelections", "图片搜索站点", "json", {}],
         ["magnetHubSelectedEngine", "磁力来源选择", "text", ""], ["newVideoViewMode", "新作品视图", "text", ""],
@@ -39,8 +36,12 @@ export function registerDefaultSettings(registry) {
         autoPage: "list", translateTitle: "list", enableLoadReview: "detail", enableLoadActressInfo: "detail",
         enableLoadOtherSite: "resources", enableMagnetsFilter: "filter",
     };
+    const quickContributions = { enableLoadScreenShot: "detail.screenshot", enablePreviewVideo: "detail.javdb-preview",
+        enableLoadPreviewVideo: "detail.javdb-preview", autoPage: "list.auto-page", translateTitle: "translation.title",
+        enableLoadReview: "detail.reviews", enableLoadActressInfo: "identity.actress-info", enableMagnetsFilter: "detail.native-magnets",
+        enable115Match: "external-bridge.115-match", enableLoadOtherSite: "external-sites.links" };
     /** @param {string} key @param {string} owner @param {string} label @param {Record<string, any>} [extra] */
-    const toggle = (key, owner, label, extra = {}) => registry.register({ key, owner, label, section: sections[key], ...boolean, defaultValue: extra.defaultValue ?? yes, ...extra });
+    const toggle = (key, owner, label, extra = {}) => registry.register({ key, owner, label, contribution: quickContributions[/** @type {keyof typeof quickContributions} */ (key)], section: sections[key], ...boolean, defaultValue: extra.defaultValue ?? yes, ...extra });
     /** @param {unknown} value @param {number} fallback @param {number} min @param {number} max */
     const normalizeInteger = (value, fallback, min, max) => {
         const parsed = Number(value);
@@ -49,6 +50,7 @@ export function registerDefaultSettings(registry) {
     };
 
     registry.register({ key: "enableSubtitle115Upload", owner: "SubtitleFeature", label: "115 字幕直传", section: "cloud", type: "boolean", defaultValue: true, effect: "live", surfaces: ["full"], normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, true) });
+    toggle("coverContextMenu", "ListPageFeature", "封面右键屏蔽菜单", { section: "filter", defaultValue: true, surfaces: ["full"], normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, true) });
     // ---- Screenshot（列表按钮与详情自动加载独立开关） ----
     toggle("enableScreenSvg", "ScreenshotFeature", "列表长缩略图", {
         description: "在列表卡片显示长缩略图入口",
@@ -137,8 +139,8 @@ export function registerDefaultSettings(registry) {
     });
     registry.register({ key: "mobileMode", owner: "LayoutFeature", label: "移动模式", type: "select", defaultValue: "auto", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动检测" }, { value: "on", label: "强制开启" }, { value: "off", label: "强制关闭" }]) });
     registry.register({ key: "themeMode", owner: "ThemeFeature", label: "主题", type: "select", defaultValue: "light", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }, { value: "auto", label: "跟随系统" }]) });
-    registry.register({ key: "containerColumns", owner: "LayoutFeature", label: "列表列数", type: "number", defaultValue: 5, effect: "live", surfaces: ["full"] });
-    registry.register({ key: "containerWidth", owner: "LayoutFeature", label: "列表宽度", type: "number", defaultValue: 100, effect: "live", surfaces: ["full"] });
+    registry.register({ key: "containerColumns", owner: "LayoutFeature", label: "列表列数", type: "number", defaultValue: 5, min: 2, max: 8, step: 1, integer: true, normalize: (/** @type {unknown} */ value) => normalizeInteger(value, 5, 2, 8), effect: "live", surfaces: ["full"] });
+    registry.register({ key: "containerWidth", owner: "LayoutFeature", label: "列表宽度", type: "number", defaultValue: 100, min: 70, max: 100, step: 1, integer: true, normalize: (/** @type {unknown} */ value) => normalizeInteger(value, 100, 70, 100), effect: "live", surfaces: ["full"] });
 
     registry.register({ key: "enableMediaLibrary", owner: "MediaLibraryFeature", label: "媒体库联动", type: "boolean", defaultValue: false, effect: "live", surfaces: [], normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, false) });
 
@@ -146,7 +148,7 @@ export function registerDefaultSettings(registry) {
     registry.register({ key: "screenshotMode", owner: "ScreenshotFeature", label: "截图来源模式", type: "select", defaultValue: "auto", effect: "manual", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动选择" }, { value: "manual", label: "手动选择" }]) });
     registry.register({ key: "screenshotProviders", owner: "ScreenshotFeature", label: "截图来源", type: "json", defaultValue: [], effect: "manual", surfaces: ["full"] });
     registry.register({ key: "enableClog", owner: "CoreFeature", label: "日志", type: "boolean", defaultValue: yes, effect: "live", surfaces: ["full"], options: Object.freeze([{ value: yes, label: "开启" }, { value: no, label: "关闭" }]) });
-    registry.register({ key: "videoMuted", owner: "PreviewVideoFeature", label: "视频默认静音", type: "boolean", defaultValue: true, effect: "live", surfaces: [] });
+    registry.register({ key: "videoMuted", owner: "PreviewVideoFeature", label: "视频默认静音", section: "media", type: "boolean", defaultValue: true, effect: "live", surfaces: ["full"], normalize: (/** @type {unknown} */ value) => parseBooleanSetting(value, true) });
 
     // ---- 云盘服务（与完整设置的云盘面板共用 Catalog / Binding） ----
     toggle("enable123Offline", "OfflineFeature", `${PRODUCT_NAMES.pan123}离线`, {

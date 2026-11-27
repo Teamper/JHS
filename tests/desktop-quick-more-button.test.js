@@ -109,7 +109,7 @@ describe("desktop quick setting full-settings button", () => {
         await Promise.all([...plugin._desktopQuickSurfaces.values()].map(surface => surface.loading));
 
         expect(openSettingDialog).toHaveBeenCalledTimes(1);
-        expect(openSettingDialog).toHaveBeenCalledWith("base-panel");
+        expect(openSettingDialog).toHaveBeenCalledWith("appearance-panel");
         expect(mini.data("jhsQuickSettingBinding")).toBeTruthy();
         expect(mini.css("display")).toBe("none");
         expect(normal.data("jhsQuickSettingBinding")).toBeFalsy();
@@ -131,7 +131,7 @@ describe("desktop quick setting full-settings button", () => {
         await Promise.all([...plugin._desktopQuickSurfaces.values()].map(surface => surface.loading));
 
         expect(openSettingDialog).toHaveBeenCalledTimes(1);
-        expect(openSettingDialog).toHaveBeenCalledWith("base-panel");
+        expect(openSettingDialog).toHaveBeenCalledWith("appearance-panel");
         expect(normal.data("jhsQuickSettingBinding")).toBeTruthy();
         expect(normal.css("display")).toBe("none");
         expect(mini.data("jhsQuickSettingBinding")).toBeFalsy();

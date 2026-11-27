@@ -9,7 +9,9 @@ import { getMovieStateEligibility, normalizeMovieCarNum } from "../../core/movie
 const JAVBUS_LIST_PREFIXES = new Set([ "star", "genre", "maker", "actress", "series", "tag", "search", "director", "studio", "label" ]);
 
 export class JavBusHostAdapter {
-    getPrivacySelectors() { return privacySelectors({ title: ".movie-box .photo-info span,.container > h3,.container > .row > h3", code: ".movie-box date,.info .header + span,.info p", actors: ".star-box,.star-name,.info a[href*='/star/']", images: ".movie-box img,.bigImage img,.sample-box img,.star-box img" }); }
+    /** @param {string} route */
+    getTitleKeywordSelector(route) { return route === "detail" ? ".row.movie h3,.container > h3,.current-title" : ".video-title,.jhs-fc2-title"; }
+    getPrivacySelectors() { return privacySelectors({ title: ".movie-box .photo-info span,.container > h3,.container > .row > h3", code: ".movie-box date,.info .header + span,.info p", actors: ".star-box,.star-name,.info a[href*='/star/']", images: ".avatar-box,.avatar-box img,.movie-box img,.bigImage img,.sample-box img,.star-box img" }); }
     locateMediaLibraryDetailRoot() { return this.detectRoute() === "detail" ? this.document.querySelector(".container .info") : null; }
     /** @param {Document} [documentRuntime] @param {Location | URL} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
     constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) { this.site = "javbus"; this.document = documentRuntime; this.location = locationRuntime; this.blacklistParser = blacklistParser; }
@@ -98,6 +100,17 @@ export class JavBusHostAdapter {
         }
         return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javbus", stateEligibility }) : null;
     }
+    readMovieActors() {
+        const panel = this.document.querySelector(".row.movie .info,.container .info");
+        const links = [...(panel?.querySelectorAll('a[href*="/star/"]') ?? [])];
+        const actors = links.flatMap(link => {
+            const url = new URL(link.getAttribute("href") || "", this.location.href), id = url.pathname.match(/\/star\/([^/]+)/u)?.[1];
+            const name = cleanActressName(readCleanActorElementText(link));
+            const role = /男|male/i.test(link.getAttribute("data-role") || link.querySelector("i")?.className || "") && !/female/i.test(link.querySelector("i")?.className || "") ? "actor" : "actress";
+            return id && name ? [{ starId: id, name, role, link }] : [];
+        });
+        return { actors, panel };
+    }
     readMovieInfo() {
         const ref = this.readMovieRef();
         if (!ref) return null;
@@ -116,7 +129,19 @@ export class JavBusHostAdapter {
             requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next",
         });
     }
-    getListLayoutContainer() { return this.document.querySelector(".container-fluid .row"); }
+    getListLayoutContainer() { return this.locateListRoot()?.closest(".container") ?? null; }
+    getPaginationBoundary() {
+        const list = this.getListLayoutContainer()?.querySelector("ul.pagination") ?? this.document.querySelector("ul.pagination");
+        if (!list?.querySelector(".active,[aria-current='page']")) return null;
+        const url = new URL(this.location.href);
+        const base = new URL(this.resolveFirstPageUrl(url.href)), prefix = base.pathname.split("/").filter(Boolean)[0] || "";
+        const page = base.pathname === url.pathname ? 1 : Number(url.pathname.split("/").filter(Boolean).at(-1)) || 1;
+        return { list, page, target: (/** @type {number} */ next) => {
+            const address = new URL(base);
+            if (next > 1) address.pathname = base.pathname.replace(/\/$/u, "") + (JAVBUS_LIST_PREFIXES.has(prefix) ? "/" : "/page/") + next;
+            return address.href;
+        } };
+    }
     /** @param {string[]} [classes] */
     createOwnedListRoot(classes = []) {
         const root = this.document.createElement("div");
@@ -130,7 +155,7 @@ export class JavBusHostAdapter {
             summary: root?.querySelector('[data-jhs-slot="summary-actions"]') ?? root?.querySelector(".row.movie") ?? null,
             resources: this.locateNativeMagnets(),
             reviews: root?.querySelector('[data-jhs-slot="reviews"]') ?? this.document.querySelector("#reviews"),
-            related: root?.querySelector('[data-jhs-slot="related"]'),
+            related: root?.querySelector('[data-jhs-slot="related"]') ?? root?.querySelector(".row.movie")?.parentElement,
         });
     }
     /** Mount JHS detail actions before the native offline-submit control. @param {Element} element */
@@ -140,7 +165,7 @@ export class JavBusHostAdapter {
         target.before(element);
         return true;
     }
-    locateNativeGallery() { return this.document.querySelector("#sample-waterfall, .sample-box"); }
+    locateNativeGallery() { return this.document.querySelector("#sample-waterfall, .sample-box:not(.screen-container)"); }
     getDetailImageSequence() {
         return readJavBusDetailImageSequence(this.locateDetailRoot(), this.location.href);
     }

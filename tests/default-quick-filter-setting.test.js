@@ -50,7 +50,7 @@ describe("default quick-filter setting", () => {
         const options = select.find("option").map((_, option) => ({ value: option.value, label: option.textContent })).get();
         expect(options.map(({ value }) => value)).toEqual([
             "all", "waitCheck", "favorite", "hasDown", "hasWatch", "blockedItems", "undownloaded",
-            "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d",
+            "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d", "favoriteActress", "rated",
         ]);
         expect(registry.get("defaultQuickFilterTab").options).toEqual(options);
         expect(select.find('option[value="undownloaded"]').text()).toBe("全部未下载");
@@ -58,7 +58,7 @@ describe("default quick-filter setting", () => {
         expect(select.val()).toBe("waitCheck");
     });
 
-    it.each(["blockedItems", "undownloaded", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d"])(
+    it.each(["blockedItems", "undownloaded", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d", "favoriteActress", "rated"])(
         "persists and reloads %s through the original settings binding", async value => {
             const { root, binding, stored, storage } = await createHarness({ defaultQuickFilterTab: "waitCheck" });
             root.find("#defaultQuickFilterTab").val(value).trigger("change");

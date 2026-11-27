@@ -361,7 +361,7 @@ export async function showSettings(root, app, route, scope) {
     summaries.connections.textContent = "JavDB、云盘与媒体库";
     void s.webdavSync.getStatus().then((/** @type {any} */ status) => {
         if (!scope.disposed) summaries.sync.textContent = status.configured ? "WebDAV 已连接" : "WebDAV 未连接";
-    }).catch(() => {});
+    }).catch(() => { if (!scope.disposed) summaries.sync.textContent = "WebDAV 状态读取失败"; });
     if (route.section) {
         showGroup(route.section);
         await hydrate(route.section);

@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 export class RemoteSettings extends EventTarget {
     /** @param {import("../platform/extension/client.js").ExtensionClient} client */
     constructor(client) {
@@ -32,7 +33,7 @@ export class RemoteSettings extends EventTarget {
             return this.accept(await this.client.call("settings.commit", [Object.fromEntries(changed.map(key => [key, { before: base[key], exists: Object.hasOwn(draft, key), value: draft[key] }]))]));
         };
         const operation = this.writeChain.then(execute);
-        this.writeChain = operation.catch(() => {});
+        this.writeChain = waitForSettlement(operation);
         return operation;
     }
     /** @param {(draft: Record<string, any>) => any} mutator */

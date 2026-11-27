@@ -45,6 +45,7 @@ export async function openNewVideoDialog(owner, /** @type {number} */ generation
                     <div class="jhs-new-video-toolbar__actions">
                         <button type="button" class="jhs-btn jhs-btn--secondary" id="checkFavoriteActress" data-tip="${escapeHtml(tips.favorite)}">${owner.actressSvg}<span>手动同步演员</span></button>
                         <button type="button" class="jhs-btn jhs-btn--secondary" id="checkNewVideo" data-tip="${escapeHtml(tips.newVideo)}">${owner.newSvg}<span>检测新作品</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--ghost" id="nvBackfillProfiles"><span>补齐身材资料</span></button>
                         <button type="button" class="jhs-btn jhs-btn--ghost" id="reLoad">${owner.refreshSvg}<span>刷新</span></button>
                         <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${owner.settingSvg}<span>设置</span></button>
                     </div>
@@ -54,8 +55,14 @@ export async function openNewVideoDialog(owner, /** @type {number} */ generation
                     </div>
                 </div>
                 <div class="jhs-new-video-searchbar">
-                    <input id="nvSearch" class="jhs-field jhs-is-hidden" type="search" placeholder="搜索番号、标题或演员" aria-label="搜索新作品">
+                    <input id="nvSearch" class="jhs-field" type="search" placeholder="搜索番号、标题或演员" aria-label="搜索新作品">
                     <button type="button" id="nvFilterToggle" class="jhs-btn jhs-btn--secondary" aria-expanded="false" aria-controls="nv-filter-panel">${getIcon("list")}<span>筛选</span></button>
+                </div>
+                <div id="nv-actor-filter" class="jhs-toolbar" aria-label="演员状态">
+                    <button type="button" class="jhs-btn jhs-btn--ghost" data-nv-actor-filter="all" aria-pressed="true">全部</button>
+                    <button type="button" class="jhs-btn jhs-btn--ghost" data-nv-actor-filter="new" aria-pressed="false">有新作品</button>
+                    <button type="button" class="jhs-btn jhs-btn--ghost" data-nv-actor-filter="unavailable" aria-pressed="false">来源不可用</button>
+                    <button type="button" class="jhs-btn jhs-btn--ghost" data-nv-actor-filter="paused" aria-pressed="false">停更</button>
                 </div>
                 <div id="nv-filter-panel" class="jhs-new-video-toolbar__filters" aria-label="新作品筛选">
                     <label class="jhs-new-video-filter-field"><span>演员类型</span><select id="paramActressType" class="jhs-select-source" aria-label="演员类型"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option></select></label>
@@ -65,7 +72,7 @@ export async function openNewVideoDialog(owner, /** @type {number} */ generation
                     <label class="jhs-new-video-filter-field"><span>演员排序</span><select id="paramSortBy" class="jhs-select-source" aria-label="演员排序">
                         <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
                     </select></label>
-                    <label class="jhs-new-video-filter-field"><span>新作品排序</span><select id="nvSortBy" class="jhs-select-source jhs-is-hidden" aria-label="新作品排序"><option value="publishTime_desc" selected>发行时间 新→旧</option><option value="publishTime_asc">发行时间 旧→新</option><option value="voteCount_desc">评价人数 多→少</option><option value="voteCount_asc">评价人数 少→多</option><option value="actress_asc">演员名 A→Z</option><option value="actress_desc">演员名 Z→A</option><option value="carNum_asc">番号 A→Z</option><option value="carNum_desc">番号 Z→A</option></select></label>
+                    <label class="jhs-new-video-filter-field"><span>新作品排序</span><select id="nvSortBy" class="jhs-select-source jhs-is-hidden" aria-label="新作品排序"><option value="publishTime_desc" selected>发行时间 新→旧</option><option value="publishTime_asc">发行时间 旧→新</option><option value="score_desc">评分 高→低</option><option value="score_asc">评分 低→高</option><option value="voteCount_desc">评价人数 多→少</option><option value="voteCount_asc">评价人数 少→多</option><option value="actress_asc">演员名 A→Z</option><option value="actress_desc">演员名 Z→A</option><option value="carNum_asc">番号 A→Z</option><option value="carNum_desc">番号 Z→A</option></select></label>
                     <div class="jhs-new-video-filter-field jhs-nv-range-field">
                         <span id="nvHeightLabel">身高(cm)</span>
                         <div class="jhs-nv-range-inputs" role="group" aria-labelledby="nvHeightLabel">
@@ -108,7 +115,7 @@ export async function openNewVideoDialog(owner, /** @type {number} */ generation
         title: '<span class="jhs-dialog-title" data-tip="数据来自演员首页，含磁力分类">新作品检测</span>',
         content: o,
         scrollbar: !1,
-        ui: { size: "workspace", body: "scroll" },
+        ui: { size: "workspace", body: "table" },
         anim: -1,
         success: async (/** @type {HTMLElement | {0: HTMLElement}} */ e, /** @type {number} */ t) => {
             if (owner.disposed || generation !== owner.nvDialogGeneration || ended) return;
@@ -159,7 +166,7 @@ export function bindWorkspaceLayout(owner) {
     owner.workspaceLayoutScope?.dispose();
     const scope = owner.workspaceLayoutScope = new LifecycleScope("new-video-layout"), root = owner.nvWorkspaceRoot;
     owner.nvFiltersExpanded = false; owner.nvTasksExpanded = false;
-    owner.workspaceCommands = ["checkFavoriteActress", "checkNewVideo", "reLoad", "toSetting"].map(id => ({ id, button: root.find(`#${id}`), label: root.find(`#${id} span`).last().text() }));
+    owner.workspaceCommands = ["checkFavoriteActress", "checkNewVideo", "nvBackfillProfiles", "reLoad", "toSetting"].map(id => ({ id, button: root.find(`#${id}`), label: root.find(`#${id} span`).last().text() }));
     const anchor = root.find("#nvWorkspaceMore"), menu = root.find(".jhs-new-video-more__menu");
     if (anchor.length && menu.length) {
         const popover = owner.workspaceMorePopover = new OwnedPopover(anchor[0], menu[0]);
@@ -203,7 +210,7 @@ export function syncWorkspaceLayout(owner) {
     }
     root.find("#nv-filter-panel").prop("hidden", compact && !owner.nvFiltersExpanded);
     root.find("#nvFilterToggle").attr("aria-expanded", String(!!owner.nvFiltersExpanded));
-    root.find("#jhs-task-status-list").prop("hidden", compact && !owner.nvTasksExpanded);
+    root.find("#jhs-task-status-list").prop("hidden", !owner.nvTasksExpanded);
     root.find("#nvTaskToggle").attr("aria-expanded", String(!!owner.nvTasksExpanded));
     owner.syncFilterSummary();
     if (changed && owner._viewMode === "list") owner.renderBatchBar();
@@ -275,13 +282,20 @@ export function bindClick(owner) {
         }
     })), owner.jquery("#toSetting").on("click", ((/** @type {JQueryEvent} */ e) => {
         owner.openTaskSettings?.(() => {
-            owner.jquery("#setting-checkFavoriteActress").css({
-                border: "1px solid var(--jhs-accent)"
-            }), owner.jquery("#setting-checkNewVideo").css({
-                border: "1px solid var(--jhs-accent)"
-            });
+            owner.jquery("#setting-checkFavoriteActress,#setting-checkNewVideo").addClass("jhs-setting-highlight")
+                .one("animationend", (/** @type {JQueryEvent} */ event) => owner.jquery(event.currentTarget).removeClass("jhs-setting-highlight"));
         });
     }));
+    owner.jquery("#nvBackfillProfiles").on("click", async (/** @type {JQueryEvent} */ event) => {
+        const button = owner.jquery(event.currentTarget).prop("disabled", true).attr("aria-busy", "true");
+        try { await owner.requestActressProfileBackfill(); }
+        finally { button.prop("disabled", false).removeAttr("aria-busy"); }
+    });
+    owner.jquery("#nv-actor-filter").on("click", "button", (/** @type {JQueryEvent} */ event) => {
+        owner.jquery("#nv-actor-filter button").attr("aria-pressed", "false");
+        owner.jquery(event.currentTarget).attr("aria-pressed", "true");
+        refreshView();
+    });
     owner.jquery("#checkFavoriteActress").on("click", ((/** @type {JQueryEvent} */ event) => {
         void owner.runManualTask(owner.jquery(event.currentTarget), "同步中…", (async task => {
             if (!owner.jquery('a[href*="/users/profile"]').length) return void owner.notifications.error(`请先登录 ${PRODUCT_NAMES.javdb}`);
@@ -322,7 +336,7 @@ export function setViewMode(owner, /** @type {string} */ mode) {
 export function applyViewMode(owner) {
     const list = "list" === owner._viewMode;
     owner.jquery("#nv-pagination-bar").toggle(list);
-    owner.jquery("#actress-card-container").toggle(!list), owner.jquery("#actress-pagination").toggle(!list), owner.jquery("#new-video-list-container").toggle(list), owner.jquery("#new-video-list-footer").toggle(list), JhsSelect.setVisible("#paramSortBy", !list), JhsSelect.setVisible("#nvSortBy", list), JhsSelect.setVisible("#paramActressType", !list), JhsSelect.setVisible("#nvCategoryFilter", list), JhsSelect.setVisible("#nvStateFilter", list), JhsSelect.setVisible("#nvDecisionFilter", list), owner.jquery("#nvSearch").toggleClass("jhs-is-hidden", !list), owner.jquery(".jhs-new-video-view [role='tab']").each(((/** @type {number} */ index, /** @type {HTMLElement} */ tab) => {
+    owner.jquery("#actress-card-container").toggle(!list), owner.jquery("#actress-pagination").toggle(!list), owner.jquery("#new-video-list-container").toggle(list), owner.jquery("#new-video-list-footer").toggle(list), JhsSelect.setVisible("#paramSortBy", !list), JhsSelect.setVisible("#nvSortBy", list), JhsSelect.setVisible("#paramActressType", !list), JhsSelect.setVisible("#nvCategoryFilter", list), JhsSelect.setVisible("#nvStateFilter", list), JhsSelect.setVisible("#nvDecisionFilter", list), owner.jquery("#nv-actor-filter").toggle(!list), owner.jquery("#nvSearch").attr({ placeholder: list ? "搜索番号、标题或演员" : "搜索演员名、别名或备注", "aria-label": list ? "搜索新作品" : "搜索演员" }), owner.jquery(".jhs-new-video-view [role='tab']").each(((/** @type {number} */ index, /** @type {HTMLElement} */ tab) => {
         const active = owner.jquery(tab).data("view") === owner._viewMode;
         owner.jquery(tab).attr({ "aria-selected": String(active), tabindex: active ? "0" : "-1" }).toggleClass("active", active);
     }));

@@ -116,7 +116,7 @@ export class JavDbNavigationController {
         box.className = "navbar-menu jhs-ui";
         box.id = "search-box";
         const controls = this.document.createElement("div");
-        controls.className = "navbar-start jhs-layout-d9caa2c0";
+        controls.className = "navbar-start jhs-navigation-controls";
         const type = this.document.createElement("select");
         type.id = "search-type";
         type.className = "jhs-select-source";

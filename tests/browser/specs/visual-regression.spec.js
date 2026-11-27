@@ -71,6 +71,11 @@ for (const [label, url, selector] of pages) {
       await page.waitForTimeout(300);
       await expect(page.locator(selector).first()).toBeVisible();
       if (fc2) await expect(page.locator('[data-jhs-action="javdb-watched"]')).toBeEnabled();
+      if (label.endsWith("Detail")) {
+        const badge = page.locator(".jhs-badge[data-jhs-privacy-kind=title]");
+        await expect(badge).toHaveCount(1);
+        await expect(badge).toBeHidden();
+      }
       await expect(page).toHaveScreenshot(`${label.replace(/\s+/g, "-")}-${theme}.png`, { fullPage: false, maxDiffPixelRatio: 0.02 });
     });
   }
@@ -83,6 +88,7 @@ test("Settings dialog visual baseline", async ({ context, page }, testInfo) => {
   await injectUserscriptRuntime(page);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  await expect(page.locator(".layui-layer #discardSettingsBtn")).toBeHidden();
   for (const id of ["containerColumns", "containerWidth"]) {
     const geometry = await page.locator(`.layui-layer #${id}`).evaluate(input => {
       const control = input.closest(".jhs-setting-row__control"), output = control.querySelector("output");
@@ -183,6 +189,9 @@ for (const theme of ["light", "dark"]) {
     const dialog = page.locator('.layui-layer').filter({ has: page.locator('.jhs-fc2-dialog-host') }).first();
     await expect(dialog.locator(".jhs-fc2-workspace")).toBeVisible();
     await expect(dialog.locator('[data-jhs-action="javdb-watched"]')).toBeEnabled();
+    const badge = dialog.locator(".jhs-badge[data-jhs-privacy-kind=title]");
+    await expect(badge).toHaveCount(1);
+    await expect(badge).toBeHidden();
     await expect(dialog.locator(".jhs-review-item")).toHaveCount(2);
     await expect(dialog.locator(".jhs-related-item")).toHaveCount(2);
     const geometry = await page.evaluate(() => {

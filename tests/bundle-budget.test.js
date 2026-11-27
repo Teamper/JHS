@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { join, resolve, sep } from "node:path";
 import { createDevTransforms } from "../scripts/dev-metadata.mjs";
 
 const scratchRoots = [];
+const scratchDirectory = fileURLToPath(new URL("../output", import.meta.url));
 const bundle = {
     baselineBytes: 1170844, referenceBytes: 1170844, referenceCommit: "4ea5536",
     softLimitBytes: 1600000, hardLimitBytes: 2000000,
@@ -18,13 +19,14 @@ const dev = Buffer.from(`${transformMetadata(header)}\n${transformBundle("")}`);
 
 afterEach(async () => {
     for (const root of scratchRoots.splice(0)) {
-        if (!resolve(root).startsWith(resolve(tmpdir()) + sep)) throw new Error("Unsafe scratch path");
+        if (!resolve(root).startsWith(resolve(scratchDirectory) + sep)) throw new Error("Unsafe scratch path");
         await rm(root, { recursive: true, force: true });
     }
 });
 
 async function runGate(sizeBytes, overrides = {}, env = {}, source = "") {
-    const root = await mkdtemp(join(tmpdir(), "jhs-bundle-budget-"));
+    await mkdir(scratchDirectory, { recursive: true });
+    const root = await mkdtemp(join(scratchDirectory, "jhs-bundle-budget-"));
     scratchRoots.push(root);
     await mkdir(join(root, "scripts"));
     await mkdir(join(root, "dist", "dev"), { recursive: true });
@@ -107,6 +109,9 @@ it.each([
     ['console.log("debug")', "bypasses the shared logger"],
     ["try { action(); } catch {}", "undocumented empty catch block"],
     ["try { action(); } catch (error) {}", "undocumented empty catch block"],
+    ["request.catch(() => {})", "discards a promise rejection silently"],
+    ["request.catch(() => null)", "discards a promise rejection silently"],
+    ["request.catch(function() { return (undefined); })", "discards a promise rejection silently"],
     ['const css = ".probe { z-index: 123 }";', "numeric z-index"],
     ['const html = `<button style="color:red">OK</button>`;', "static inline style"],
     ['const html = `<button class="button is-primary jhs-btn">OK</button>`;', "mixes JHS and Bulma"],

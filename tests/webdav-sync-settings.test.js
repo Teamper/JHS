@@ -3,7 +3,7 @@ import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { emptySyncModel, projectSyncData, syncFileName, syncHash, validateSyncEnvelope, validateSyncState, versionSyncDiff } from "../src/core/webdav-sync-model.js";
 import { encryptPortableBackup } from "../src/core/credential-crypto.js";
-import { SYNC_JOURNAL_KEY } from "../src/core/webdav-sync-store.js";
+import { SYNC_JOURNAL_KEY, SYNC_STATE_KEY } from "../src/core/webdav-sync-store.js";
 import { memoryDav, syncReplica } from "./helpers/webdav-sync-fixture.js";
 
 const replicaId = "11111111-1111-4111-8111-111111111111", createdAt = "2026-10-22T00:00:00.000Z";
@@ -72,5 +72,43 @@ describe("descriptor-owned synchronized setting validation", () => {
         await expect(local.store.merge([model({ themeMode: "bad-mode" })], "binding", async () => {})).rejects.toThrow("themeMode");
         expect(local.values.get("setting")).toEqual({ themeMode: "light" });
         expect(local.values.has(SYNC_JOURNAL_KEY)).toBe(false);
+    });
+
+    it("joins a library when a legacy preference exists with an undefined value", async () => {
+        const dav = memoryDav(), local = await syncReplica(dav, { data: { setting: { themeMode: undefined, videoMuted: false } } });
+        await local.service.check();
+        expect(dav.files.size).toBe(1);
+        expect(local.values.get("setting")).not.toHaveProperty("themeMode");
+        expect(local.values.get("setting").videoMuted).toBe(false);
+    });
+
+    it.each([false, true])("repairs a persisted undefined setting after restart (previously deleted: %s)", async deleted => {
+        const dav = memoryDav(), local = await syncReplica(dav, { data: { setting: { themeMode: "dark", videoMuted: false } } });
+        await local.service.check();
+        const key = "setting/themeMode", state = local.values.get(SYNC_STATE_KEY);
+        const record = state.model.records[key];
+        record.fields.value = { v: [++state.counter, state.replicaId], value: undefined };
+        const settings = local.values.get("setting");
+        if (deleted) {
+            record.death = [++state.counter, state.replicaId];
+            delete state.shadow[key];
+            delete settings.themeMode;
+        } else {
+            state.shadow[key] = { value: undefined };
+            settings.themeMode = undefined;
+        }
+        expect(() => validateSyncState(state.model, validateSetting)).toThrow(key);
+
+        const restarted = await local.restart();
+        await restarted.service.check();
+        const repaired = await restarted.store.read();
+        expect(validateSyncState(repaired.model, validateSetting)).toBe(repaired.model);
+        expect(repaired.model.records[key].death).toEqual(record.death ?? record.fields.value.v);
+        expect(repaired.shadow).not.toHaveProperty(key);
+
+        const peer = await syncReplica(dav, { data: { setting: { themeMode: "light" } } });
+        await peer.service.check();
+        expect(peer.values.get("setting")).not.toHaveProperty("themeMode");
+        expect(peer.values.get("setting").videoMuted).toBe(false);
     });
 });

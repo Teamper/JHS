@@ -95,6 +95,25 @@ export class JavDbListService extends EventTarget {
         if (!selected.size) throw new Error("请先选择影片");
         return [...selected.values()];
     }
+    /** Accept each movie independently, keeping only unambiguous IDs in the task. @param {any[]} movies @param {string} origin */
+    partitionMovies(movies, origin) {
+        const accepted = new Map(), conflicts = new Set(), skipped = [];
+        for (const movie of movies) {
+            try {
+                const [item] = this.normalizeMovies([movie], origin);
+                const previous = accepted.get(item.videoId);
+                if (conflicts.has(item.videoId) || previous && previous.carNum !== item.carNum) {
+                    conflicts.add(item.videoId);
+                    if (previous) skipped.push({ carNum: previous.carNum, reason: "链接对应多个番号" });
+                    accepted.delete(item.videoId);
+                    skipped.push({ carNum: item.carNum, reason: "链接对应多个番号" });
+                } else accepted.set(item.videoId, item);
+            } catch (error) {
+                skipped.push({ carNum: String(movie.carNum || "未知番号"), reason: error instanceof Error ? error.message : "来源无法核对" });
+            }
+        }
+        return { movies: [...accepted.values()], skipped };
+    }
     /** @param {{movies: any[], lists: any[], checked: boolean, expectedAccount: string}} input @param {any} [scope] */
     async createTask(input, scope) {
         if (this.disposed) throw new Error("清单功能已停用");
@@ -128,6 +147,32 @@ export class JavDbListService extends EventTarget {
             if (task?.origin === this.context()?.origin) tasks.push(task);
         }
         return tasks.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+    }
+    /** @param {string} expectedAccount @param {any} scope */
+    async clearCompleted(expectedAccount, scope) {
+        const access = await this.access(scope);
+        if (!access.writable || access.account?.fingerprint !== expectedAccount) throw failure("LIST_ACCOUNT_CHANGED", "网页账号已变化，请重新核对");
+        let removed = 0;
+        for (const task of await this.listTasks()) {
+            if (task.state !== "complete" || task.accountFingerprint !== expectedAccount) continue;
+            this.validateTask(task);
+            await this.locks.request(`jhs_javdb_list_task:${task.origin}:${task.id}`, { ifAvailable: true }, async (/** @type {any} */ lock) => {
+                if (!lock) return;
+                scope.assertActive();
+                const key = PREFIX + task.id, current = await this.storage.get(key);
+                if (current?.state !== "complete" || current.accountFingerprint !== expectedAccount) return;
+                const results = await this.readResults(task);
+                const deletes = [key, ...[...results.keys()].map(pair => key + "/" + pair)];
+                if (this.storage.canCommitLockedBatch) {
+                    if (!await this.storage.commitLockedBatch({ puts: {}, deletes })) throw new Error("清单记录清除失败");
+                } else {
+                    for (const entry of deletes.slice(1)) await this.storage.remove(entry);
+                    await this.storage.remove(key);
+                }
+                removed++;
+            });
+        }
+        return removed;
     }
     /** @param {any} task */
     async readResults(task) {

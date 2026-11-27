@@ -103,10 +103,14 @@ export const NEW_VIDEO_STYLES = `.newVideoToolBox { display:flex; flex-direction
                 .jhs-new-video-commandbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--jhs-space-2); width:100%; }
                 .jhs-new-video-searchbar { display:flex; align-items:center; gap:var(--jhs-space-2); min-width:0; }
                 .jhs-new-video-searchbar #nvSearch { width:240px; min-width:0; }
-                .jhs-new-video-more, #nvFilterToggle, #nvTaskToggle { display:none; }
+                .jhs-new-video-more, #nvFilterToggle { display:none; }
                 .jhs-new-video-toolbar__filters { align-items:flex-end; flex:1 1 auto; min-width:0; }
                 .jhs-new-video-filter-field { display:grid; min-width:0; gap:var(--jhs-space-1); margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
                 .jhs-new-video-toolbar #checkNewVideoMsg:empty { display:none; }
+                #nvTaskToggle { display:flex; min-height:var(--jhs-control-height); justify-content:space-between; }
+                #nvTaskToggle[aria-expanded="true"] svg { transform:rotate(180deg); }
+                .jhs-new-video-toolbar__filters :is(.jhs-btn,.jhs-field,.jhs-option-row) { min-height:var(--jhs-control-height); }
+                @media (max-width:767px), (pointer:coarse) { .jhs-new-video-toolbar__filters :is(.jhs-btn,.jhs-field,.jhs-option-row) { min-height:var(--jhs-touch-target); } }
                 .jhs-new-video-tasks { flex:0 0 auto; min-width:0; }
                 #actress-card-container { flex:1; min-height:160px; align-content:start; }
                 #new-video-list-container { min-height:160px; }

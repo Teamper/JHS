@@ -6,11 +6,12 @@ import { assertMovieStateEligible, getMovieStateEligibility } from "../../core/m
 
 /** Keep the list-card block action inside the List Feature lifecycle. */
 export class ListContextMenuController {
-    /** @param {{hostAdapter: any, list: any, state: any, ui: any, notifications: any, scope: any, diagnostics?: any}} options */
+    /** @param {{hostAdapter: any, list: any, state: any, ui: any, notifications: any, scope: any, diagnostics?: any, settings?: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.list = options.list;
         this.state = options.state;
+        this.settings = options.settings;
         this.ui = options.ui;
         this.notifications = options.notifications;
         this.scope = options.scope;
@@ -34,6 +35,7 @@ export class ListContextMenuController {
 
     /** @param {Event} event */
     onContextMenu(event) {
+        if (this.settings?.snapshot().coverContextMenu === false) return;
         const element = /** @type {Element | null} */ (event.target && typeof /** @type {any} */ (event.target).closest === "function" ? event.target : null);
         if (!element || !element.closest(".item img, .item video")) return;
         const card = element.closest(".item");
@@ -41,12 +43,14 @@ export class ListContextMenuController {
         event.preventDefault();
         try {
             const record = this.readEligibleCard(card);
+            const blocked = JSON.parse(card.getAttribute("data-jhs-flags") || "{}").blocked === true;
             const actorName = this.getActorName();
+            const action = blocked ? "取消屏蔽" : "屏蔽";
             this.ui.confirm(
                 { clientX: /** @type {MouseEvent} */ (event).clientX, clientY: /** @type {MouseEvent} */ (event).clientY },
-                `屏蔽「${escapeHtml(record.carNum)}」？`,
-                () => this.blockMovie({ ...record, actorName }, card),
-                { confirmText: "屏蔽" },
+                `${action}「${escapeHtml(record.carNum)}」？`,
+                () => this.blockMovie({ ...record, actorName }, card, !blocked),
+                { confirmText: action },
             );
         } catch (error) {
             this.recordError("右键屏蔽菜单处理失败", error);
@@ -75,20 +79,21 @@ export class ListContextMenuController {
     }
 
     /** @param {{carNum: string, url: string, publishTime?: string, fc2Source?: string, actorName: string, stateEligibility?: any}} record @param {Element} [card] */
-    async blockMovie(record, card) {
+    async blockMovie(record, card, blocked = true) {
         if (this.disposed || this.scope.disposed) return;
         try {
             let source = card ? this.readEligibleCard(card, record.carNum) : record;
             assertMovieStateEligible(source);
-            const names = record.actorName || await this.list.parseActressName?.(source.url, this.scope);
+            const names = blocked ? record.actorName || await this.list.parseActressName?.(source.url, this.scope) : "";
             if (this.disposed || this.scope.disposed) return;
             source = card ? this.readEligibleCard(card, record.carNum) : record;
             const stateEligibility = assertMovieStateEligible(source);
-            await this.state.patch(source.carNum, { blocked: true }, {
+            await this.state.patch(source.carNum, { blocked }, {
+                ...(blocked ? {} : { existingOnly: true }),
                 record: { carNum: source.carNum, url: source.url, names, publishTime: source.publishTime, fc2Source: source.fc2Source, stateEligibility },
             });
             if (this.disposed || this.scope.disposed) return;
-            this.notifications.ok("已屏蔽");
+            this.notifications.ok(blocked ? "已屏蔽" : "已取消屏蔽");
         } catch (error) {
             if (this.disposed || this.scope.disposed) return;
             this.recordError("列表屏蔽操作失败", error);

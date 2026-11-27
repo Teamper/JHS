@@ -9,7 +9,7 @@ describe("cloud task queries", () => {
     it("reads signed 123 task pages through the integration", async () => {
         const http = { request: vi.fn(async () => ({ data: fixture("pan123") })) };
         const adapter = createPan123Adapter(http, { now: () => new Date("2026-11-16T00:00:00Z"), nonce: () => 1 });
-        expect(await adapter.listTasks({ token: "fixture-token" })).toMatchObject({ total: 1, items: [{ id: "1001", status: "1", progress: 25 }] });
+        expect(await adapter.listTasks({ token: "fixture-token" })).toMatchObject({ total: 1, items: [{ id: "1001", status: "下载中", progress: 25 }] });
         expect(http.request.mock.calls[0][0]).toMatchObject({ capability: "offline.list", method: "POST", headers: { Authorization: "Bearer fixture-token" } });
         expect(JSON.parse(http.request.mock.calls[0][0].body)).toEqual({ current_page: 1, page_size: 100, status_arr: [0, 1, 2, 3] });
         await expect(adapter.listTasks()).rejects.toMatchObject({ code: "AUTH_REQUIRED" });

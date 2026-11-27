@@ -1,4 +1,4 @@
-import { openUtility } from "../harness/enhancement-navigation.js";
+import { openDetailEnhancements, openUtility } from "../harness/enhancement-navigation.js";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -208,5 +208,39 @@ for (const theme of ["light", "dark"]) test(`media list schedules visible cards 
     await first.screenshot({ path: info.outputPath(`media-list-private-${theme}.png`) });
     await first.locator(".jhs-media-badge").getByRole("button", { name: "刷新媒体库", exact: true }).click();
     await expect(first.locator(".jhs-media-badge")).toContainText("已入库");
+    expect(errors).toEqual([]);
+});
+
+
+test("detail remarks save as text and can be found in history", async ({ page, context }, info) => {
+    test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop and compact remark coverage");
+    const errors = await boot(page, context, "light");
+    await openDetailEnhancements(page);
+    await page.getByRole("menuitem", { name: "编辑备注" }).click();
+    const dialog = page.getByRole("dialog", { name: "作品备注" }), field = dialog.getByRole("textbox", { name: "作品备注" });
+    const note = "保留这条 <b>作品备注</b>";
+    await field.fill(note);
+    await dialog.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    const badge = page.locator(".jhs-badge").filter({ hasText: "保留这条" });
+    await expect(badge).toHaveText(note);
+    await expect(badge.locator("b")).toHaveCount(0);
+
+    await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));
+    const search = page.getByPlaceholder("搜索番号、演员或备注");
+    await expect(page.locator(".tabulator-row .history-detailBtn")).toHaveCount(1);
+    await search.fill("没有这条记录");
+    await search.press("Enter");
+    await expect(page.locator(".tabulator-row .history-detailBtn")).toHaveCount(0);
+    await search.fill("保留这条");
+    await search.press("Enter");
+    await expect(page.locator(".tabulator-row .history-detailBtn")).toHaveCount(1);
+    await page.locator('.tabulator-row input[type="checkbox"]').check();
+    const batch = page.locator("#allSelectBox");
+    await expect(batch).toBeVisible();
+    const heights = await batch.locator("[data-history-batch], .multiple-history-deleteBtn").evaluateAll(buttons =>
+        buttons.map(button => button.getBoundingClientRect().height));
+    expect(heights).toHaveLength(5);
+    expect(new Set(heights).size).toBe(1);
     expect(errors).toEqual([]);
 });

@@ -196,6 +196,7 @@ export async function openRebindActorDialog(owner, /** @type {ActorRecord} */ ac
         type: 1, title: `重新绑定演员来源：${safe(actress.name)}`, ui: { size: "sm", body: "scroll" }, content: root, btn: ["关闭"],
         success: (/** @type {HTMLElement} */ _layer, /** @type {number} */ id) => {
             dialogId = id;
+            owner.jquery(_layer).find(".layui-layer-title").attr("data-jhs-privacy-kind", "actor");
             owner.utils.setupEscClose?.(id);
             scope.addCleanup(() => owner.utils.releaseEscClose?.(id));
             void runSearch();

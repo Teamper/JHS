@@ -82,7 +82,7 @@ describe("full settings WebDAV save transaction", () => {
         expect(test.root.find("#reviewCount").val()).toBe("40");
         expect(test.utilities.q.mock.calls[0][4]).toEqual({ confirmText: "授权", cancelText: "取消" });
         await expect(saveSettingForm(test.dependencies, test.root)).resolves.toEqual({ ok: true });
-        expect(test.stored.setting).toMatchObject({ reviewCount: "40", webDavUrl: "https://new.example/dav", webDavUsername: "new-user", trustedLocalOrigins: ["https://old.example", "https://new.example"] });
+        expect(test.stored.setting).toMatchObject({ reviewCount: 40, webDavUrl: "https://new.example/dav", webDavUsername: "new-user", trustedLocalOrigins: ["https://old.example", "https://new.example"] });
         expect(test.password()).toBe("new-password");
     });
 
@@ -113,7 +113,7 @@ describe("full settings WebDAV save transaction", () => {
         test.stored.setting = { ...test.stored.setting, themeMode: "dark", foreignValue: "latest", trustedLocalOrigins: ["https://old.example", "https://other-tab.example"] };
         await expect(saveSettingForm(test.dependencies, test.root)).resolves.toEqual({ ok: true });
         expect(test.storage.set).toHaveBeenCalledOnce();
-        expect(test.stored.setting).toMatchObject({ reviewCount: "40", webDavUrl: "https://new.example/dav", webDavUsername: "new-user", themeMode: "dark", foreignValue: "latest", trustedLocalOrigins: ["https://old.example", "https://other-tab.example", "https://new.example"] });
+        expect(test.stored.setting).toMatchObject({ reviewCount: 40, webDavUrl: "https://new.example/dav", webDavUsername: "new-user", themeMode: "dark", foreignValue: "latest", trustedLocalOrigins: ["https://old.example", "https://other-tab.example", "https://new.example"] });
         expect(test.stored.setting).not.toHaveProperty("webDavPassword");
         expect(test.password()).toBe("new-password");
         expect(test.root.data("jhsDirtyManualKeys").size).toBe(0);

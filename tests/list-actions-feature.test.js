@@ -60,7 +60,7 @@ describe("native list actions controller", () => {
         await harness.controller.start();
         expect(harness.$("#addBlacklistBtn").text()).toBe("已加入黑名单");
         const actions = await harness.controller.getPageActions();
-        expect(actions.map(action => action.id)).toEqual(["batch-favorite", "batch-downloaded", "batch-block", "blacklist-add"]);
+        expect(actions.map(action => action.id)).toEqual(["batch-favorite", "batch-downloaded", "batch-watched", "batch-block", "blacklist-add"]);
         const execute = vi.spyOn(harness.controller, "executePageAction"); harness.$("#favoriteAllVideo").trigger("click");
         await vi.waitFor(() => expect(harness.controller.list.batchSaveAllVideos).toHaveBeenCalledOnce()); expect(execute).toHaveBeenCalledWith("batch-favorite");
         expect(harness.controller.list.batchSaveAllVideos).toHaveBeenCalledWith({ kind: "actor", displayName: "Actor", recordName: "Actor" }, "favorite");

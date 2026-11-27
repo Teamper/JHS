@@ -1,5 +1,6 @@
 // @ts-check
 
+import { PAN123_WEB_HOSTS } from "../core/pan123-origins.js";
 import { decryptData, encryptData } from "../core/credential-crypto.js";
 
 export const PAN123_CREDENTIAL_KEYS = Object.freeze({
@@ -27,7 +28,7 @@ export class Pan123CredentialService {
 
     /** @param {import("../core/lifecycle-scope.js").LifecycleScope} scope Start token synchronization only on the original 123Pan account host. */
     startTokenSync(scope) {
-        if (this.window?.location?.hostname !== "yun.123pan.com" || this.syncScope === scope) return false;
+        if (!PAN123_WEB_HOSTS.includes(this.window?.location?.hostname) || this.window?.location?.protocol !== "https:" || this.syncScope === scope) return false;
         this.syncScope = scope;
         void this.syncTokenOnce();
         this.syncTimer && clearInterval(this.syncTimer);

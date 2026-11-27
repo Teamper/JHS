@@ -80,6 +80,7 @@ export class DesktopQuickSettings {
         if (this.ready && !this.host.childElementCount) { this.ready = false; this.loading = null; }
         if (!this.opened) { this.options.onOpen(); closeOwnedPopover(this.box.ownerDocument); }
         this.opened = true;
+        this.host.classList.add("is-open");
         const generation = ++this.generation;
         if (!this.ready) {
             if (!this.loading) {
@@ -112,7 +113,7 @@ export class DesktopQuickSettings {
         this.host.style.maxHeight = `${Math.max(0, Math.min(maximum, view.innerHeight - rect.top - 8))}px`;
     }
     close() {
-        this.cancelClose(); this.opened = false; this.generation++;
+        this.cancelClose(); this.opened = false; this.host.classList.remove("is-open"); this.generation++;
         if (ownedPopoverRoots(this.host).length) closeOwnedPopover(this.box.ownerDocument);
         this.options.jquery(this.host).hide();
     }

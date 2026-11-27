@@ -44,6 +44,7 @@ import { BusImageLayoutService } from "../services/bus-image-layout-service.js";
 import { JavDbWantService } from "../services/javdb-want-service.js";
 import { bindJavDbWantService } from "../core/javdb-api.js";
 import { CredentialService } from "../services/credential-service.js";
+import { OfflineTaskQueryService } from "../services/offline-task-query-service.js";
 import { Pan123CredentialService } from "../services/pan123-credential-service.js";
 import { ResourceSettingsService } from "../services/resource-settings-service.js";
 import { DomUiService } from "../services/dom-ui-service.js";
@@ -100,6 +101,7 @@ export function createAppContext(runtime) {
     if (runtime.eventBus && !runtime.eventBus.errorReporter) runtime.eventBus.errorReporter = (/** @type {unknown} */ error) => feedback.clog.error("[JHS] event listener failed:", error);
     const resourceSettings = new ResourceSettingsService(settings);
     const clipboard = { copyText: createClipboardWriter(notifications, feedback.clog) };
+    feedback.clog.copyText ??= clipboard.copyText;
     const mobile = () => isMobileMode(settings.snapshot().mobileMode);
     const pageDialogs = createPageDialogs({ dialog, navigation, esc: dialogEsc, settings, isMobileMode: mobile, logger: feedback.clog });
     const { ImageHoverPreview } = feedback;
@@ -193,7 +195,7 @@ export function createAppContext(runtime) {
     const related = { list: (/** @type {Record<string, unknown>} */ movieRef, /** @type {Record<string, any>} */ options = {}) => integrations.invokeList("movie.related", "listRelated", movieRef, options) };
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations, diagnostics);
-    const translation = new TranslationService(integrations, storage, {credential,settings,urlPolicy,enabled:true,googleOnly:platform.googleTranslationOnly});
+    const translation = new TranslationService(integrations, storage, {credential,settings,urlPolicy,diagnostics,enabled:true,googleOnly:platform.googleTranslationOnly});
     rootScope.addCleanup(() => translation.dispose());
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations, javdbLists);
@@ -202,6 +204,7 @@ export function createAppContext(runtime) {
     rootScope.addCleanup(bindJavDbWantService(javdbWant));
     rootScope.addCleanup(() => javdbWant.dispose());
     const offline = new OfflineService(providers, integrations);
+    const offlineTasks = new OfflineTaskQueryService({ offline, storage, settings, token: () => pan123Credential.getStoredToken() });
     const one115Match = new OneOneFiveMatchService(offline);
     const subtitleUpload = new SubtitleUploadService({ offline, storage, matching: one115Match, events: runtime.eventBus });
     const offlineSubmissionReceipts = platform.receipts ?? new OfflineSubmissionReceiptService(runtime.localStorage);
@@ -217,7 +220,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.clipboard, clipboard).register(SERVICE.domUi, domUi).register(SERVICE.keywordRules, keywordRules).register(SERVICE.profile, profile)
         .register(SERVICE.state, state).register(SERVICE.storageMutation, mutationCoordinator).register(SERVICE.busImageLayout, busImageLayout).register(SERVICE.events, runtime.eventBus)
         .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.detailContent, Object.freeze({ review, related })).register(SERVICE.magnet, magnet)
-        .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, Object.freeze({ api: offline, match: one115Match, receipts: offlineSubmissionReceipts, pan123Credential }))
+        .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, Object.freeze({ api: offline, match: one115Match, receipts: offlineSubmissionReceipts, pan123Credential, tasks: offlineTasks }))
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, Object.freeze({ search: subtitle, upload: subtitleUpload })).register(SERVICE.account, account)
         .register(REGISTRY.integration, integrations);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);

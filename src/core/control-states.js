@@ -28,7 +28,7 @@ export function buildControlStatesCss(fields) {
     .jhs-link:hover { color:var(--jhs-accent-hover); text-decoration-thickness:2px; }
     .jhs-link:active { color:var(--jhs-accent-hover); }
     .jhs-image-viewer :is(.viewer-button,.viewer-toolbar li):focus-visible { outline:2px solid var(--jhs-focus); outline-offset:2px; }
-    :is(.jhs-tab,.jhs-segmented__item)[aria-selected="true"] {
+    .jhs-tab[aria-selected="true"] {
         border-color:var(--jhs-accent); background:var(--jhs-accent-tint); color:var(--jhs-accent);
         box-shadow:inset 0 -2px 0 var(--jhs-accent);
     }
@@ -41,16 +41,7 @@ export function buildControlStatesCss(fields) {
     :is(.jhs-popover,.jhs-owned-popover,.jhs-fab-menu,.jhs-mobile-filter-menu,.jhs-mobile-sort-menu) [role="menuitemradio"][aria-checked="true"]::after {
         content:"\\2713"; margin-left:auto; padding-left:var(--jhs-space-2); font-weight:var(--jhs-font-weight-semibold);
     }
-    .jhs-select-option[aria-selected="true"] { border-color:var(--jhs-accent); background:var(--jhs-accent-tint); color:var(--jhs-accent); }
-    .jhs-select-option.is-active { outline:2px solid var(--jhs-focus); outline-offset:-2px; }
-    .jhs-table .tabulator-row.tabulator-selected { background:var(--jhs-accent-tint)!important; outline:2px solid var(--jhs-accent); outline-offset:-2px; }
-    .jhs-table .tabulator-row.tabulator-selected:hover { background:var(--jhs-surface-hover)!important; }
-    .jhs-table .tabulator-row:focus-visible { outline:2px solid var(--jhs-focus); outline-offset:-2px; }
 
-    .jhs-dialog .layui-layer-btn > a:hover { border-color:var(--jhs-accent)!important; background:var(--jhs-surface-hover)!important; }
-    .jhs-dialog:not(.jhs-confirm-actions) .layui-layer-btn > .layui-layer-btn0:hover,
-    .jhs-dialog.jhs-confirm-actions:not(.jhs-confirm-actions--danger) .layui-layer-btn > .layui-layer-btn1:hover { border-color:var(--jhs-accent-hover)!important; background:var(--jhs-accent-hover)!important; color:var(--jhs-accent-text-on)!important; }
-    .jhs-dialog.jhs-confirm-actions.jhs-confirm-actions--danger .layui-layer-btn > .layui-layer-btn1:hover { border-color:var(--jhs-danger)!important; background:var(--jhs-danger)!important; color:var(--jhs-danger-text-on)!important; filter:brightness(.92); }
     :is(.jhs-btn,.jhs-filter-btn,.site-btn,.magnet-hub-btn,.pagination-btn,.jhs-segmented__item,.jhs-icon-btn,.card-btn,
         .jhs-fab,.jhs-fab-menu-item,.console-logger-toggle,.console-logger-controls button,.console-logger-scroll-to-bottom,
         .jhs-image-viewer .viewer-button,.jhs-image-viewer .viewer-toolbar li,.jhs-toast .toast-close,

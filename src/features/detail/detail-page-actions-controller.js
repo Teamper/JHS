@@ -1,6 +1,8 @@
 // @ts-check
 
 import { createStateActions } from "../../ui/detail/state-actions.js";
+import { mountMovieRemark } from "../../ui/detail/movie-remark.js";
+import { createMovieContext } from "../../core/movie-context.js";
 import { renderStateView } from "../../core/ui-primitives.js";
 import { C, _, escapeHtml, normalizeCarNum } from "../../core/constants.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
@@ -79,7 +81,9 @@ export class DetailPageActionsController {
             if (!content?.length) return;
             content.attr("aria-busy", "true").empty().text("加载中…");
             try {
-                const hub = await magnetHub.createMagnetHub(carNum);
+                const record = this.getStateRecord();
+                const movieContext = createMovieContext({ ...record, carNum, names: record.names ?? record.actress, detailUrl: record.url }, "native-detail");
+                const hub = await magnetHub.createMagnetHub({ movieContext, root: this.document }, { isActive: () => active.open && !this.scope.disposed });
                 if (!active.open || this.scope.disposed || this.readMagnetHub() !== magnetHub || !content[0]?.isConnected) return;
                 content.removeAttr("role").empty().append(hub);
             } catch (error) {
@@ -134,10 +138,10 @@ export class DetailPageActionsController {
         const info = this.getPageInfo(), carNum = info.carNum;
         const $ = this.jquery;
         const row = $(`
-            <div class="jhs-detail-btn-row jhs-layout-e2965a97" data-jhs-detail-actions>
+            <div class="jhs-detail-btn-row" data-jhs-detail-actions>
                 <div data-jhs-state-slot></div>
-                <div class="jhs-layout-1e90930a">
-                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--secondary jhs-layout-5f3e3549"><span id="magnets-span">关闭磁力过滤</span></button>
+                <div class="jhs-detail-extra-tools">
+                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--secondary"><span id="magnets-span">关闭磁力过滤</span></button>
                     <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent"><span>磁力搜索</span></button>
                     <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--secondary"><span>字幕</span></button>
                 </div>
@@ -175,11 +179,18 @@ export class DetailPageActionsController {
             void operation.catch(error => this.subtitleError("打开", error));
         });
         if (!carNum) {
-            row.find("#filterBtn,#favoriteBtn,#hasDownBtn,#hasWatchBtn,#magnetSearchBtn,#xunLeiSubtitleBtn,#search-subtitle-btn")
+            row.find("#filterBtn,#favoriteBtn,#hasDownBtn,#hasWatchBtn,#magnetSearchBtn,#xunLeiSubtitleBtn")
                 .prop("disabled", true).attr("title", "番号不可用");
             this.diagnostics.recordError({ source: "detail-page-actions", contributionId: "detail.page-state-actions", message: "详情操作不可用：番号不可用" });
         } else {
             this.stateBinding = this.stateActions?.bind({ root: this.document, carNum }) ?? null;
+            if (this.stateActions && info.stateEligibility?.eligible) mountMovieRemark({
+                host: row[0], scope: this.scope, getRecord: () => this.getStateRecord(), state: this.stateActions.state,
+                events: this.events, dialog: this.dialog, report: error => {
+                    this.diagnostics.recordError({ source: "detail-remark", message: "备注操作失败", error });
+                    this.notifications.error("备注操作失败，请重试");
+                },
+            });
         }
         return mounted;
     }
@@ -226,7 +237,7 @@ export class DetailPageActionsController {
             if (scope.disposed) return;
             if (!results?.length) return void this.notifications.error("未找到该番号的迅雷字幕");
             index = this.dialog.open({
-                type: 1, title: "迅雷字幕", content: '<div><div id="xunlei-table-container" class="jhs-layout-583c2485"></div></div>',
+                type: 1, title: "迅雷字幕", content: '<div class="jhs-table-dialog"><div id="xunlei-table-container" class="jhs-table-dialog__content"></div></div>',
                 ui: { body: "table" },
                 scrollbar: false, area: this.ui.getResponsiveArea(["60%", "70%"]), anim: -1,
                 success: (/** @type {any} */ _element, /** @type {number} */ layerIndex) => {

@@ -66,21 +66,21 @@ export class BlacklistWorkspaceController {
         const interval = escapeHtml(String(settings.checkBlacklist_intervalTime ?? 12));
         const safeLastCheck = escapeHtml(String(lastCheck));
         const content = `
-            <div class="jhs-layout-7cb3f981">
-                <div class="jhs-layout-da5a4919">
-                    <div class="jhs-layout-31a824a2">
+            <div class="jhs-blacklist-layout">
+                <div class="jhs-blacklist-toolbar">
+                    <div class="jhs-blacklist-toolbar__group">
                         <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${safeLastCheck}; 检测间隔时间: ${interval}小时">${FEATURE_ICONS.blacklistSvg}<span>手动检测黑名单</span></button>
                         <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${FEATURE_ICONS.settingSvg}<span>设置</span></button>
                     </div>
-                    <div class="jhs-layout-31a824a2">
+                    <div class="jhs-blacklist-toolbar__group">
                         <select id="dataType" class="jhs-select-source" aria-label="演员角色"><option value="" selected>所有</option><option value="actor">男演员</option><option value="actress">女演员</option></select>
                         <select id="statusType" class="jhs-select-source" aria-label="检测状态"><option value="" selected>全部状态</option><option value="normal">继续检测</option><option value="stop">停更跳过</option></select>
                         <select id="urlType" aria-label="屏蔽类型" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${this.site === "javdb" ? "" : " jhs-is-hidden"}"><option value="" selected>--屏蔽类型--</option><option value="hasT">按所选分类屏蔽</option><option value="noT">未筛选分类</option></select>
                         <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" aria-label="搜索黑名单演员" class="jhs-field">
-                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>
+                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary">重置</button><button type="button" id="removeBlacklistSelection" class="jhs-btn jhs-btn--ghost" disabled>移出所选演员</button>
                     </div>
                 </div>
-                <div id="table-container" class="jhs-layout-d44e70c7"></div>
+                <div id="table-container"></div>
             </div>`;
         const generation = ++this.dialogGeneration;
         const id = this.dialog.open({
@@ -126,6 +126,15 @@ export class BlacklistWorkspaceController {
                 event.preventDefault();
                 const target = this.$(event.currentTarget);
                 this.ui.openPage(target.attr("data-url"), target.attr("data-name"), true, event);
+            }).on("click.jhsBlacklist", "#removeBlacklistSelection", (/** @type {any} */ event) => {
+                const actors = this.tableObj?.getSelectedData?.() || [];
+                if (!actors.length) return;
+                this.ui.confirm(event, "解除所选 " + actors.length + " 位演员的屏蔽？", async () => {
+                    try {
+                        await this.state.removeBlacklistActors(actors.map((/** @type {BlacklistRecord} */ actor) => actor.starId));
+                        if (this.isCurrent(generation)) await this.reloadTable(generation);
+                    } catch (error) { this.logger.error("批量解除屏蔽失败", error); this.notifications.error("移出失败，请重试"); }
+                }, { confirmText: "解除屏蔽", tone: "danger" });
             }).on("click.jhsBlacklist", "#checkBlacklistBtn", (/** @type {any} */ event) => void this.runManualScan(event, generation));
     }
 
@@ -230,13 +239,18 @@ export class BlacklistWorkspaceController {
             paginationCounter: (/** @type {any} */ _pageSize, /** @type {any} */ _currentRow, /** @type {any} */ _totalRows, /** @type {number} */ pageTotal) => `演员: ${pageTotal} &nbsp;&nbsp;&nbsp;番号总数: ${this.currentCarCount}  <span id="checkBlacklistMsg" class="jhs-table-counter-note"></span>`,
             responsiveLayout: "collapse", responsiveLayoutCollapse: true,
             columnDefaults: { headerHozAlign: "center", hozAlign: "center" }, index: "starId",
+            selectableRows: true,
             columns: this.getColumns(), initialSort: [{ column: "createTime", dir: "desc" }],
+        });
+        this.tableObj.on?.("rowSelectionChanged", (/** @type {BlacklistRecord[]} */ selected) => {
+            this.blacklistRoot?.find("#removeBlacklistSelection").prop("disabled", selected.length === 0);
         });
     }
 
     getColumns() {
         return [
-            { title: "演员", field: "name", sorter: "string", minWidth: 100, responsive: 0, headerSort: false, formatter: (/** @type {TableCell} */ cell) => {
+            { title: "", formatter: "rowSelection", titleFormatter: "rowSelection", headerSort: false, width: 46, responsive: 0 },
+            { title: "演员", field: "name", sorter: "string", minWidth: 100, responsive: 0, formatter: (/** @type {TableCell} */ cell) => {
                 const actor = cell.getData(), url = normalizeHttpUrl(actor.url, this.window.location.href), link = this.document.createElement("a");
                 link.className = "open-url"; link.textContent = String(actor.name || ""); link.dataset.name = String(actor.name || "");
                 if (url) { link.href = url; link.dataset.url = url; link.target = "_blank"; link.rel = "noopener noreferrer"; }
@@ -259,7 +273,19 @@ export class BlacklistWorkspaceController {
                 badge.textContent = hasCategory ? "按所选分类屏蔽" : "未筛选分类";
                 return badge;
             } },
-            { title: "番号数量", field: "count", sorter: "number", width: 170, responsive: 1 },
+            { title: "番号数量", field: "count", sorter: "number", width: 95, responsive: 1, formatter: (/** @type {TableCell} */ cell) => {
+                const actor = cell.getData(), button = this.document.createElement("button");
+                button.type = "button";
+                button.className = "jhs-btn jhs-btn--ghost jhs-btn--sm";
+                button.textContent = String(actor.count || 0);
+                button.disabled = !actor.count;
+                button.setAttribute("aria-label", "查看被屏蔽番号");
+                button.addEventListener("click", () => void this.openBlockedMovies(actor).catch(error => {
+                    this.logger.error("读取屏蔽番号失败", error);
+                    this.notifications.error("读取失败，请重试");
+                }));
+                return button;
+            } },
             { title: "创建时间", field: "createTime", sorter: "string", width: 170, responsive: 5, formatter: (/** @type {TableCell} */ cell) => formatUiDateTime(cell.getData().createTime) },
             { title: "最后发行时间", field: "lastPublishTime", sorter: "string", width: 170, responsive: 1 },
             { title: "状态", field: "isUnCheck", sorter: "string", width: 120, responsive: 1, formatter: (/** @type {TableCell} */ cell) => {
@@ -286,6 +312,33 @@ export class BlacklistWorkspaceController {
                 return '<button type="button" class="jhs-btn jhs-btn--danger delete-btn"><span>解除屏蔽</span></button>';
             } },
         ];
+    }
+
+    /** @param {BlacklistRecord} actor */
+    async openBlockedMovies(actor) {
+        const generation = this.dialogGeneration;
+        const movies = (await this.state.getBlacklistCarList()).filter((/** @type {any} */ movie) => movie.starId === actor.starId);
+        if (!this.isCurrent(generation)) return;
+        const content = this.$('<div class="jhs-form-dialog jhs-record-list"></div>').hide().appendTo(this.document.body);
+        for (const movie of movies) {
+            const label = this.$("<span></span>").attr("data-jhs-privacy-kind", "code").text(movie.carNum);
+            const remove = this.$('<button type="button" class="jhs-btn jhs-btn--ghost">解除屏蔽</button>').on("click", async () => {
+                remove.prop("disabled", true);
+                try {
+                    await this.state.removeBlacklistedMovie(actor.starId, movie.carNum);
+                    remove.parent().remove();
+                    if (this.isCurrent(generation)) await this.reloadTable(generation);
+                } catch (error) {
+                    this.logger.error("解除番号屏蔽失败", error);
+                    this.notifications.error("解除失败，请重试");
+                    remove.prop("disabled", false);
+                }
+            });
+            content.append(this.$('<div class="jhs-toolbar"></div>').append(label, remove));
+        }
+        let closed = false;
+        const id = this.dialog.open({ type: 1, title: "屏蔽番号", content, ui: { size: "sm", body: "scroll" }, end: () => { closed = true; content.remove(); release(); } });
+        const release = this.scope.addCleanup(() => { if (!closed) this.dialog.close(id); });
     }
 
     /** @param {number} generation */

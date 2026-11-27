@@ -117,7 +117,7 @@ function listsWorkspace({writable = true, deferred = null} = {}) {
     const scope = own(), dialog = {open:vi.fn(()=>7),close:vi.fn()};
     const service = Object.assign(new EventTarget(),{
         runs:new Map(), access:vi.fn(async()=>({origin:"https://javdb.com",account:{fingerprint:"account",label:"网页账号"},writable,reason:writable?"":"当前环境不支持跨标签互斥，清单保持只读"})),
-        normalizeMovies:vi.fn(movies=>movies.map(item=>({...item,videoId:"a"}))),
+        partitionMovies:vi.fn(movies=>({movies:movies.map(item=>({...item,videoId:"a"})),skipped:[]})),
         directory:vi.fn(deferred || (async()=>[{id:"1",name:"现有清单 <img>",checked:true,disabled:false},{id:"2",name:"另一清单",checked:false,disabled:false}])),
         listTasks:vi.fn(async()=>[]),createTask:vi.fn(async()=>({id:"task"})),resume:vi.fn(async()=>{}),stop:vi.fn(async()=>{}),inspect:vi.fn(),
     });

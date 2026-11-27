@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 
 import { JhsError } from "../core/jhs-error.js";
 
@@ -277,7 +278,7 @@ export class HttpService {
         } };
         let removeFromScope;
         try { removeFromScope = scope?.ownRequestConsumer(consumer); }
-        catch (error) { consumer.release(); void entry.promise.catch(() => {}); throw error; }
+        catch (error) { consumer.release(); void waitForSettlement(entry.promise); throw error; }
         this.updateDiagnostics();
         let removeAbortListener = () => {};
         const result = scope ? Promise.race([

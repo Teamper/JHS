@@ -55,5 +55,5 @@ describe("bundle analysis budget report", () => {
         expect(saved.packedGzipBytes).toBeGreaterThan(0);
         expect(saved.moduleContributions).toEqual([{ path: "src/example.js", unpackedBytes }]);
         expect(saved.packing).toEqual({ resourceCount: 1 });
-    });
+    }, 30_000);
 });

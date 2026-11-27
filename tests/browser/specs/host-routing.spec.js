@@ -227,7 +227,7 @@ test("Settings opens when optional CoverButton and Blacklist contributions are d
   await clickSettingsCategory(page.locator('.layui-layer .side-menu-item[data-panel="browse-panel"]'));
   await page.locator(".layui-layer #reviewCount").selectOption("30", { force: true });
   await page.locator(".layui-layer #saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().reviewCount)).toBe("30");
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().reviewCount)).toBe(30);
   await expect(page.locator(".layui-layer #saveBtn")).not.toHaveAttribute("aria-busy", "true");
 });
 

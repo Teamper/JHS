@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 import { createRuntimeLookup } from "./runtime-lookup.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
 
@@ -128,7 +129,7 @@ export class FeatureRuntime {
             this.diagnostics.featureDescriptors = this.getFeatureDescriptors();
             if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("jhs-feature-availability-changed"));
         };
-        this.configurationQueue = this.configurationQueue.catch(() => {}).then(apply);
+        this.configurationQueue = waitForSettlement(this.configurationQueue).then(apply);
         return this.configurationQueue;
     }
 
@@ -298,10 +299,11 @@ export class FeatureRuntime {
                 // System controls mount promptly; only optional automatic work waits for quiet.
                 if (manifest.kind !== "system" && this.backgroundWork) await this.backgroundWork.waitForTurn();
                 if (!this.isEligible(manifest)) return;
-                void this.activate(manifest.id).catch(() => undefined);
+                await this.activate(manifest.id);
             };
-            if (typeof globalThis.requestIdleCallback === "function") globalThis.requestIdleCallback(() => { void activate().catch(() => undefined); }, { timeout: 1500 });
-            else setTimeout(() => { void activate().catch(() => undefined); }, 100);
+            const run = () => { void activate().catch(error => this.diagnostics?.recordError?.({ source: "feature-idle", featureId: manifest.id, message: error instanceof Error ? error.message : String(error) })); };
+            if (typeof globalThis.requestIdleCallback === "function") globalThis.requestIdleCallback(run, { timeout: 1500 });
+            else setTimeout(run, 100);
         }
     }
 

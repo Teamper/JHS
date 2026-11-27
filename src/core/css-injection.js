@@ -1,6 +1,6 @@
 // @ts-check
 
-import { H, getJavBusHiddenNavCss, getJavDbHiddenNavCss, l, r } from "./constants.js";
+import { getJavBusHiddenNavCss, getJavDbHiddenNavCss, l, r } from "./constants.js";
 import { buildThemeCss } from "./theme.js";
 import { buildUiPrimitivesCss } from "./ui-primitives.js";
 
@@ -20,7 +20,7 @@ function buildJavBusCss() { return `
     .avatar-box { display:flex!important; width:100%!important; margin:0!important; }
     .avatar-box .photo-info { display:flex; align-items:center; justify-content:center; gap:var(--jhs-space-6); flex-direction:row; background-color:var(--jhs-surface)!important; }
     footer:not(:where(.jhs-ui, .jhs-ui *)) { display:none!important; }
-    .video-title { display:-webkit-box!important; height:75px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+    .video-title { display:-webkit-box!important; min-height:2.8em;height:auto; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
 </style>`; }
 
 function buildJavDbCss() { return `
@@ -41,8 +41,7 @@ function buildJavDbCss() { return `
     :is([data-jhs-card-list],[data-jhs-primary-list],[data-jhs-native-recommendations]) .item { position:relative!important; }
     .item > a[data-jhs-fc2-primary="true"], .item > a[data-jhs-fc2-primary="true"] .cover, .item > a[data-jhs-fc2-primary="true"] .cover img { display:block!important; width:100%!important; }
     :is([data-jhs-card-list],[data-jhs-primary-list],[data-jhs-native-recommendations]) .item .cover img { transform:none!important; transition:none!important; }
-    :is([data-jhs-card-list],[data-jhs-primary-list],[data-jhs-native-recommendations]) .video-title { min-width:0; overflow:hidden; overflow-wrap:anywhere; clip-path:inset(0 0 max(0px,calc(100% - 3lh)) 0); }
-    :is([data-jhs-card-list],[data-jhs-primary-list],[data-jhs-native-recommendations]) .video-title { display:-webkit-box; height:80px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+    :is([data-jhs-card-list],[data-jhs-primary-list],[data-jhs-native-recommendations]) .video-title { min-width:0; overflow:hidden; overflow-wrap:anywhere; display:-webkit-box; min-height:2.8em;height:auto; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
     .main-tabs, .tabs { overflow-x:hidden; flex-wrap:wrap; justify-content:flex-start; }
     .main-tabs ul, .tabs ul { flex-wrap:wrap; flex-grow:0; }
     .toolbar { display:flex; }
@@ -68,16 +67,15 @@ const F = `
     .tabulator-tableholder { overflow-x:hidden!important; }
 </style>`;
 
-let coreCssInjected = false;
-
-/** 在 Bootstrap 阶段一次性注入核心、宿主和 UI primitive 样式。 @param {{register?: (id: string, css: string) => unknown}} [styles] @param {string} [detailPanelCss] */
-export function injectCoreCss(styles, detailPanelCss = "") {
-    if (coreCssInjected) return;
-    const register = (/** @type {string} */ id, /** @type {string} */ css) => styles?.register ? styles.register(id, css.replace(/^\s*<style\b[^>]*>|<\/style>\s*$/g, "")) : H(css);
+/**
+ * Register core and host styles through the owning document's style port.
+ * @param {import("../contracts/ports.js").StylePort} styles
+ */
+export function injectCoreCss(styles) {
+    const register = (/** @type {string} */ id, /** @type {string} */ css) => styles.register(id, css.replace(/^\s*<style\b[^>]*>|<\/style>\s*$/g, ""));
     register("jhs-core-theme", buildThemeCss());
-    l && register("jhs-host-javbus", buildJavBusCss()), r && register("jhs-host-javdb", buildJavDbCss());
+    if (l) register("jhs-host-javbus", buildJavBusCss());
+    if (r) register("jhs-host-javdb", buildJavDbCss());
     register("jhs-core-layout", F);
     register("jhs-ui-primitives", buildUiPrimitivesCss());
-    if (detailPanelCss) register("jhs-detail-panels", detailPanelCss);
-    coreCssInjected = true;
 }

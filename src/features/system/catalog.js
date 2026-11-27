@@ -6,7 +6,6 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { openSettingsUi, registerSettingsUiOwner } from "../../core/settings-ui-owner.js";
 import { LibraryStatsService } from "../../services/library-stats-service.js";
 import { SettingsEffectsController } from "./settings-effects-controller.js";
-import { SettingsEntryController } from "./settings-entry-controller.js";
 
 export const systemFeatureManifests = Object.freeze([
     defineFeature({
@@ -30,64 +29,6 @@ export const systemFeatureManifests = Object.freeze([
             });
             controller.start();
             return { activeContributions: [] };
-        },
-    }),
-    defineFeature({
-        id: "settings-entry", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "eager", optionalRequires: [SERVICE.taskExecution],
-        requires: [PORT.style, PORT.host, SERVICE.profile, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.settingsTools, SERVICE.keywordRules, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, SERVICE.mediaLibrary, SERVICE.busImageLayout, SERVICE.events, SERVICE.domUi, SERVICE.clog, SERVICE.notifications], contributes: ["settings.core"], providesCommands: [],
-        activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-            const pageDocument = deps[PORT.host].document;
-            const pageWindow = pageDocument.defaultView;
-            const { SettingPlugin } = await import("../settings/settings-controller.js");
-            const adapter = new SettingPlugin({
-                runtimeServices: {
-                    ...deps[SERVICE.settingsTools], host: deps[PORT.host], diagnostics: runtime.diagnostics, profile: deps[SERVICE.profile],
-                    dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], keywordRules: deps[SERVICE.keywordRules],
-                    http: deps[SERVICE.http], offline: deps[SERVICE.offline].api, magnet: deps[SERVICE.magnet], movie: deps[SERVICE.movie],
-                    state: deps[SERVICE.state], translation: deps[SERVICE.translation], mediaLibrary: deps[SERVICE.mediaLibrary], busImageLayout: deps[SERVICE.busImageLayout],
-                    scope: () => runtime.scope,
-                },
-                readListPage: () => runtime.getCapability?.("list.core"),
-                readNewVideo: () => runtime.getCapability?.("discovery.new-video"),
-                readTask: () => deps[SERVICE.taskExecution] ?? runtime.getCapability?.("discovery.scheduler"),
-                readCoverButtons: () => runtime.getCapability?.("detail.cover-state-actions"),
-                readExternalSites: () => runtime.getCapability?.("detail.external-sites"),
-                readBlacklist: () => runtime.getCapability?.("library.blacklist"),
-                jquery: deps[SERVICE.domUi].jquery, utilities: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications],
-                logger: deps[SERVICE.clog], events: deps[SERVICE.events], domUi: deps[SERVICE.domUi],
-                document: pageDocument, window: pageWindow, site: runtime.site, route: runtime.route,
-            });
-            runtime.onCapabilityChanged("discovery.scheduler", () => adapter.renderTaskStatuses());
-            runtime.provideCapability?.("settings.core", adapter);
-            const release = runtime.registerCompatibilityBean?.("SettingPlugin", adapter);
-            if (release) runtime.scope.addCleanup(release);
-            try {
-                const css = await adapter.initEntryCss();
-                if (css) runtime.scope.addCleanup(deps[PORT.style].register("jhs-settings-feature", css.replace(/^\s*<style>|<\/style>\s*$/g, "")));
-            } catch (error) {
-                runtime.diagnostics.recordError({ source: "settings-entry", message: error instanceof Error ? error.message : String(error) });
-                deps[SERVICE.clog].error?.("设置界面样式加载失败", error);
-            }
-            let fullStylesPromise = /** @type {Promise<void> | null} */ (null);
-            adapter.fullSettingsStyleLoader = () => fullStylesPromise ??= (async () => {
-                const css = await adapter.initCss();
-                runtime.scope.assertActive();
-                if (css) runtime.scope.addCleanup(deps[PORT.style].register("jhs-full-settings-feature", css.replace(/^\s*<style>|<\/style>\s*$/g, "")));
-            })().catch(error => { fullStylesPromise = null; throw error; });
-            const controller = new SettingsEntryController({
-                document: pageDocument, scope: runtime.scope,
-                initializeSurface: () => adapter.activateFeatureSurface(runtime.scope, deps[SERVICE.profile]),
-                executeCommand: (command) => runtime.executeCommand(command),
-                closeQuickSettings: () => adapter.disposeQuickSettings(),
-                lowZIndex: () => deps[SERVICE.clog].lowZIndex?.(),
-                onError: (error) => {
-                    runtime.diagnostics.recordError({ source: "settings-entry", message: error instanceof Error ? error.message : String(error) });
-                    deps[SERVICE.clog].error?.("设置中心打开失败", error);
-                    deps[SERVICE.notifications].error?.("设置中心打开失败");
-                },
-            });
-            controller.start();
-            return { activeContributions: ["settings.core"] };
         },
     }),
     defineFeature({
@@ -122,6 +63,7 @@ export const systemFeatureManifests = Object.freeze([
                 capabilities: {
                     get listPage() { return runtime.getCapability("list.core"); },
                     get listActions() { return runtime.getCapability("list.actions"); },
+                    openStats: () => runtime.executeCommand("stats.open"),
                     get settings() { return runtime.getCapability("settings.core"); },
                     get detailActions() { return runtime.getCapability("detail.page-state-actions"); },
                 },
@@ -168,7 +110,7 @@ export const systemFeatureManifests = Object.freeze([
     defineFeature({
         id: "stats", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "idle",
         requires: [SERVICE.state, SERVICE.notifications, SERVICE.movie, SERVICE.settings, SERVICE.dialog, SERVICE.events, SERVICE.domUi, PORT.style],
-        contributes: ["stats.dashboard"], providesCommands: [],
+        contributes: ["stats.dashboard"], providesCommands: ["stats.open"],
         activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
             const { StatsController } = await import("./stats-controller.js");
             const libraryStats = new LibraryStatsService({ state: deps[SERVICE.state] });
@@ -200,11 +142,14 @@ export const systemFeatureManifests = Object.freeze([
                         runtime.diagnostics.recordError({ source: "stats-feature", featureId: "stats", contributionId: "stats.dashboard", message: error instanceof Error ? error.message : String(error) });
                     }
                 },
-                openNewVideo: () => runtime.executeCommand("new-video.open"),
+                site: runtime.site, isList: runtime.route === "list",
+                openNewVideo: runtime.isCommandAvailable("new-video.open") ? () => runtime.executeCommand("new-video.open") : undefined,
+                openMetric: (action) => action.startsWith("history-") ? runtime.executeCommand("library.history.open", action.slice(8))
+                    : action === "blacklist" ? runtime.executeCommand("library.blacklist.open") : runtime.executeCommand("settings.open", "plugin-mgmt-panel"),
             });
             try {
                 controller.start();
-                return { activeContributions: ["stats.dashboard"], dispose: () => controller.dispose() };
+                return { activeContributions: ["stats.dashboard"], commands: { "stats.open": () => controller.openDialog() }, dispose: () => controller.dispose() };
             } catch (error) {
                 controller.dispose();
                 runtime.diagnostics.recordError({ source: "stats-feature", featureId: "stats", contributionId: "stats.dashboard", message: error instanceof Error ? error.message : String(error) });

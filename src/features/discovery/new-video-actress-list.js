@@ -1,4 +1,5 @@
 // @ts-check
+import { newVideoPagination } from "./new-video-pagination.js";
 
 import { genericSort } from "../../core/collection-sort.js";
 import { OwnedPopover } from "../../core/owned-popover.js";
@@ -71,6 +72,13 @@ export async function renderActressCards(owner) {
     if (bodyActive) t = t.filter((actress => bodyMatcher(owner.getActressMeasurements(actress))));
     const _carSet = owner.nvCarMapCache;
     const _newVideoCount = (/** @type {ActorRecord} */ e) => owner.getPendingNewVideoCount(e, _carSet);
+    const javDbUrl = owner.nvJavDbUrl, ruleTime = owner.nvRuleTime;
+    const sourceHealth = owner.getRuntimeService("sourceHealth"), unavailableStarIds = new Set((javDbUrl && sourceHealth ? sourceHealth.list(javDbUrl) : []).map((/** @type {{starId?: string}} */ item) => String(item.starId || "")));
+    const query = String(owner.jquery("#nvSearch").val() || "").trim().toLowerCase();
+    const filter = owner.jquery('#nv-actor-filter button[aria-pressed="true"]').attr("data-nv-actor-filter");
+    t = t.filter(actor => (!query || [actor.name, actor.allName, actor.remark].flat().some(value => String(value || "").toLowerCase().includes(query)))
+        && (filter === "new" ? _newVideoCount(actor) > 0 : filter === "unavailable" ? unavailableStarIds.has(actor.starId)
+            : filter === "paused" ? shouldSkipStopped(actor.lastPublishTime, ruleTime) : true));
     const sortBy = owner.jquery("#paramSortBy").val();
     const sortMap = {
         "lastPublishTime_desc": [{ key: "lastPublishTime", order: "desc" }],
@@ -90,9 +98,9 @@ export async function renderActressCards(owner) {
     const sortedActresses = genericSort(t, sortMap[/** @type {keyof typeof sortMap} */ (sortBy)] || defaultSort);
     const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / owner.pageSize), pageStart = (owner.currentPage - 1) * owner.pageSize, pageEnd = pageStart + owner.pageSize;
     totalPages > 0 && owner.currentPage > totalPages && (owner.currentPage = totalPages);
-    const safePageStart = (owner.currentPage - 1) * owner.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + owner.pageSize), javDbUrl = owner.nvJavDbUrl, ruleTime = owner.nvRuleTime;
+    const safePageStart = (owner.currentPage - 1) * owner.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + owner.pageSize);
     if (0 === pageActresses.length) {
-        const hasActressFilter = owner.nvActressesCache.length > 0 && (n !== "all" || bodyActive);
+        const hasActressFilter = owner.nvActressesCache.length > 0 && (n !== "all" || bodyActive || query || filter !== "all");
         renderStateView(e, {
             type: "empty",
             title: owner.nvActressesCache.length ? "暂无符合筛选的演员" : "暂无收藏演员",
@@ -101,13 +109,15 @@ export async function renderActressCards(owner) {
                 onAction: () => {
                     JhsSelect.setValue("#paramActressType", "all", !1);
                     owner.resetBodyFilter();
+                    owner.jquery("#nvSearch").val("");
+                    owner.jquery("#nv-actor-filter [data-nv-actor-filter=all]").trigger("click");
                     void owner.refreshCurrentView({ resetPage: true });
                 },
             } : {}),
         });
         return void owner.renderPagination(totalCount, totalPages);
     }
-    const sourceHealth = owner.getRuntimeService("sourceHealth"), unavailableStarIds = new Set((javDbUrl && sourceHealth ? sourceHealth.list(javDbUrl) : []).map((/** @type {{starId?: string}} */ item) => String(item.starId || "")));
+
     const cards = pageActresses.map((actress => {
         const allNames = Array.isArray(actress.allName) ? actress.allName.join("，") : "";
         const name = String(actress.name || ""), remark = String(actress.remark || ""), starId = String(actress.starId || "");
@@ -129,6 +139,12 @@ export async function renderActressCards(owner) {
         ), actions = owner.jquery('<div class="actress-card__actions"></div>');
         const check = owner.jquery('<button type="button" class="jhs-btn jhs-btn--secondary btn-check-actress"><span>重新检测</span></button>').attr("data-starId", starId).prepend(owner.checkSvg), remove = owner.jquery('<button type="button" class="jhs-btn jhs-icon-btn jhs-btn--ghost btn-delete-actress" title="取消收藏"></button>').attr({ "aria-label": `取消收藏 ${name}`, "data-starId": starId }).append(owner.deleteSvg), edit = owner.jquery('<button type="button" class="jhs-btn jhs-btn--ghost btn-edit-actress" role="menuitem"><span>编辑资料</span></button>').attr("data-starId", starId).prepend(owner.editSvg);
         actions.append(check, remove, owner.jquery(`<div class="actress-card__menu"><button type="button" class="jhs-btn jhs-icon-btn jhs-btn--ghost" aria-label="更多操作" title="更多操作" aria-haspopup="menu" aria-expanded="false">${getIcon("ellipsis")}</button><div class="jhs-popover actress-card__menu-popover" role="menu"></div></div>`).find(".actress-card__menu-popover").append(edit).end());
+        if (unavailableStarIds.has(starId)) {
+            const rebind = owner.jquery('<button type="button" class="jhs-btn jhs-btn--secondary">重绑</button>');
+            rebind.on("click", () => void owner.openRebindActorDialog(actress));
+            remove.attr("title", "移除").append(owner.jquery("<span></span>").text("移除"));
+            actions.prepend(rebind);
+        }
         return card.append(badges, profile, meta, owner.jquery("<p class=\"actress-card__note\"></p>").attr("title", noteText).text(noteText), actions)[0];
     }));
     e.empty().append(cards), owner.jquery(".btn-delete-actress").off("click").on("click", ((/** @type {JQueryEvent} */ e) => {
@@ -184,21 +200,8 @@ export async function renderActressCards(owner) {
 
 /** @param {NewVideoWorkspaceService} owner */
 export function renderPagination(owner, /** @type {number} */ e, /** @type {number} */ t) {
-    const n = owner.currentPage;
-    let a = "";
-    const i = owner.jquery("#actress-pagination");
-    if (0 === t) return a = '<span class="jhs-pagination__summary">共 0 条记录</span>', void i.html(a);
-    n > 1 && t > 5 && (a += '<button type="button" class="jhs-btn pagination-btn" data-page="1">首页</button>'),
-    n > 1 && (a += `<button type="button" class="jhs-btn pagination-btn" data-page="${n - 1}">上一页</button>`);
-    let s = Math.max(1, n - Math.floor(2.5)), o = Math.min(t, s + 5 - 1);
-    o - s < 4 && (s = Math.max(1, o - 5 + 1));
-    for (let r = s; r <= o; r++) {
-        a += `<button type="button" class="jhs-btn pagination-btn page-number-btn ${r === n ? "active" : ""}" data-page="${r}" ${r === n ? 'aria-current="page"' : ""}>${r}</button>`;
-    }
-    n < t && (a += `<button type="button" class="jhs-btn pagination-btn" data-page="${n + 1}">下一页</button>`),
-    n < t && t > 5 && (a += `<button type="button" class="jhs-btn pagination-btn" data-page="${t}">尾页</button>`),
-    a += `<span class="jhs-pagination__summary">共 ${e} 条记录（第 ${n}/${t} 页）</span>`,
-    i.html(a), i.find(".pagination-btn").off("click").on("click", ((/** @type {JQueryEvent} */ e) => {
+    const i = owner.jquery("#actress-pagination").html(newVideoPagination({ page: owner.currentPage, pages:t, total:e, attribute:"data-page" }));
+    i.find(".pagination-btn").off("click").on("click", ((/** @type {JQueryEvent} */ e) => {
         if (owner.jquery(e.currentTarget).is("[disabled]")) return;
         const n = parseInt(owner.jquery(e.currentTarget).data("page"));
         n >= 1 && n <= t && n !== owner.currentPage && (owner.currentPage = n, owner.renderActressCards());

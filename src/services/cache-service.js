@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 
 import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 
@@ -208,7 +209,7 @@ export class CacheService {
 
     /** Wait for a deferred prune so destructive cache operations can establish a clean boundary. */
     async waitForPrune() {
-        await this.prunePromise?.catch(() => {});
+        await waitForSettlement(this.prunePromise);
     }
 
     /** Remove expired entries and keep the persistent public namespace bounded. */
@@ -222,7 +223,7 @@ export class CacheService {
         for (const key of cacheKeys) {
             let meta = this.publicMetadataIndex.get(key);
             if (!meta || !Number.isFinite(meta.expiresAt) || meta.expiresAt <= now) {
-                const entry = await this.storage.get(key).catch(() => undefined);
+                const entry = await this.storage.get(key);
                 if (!entry || entry.version !== this.namespaceVersion || !Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) {
                     this.publicMetadataIndex.delete(key);
                     await this.removeUnchangedPublicEntry(key, entry);
@@ -239,7 +240,7 @@ export class CacheService {
         candidates.sort((left, right) => left.lastUsed - right.lastUsed);
         for (const candidate of candidates) {
             const { key, lastUsed, expiresAt, writeId } = candidate;
-            const entry = await this.storage.get(key).catch(() => undefined);
+            const entry = await this.storage.get(key);
             if (!entry) continue;
             if (entry.version !== this.namespaceVersion || (Number(entry.lastUsed) || 0) !== lastUsed
                 || entry.expiresAt !== expiresAt || entry.writeId !== writeId) {
@@ -265,7 +266,7 @@ export class CacheService {
         if (!storage) return;
         let keys;
         try { keys = await storage.keys(); } catch { return; }
-        await Promise.all(keys.filter((/** @param {string} key */ key => key.startsWith(this._publicPrefix(namespace)))).map((/** @param {string} key */ key => storage.remove(key).catch(() => {}))));
+        await Promise.all(keys.filter(key => key.startsWith(prefix)).map(key => storage.remove(key)));
     }
 
     async clearAll() {
@@ -278,8 +279,8 @@ export class CacheService {
         if (this.storage) {
             try {
                 const storage = this.storage, prefix = `jhs_http_public_cache:v${this.namespaceVersion}:`, keys = await storage.keys();
-                await Promise.all(keys.filter((/** @type {string} */ key) => key.startsWith(prefix)).map((/** @type {string} */ key) => storage.remove(key).catch(() => {})));
-            } catch { /* cache cleanup remains best effort */ }
+                await Promise.all(keys.filter(key => key.startsWith(prefix)).map(key => storage.remove(key)));
+            } catch (error) { this.diagnostics?.recordError({ source: "cache", message: "部分缓存清理失败", error }); throw error; }
         }
     }
     async clearPublic() { return this.clearAll(); }

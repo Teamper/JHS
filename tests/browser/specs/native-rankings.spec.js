@@ -112,7 +112,7 @@ test.describe("JavDB native rankings", () => {
     await expect(page.locator("#native-second")).toBeHidden();
   });
 
-  test("TOP250 batch confirmation names the display-only subtitle filter", async ({ page }, testInfo) => {
+  test("TOP250 batch confirmation states it will process visible results", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-wide");
     await page.goto("https://javdb.com/rankings/top?t=y2026&page=2", { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page);
@@ -121,7 +121,7 @@ test.describe("JavDB native rankings", () => {
 
     await page.getByRole("button", { name: "批量操作" }).click();
     await page.locator("#favoriteAllVideo").click();
-    const dialog = page.locator(".layui-layer").filter({ hasText: "当前字幕筛选只影响显示，不限制批量处理范围" });
+    const dialog = page.locator(".layui-layer").filter({ hasText: /当前榜单页.*可见影片/ });
     await expect(dialog).toBeVisible();
     await dialog.locator(".layui-layer-btn").getByText("取消", { exact: true }).click();
     await expect(dialog).toHaveCount(0);

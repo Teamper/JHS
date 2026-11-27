@@ -32,7 +32,7 @@ export const newVideoFeature = defineFeature({
             import("./new-video-scan-controller.js"),
             import("./new-video-workspace-service.js"),
         ]);
-        const sourceHealth = new ActorSourceHealth(deps[SERVICE.storage]);
+        const sourceHealth = new ActorSourceHealth(deps[SERVICE.storage], Date.now, error => runtime.diagnostics.recordError({ source: "actor-source-health", message: error.message }));
         const schedulerEnabled = () => runtime.isContributionEnabled("scheduler", "discovery.scheduler", "TaskPlugin");
         const remoteTask = deps[SERVICE.taskExecution];
         const activateScheduler = () => remoteTask ? Promise.resolve(remoteTask) : runtime.executeCommand("scheduler.service");

@@ -11,7 +11,7 @@ describe("multi-state list visibility", () => {
         expect(api.normalizeQuickFilterKey("undownloaded")).toBe("undownloaded");
         expect(api.normalizeQuickFilterKey("unknown")).toBe("waitCheck");
         expect(Array.from(api.PRIMARY_QUICK_FILTERS)).toEqual(["all", "waitCheck", "favorite", "hasDown", "hasWatch"]);
-        expect(Array.from(api.SECONDARY_QUICK_FILTERS)).toEqual(["blockedItems", "undownloaded", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d"]);
+        expect(Array.from(api.SECONDARY_QUICK_FILTERS)).toEqual(["blockedItems", "undownloaded", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d", "favoriteActress", "rated"]);
     });
 
     it.each([

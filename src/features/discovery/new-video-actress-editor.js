@@ -1,5 +1,6 @@
 // @ts-check
 
+import { formatBodyMeasurements } from "../../core/actress-measurements.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { A, _, escapeHtml } from "../../core/constants.js";
@@ -101,6 +102,7 @@ export async function editActress(owner, /** @type {ActorRecord} */ record) {
         <div class="jhs-form-field"><label class="jhs-form-label" for="actressType">演员类别</label><select id="actressType" class="jhs-select-source"><option value="">未知</option><option value="censored">有码</option><option value="uncensored">无码</option></select></div>
         <div class="jhs-form-field"><label class="jhs-form-label" for="edit-actress-newvideolist">新作品番号（用逗号分隔）</label><textarea id="edit-actress-newvideolist" class="jhs-textarea">${safe(videos)}</textarea></div>
         <div class="jhs-form-field"><label class="jhs-form-label" for="edit-remark">备注</label><textarea id="edit-remark" class="jhs-textarea">${safe(record.remark)}</textarea></div>
+        <div class="jhs-form-field"><strong>身材资料</strong><div id="edit-actress-profile">${safe(formatBodyMeasurements(record) || "暂无资料")}</div><button type="button" id="refresh-actress-profile" class="jhs-btn jhs-btn--secondary">重新拉取资料</button></div>
         <p id="edit-actress-error" class="jhs-field-error" role="alert" hidden></p>
     </div>`);
     root.find("#actressType").val(record.actressType || "");
@@ -116,6 +118,17 @@ export async function editActress(owner, /** @type {ActorRecord} */ record) {
     }).catch(error => { if (owner.isEditorCurrent(editor)) { owner.logger.warn("演员编辑生命周期初始化失败", error); owner.closeActressEditor(editor); } });
     root.on("input.jhsActressEditor", "#edit-actress-avatar", (/** @type {JQueryEvent} */ event) => root.find("#edit-avatar-preview").attr("src", normalizeHttpUrl(owner.jquery(event.currentTarget).val(), owner.nvJavDbUrl) || ""));
     root.on("input.jhsActressEditor", "#edit-actress-name,#edit-actress-allname", () => owner.cancelAvatarSearch(editor));
+    root.on("click.jhsActressEditor", "#refresh-actress-profile", async (/** @type {JQueryEvent} */ event) => {
+        const button = owner.jquery(event.currentTarget).prop("disabled", true).attr("aria-busy", "true");
+        try {
+            await owner.requestActressProfileBackfill({ clearStarIds: [record.starId], backfillOptions: { starIds: [record.starId], force: true, refresh: true } });
+            const latest = (await owner.getRuntimeService("state").getFavoriteActressList()).find((/** @type {ActorRecord} */ item) => item.starId === record.starId);
+            if (owner.isEditorCurrent(editor)) root.find("#edit-actress-profile").text(formatBodyMeasurements(latest) || "暂无资料");
+        } catch (error) {
+            if (owner.isEditorCurrent(editor)) root.find("#edit-actress-error").text("读取资料失败，请重试").prop("hidden", false);
+            owner.logger.error("读取演员资料失败", error);
+        } finally { button.prop("disabled", false).removeAttr("aria-busy"); }
+    });
     root.on("click.jhsActressEditor", "#search-avatar-btn", () => void owner.searchAvatar(editor));
     root.on("click.jhsActressEditor", "#rebind-actor-id-btn", () => void owner.openRebindActorDialog(record, { ownerScope: editor.scope }));
     root.on("click.jhsActressEditor", "#select-cdn-btn", () => {
@@ -144,7 +157,9 @@ export async function editActress(owner, /** @type {ActorRecord} */ record) {
             editor.id = id;
             editor.mounted = true;
             if (!owner.isEditorCurrent(editor)) return;
-            editor.layer = owner.jquery(layer); JhsSelect.enhance(layer); owner.utils.setupEscClose?.(id);
+            editor.layer = owner.jquery(layer);
+            editor.layer.find(".layui-layer-title").attr("data-jhs-privacy-kind", "actor");
+            JhsSelect.enhance(layer); owner.utils.setupEscClose?.(id);
             scope.addCleanup(() => owner.utils.releaseEscClose?.(id));
             const observer = new owner.window.MutationObserver(() => { if (!root[0].isConnected) owner.closeActressEditor(editor); });
             observer.observe(owner.document.body, { childList: true, subtree: true }); scope.ownObserver(observer);

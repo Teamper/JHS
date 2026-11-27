@@ -9,10 +9,15 @@ const SITES = Object.freeze([
     Object.freeze({ id: "jableBtn", name: "jable", settingKey: "jableUrl", defaultBaseUrl: "https://jable.tv", itemSelector: "#list_videos_videos_list_search_result .detail .title a", textSelector: null, hrefSelector: null, searchPath: (/** @type {string} */ value) => `/search/${value}/` }),
     Object.freeze({ id: "avgleBtn", name: "avgle", settingKey: "avgleUrl", defaultBaseUrl: "https://jav.rs", itemSelector: ".text-secondary", textSelector: null, hrefSelector: null, searchPath: (/** @type {string} */ value) => `/vod/search.html?wd=${value}` }),
     Object.freeze({ id: "missAvBtn", name: "missAv", settingKey: "missAvUrl", defaultBaseUrl: "https://missav.live", itemSelector: ".text-secondary", textSelector: null, hrefSelector: null, searchPath: (/** @type {string} */ value) => `/search/${value}` }),
-    Object.freeze({ id: "supJavBtn", name: "supJav", settingKey: "supJavUrl", defaultBaseUrl: "https://supjav.com", itemSelector: ".posts post", textSelector: null, hrefSelector: null, titleAttribute: true, searchPath: (/** @type {string} */ value) => `/?s=${value}` }),
+    Object.freeze({ id: "supJavBtn", name: "supJav", settingKey: "supJavUrl", defaultBaseUrl: "https://supjav.com", itemSelector: ".posts .post", textSelector: null, hrefSelector: "a[href]", titleAttribute: true, searchPath: (/** @type {string} */ value) => `/?s=${value}` }),
     Object.freeze({ id: "javDbBtn", name: "javDb", settingKey: "javDbUrl", defaultBaseUrl: "https://javdb.com", itemSelector: ".movie-list .item", textSelector: ".video-title", hrefSelector: "a", searchPath: (/** @type {string} */ value) => `/search?q=${value}` }),
-    Object.freeze({ id: "javBusBtn", name: "javBus", settingKey: "javBusUrl", defaultBaseUrl: "https://www.javbus.com", itemSelector: ".container h3", textSelector: null, hrefSelector: null, directDetail: true, searchPath: (/** @type {string} */ value) => `/${value}` }),
+    Object.freeze({ id: "javBusBtn", name: "javBus", settingKey: "javBusUrl", defaultBaseUrl: "https://www.javbus.com", itemSelector: ".container h3", textSelector: null, hrefSelector: null, directDetail: true, searchPath: (/** @type {string} */ value) => `/search/${value}` }),
 ]);
+
+/** @param {string} carNum @param {string} origin */
+function directDetailUrl(carNum, origin) {
+    return new URL(`/${encodeURIComponent(carNum)}`, origin).href;
+}
 
 /** @param {any} site @param {Record<string, any>} settings */
 function siteDefinition(site, settings) {
@@ -26,13 +31,14 @@ export function parseExternalSiteResults(html, site, carNum, baseUrl) {
     const document = new DOMParser().parseFromString(html, "text/html"), results = [];
     for (const element of document.querySelectorAll(site.itemSelector)) {
         const textNode = site.textSelector ? element.querySelector(site.textSelector) : element;
-        const text = site.titleAttribute ? element.getAttribute("title") || "" : textNode?.textContent?.trim() || "";
+        const text = site.titleAttribute ? (element.getAttribute("title") || element.querySelector("[title]")?.getAttribute("title") || element.textContent || "").trim() : textNode?.textContent?.trim() || "";
         if (!text.toLowerCase().includes(carNum.toLowerCase())) continue;
-        if (site.directDetail) results.push(new URL(`/${encodeURIComponent(carNum)}`, `${baseUrl}/`).href);
+        if (site.directDetail) results.push(directDetailUrl(carNum, baseUrl));
         else {
-            const hrefNode = site.hrefSelector ? element.querySelector(site.hrefSelector) : element, href = hrefNode?.getAttribute("href");
+            const hrefNode = site.hrefSelector && !element.matches(site.hrefSelector) ? element.querySelector(site.hrefSelector) : element, href = hrefNode?.getAttribute("href");
             if (!href) throw new JhsError("PARSE_ERROR", "外部站点结果缺少链接", { source: site.id });
-            results.push(new URL(href, `${baseUrl}/`).href);
+            const url = new URL(href, baseUrl);
+            if (url.origin === baseUrl && ["https:", "http:"].includes(url.protocol)) results.push(url.href);
         }
     }
     return Object.freeze([...new Set(results)]);
@@ -49,12 +55,14 @@ export function createExternalSitesAdapter(http) {
         async searchSite(siteId, carNum, options = {}) {
             const site = SITES.find((item) => item.id === siteId);
             if (!site) throw new JhsError("UNSUPPORTED", `未知外部站点：${siteId}`, { source: "external-sites" });
-            const definition = siteDefinition(site, options.settings || {}), url = definition.searchUrl(carNum), target = new URL(url), builtinHost = new URL(site.defaultBaseUrl).hostname.replace(/^www\./, "");
+            const definition = siteDefinition(site, options.settings || {}), searchUrl = definition.searchUrl(carNum);
+            const url = "directDetail" in site ? directDetailUrl(carNum, definition.baseUrl) : searchUrl;
+            const target = new URL(url), builtinHost = new URL(site.defaultBaseUrl).hostname.replace(/^www\./, "");
             const urlPolicy = target.hostname === builtinHost || target.hostname.endsWith(`.${builtinHost}`)
                 ? { trustClass: "builtin-public", hosts: [builtinHost], expectedOrigin: target.origin }
                 : { trustClass: "custom-public", expectedOrigin: target.origin };
             const response = await http.request({ capability: "movie.external-sites", providerId: `external-site:${siteId}`, method: "GET", url, responseType: "text", urlPolicy }, options.scope);
-            return Object.freeze({ searchUrl: url, matches: parseExternalSiteResults(response.data, site, carNum, definition.baseUrl) });
+            return Object.freeze({ searchUrl, matches: parseExternalSiteResults(response.data, site, carNum, definition.baseUrl) });
         },
     });
 }

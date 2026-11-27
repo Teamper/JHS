@@ -8,10 +8,12 @@ const change = (model, before, after, counter, replica = A) => versionSyncDiff(m
 
 describe("versioned WebDAV state", () => {
     it("retains independent fields when two offline devices first add the same record", () => {
-        const a = change(emptySyncModel(), {}, projection({ ...record({ favorite: true }), remark: "note" }), 2);
+        const a = change(emptySyncModel(), {}, projection({ ...record({ favorite: true }), remark: "note", title: "作品原题", actorNames: ["新演员"] }), 2);
         const b = change(emptySyncModel(), {}, projection({ ...record({ watched: true }), names: "actor" }), 3, B);
         const merge = joinSyncModels(a, b);
-        expect(materializeSyncData(merge, {}).car_list[0]).toMatchObject({ stateFlags: { favorite: true, watched: true }, remark: "note", names: "actor" });
+        expect(materializeSyncData(merge, {}).car_list[0]).toMatchObject({ stateFlags: { favorite: true, watched: true },
+            remark: "note", names: "actor", title: "作品原题", actorNames: ["新演员"],
+        });
         const deleted = change(a, projection({ ...record({ favorite: true }), remark: "note" }), {}, 4);
         const rebuilt = change(deleted, {}, projection(record({ downloaded: true })), 5);
         const left = joinSyncModels(joinSyncModels(a, b), rebuilt), right = joinSyncModels(a, joinSyncModels(b, rebuilt));

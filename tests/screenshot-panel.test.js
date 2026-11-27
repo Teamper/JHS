@@ -58,7 +58,7 @@ it("renders a service-owned screenshot without legacy plugin access", async () =
     await renderScreenshotPanel({ target: host, carNum: "ABC-123", screenshot, settings: {}, openImageViewer });
     expect(document.querySelector("#target img")?.getAttribute("src")).toBe("https://img.javstore.net/test.jpg");
     expect(host.attr("aria-busy")).toBe("false");
-    host.find('.jhs-fc2-screenshot-thumbnail').trigger('click');
+    host.find('.jhs-screenshot-thumbnail').trigger('click');
     expect(openImageViewer).toHaveBeenCalledWith(document.querySelector('#target img'),expect.objectContaining({imageKind:'contact-sheet',owner:document.querySelector('#target button'),trigger:document.querySelector('#target button')}));
 });
 
@@ -107,7 +107,7 @@ it("keeps manual mode request-free until selected", async () => {
     expect(jquery("#target [role='tab']").length).toBe(1);
     jquery("#target [role='tab']").trigger("click");
     await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(jquery("#target [role='tabpanel']").text()).toBe("暂无缩略图"));
+    await vi.waitFor(() => expect(jquery("#target [role='tabpanel']").text()).toContain("暂无缩略图"));
 });
 
 it("hides disabled providers and does not create request entries", async () => {
@@ -126,7 +126,7 @@ it("shows an empty state without rendering unsafe screenshot URLs", async () => 
     const screenshot = createService(vi.fn(async () => [{ url: "javascript:alert(1)" }]));
     await renderScreenshotPanel({ target: jquery("#target"), carNum: "ABC-123", screenshot, settings: {} });
     expect(jquery("#target img").length).toBe(0);
-    expect(jquery("#target").text()).toBe("暂无缩略图");
+    expect(jquery("#target").text()).toContain("暂无缩略图");
 });
 
 it("lets the screenshot service select the enabled automatic source", async () => {

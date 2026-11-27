@@ -162,7 +162,7 @@ export class ActressInfoController {
         const blocks = [];
         for (const actor of actresses) {
             const info = await this.resolveActorInfo({
-                starId: actor.starId || "",
+                starId: this.hostAdapter.site === "javbus" ? "" : actor.starId || "",
                 domNames: [actor.name],
                 aliasMaps,
                 requestScope,
@@ -188,13 +188,11 @@ export class ActressInfoController {
             const heading = this.document.createElement("strong");
             heading.textContent = `${name}：`;
             block.append(heading);
-            link.className = "jhs-layout-9813a0dd";
+            link.className = "jhs-actress-info-link";
             link.href = this.safeExternalUrl(info.url) || "#";
-            link.append(
-                this.createInfoTag(`${info.birthday || ""} ${info.age || ""}`.trim()),
-                this.createInfoTag(`${info.height || ""} ${info.weight || ""}`.trim()),
-                this.createInfoTag(`${info.threeSizeText || ""} ${info.braSize || ""}`.trim()),
-            );
+            for (const value of [`${info.birthday || ""} ${info.age || ""}`, `${info.height || ""} ${info.weight || ""}`, `${info.threeSizeText || ""} ${info.braSize || ""}`]) {
+                if (value.trim()) link.append(this.createInfoTag(value.trim()));
+            }
         } else {
             link.href = this.safeExternalUrl(this.service.profileUrl(name)) || "#";
             const heading = this.document.createElement("strong");

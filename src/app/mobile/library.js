@@ -7,6 +7,7 @@ import { movieTitle } from "./title-translation.js";
 import { renderMoviePoster } from "./movie-poster.js";
 import { parseBooleanSetting } from "../../core/feature-helpers.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
+import { waitForSettlement } from "../../core/async-settlement.js";
 import { appendCatalogItems, catalogOrders, libraryOrders, orderMovies, restoreWork, retainMovieSelection, sorting, viewToggle, visibleWork } from "./browse-controls.js";
 
 /** @typedef {import("../../core/lifecycle-scope.js").LifecycleScope} Scope */
@@ -29,16 +30,18 @@ export function createRecentWorks(storage) {
     return {
         async list() {
             await write;
-            return read().catch(() => []);
+            return read();
         },
         remember(/** @type {any} */ movie) {
             const { id, carNum, title, url, coverUrl } = movie;
             if (!id || !getMovieStateEligibility(movie).eligible) return;
-            write = write.then(async () => {
+            const operation = write.then(async () => {
                 const previous = await read();
                 const latest = { id, carNum, title, url, coverUrl };
                 await storage.set(recentKey, [latest, ...previous.filter(item => item.id !== id)].slice(0, 8));
-            }).catch(() => {});
+            });
+            write = waitForSettlement(operation);
+            return operation;
         },
     };
 }

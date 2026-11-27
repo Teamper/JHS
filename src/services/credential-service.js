@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 import { decryptData, encryptData } from "../core/credential-crypto.js";
 export const CREDENTIAL_KEYS = Object.freeze({
     installationSecret: "jhs_credential_install_secret",
@@ -159,7 +160,7 @@ export class CredentialService extends EventTarget {
         };
         const locks = /** @type {any} */ (globalThis.navigator?.locks);
         if (locks?.request) return locks.request(`jhs_connection:${key}`, save);
-        const pending = (connectionQueues.get(key) || Promise.resolve()).catch(() => {}).then(save);
+        const pending = waitForSettlement(connectionQueues.get(key)).then(save);
         connectionQueues.set(key, pending);
         try { return await pending; }
         finally { if (connectionQueues.get(key) === pending) connectionQueues.delete(key); }

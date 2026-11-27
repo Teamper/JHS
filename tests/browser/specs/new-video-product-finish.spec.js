@@ -8,6 +8,17 @@ for (const theme of ["light", "dark"]) {
         await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("new-video.open"));
         const workspace = page.locator(".newVideoToolBox");
         await expect(workspace).toHaveAttribute("data-jhs-compact", "true");
+        await expect(workspace.locator(".jhs-new-video-toolbar__actions #nvBackfillProfiles")).toHaveCount(0);
+        const tabsFit = () => workspace.getByRole("tablist", { name: "新作品视图" }).evaluate(tabs => {
+            const bounds = tabs.getBoundingClientRect();
+            return [...tabs.querySelectorAll('[role="tab"]')].every(tab => {
+                const text = document.createRange();
+                text.selectNodeContents(tab);
+                const label = text.getBoundingClientRect(), button = tab.getBoundingClientRect();
+                return label.left >= Math.max(button.left, bounds.left) && label.right <= Math.min(button.right, bounds.right);
+            });
+        });
+        expect(await tabsFit()).toBe(true);
         const contrast = await workspace.locator(".card-tag").first().evaluate(node => {
             const luminance = color => {
                 const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
@@ -44,6 +55,7 @@ for (const theme of ["light", "dark"]) {
         await workspace.locator("#nvFilterToggle").click();
         await workspace.locator("#nvWorkspaceMore").click();
         await expect(page.getByRole("menuitem", { name: "手动同步演员", exact: true })).toBeVisible();
+        await expect(page.getByRole("menuitem", { name: "补齐身材资料", exact: true })).toBeVisible();
         await expect(page.getByRole("tooltip")).toBeVisible();
         await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toHaveCount(0);
         await expect(workspace.locator("#nvWorkspaceMore")).toHaveAttribute("aria-expanded", "true");
@@ -54,7 +66,10 @@ for (const theme of ["light", "dark"]) {
             await page.setViewportSize({ width: 1280, height: 720 });
             await expect(page.locator("body > .jhs-owned-popover")).toHaveCount(0);
             await expect(workspace.locator("#checkFavoriteActress")).toBeFocused();
+            await expect(workspace.locator(".jhs-new-video-toolbar__actions #nvBackfillProfiles")).toBeVisible();
             await page.setViewportSize({ width: 320, height: 640 });
+            await expect(workspace).toHaveAttribute("data-jhs-compact", "true");
+            expect(await tabsFit()).toBe(true);
             await expect(page.getByRole("tooltip")).toHaveCount(0);
             const narrow = await workspace.evaluate(root => ({ width: root.clientWidth, scroll: root.scrollWidth }));
             expect(narrow.scroll).toBeLessThanOrEqual(narrow.width + 1);

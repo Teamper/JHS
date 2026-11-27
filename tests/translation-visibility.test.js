@@ -1,5 +1,6 @@
 import {afterEach,expect,it,vi} from "vitest";
 import {JSDOM} from "jsdom";
+import jquery from "jquery";
 import {LifecycleScope} from "../src/core/lifecycle-scope.js";
 import {ExternalBridgeTranslationController} from "../src/features/translation/translation-controller.js";
 import {installVisibleLayout} from "./helpers/visible-layout.js";
@@ -17,7 +18,7 @@ function setup(translate=vi.fn(async text=>({text:`译文 ${text}`,source:{name:
     const privacy=new EventTarget();privacy.masked=false;privacy.targets=()=>["title"];
     const translation=new EventTarget();translation.translateDetailed=translate;
     const scope=new LifecycleScope("visible-translation");owned.push({scope,dom});
-    const controller=new ExternalBridgeTranslationController({document:dom.window.document,window:dom.window,route:"list",hostAdapter:{site:"javdb",getListSelectors:()=>({itemSelector:".movie-list .item"})},listPage:null,settings,privacy,translation,styles:{},diagnostics:{recordError:vi.fn()},scope});
+    const controller=new ExternalBridgeTranslationController({document:dom.window.document,window:dom.window,jquery:jquery(dom.window),route:"list",hostAdapter:{site:"javdb",getListSelectors:()=>({itemSelector:".movie-list .item"})},listPage:null,settings,privacy,translation,styles:{},diagnostics:{recordError:vi.fn()},scope});
     controller.start();
     return {dom,scope,controller,visible,later,settings,privacy,translation,translate,disconnect,enterLater(){laterTop=10;callback([{target:later,isIntersecting:true}]);}};
 }

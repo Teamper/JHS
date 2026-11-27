@@ -23,8 +23,8 @@ export async function getTaskButtonTips(owner) {
         interval("newVideo", settings.checkNewVideo_intervalTime),
     ]);
     return {
-        favorite: `上次完整同步: ${storage.getLocal("jhs_time_checkFavoriteActress") || "无"}; 检测间隔时间: ${favoriteHours}小时`,
-        newVideo: `上次整批检测: ${storage.getLocal("jhs_time_checkNewVideo") || "无"}; 检测间隔时间: ${newVideoHours}小时`,
+        favorite: `上次完整同步: ${formatUiDateTime(storage.getLocal("jhs_time_checkFavoriteActress"))}; 检测间隔时间: ${favoriteHours}小时`,
+        newVideo: `上次整批检测: ${formatUiDateTime(storage.getLocal("jhs_time_checkNewVideo"))}; 检测间隔时间: ${newVideoHours}小时`,
     };
 }
 
@@ -79,6 +79,10 @@ export function renderTaskStatuses(owner) {
         statuses.set(view.status, (statuses.get(view.status) || 0) + 1);
         container.append(renderTaskStatus(owner.jquery, name, snapshot, settings));
     }
+    const attention = ["运行中", "等待重试", "完成，有异常项"].some(status => statuses.has(status));
+    if (attention && container.attr("data-jhs-attention") !== "true") owner.nvTasksExpanded = true;
+    container.attr("data-jhs-attention", String(attention)).prop("hidden", !owner.nvTasksExpanded);
+    owner.jquery("#nvTaskToggle").attr("aria-expanded", String(!!owner.nvTasksExpanded));
     owner.jquery("#nvTaskToggle span").text(`任务：${[...statuses].map(([status, count]) => `${count}项${status}`).join(" · ")}`);
     const health = owner.getRuntimeService("sourceHealth");
     const origin = owner.getRuntimeService("movie")?.externalSiteOrigin?.("javDbBtn", settings);

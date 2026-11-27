@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import jquery from "jquery";
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { readFileSync } from "node:fs";
@@ -47,7 +48,7 @@ function createController({ enabled = false, route = "detail", carNum = "ABC-123
     };
     const scope = new LifecycleScope("test-one-one-five");
     const dialog = { open: vi.fn() };
-    const ui = { confirm: vi.fn((_position, _message, accept) => accept()) };
+    const ui = { jquery, confirm: vi.fn((_position, _message, accept) => accept()) };
     const notifications = { error: vi.fn(), info: vi.fn(), ok: vi.fn(), debug: vi.fn() };
     const offline = {
         searchFiles,

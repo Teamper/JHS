@@ -84,6 +84,7 @@ export class ImageHoverPreview {
                 transition: opacity var(--jhs-motion-base) var(--jhs-ease);
             }
             .image-hover-preview.active { visibility: visible; opacity: 1; }
+            html[data-jhs-privacy-mask-images] .image-hover-preview { visibility:hidden; }
             .image-hover-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
             .image-hover-preview::after {
                 position: absolute;
@@ -139,11 +140,12 @@ export class ImageHoverPreview {
         }
     }
     isOwnerUncovered() {
+        if (document.documentElement.hasAttribute("data-jhs-privacy-mask-images")) return false;
         const owner = this.resolveOwnerElement();
         if (!owner) return this.config.zIndexStrategy !== "owner";
         if (!owner.isConnected || !this.currentTarget?.isConnected || !owner.contains(this.currentTarget) || !this.currentTarget.getClientRects().length) return false;
         const ownerLayer = owner.closest(".layui-layer"), ownerZ = Number(ownerLayer && window.getComputedStyle(ownerLayer).zIndex) || 0;
-        return ![...document.querySelectorAll(".layui-layer, .viewer-container, .fancybox-container, .loading-container, .jhs-owned-popover.is-open, #quick-setting-box:not([hidden]), .jhs-fab-menu.jhs-fab-menu-open")].some(root => {
+        return ![...document.querySelectorAll(".layui-layer, .viewer-container, .fancybox-container, .loading-container, .jhs-owned-popover.is-open, #jhs-quick-setting-sheet.is-open, .simple-setting.is-open, .mini-simple-setting.is-open, .jhs-fab-menu.jhs-fab-menu-open")].some(root => {
             if (root === ownerLayer || root.contains(owner)) return false;
             const style = window.getComputedStyle(root);
             if (!root.getClientRects().length || style.display === "none" || style.visibility === "hidden") return false;
@@ -246,7 +248,7 @@ export class ImageHoverPreview {
             error.textContent = "图片加载失败";
             this.preview.replaceChildren(error);
             this.preview.classList.remove("loading");
-            this.preview.classList.add("active");
+            if (this.isOwnerUncovered()) this.preview.classList.add("active");
         };
         image.src = source;
     }

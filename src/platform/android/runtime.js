@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../../core/async-settlement.js";
 import { registerPlugin } from "@capacitor/core";
 import { JhsError, JHS_ERROR_CODES } from "../../core/jhs-error.js";
 
@@ -48,7 +49,7 @@ export class AndroidHttpAdapter {
         const { signal, requestOptions = {} } = options;
         let sessionSite = "";
         /** @type {{signingIn:boolean}|undefined} */ let sessionState;
-        const abort = () => void android.cancel({ id }).catch(() => {});
+        const abort = () => void waitForSettlement(android.cancel({ id }));
         const assertActive = () => {
             if (signal?.aborted) throw new JhsError("ABORTED", "请求已取消");
             if (sessionSite && (sessionState?.signingIn || this.sessionStates.get(sessionSite) !== sessionState)) {

@@ -80,7 +80,7 @@ export class SettingsRegistry {
         try {
             if (!validateDescriptorSync(descriptor, value)) throw new Error("类型、可选值或取值范围不符合要求");
         } catch (error) {
-            throw new Error(`同步设置“${descriptor.label}”(${key})无效：${error instanceof Error ? error.message : "配置格式不正确"}`);
+            throw new TypeError(`同步设置“${descriptor.label}”(${key})无效：${error instanceof Error ? error.message : "配置格式不正确"}`);
         }
         return true;
     }

@@ -4,7 +4,7 @@ import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
 
 export default defineFeature({
-    id: "actress-info", kind: "feature", disableable: true, sites: ["javdb"], routes: [], startup: "idle",
+    id: "actress-info", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "idle",
     requires: [PORT.host, PORT.style, SERVICE.actressInfo, SERVICE.settings, SERVICE.state, SERVICE.clog],
     contributes: ["identity.actress-info"], providesCommands: [],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {

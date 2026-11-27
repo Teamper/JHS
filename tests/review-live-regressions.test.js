@@ -74,7 +74,8 @@ describe("review settings regressions", () => {
     it("reads canonical keywords and saves into the same portable key", async () => {
         const { $, values, panel } = await harness();
         await panel.show("a", $("#target"));
-        expect($(".jhs-review-item")).toHaveLength(0);
+        expect($(".jhs-review-item[hidden]")).toHaveLength(1);
+        expect($(".jhs-review-item[hidden] .review-content").text()).toBe("blocked");
         await panel.saveKeyword("another");
         expect(values.get("filter_keyword_review")).toEqual(["blocked", "another"]);
     });

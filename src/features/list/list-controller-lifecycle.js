@@ -67,6 +67,21 @@ export function start(owner) {
         doc.addEventListener("actress-state-changed", onActressStateChanged);
         owner.scope.addCleanup(() => doc.removeEventListener?.("actress-state-changed", onActressStateChanged));
     }
+    if (owner.events?.on) owner.scope.addCleanup(owner.events.on("personal-rating-changed", () => {
+        owner.filterContextProvider?.invalidate();
+        return owner.listRefreshController.request({ full: true, reason: "personal-rating-changed" });
+    }));
+    if (doc?.addEventListener) {
+        let pending = false;
+        owner.scope.listen(doc, "jhs-card-visibility-changed", () => {
+            if (pending) return;
+            pending = true;
+            queueMicrotask(() => {
+                pending = false;
+                if (!owner.scope.disposed) owner.reconcileListItems(null, owner.legacyPlugin.captureListRevision?.() ?? "0");
+            });
+        });
+    }
     owner.legacyPlugin.setSortController?.(owner.sortController);
     owner.hostMarkupController.normalizeInitialMarkup();
     const selectors = (owner.hostAdapter?.getLiveListSelectors?.() ?? owner.hostAdapter?.getListSelectors?.()) ?? owner.legacyPlugin.getSelector?.();

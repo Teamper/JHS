@@ -8,25 +8,27 @@ const policy = { trustClass: "builtin-public", hosts: ["subtitlecat.com"] };
 export function createSubtitleCatAdapter(http) {
     return Object.freeze({
         contracts: ["Subtitle"],
-        /** @param {{carNum?: unknown}} movieRef @param {{scope?: any, refreshCache?: boolean}} [options] */
+        /** @param {{carNum?: unknown, keyword?: string}} movieRef @param {{scope?: any, refreshCache?: boolean, onPartialFailure?: (failed:number) => void}} [options] */
         async search(movieRef, options = {}) {
             if (!http) throw new TypeError("字幕请求服务不可用");
             const carNum = String(movieRef.carNum || "").trim();
             if (!carNum) return [];
-            const base = `https://www.subtitlecat.com/index.php?search=${encodeURIComponent(carNum)}`;
+            const base = `https://www.subtitlecat.com/index.php?search=${encodeURIComponent(movieRef.keyword?.trim() || carNum)}`;
             const search = await http.request({ providerId: "subtitlecat", capability: "subtitle.search", url: base, responseType: "text", urlPolicy: policy, refreshCache: options.refreshCache === true,
                 cacheAccept: (/** @type {any} */ response) => { try { return parseSubtitleCatSearch(response.data, response.finalUrl || base, carNum).length > 0; } catch { return false; } },
             }, options.scope);
             const candidates = parseSubtitleCatSearch(search.data, search.finalUrl || base, carNum);
-            const results = [];
-            for (const candidate of candidates) {
+            const settled = await Promise.allSettled(candidates.map(async candidate => {
                 options.scope?.assertActive();
                 const detail = await http.request({ providerId: "subtitlecat", capability: "subtitle.search", url: candidate.url, responseType: "text", urlPolicy: policy, refreshCache: options.refreshCache === true,
                     cacheAccept: (/** @type {any} */ response) => { try { return parseSubtitleCatDownloads(response.data, response.finalUrl || candidate.url, carNum, candidate.name).length > 0; } catch { return false; } },
                 }, options.scope);
-                results.push(...parseSubtitleCatDownloads(detail.data, detail.finalUrl || candidate.url, carNum, candidate.name));
-            }
-            return results;
+                return parseSubtitleCatDownloads(detail.data, detail.finalUrl || candidate.url, carNum, candidate.name);
+            }));
+            options.scope?.assertActive();
+            const failures = settled.filter(result => result.status === "rejected").length;
+            if (failures) options.onPartialFailure?.(failures);
+            return settled.flatMap(result => result.status === "fulfilled" ? result.value : []);
         },
         /** @param {{url?: unknown}} subtitle @param {{scope?: any}} [options] */
         async downloadAsset(subtitle, options = {}) {
@@ -39,12 +41,12 @@ export function createSubtitleCatAdapter(http) {
             const result = await http.request({ providerId: "subtitlecat", capability: "subtitle.download", url: String(subtitle.url || ""), responseType: "text", urlPolicy: policy }, options.scope);
             return result.data;
         },
-        /** @param {{carNum?: unknown}} movieRef */
+        /** @param {{carNum?: unknown, keyword?: string}} movieRef */
         detailUrl(movieRef) {
             const carNum = String(movieRef?.carNum || "").trim();
             if (!carNum) return null;
             const url = new URL("/index.php", "https://subtitlecat.com");
-            url.searchParams.set("search", carNum);
+            url.searchParams.set("search", movieRef.keyword?.trim() || carNum);
             return url.href;
         },
     });

@@ -66,6 +66,10 @@ export function readListItem(item, jquery = /** @type {any} */ (globalThis).$) {
         publishTime = dates.find((/** @type {string} */ value) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
         nativeNumbers = dates.filter((/** @type {string} */ value) => !/^\d{4}-\d{1,2}-\d{1,2}$/.test(value)).map(normalizeMovieCarNum).filter(Boolean);
         carNum = nativeNumbers[0];
+        if (!carNum && element.closest(".masonry").length && typeof url === "string") {
+            const hrefCode = /\/([A-Z0-9]+-[0-9]+)\/?(?:[?#]|$)/i.exec(url)?.[1];
+            carNum = normalizeMovieCarNum(hrefCode);
+        }
     }
     const normalized = normalizeMovieCarNum(carNum) ?? "";
     title = element.attr("data-jhs-original-title") || title;

@@ -1,5 +1,5 @@
-import { JhsSelect } from "../../core/ui-primitives.js";
 // @ts-check
+import { JhsSelect } from "../../core/ui-primitives.js";
 
 /** In-memory ownership for the full form; it never persists settings or credentials. */
 export class SettingsDraft {
@@ -74,6 +74,21 @@ export class SettingsDraft {
         const text = count ? `有 ${count} 项未保存` : "";
         this.root.find("#settings-draft-status").text(text);
         this.root.find("#saveBtn").attr("data-jhs-dirty-count", count);
+        this.root.find("#discardSettingsBtn").prop("hidden", !count && !pending);
+        const groups = new Set();
+        for (const key of new Set([...dirty, ...(this.session?.dirtyKeys() || [])])) {
+            const field = this.root.find(this.selectors[key] || '[data-jhs-setting="' + key + '"]');
+            const id = field.closest(".content-panel").attr("id");
+            if (id) groups.add(id);
+            else if (key.startsWith("privacy")) groups.add("appearance-panel");
+            else if (key === "disabledPlugins" || key === "detailShortcuts") groups.add(key === "disabledPlugins" ? "advanced-panel" : "browse-panel");
+            else groups.add("resources-panel");
+        }
+        if (review || title || pendingGroups.has("review") || pendingGroups.has("title")) groups.add("filtering-panel");
+        if (pendingGroups.has("resources") || this.session?.extraDirtyCount?.()) groups.add("resources-panel");
+        this.root.find(".side-menu-item").each((/** @type {number} */ _, /** @type {HTMLElement} */ item) => {
+            item.toggleAttribute("data-jhs-dirty", groups.has(item.dataset.panel));
+        });
         return { count, pending };
     }
     /** Advance only committed parts of the captured submission; newer edits remain dirty. @param {ReturnType<SettingsDraft['capture']>} submitted @param {string[]} keys */

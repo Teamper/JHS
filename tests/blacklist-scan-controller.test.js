@@ -25,7 +25,7 @@ function createController({ records = [], request = vi.fn(async () => ({ data: "
 describe("BlacklistScanController", () => {
     it("preserves host, interval, stopped and source filtering before feature-owned writes", async () => {
         const records = [
-            { starId: "primary", name: "Primary", url: "https://javdb.com/actors/primary?t=d", createTime: "2026-09-27" },
+            { starId: "primary", name: "Primary", url: "https://javdb-old.com/actors/primary?t=d", createTime: "2026-09-27" },
             { starId: "other-host", name: "Other", url: "https://javbus.com/star/other", createTime: "2026-09-26" },
             { starId: "recent", name: "Recent", url: "https://javdb.com/actors/recent", checkTime: "recent", createTime: "2026-09-25" },
             { starId: "stopped", name: "Stopped", url: "https://javdb.com/actors/stopped", lastPublishTime: "2010-01-01", createTime: "2026-09-24" },
@@ -34,7 +34,7 @@ describe("BlacklistScanController", () => {
         const setup = createController({ records });
         const result = await setup.controller.scan(setup.options);
 
-        expect(result).toMatchObject({ success: 1, networkFailed: 0, parseFailed: 0, skippedHost: 2, skippedInterval: 1, skippedStopped: 1, aborted: 0 });
+        expect(result).toMatchObject({ success: 1, networkFailed: 0, parseFailed: 1, skippedHost: 1, skippedInterval: 1, skippedStopped: 1, aborted: 0 });
         expect(setup.http.request).toHaveBeenCalledOnce();
         expect(setup.http.request).toHaveBeenCalledWith(expect.objectContaining({
             providerId: "host-task:javdb", url: "https://javdb.com/actors/primary?t=d", timeout: 10000, retryCount: 1,

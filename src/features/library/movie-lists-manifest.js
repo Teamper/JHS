@@ -4,7 +4,7 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { MovieListsController, MOVIE_LISTS_STYLES } from "./movie-lists-controller.js";
 
 export default defineFeature({
-    id:"movie-lists", kind:"feature", disableable:true, sites:["javdb","javbus"], routes:[], startup:"eager",
+    id:"movie-lists", kind:"feature", disableable:true, sites:["javdb"], routes:[], startup:"eager",
     requires:[PORT.host, PORT.style, SERVICE.javdbLists, SERVICE.dialog, SERVICE.domUi], contributes:[], providesCommands:["library.lists.open"],
     activate:async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         runtime.scope.addCleanup(deps[PORT.style].register("jhs-movie-lists",MOVIE_LISTS_STYLES));

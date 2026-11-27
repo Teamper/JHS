@@ -12,6 +12,7 @@ describe("FC2 workspace Feature ownership", () => {
         const diagnostics = new DiagnosticsService();
         const styleRelease = vi.fn(), style = { register: vi.fn(() => styleRelease) };
         const movie = { id: "injected-movie-service" };
+        const events = {};
         const logger = { warn: vi.fn(), error: vi.fn() };
         const container = new DependencyContainer()
             .register(PORT.style, style)
@@ -28,6 +29,7 @@ describe("FC2 workspace Feature ownership", () => {
             .register(SERVICE.detailContent, { review: {}, related: {} })
             .register(SERVICE.keywordRules, {})
             .register(SERVICE.state, {})
+            .register(SERVICE.events, events)
             .register(SERVICE.domUi, {})
             .register(SERVICE.clipboard, {})
             .register(SERVICE.notifications, {})
@@ -51,6 +53,7 @@ describe("FC2 workspace Feature ownership", () => {
 
         expect(consumedService).toBe(runtime.runtimeLookup.getBean("Fc2Plugin"));
         expect(consumedService.getRuntimeService("movie")).toBe(movie);
+        expect(consumedService.getRuntimeService("events")).toBe(events);
         expect(consumedService.getRuntimeService("logger")).toBe(logger);
         expect(consumedService.managedByFeature).toBe(true);
         expect(style.register).toHaveBeenCalledOnce();

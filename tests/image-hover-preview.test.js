@@ -30,6 +30,7 @@ class FakeElement {
     remove() { this.parentNode && (this.parentNode.children = this.parentNode.children.filter((child) => child !== this)); this.parentNode = null; }
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) || null; }
+    hasAttribute(name) { return this.attributes.has(name); }
     closest(selector) { return this.selectors.has(selector) ? this : this.parentNode?.closest?.(selector) || null; }
     contains(node) { return node === this || this.children.some((child) => child.contains(node)); }
     get offsetWidth() { return Number.parseInt(this.style.width, 10) || 120; }
@@ -37,7 +38,7 @@ class FakeElement {
 }
 
 class FakeDocument {
-    constructor(head, body) { this.head = head; this.body = body; this.listeners = new Map(); }
+    constructor(head, body) { this.head = head; this.body = body; this.documentElement = new FakeElement("html"); this.listeners = new Map(); }
     createElement(tagName) { return new FakeElement(tagName); }
     getElementById(id) { return this.head.children.find((child) => child.id === id) || null; }
     addEventListener(type, listener) { const listeners = this.listeners.get(type) || new Set(); listeners.add(listener); this.listeners.set(type, listeners); }

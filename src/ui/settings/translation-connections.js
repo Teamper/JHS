@@ -5,12 +5,14 @@ import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { DEFAULT_TRANSLATION_PROMPT, TRANSLATION_TYPES, translationErrorLabel, normalizeTranslationPrompt } from "../../core/translation-model.js";
 export const TRANSLATION_SETTINGS_STYLES = `
 .jhs-translation-settings,.jhs-translation-workspace{padding:var(--jhs-space-4);box-sizing:border-box;display:grid;gap:var(--jhs-space-3);color:var(--jhs-text);min-width:0}
+.jhs-translation-workspace { background:var(--jhs-surface); }
 .jhs-translation-settings fieldset,.jhs-translation-row{display:grid;gap:var(--jhs-space-3);min-width:0;padding:var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md)}
 .jhs-translation-settings label{display:grid;gap:var(--jhs-space-1);min-width:0}
 .jhs-translation-settings label.jhs-translation-choice{display:flex;align-items:center;gap:var(--jhs-space-2)}
 .jhs-translation-settings .jhs-field{width:100%;min-width:0;box-sizing:border-box}
 .jhs-translation-settings textarea{min-height:100px;resize:vertical}
 .jhs-translation-actions,.jhs-translation-fallback{display:flex;flex-wrap:wrap;align-items:center;gap:var(--jhs-space-2)}
+.jhs-translation-settings ol { list-style:none; padding:0; margin:0; display:grid; gap:var(--jhs-space-2); }
 .jhs-translation-fallback select{flex:1;min-width:120px}
 .jhs-translation-settings [hidden],.jhs-translation-workspace [hidden]{display:none!important}
 .jhs-translation-settings p,.jhs-translation-workspace p{overflow-wrap:anywhere}
@@ -90,6 +92,7 @@ export function createTranslationConnections(options) {
         const row = document.createElement("fieldset"), legend = document.createElement("legend"), rowScope = new LifecycleScope("translation:profile"), id = connection.id || crypto.randomUUID();
         const release = scope.addCleanup(() => rowScope.dispose());
         rowScope.addCleanup(release);
+        legend.className = "jhs-sr-only";
         legend.textContent = connection.name || "新服务";
         row.append(legend);
         const name = field(row, "名称", connection.name || "").input;
@@ -172,8 +175,8 @@ export function createTranslationConnections(options) {
             button(row, label, () => { const index = fallbacks.indexOf(item), next = index + delta; if (next < 0 || next >= fallbacks.length)
                 return; const focus = document.activeElement; [fallbacks[index], fallbacks[next]] = [fallbacks[next], fallbacks[index]]; for (const entry of fallbacks)
                 fallbackList.append(entry.root); const HTMLElementType = document.defaultView?.HTMLElement; if (HTMLElementType && focus instanceof HTMLElementType)
-                focus.focus(); }, rowScope);
-        button(row, "删除", () => { fallbacks.splice(fallbacks.indexOf(item), 1); rowScope.dispose(); row.remove(); JhsSelect.get(primary)?.trigger[0]?.focus(); }, rowScope);
+                focus.focus(); }, rowScope).classList.add("jhs-btn--sm");
+        button(row, "删除", () => { fallbacks.splice(fallbacks.indexOf(item), 1); rowScope.dispose(); row.remove(); JhsSelect.get(primary)?.trigger[0]?.focus(); }, rowScope).classList.add("jhs-btn--sm");
     };
     button(selection, "添加备用服务", () => { if (fallbacks.length < 20)
         appendFallback(""); });

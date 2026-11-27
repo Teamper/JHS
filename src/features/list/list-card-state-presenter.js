@@ -7,7 +7,7 @@ import { isHardHidden } from "../../core/list-filters.js";
 import { evaluateListItem, findMatchedTitleKeyword } from "./list-evaluator.js";
 import { OwnedPopover } from "../../core/owned-popover.js";
 
-export const LIST_CARD_STATE_STYLES = `.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:var(--jhs-space-1);display:flex;flex-wrap:wrap;gap:var(--jhs-space-1);max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 var(--jhs-space-1);border-radius:var(--jhs-radius-pill)}.status-tag--blocked{background:var(--jhs-status-filter);color:var(--jhs-status-filter-on)}.status-tag--favorite{background:var(--jhs-status-fav);color:var(--jhs-status-fav-on)}.status-tag--downloaded{background:var(--jhs-status-down);color:var(--jhs-status-down-on)}.status-tag--watched{background:var(--jhs-status-watch);color:var(--jhs-status-watch-on)}.jhs-card-reason{position:absolute;bottom:var(--jhs-space-2);right:var(--jhs-space-2);z-index:var(--jhs-z-content);min-height:var(--jhs-touch-target)}.jhs-card-reason-owner{position:relative}.jhs-card-reasons{padding:var(--jhs-space-3);gap:var(--jhs-space-2);overflow:auto}.jhs-card-reasons p{margin:0;overflow-wrap:anywhere}`;
+export const LIST_CARD_STATE_STYLES = `.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:var(--jhs-space-1);display:flex;flex-wrap:wrap;gap:var(--jhs-space-1);max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 var(--jhs-space-1);border-radius:var(--jhs-radius-pill)}.status-tag--blocked{background:var(--jhs-status-filter);color:var(--jhs-status-filter-on)}.status-tag--favorite{background:var(--jhs-status-fav);color:var(--jhs-status-fav-on)}.status-tag--downloaded{background:var(--jhs-status-down);color:var(--jhs-status-down-on)}.status-tag--watched{background:var(--jhs-status-watch);color:var(--jhs-status-watch-on)}.jhs-card-cover-frame{position:relative}.jhs-card-reason{align-self:flex-start;margin:var(--jhs-space-2)}.status-tag--favorite-actress{background:var(--jhs-accent-tint);color:var(--jhs-accent-text)}.jhs-card-reasons{padding:var(--jhs-space-3);gap:var(--jhs-space-2);overflow:auto}.jhs-card-reasons p{margin:0;overflow-wrap:anywhere}`;
 
 const BADGES = Object.freeze({
     blocked: { text: u, color: "var(--jhs-status-filter)", on: "var(--jhs-status-filter-on)", tip: "单番号屏蔽" },
@@ -30,6 +30,7 @@ export class ListCardStatePresenter {
         /** @type {Map<Element, any>} */ this.summaryItems = new Map();
         /** @type {any} */ this.summary = null;
         /** @type {OwnedPopover | null} */ this.reasonPopover = null;
+        /** @type {WeakMap<Element, HTMLButtonElement>} */ this.reasons = new WeakMap();
         this.yieldFrame = options.yieldFrame ?? (() => new Promise((resolve) => {
             const view = this.document?.defaultView;
             const scheduler = /** @type {any} */ (view)?.scheduler;
@@ -53,7 +54,7 @@ export class ListCardStatePresenter {
             const item = items[index];
             if (this.hostAdapter?.site === "javbus" && item.querySelector(".avatar-box")) continue;
             const record = this.readCardIdentity(item), { carNum, title } = record;
-            const enrichedRecord = context.favoriteActressHighlightEnabled && context.favoriteActressIndex?.hasActresses && (record.cardNames === undefined || record.cardStarIds === undefined)
+            const enrichedRecord = context.favoriteActressIndex?.hasActresses && (record.cardNames === undefined || record.cardStarIds === undefined)
                 ? { ...record, cardNames: record.cardNames ?? readCardNames(item), cardStarIds: record.cardStarIds ?? readCardStarIds(item) }
                 : record;
             const evaluation = evaluateListItem(enrichedRecord, context, { filter });
@@ -73,6 +74,8 @@ export class ListCardStatePresenter {
         item.setAttribute("data-jhs-visibility", JSON.stringify(visibilityReasons));
         item.setAttribute("data-jhs-recent", recent ? "yes" : "no");
         item.setAttribute("data-jhs-tag-position", tagPosition);
+        item.toggleAttribute("data-jhs-collected-actress", Boolean(evaluation.collectedActress));
+        item.toggleAttribute("data-jhs-rated", Boolean(evaluation.rated));
         if (favoriteActresses.length) {
             item.setAttribute("data-jhs-favorite-actress", "yes");
             item.setAttribute("data-jhs-favorite-actress-names", favoriteActresses.join("，"));
@@ -84,7 +87,10 @@ export class ListCardStatePresenter {
         const signature = JSON.stringify({ flags, visibilityReasons, P: tagPosition, keyword: visibilityReasons.keyword ? (matchedKeyword || findMatchedTitleKeyword(context.titleKeywords, title, carNum)) : "", actors: context.actorCarNumToNameMap?.get(carNum), actresses: context.actressCarNumToNameMap?.get(carNum), favoriteActresses });
         if (item.getAttribute("data-jhs-state-signature") !== signature) {
             item.setAttribute("data-jhs-state-signature", signature);
-            if (this.reasonPopover && item.contains(this.reasonPopover.anchor)) this.reasonPopover.close();
+            const reason = this.reasons.get(item);
+            if (reason && this.reasonPopover?.anchor === reason) this.reasonPopover.close();
+            reason?.remove();
+            this.reasons.delete(item);
             item.querySelectorAll(".jhs-status-tags,.jhs-card-reason").forEach((node) => node.remove());
             this.renderBadges(item, { carNum, title, flags, visibilityReasons, matchedKeyword, context, tagPosition, favoriteActresses });
         }
@@ -115,16 +121,15 @@ export class ListCardStatePresenter {
             const toneClass = ["keyword", "actorBlacklist", "actressBlacklist"].includes(String(key)) ? "status-tag--blocked" : key === "favoriteActress" ? "status-tag--favorite-actress" : `status-tag--${key}`;
             badge.className = `jhs-badge ${key === "favoriteActress" ? "jhs-badge--accent" : isJavDb ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag ${toneClass}`;
             badge.dataset.tip = tip;
+            if (["keyword", "actorBlacklist", "actressBlacklist", "favoriteActress"].includes(String(key))) badge.setAttribute("data-jhs-privacy-sensitive", "");
             badge.title = "";
             badge.textContent = definition.text;
             box.append(badge);
         }
 
-        if (isJavDb) item.querySelector(".tags")?.append(box);
-        else if (this.hostAdapter?.site === "javbus") {
-            const target = item.querySelector(".item-tag") ?? item.querySelector(".photo-info > span > div") ?? item.querySelector(".photo-info > span") ?? item.querySelector("a") ?? item;
-            target?.append(box);
-        }
+        const frame = item.querySelector(".cover,.photo-frame") ?? item.querySelector(".item-tag") ?? item;
+        frame.classList.add("jhs-card-cover-frame");
+        frame.append(box);
         const reasons = definitions.filter(([key]) => ["keyword", "actorBlacklist", "actressBlacklist"].includes(String(key)));
         if (reasons.length) {
             const button = this.document.createElement("button");
@@ -133,8 +138,9 @@ export class ListCardStatePresenter {
             button.textContent = "屏蔽原因";
             button.setAttribute("aria-label", `${carNum} 的屏蔽原因`);
             button.setAttribute("aria-haspopup", "dialog"); button.setAttribute("aria-expanded", "false");
-            const owner = item.matches("a") ? item.parentElement : item;
-            owner?.classList.add("jhs-card-reason-owner"); owner?.append(button);
+            if (item.matches("a")) item.after(button);
+            else item.append(button);
+            this.reasons.set(item, button);
             button.addEventListener("click", (/** @type {MouseEvent} */ event) => {
                 event.preventDefault(); event.stopPropagation();
                 const current = this.reasonPopover;
@@ -145,6 +151,7 @@ export class ListCardStatePresenter {
                 title.textContent = "规则屏蔽原因"; panel.append(title);
                 for (const [key, , tip] of reasons) {
                     const line = this.document.createElement("p");
+                    line.setAttribute("data-jhs-privacy-kind", key === "keyword" ? "title" : "actor");
                     line.textContent = `${BADGES[/** @type {keyof typeof BADGES} */ (String(key))].text}：${tip || "未知"}`; panel.append(line);
                 }
                 close.type = "button"; close.className = "jhs-btn jhs-btn--secondary"; close.textContent = "关闭"; panel.append(close);

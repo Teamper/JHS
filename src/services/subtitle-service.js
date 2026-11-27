@@ -10,13 +10,14 @@ export class SubtitleService {
         /** @type {Map<string, {scope: LifecycleScope, users: number, promise: Promise<ReturnType<typeof parseSubtitleAsset>>}>} */ this.inflight = new Map();
     }
 
-    /** @param {Record<string, unknown>} movieRef @param {{scope?: LifecycleScope, refreshCache?: boolean, onSource?: (result: {providerId: string, status: string, records: any[], error?: string}) => void}} [options] */
+    /** @param {Record<string, unknown>} movieRef @param {{scope?: LifecycleScope, refreshCache?: boolean, onSource?: (result: {providerId: string, status: string, records: any[], error?: string, failures?: number}) => void}} [options] */
     async searchAll(movieRef, options = {}) {
         const results = await Promise.all(this.integrations.list("subtitle.search").map(async manifest => {
             try {
-                const records = (await this.search(manifest.id, movieRef, options)).filter((/** @type {any} */ item) => SUBTITLE_EXTENSIONS.includes(String(item.extension).toLowerCase()));
+                let failures = 0;
+                const records = (await this.search(manifest.id, movieRef, { ...options, onPartialFailure: count => { failures += count; } })).filter((/** @type {any} */ item) => SUBTITLE_EXTENSIONS.includes(String(item.extension).toLowerCase()));
                 options.scope?.assertActive();
-                const result = { providerId: manifest.id, status: records.length ? "success" : "empty", records };
+                const result = { providerId: manifest.id, status: records.length ? "success" : "empty", records, failures };
                 options.onSource?.(result);
                 return result;
             } catch (error) {
@@ -76,7 +77,7 @@ export class SubtitleService {
         }
     }
 
-    /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, refreshCache?: boolean}} [options] */
+    /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, refreshCache?: boolean, onPartialFailure?: (failed:number) => void}} [options] */
     async search(providerId, movieRef, options = {}) {
         const manifest = this.integrations.list("subtitle.search").find((item) => item.id === providerId);
         if (!manifest) return [];

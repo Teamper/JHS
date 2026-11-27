@@ -20,6 +20,59 @@ function createHarness(initial = {}, mutationCoordinator = null, diagnosticConso
 }
 
 describe("StateService durable transactions", () => {
+    it("confirms only the matching ambiguous offline attempt without adding a second history entry", async () => {
+        const { service, eventBus } = createHarness();
+        const record = await service.appendOfflineHistory({ id: "pending-1", providerId: "115", resource: "magnet:test",
+            carNum: "ABC-1", status: "pending", submissionOutcome: "unknown", errorCode: "TIMEOUT" });
+        await expect(service.confirmOfflineSubmission({ attemptId: record.id, providerId: "123", resource: record.resource })).resolves.toBe(false);
+        const attempt = { attemptId: record.id, providerId: record.providerId, resource: record.resource };
+        await expect(service.confirmOfflineSubmission(attempt)).resolves.toBe(true);
+        await expect(service.confirmOfflineSubmission(attempt)).resolves.toBe(false);
+        const history = await service.getOfflineHistory();
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({ id: record.id, createdAt: record.createdAt, status: "submitted", submissionOutcome: "exists" });
+        expect(history[0]).not.toHaveProperty("errorCode");
+        expect(eventBus.emit).toHaveBeenLastCalledWith("offline-history-changed", { ids: [record.id] }, { broadcastFirst: true });
+    });
+
+    it("adds known cast without replacing legacy names and reverts cast additions with the mark", async () => {
+        const { service } = createHarness();
+        await service.patch("ABC-1", { favorite: true }, { record: { names: "既有演员", remark: "旧备注" } });
+        const options = { keepExistingNames: true };
+        const marked = await service.patch(["ABC-1"], { watched: true }, { ...options,
+            records: [{ carNum: "ABC-1", names: "作品原题", title: "作品原题", actorNames: [" 新演员 ", "", "新演员"] }],
+        });
+        expect(await service.getState("ABC-1")).toMatchObject({
+            names: "既有演员", title: "作品原题", actorNames: ["新演员"], remark: "旧备注",
+            stateFlags: { favorite: true, watched: true },
+        });
+        await expect(service.patch("ABC-1", {}, { record: { actorNames: ["新演员"] } }))
+            .resolves.toEqual({ changed: [], transactionId: null });
+        const another = await service.patch("ABC-1", { downloaded: true }, { record: { actorNames: ["新演员", "另一演员"] } });
+        expect((await service.getState("ABC-1")).actorNames).toEqual(["新演员", "另一演员"]);
+        await service.undoTransaction(another.transactionId);
+        expect((await service.getState("ABC-1")).actorNames).toEqual(["新演员"]);
+        await service.undoTransaction(marked.transactionId);
+        const restored = await service.getState("ABC-1");
+        expect(restored).toMatchObject({ names: "既有演员", remark: "旧备注", stateFlags: { favorite: true, watched: false } });
+        expect(restored).not.toHaveProperty("actorNames");
+        expect(restored).not.toHaveProperty("title");
+    });
+
+    it("updates existing batch targets without resurrecting a deleted record", async () => {
+        const { service } = createHarness();
+        await service.patch(["ABC-1", "ABC-2"], { favorite: true });
+        await service.remove("ABC-1");
+
+        const update = await service.patch(["ABC-1", "ABC-2"], { downloaded: true }, { existingOnly: true });
+        expect(update.changed).toEqual(["ABC-2"]);
+        expect(await service.getState("ABC-1")).toBeFalsy();
+        expect((await service.getState("ABC-2")).stateFlags.downloaded).toBe(true);
+        await service.undoTransaction(update.transactionId);
+        expect(await service.getState("ABC-1")).toBeFalsy();
+        expect((await service.getState("ABC-2")).stateFlags.downloaded).toBe(false);
+    });
+
     it("can save a personal flag independently of the new-work queue and undo each action", async () => {
         const { service, data } = createHarness({
             car_list: [],

@@ -65,6 +65,12 @@ function isResourceText(value) {
     return /^\s*[.#:@\[]/.test(value) && /\{[^{}]*[\w-]+\s*:[^{}]+[;}]/.test(value) && /--jhs-|\.jhs-|\[data-jhs-/.test(value);
 }
 
+function isDisplayCopy(value) {
+    return Buffer.byteLength(value, "utf8") >= 18
+        && /(?:\p{Script=Han}.*){4}/su.test(value)
+        && !/[<>{}\u0000-\u0008]/u.test(value);
+}
+
 function templateParts(node) {
     return [node.head, ...node.templateSpans.map(span => span.literal)];
 }
@@ -75,7 +81,8 @@ function isResourceTemplate(node) {
         if (ts.isTaggedTemplateExpression(parent)) return false;
     }
     // An empty placeholder still delimits adjacent markup and CSS tokens.
-    return isResourceText(templateParts(node).map(part => part.text).join(" "));
+    const text = templateParts(node).map(part => part.text).join(" ");
+    return isResourceText(text) || isDisplayCopy(text);
 }
 
 function staticValue(node) {
@@ -133,15 +140,17 @@ function businessAstDigest(file, getterName, resources) {
 export function collectStaticResources(path, source) {
     path = path.replaceAll("\\", "/");
     const resources = new Map();
-    if (!resourceOwners.has(path)) return resources;
+    const markupOwner = resourceOwners.has(path);
+    const copyOwner = /^src\/(?:core|contracts|features|integrations|platform|services|ui)\//u.test(path) || path === "src/app/settings-catalog.js";
+    if (!markupOwner && !copyOwner) return resources;
     const register = value => resources.set(value, new Set([path]));
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     function visit(node) {
         const value = staticValue(node);
-        if (value !== undefined && isResourceText(value)) register(value);
+        if (value !== undefined && (markupOwner && isResourceText(value) || copyOwner && isDisplayCopy(value))) register(value);
         if (isResourceTemplate(node)) {
             for (const part of templateParts(node)) {
-                if (Buffer.byteLength(part.text, "utf8") >= 32) register(part.text);
+                if (markupOwner && Buffer.byteLength(part.text, "utf8") >= 32 || copyOwner && isDisplayCopy(part.text)) register(part.text);
             }
         }
         ts.forEachChild(node, visit);
@@ -151,13 +160,18 @@ export function collectStaticResources(path, source) {
 }
 
 /** Replace data values only; all surrounding business tokens and evaluation order stay intact. */
-export function replaceResourceLiterals(bundle, registry) {
+export function replaceResourceLiterals(bundle, registry, { internRepeatedText = false } = {}) {
     const file = ts.createSourceFile("bundle.js", bundle, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-    const matches = [], identifiers = new Set();
+    const matches = [], identifiers = new Set(), repeated = new Map();
     function visit(node) {
         if (ts.isIdentifier(node)) identifiers.add(node.text);
-        if (isTextLiteral(node) && isValuePosition(node) && registry.has(node.text)) {
-            matches.push({ start: node.getStart(file), end: node.end, value: node.text });
+        if (isTextLiteral(node) && isValuePosition(node)) {
+            const literal = { start: node.getStart(file), end: node.end, value: node.text };
+            if (registry.has(literal.value)) matches.push(literal);
+            else if (internRepeatedText && Buffer.byteLength(literal.value, "utf8") >= 15 && !/[<>{}\u0000-\u001f]/u.test(literal.value)) {
+                if (!repeated.has(literal.value)) repeated.set(literal.value, []);
+                repeated.get(literal.value).push(literal);
+            }
         } else if (isResourceTemplate(node)) {
             for (const part of templateParts(node)) {
                 if (registry.has(part.text)) matches.push({
@@ -170,6 +184,8 @@ export function replaceResourceLiterals(bundle, registry) {
         ts.forEachChild(node, visit);
     }
     visit(file);
+    // Store repeated fixed strings once. Property names and tagged templates keep their original syntax.
+    for (const occurrences of repeated.values()) if (occurrences.length >= 3) matches.push(...occurrences);
     matches.sort((left, right) => left.start - right.start);
     let getterName = "__jhsStaticText";
     while (identifiers.has(getterName)) getterName += "$";
@@ -178,14 +194,18 @@ export function replaceResourceLiterals(bundle, registry) {
     const resources = [...new Set(matches.map(match => match.value))].sort();
     const ids = new Map(resources.map((value, index) => [value, index]));
     const replacements = matches.map(match => ({ ...match, id: ids.get(match.value) }));
-    let code = bundle;
-    for (const replacement of [...replacements].reverse()) {
+    const chunks = [];
+    let cursor = 0;
+    for (const replacement of replacements) {
         // Minified keywords can directly abut quoted literals: return"css".
         // Delimit the replacement before reparsing so return/throw/typeof stay keywords.
         const lookup = `${getterName}(${replacement.id})`;
         const insert = replacement.template ? "${" + lookup + "}" : ` ${lookup} `;
-        code = code.slice(0, replacement.start) + insert + code.slice(replacement.end);
+        chunks.push(bundle.slice(cursor, replacement.start), insert);
+        cursor = replacement.end;
     }
+    chunks.push(bundle.slice(cursor));
+    const code = chunks.join("");
     const rewritten = ts.createSourceFile("packed-business.js", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     if (businessAstDigest(file) !== businessAstDigest(rewritten, getterName, resources)) {
         throw new Error("Static resource rewrite changed business syntax");
@@ -206,8 +226,8 @@ async function buildCodec(globalName) {
 }
 
 /** Embed only data plus a synchronous decoder; no loader, remote code or runtime storage. */
-export async function packStaticResources(bundle, registry) {
-    const replaced = replaceResourceLiterals(bundle, registry);
+export async function packStaticResources(bundle, registry, options) {
+    const replaced = replaceResourceLiterals(bundle, registry, options);
     if (!replaced.resources.length) return { code: bundle, resources: [], payload: "", license: "", report: { resourceCount: 0 } };
     const serialized = JSON.stringify(replaced.resources);
     const compressed = deflateRawSync(Buffer.from(serialized, "utf8"), { level: 9 });
@@ -226,6 +246,8 @@ export async function packStaticResources(bundle, registry) {
     const optimized = await esbuild.transform(wrapped, {
         minify: true, target: "es2020", charset: "utf8", legalComments: "none", logLevel: "silent",
     });
+    const counts = new Map();
+    for (const { id } of replaced.replacements) counts.set(id, (counts.get(id) ?? 0) + 1);
     const report = {
         resourceCount: replaced.resources.length,
         referenceCount: replaced.replacements.length,
@@ -235,7 +257,7 @@ export async function packStaticResources(bundle, registry) {
         bodyBytesBefore: Buffer.byteLength(bundle), bodyBytesAfter: Buffer.byteLength(optimized.code),
         resources: replaced.resources.map((value, id) => ({
             id, bytes: Buffer.byteLength(value), sha256: createHash("sha256").update(value).digest("hex"),
-            owners: [...registry.get(value)].sort(), references: replaced.replacements.filter(item => item.id === id).length,
+            owners: registry.has(value) ? [...registry.get(value)].sort() : ["repeated bundle text"], references: counts.get(id),
         })),
     };
     return { code: optimized.code, resources: replaced.resources, payload, license, report };

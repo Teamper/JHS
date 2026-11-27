@@ -1,5 +1,6 @@
 // @ts-check
 
+import { SCREENSHOT_PANEL_STYLES } from "../../ui/detail/panel-styles.js";
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { Fc2OwnedPageController } from "./fc2-owned-page-controller.js";
@@ -14,7 +15,7 @@ const commandId = "detail.fc2.workspace";
 export default defineFeature({
     id: "fc2-workspace", kind: "feature", disableable: true,
     sites: ["javdb"], routes: ["list", "detail", "owned-detail"], startup: "eager",
-    requires: [PORT.style, SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.account, SERVICE.credential, SERVICE.translation, SERVICE.privacy, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.detailContent, SERVICE.keywordRules, SERVICE.state, SERVICE.domUi, SERVICE.clipboard, SERVICE.notifications, SERVICE.clog],
+    requires: [PORT.style, SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.account, SERVICE.credential, SERVICE.translation, SERVICE.privacy, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.detailContent, SERVICE.keywordRules, SERVICE.state, SERVICE.events, SERVICE.domUi, SERVICE.clipboard, SERVICE.notifications, SERVICE.clog],
     contributionRoutes: ["list", "detail", "owned-detail"],
     contributes: [contributionId], providesCommands: [commandId],
     activate: async (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -29,7 +30,7 @@ export default defineFeature({
                 account: deps[SERVICE.account], credential: deps[SERVICE.credential], translation: deps[SERVICE.translation],
                 privacy:deps[SERVICE.privacy],
                 settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], screenshot: deps[SERVICE.screenshot],
-                review: deps[SERVICE.detailContent].review, keywordRules: deps[SERVICE.keywordRules], related: deps[SERVICE.detailContent].related, state: deps[SERVICE.state],
+                review: deps[SERVICE.detailContent].review, keywordRules: deps[SERVICE.keywordRules], related: deps[SERVICE.detailContent].related, state: deps[SERVICE.state], events: deps[SERVICE.events],
                 ui: deps[SERVICE.domUi], clipboard: deps[SERVICE.clipboard], notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog],
                 ensureFc2Catalog: () => runtime.executeCommand("fc2-catalog.ensure"),
                 openSubtitles: (/** @type {any} */ movie) => runtime.isCommandAvailable?.("subtitle.open") ? runtime.executeCommand("subtitle.open", movie) : Promise.reject(new Error("统一字幕面板已关闭，可在完整设置的功能管理中开启")),
@@ -55,7 +56,7 @@ export default defineFeature({
         runtime.onCapabilityChanged?.("detail.external-sites", () => service.refreshExternalSites());
         runtime.scope.listen(deps[SERVICE.credential], "credentials.changed", (/** @type {any} */ event) => { if (event.detail?.key === "jhs_appAuthorization") service.refreshWantAccounts(); });
         runtime.scope.addCleanup(() => service.disposeWantContexts());
-        runtime.scope.addCleanup(deps[PORT.style].register("jhs-fc2-workspace-feature", FC2_WORKSPACE_STYLES));
+        runtime.scope.addCleanup(deps[PORT.style].register("jhs-fc2-workspace-feature", FC2_WORKSPACE_STYLES + SCREENSHOT_PANEL_STYLES));
         const releaseCompatibilityBean = runtime.registerCompatibilityBean?.("Fc2Plugin", service);
         if (typeof releaseCompatibilityBean === "function") runtime.scope.addCleanup(releaseCompatibilityBean);
 

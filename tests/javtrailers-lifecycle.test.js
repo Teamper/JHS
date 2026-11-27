@@ -71,12 +71,16 @@ describe("JavTrailers Feature controller", () => {
         video.dispatchEvent(new Event("timeupdate"));
         expect(video.currentTime).toBe(17);
         video.currentTime = 1;
-        window.dispatchEvent(new MessageEvent("message"));
+        const seek = { origin: window.location.origin, source: window, data: { type: "jhs:trailer-seek" } };
+        window.dispatchEvent(new MessageEvent("message", { ...seek, origin: "https://untrusted.example" }));
+        window.dispatchEvent(new MessageEvent("message", { ...seek, data: {} }));
+        expect(video.currentTime).toBe(1);
+        window.dispatchEvent(new MessageEvent("message", seek));
         expect(video.currentTime).toBe(6);
 
         scope.dispose();
         video.style.position = "relative";
-        window.dispatchEvent(new MessageEvent("message"));
+        window.dispatchEvent(new MessageEvent("message", seek));
         expect(video.currentTime).toBe(6);
         expect(video.style.position).toBe("relative");
         expect(canvas.style.position).toBe("");

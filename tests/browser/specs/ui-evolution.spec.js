@@ -46,7 +46,7 @@ test("eight settings categories retain drafts, enhance all selects and save acro
   await expect.poll(() => page.evaluate(() => {
     const values = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot();
     return [values.highlightedTagNumber, values.httpTimeout];
-  })).toEqual(["3", 7000]);
+  })).toEqual([3, 7000]);
 });
 
 test("legacy settings entry points locate their group and keyboard navigation keeps the footer reachable", async ({ page, context }) => {
@@ -131,6 +131,7 @@ for (const theme of ["light", "dark"]) for (const scene of ["settings", "tasks",
     await boot(page, context, theme, scene === "detail");
     if (scene === "settings" || scene === "tasks") {
       const dialog = await openSettings(page, scene === "tasks" ? "task-panel" : undefined);
+      await expect(dialog.locator("#discardSettingsBtn")).toBeHidden();
       if (scene === "tasks") await expect(dialog.locator(".jhs-task-setting-status")).toHaveCount(3);
     }
     if (scene === "history") await page.evaluate(() => window.__jhsBrowserDiagnostics.executeCommand("library.history.open"));

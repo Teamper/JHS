@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import ts from "typescript";
 import { fileURLToPath } from "node:url";
 import { scanImportTimeEffects } from "./import-time-purity.mjs";
 
@@ -13,6 +14,19 @@ async function listJavaScriptFiles(directory) {
         return entry.isFile() && entry.name.endsWith(".js") ? [fullPath] : [];
     }));
     return nested.flat();
+}
+
+function importSpecifiers(source, file) {
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const paths = [];
+    function visit(node) {
+        const specifier = ts.isImportDeclaration(node) || ts.isExportDeclaration(node) ? node.moduleSpecifier
+            : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node.arguments[0] : null;
+        if (specifier && ts.isStringLiteralLike(specifier)) paths.push(specifier.text);
+        ts.forEachChild(node, visit);
+    }
+    visit(tree);
+    return paths;
 }
 
 async function checkImportGraph() {
@@ -33,9 +47,9 @@ async function checkImportGraph() {
     for (const file of files) {
         const source = await readFile(file, "utf8");
         const dependencies = [];
-        for (const match of source.matchAll(/^import\s+[^;]*?from\s+["']([^"']+)["'];?/gm)) {
-            if (!match[1].startsWith(".")) continue;
-            const dependency = path.resolve(path.dirname(file), match[1]);
+        for (const specifier of importSpecifiers(source, file)) {
+            if (!specifier.startsWith(".")) continue;
+            const dependency = path.resolve(path.dirname(file), specifier);
             if (!knownFiles.has(dependency)) continue;
             dependencies.push(dependency);
             const sourceLayer = path.relative(path.join(rootDir, "src"), file).split(path.sep)[0];

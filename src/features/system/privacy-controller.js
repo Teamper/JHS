@@ -2,22 +2,19 @@
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { shortcutFromEvent, shortcutMatches } from "../../core/detail-shortcuts.js";
 import { movieCodeTokens } from "../../core/movie-code-evidence.js";
-import { PRIVACY_DOCUMENT_TITLE_ATTRIBUTE } from "../../contracts/privacy-targets.js";
-import { createPrivacyPreferences } from "../../ui/settings/privacy-controls.js";
+import { dismissActiveTooltip } from "../../core/tooltip-controller.js";
+import { PRIVACY_DOCUMENT_TITLE_ATTRIBUTE, PRIVACY_KIND_ATTRIBUTE, explicitPrivacyKind } from "../../contracts/privacy-targets.js";
 
 export class PrivacyController {
-    /** @param {{host: any, privacy: any, settings: any, scope: LifecycleScope, ui: any, dialog: any, notifications: any}} options */
+    /** @param {{host: any, privacy: any, settings: any, scope: LifecycleScope, notifications: any}} options */
     constructor(options) {
         this.host = options.host;
         this.privacy = options.privacy;
         this.settings = options.settings;
         this.scope = options.scope;
-        this.ui = options.ui;
-        this.dialog = options.dialog;
         this.notifications = options.notifications;
         this.document = /** @type {Document} */ (options.host.document);
         this.window = /** @type {Window & typeof globalThis} */ (this.document.defaultView);
-        this.dialogScope = /** @type {LifecycleScope | null} */ (null);
         this.targetsKey = "";
         /** @type {Map<Element, string>} */ this.titles = new Map();
         this.documentTitle = /** @type {string | null} */ (null);
@@ -49,16 +46,19 @@ export class PrivacyController {
                 node.removeAttribute("data-jhs-privacy-original-title");
                 this.titles.delete(node);
             }
-            for (const record of records) for (const node of record.addedNodes) {
-                if (node.nodeType === 1) this.mark(/** @type {Element} */ (node));
-                else if (node.nodeType === 3 && node.parentElement && !node.parentElement.hasAttribute("data-jhs-privacy-text")) this.mark(node.parentElement);
+            for (const record of records) {
+                if (record.type === "attributes") this.mark(/** @type {Element} */ (record.target));
+                for (const node of record.addedNodes) {
+                    if (node.nodeType === 1) this.mark(/** @type {Element} */ (node));
+                    else if (node.nodeType === 3 && node.parentElement && !node.parentElement.hasAttribute("data-jhs-privacy-text")) this.mark(node.parentElement);
+                }
             }
-        }, { childList: true, subtree: true });
+        }, { childList: true, subtree: true, attributes: true, attributeFilter: [PRIVACY_KIND_ATTRIBUTE] });
         this.scope.addCleanup(() => {
             this.privacy.setActive?.(false);
-            this.dialogScope?.dispose();
             this.restoreTitles();
             this.document.documentElement.removeAttribute("data-jhs-privacy-active");
+            this.document.documentElement.removeAttribute("data-jhs-privacy-mask-images");
             this.clearMarks();
         });
         this.update();
@@ -72,7 +72,10 @@ export class PrivacyController {
             this.clearMarks();
             this.targetsKey = targetsKey;
         }
-        this.document.documentElement.toggleAttribute("data-jhs-privacy-active", this.privacy.masked);
+        const html = this.document.documentElement;
+        html.toggleAttribute("data-jhs-privacy-active", this.privacy.masked);
+        html.toggleAttribute("data-jhs-privacy-mask-images", this.privacy.masked && this.privacy.targets().includes("images"));
+        if (this.privacy.masked) dismissActiveTooltip(this.document);
         if (!this.privacy.masked) this.restoreTitles();
         if (this.privacy.masked && this.privacy.targets().includes("title")) {
             if (this.document.title !== "JHS 隐私遮罩") {
@@ -99,7 +102,9 @@ export class PrivacyController {
             const nodes = [...(root.matches(selector) ? [root] : []), ...root.querySelectorAll(selector)];
             for (const node of nodes) {
                 if (node.closest(".jhs-privacy-config,.jhs-privacy-tools")) continue;
-                if (node.matches(".layui-layer-title") && !movieCodeTokens(node.textContent || "").length) continue;
+                const explicit = explicitPrivacyKind(node);
+                if (explicit && explicit !== kind) continue;
+                if (!explicit && node.matches(".layui-layer-title") && !movieCodeTokens(node.textContent || "").length) continue;
                 if (kind === "code" && node.matches("p,date") && !movieCodeTokens(node.textContent || "").length) continue;
                 if (this.privacy.masked) {
                     let titleNode = /** @type {Element | null} */ (node);
@@ -114,8 +119,12 @@ export class PrivacyController {
                 /** @type {Text[]} */ const texts = [];
                 while (walker.nextNode()) {
                     const text = /** @type {Text} */ (walker.currentNode);
-                    if (kind === "title" && text.parentElement?.closest(selectors.code)) continue;
-                    if (text.data.trim() && !text.parentElement?.closest('[data-jhs-privacy-text],button,input,select,textarea,script,style,svg,[data-jhs-privacy-control]')) texts.push(text);
+                    const parent = text.parentElement;
+                    if (!text.data.trim() || parent?.closest('[data-jhs-privacy-text],input,select,textarea,script,style,svg,[data-jhs-privacy-control]')) continue;
+                    const tagged = parent?.closest(`[${PRIVACY_KIND_ATTRIBUTE}]`);
+                    if (tagged && explicitPrivacyKind(tagged) !== kind) continue;
+                    if (!tagged && (parent?.closest("button") || kind === "title" && parent?.closest(selectors.code))) continue;
+                    texts.push(text);
                 }
                 for (const text of texts) {
                     const span = this.document.createElement("span");
@@ -156,21 +165,5 @@ export class PrivacyController {
             const event = /** @type {KeyboardEvent} */ (rawEvent); if (event.code === "Space") { event.preventDefault(); release(); } });
         for (const type of ["pointerup", "pointercancel", "lostpointercapture", "blur"]) scope.listen(button, type, release);
         scope.addCleanup(release);
-    }
-    configure() {
-        if (this.dialogScope && !this.dialogScope.disposed) return;
-        const scope = new LifecycleScope("privacy:preferences"), focused = this.document.activeElement;
-        this.dialogScope = scope;
-        let id = 0;
-        let closed = false, releaseOwner = () => {};
-        scope.addCleanup(() => releaseOwner());
-        const root = createPrivacyPreferences({ document: this.document, scope, settings: this.settings, onClose: () => this.dialog.close(id) });
-        root.style.display = "none";
-        this.document.body.append(root);
-        scope.addCleanup(() => { root.remove(); if (focused instanceof this.window.HTMLElement && focused.isConnected) focused.focus(); });
-        try {
-            id = this.dialog.open({ type: 1, title: "隐私遮罩偏好", content: this.ui.jquery(root), ui: { size: "form", body: "scroll" }, shadeClose: true, end: () => { closed = true; scope.dispose(); } });
-            if (!closed) releaseOwner = this.scope.addCleanup(() => { if (!closed) this.dialog.close(id); scope.dispose(); });
-        } catch (error) { scope.dispose(); throw error; }
     }
 }

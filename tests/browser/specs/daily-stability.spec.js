@@ -35,6 +35,17 @@ for (const theme of ["light", "dark"]) test(`ordinary detail screenshot policy r
     await page.screenshot({ path: info.outputPath(`screenshot-policy-${theme}.png`) });
 });
 
+async function showSourceHealth(workspace) {
+    const toggle = workspace.locator("#nvTaskToggle");
+    await expect(toggle).toBeVisible();
+    if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+    const panel = workspace.getByRole("region", { name: "来源不可用的演员" });
+    await expect(panel).toBeVisible();
+    const details = panel.locator(".jhs-source-health-details");
+    if (!await details.evaluate(node => node.open)) await details.locator("summary").click();
+    return panel;
+}
+
 for (const theme of ["light", "dark"]) test(`actor source exceptions expose a safe manual retry ${theme}`, async ({ page, context }, info) => {
     await boot(page, context, theme);
     await page.evaluate(async () => {
@@ -54,8 +65,7 @@ for (const theme of ["light", "dark"]) test(`actor source exceptions expose a sa
         plugin.openDialog();
     });
     const workspace = page.locator(".newVideoToolBox");
-    if (await workspace.locator("#nvTaskToggle").isVisible()) await workspace.locator("#nvTaskToggle").click();
-    const exceptions = workspace.getByRole("region", { name: "来源不可用的演员" });
+    const exceptions = await showSourceHealth(workspace);
     await expect(exceptions).toContainText("来源不可用：3 位演员");
     await expect(exceptions).toContainText("24 小时后自动重查");
     const retries = exceptions.getByRole("button", { name: /^重试 / });
@@ -92,8 +102,7 @@ test("a closed actor retry cannot move focus in a later workspace", async ({ pag
         plugin.openDialog();
     });
     const root = page.locator(".newVideoToolBox");
-    if (await root.locator("#nvTaskToggle").isVisible()) await root.locator("#nvTaskToggle").click();
-    await root.getByRole("button", { name: /^重试 / }).click();
+    await (await showSourceHealth(root)).getByRole("button", { name: /^重试 / }).click();
     await expect.poll(() => page.evaluate(() => typeof window.releaseActorRetry)).toBe("function");
     await page.locator(".layui-layer-close").click();
     await expect(root).toHaveCount(0);
@@ -154,8 +163,7 @@ test("unavailable actor source panel supports profile inspection, rebind search,
     });
     const root = page.locator(".newVideoToolBox");
     await expect(root).toBeVisible();
-    if (await root.locator("#nvTaskToggle").isVisible()) await root.locator("#nvTaskToggle").click();
-    const healthPanel = root.locator(".jhs-source-health-panel");
+    const healthPanel = await showSourceHealth(root);
     await expect(healthPanel).toContainText("来源不可用：2 位演员");
     await expect(healthPanel.locator('a[href="https://javdb.com/actors/ui-actor?t=d"]')).toBeVisible();
     await healthPanel.scrollIntoViewIfNeeded();

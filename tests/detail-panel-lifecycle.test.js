@@ -65,7 +65,7 @@ describe("detail panel instance lifecycle", () => {
     it("binds the review context-menu handler exactly once across multiple panels", async () => {
         const { $, Review: plugin, keywordRules, window } = loadPanels();
         await plugin.show("A", $("#review-a")), await plugin.show("B", $("#review-b"));
-        window.getSelection = () => ({ toString: () => "keyword" });
+        window.getSelection = () => ({ anchorNode: $("#review-a .review-content")[0], toString: () => "keyword" });
         $("#review-a .review-content").trigger("contextmenu");
         await vi.waitFor((() => expect(keywordRules.addReviewKeyword).toHaveBeenCalledOnce()));
     });

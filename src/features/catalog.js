@@ -23,6 +23,7 @@ import translationTools from "./translation/tools-manifest.js";
 import enhancementSettings from "./system/enhancement-settings-manifest.js";
 import translation from "./translation/manifest.js";
 import externalSites from "./external-sites/manifest.js";
+import settingsEntry from "./settings/manifest.js";
 import { systemFeatureManifests } from "./system/catalog.js";
 
-export const featureManifests = Object.freeze([...systemFeatureManifests, enhancementSettings, translationTools, mediaLibrary, personalRatings, movieSelection, movieLists, privacy, subtitleWorkspace, detail, fc2Workspace, list, library, identity, actressInfo, discovery, ranking, newVideoFeature, schedulerFeature, translation, externalBridge, fc2Catalog, oneOneFive, externalSites, compatibility]);
+export const featureManifests = Object.freeze([settingsEntry, ...systemFeatureManifests, enhancementSettings, translationTools, mediaLibrary, personalRatings, movieSelection, movieLists, privacy, subtitleWorkspace, detail, fc2Workspace, list, library, identity, actressInfo, discovery, ranking, newVideoFeature, schedulerFeature, translation, externalBridge, fc2Catalog, oneOneFive, externalSites, compatibility]);

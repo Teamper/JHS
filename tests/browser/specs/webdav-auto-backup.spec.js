@@ -2,6 +2,7 @@ import { clickSettingsCategory } from "../harness/settings-navigation.js";
 import { expect, test } from "@playwright/test";
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 import { isolatedDav, sharedUserscriptInstallation } from "../harness/sync-dav.js";
+import { injectRealLayer } from "../harness/real-layer.js";
 
 const service = (page, method = "check", ...args) => page.evaluate(({ method, args }) => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("webdavSync")[method](...args), { method, args });
 async function openSettings(page) {
@@ -52,7 +53,7 @@ test("isolated DAV automatically converges across devices and sites, including p
         await expect(dialog.locator("#waitCheckCount")).toHaveValue("11");
         await dialog.locator("#saveBtn").click();
         await service(b); await service(page);
-        expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().waitCheckCount)).toBe("11");
+        expect(await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().waitCheckCount)).toBe(11);
         const bus = await context.newPage(); await bus.goto("https://www.javbus.com/");
         await injectUserscriptRuntime(bus, { beforeUserscriptInjection: installA });
         await expect.poll(async () => (await service(bus, "getStatus")).lastSuccessAt).toBeGreaterThan(0);
@@ -92,8 +93,10 @@ test("legacy blocked movies with equivalent numbers sync without losing their re
 test("zero requests without credentials, saved connection auto joins, pause and reopen preserve progress", async ({ page, context }) => {
     const dav = await isolatedDav();
     try {
-        const install = await sharedUserscriptInstallation(context, dav); await fulfillHostFixtures(context);
-        await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page, { beforeUserscriptInjection: install });
+        const install = await sharedUserscriptInstallation(context, dav);
+        const beforeUserscriptInjection = async page => { await install(page); await injectRealLayer(page); };
+        await fulfillHostFixtures(context);
+        await page.goto("https://javdb.com/"); await injectUserscriptRuntime(page, { beforeUserscriptInjection });
         await service(page); expect(dav.requests).toHaveLength(0);
         const dialog = await openSettings(page);
         await expect(dialog.locator("#webDavAutoBackupEnabled")).toHaveCount(0);
@@ -110,7 +113,7 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         await service(page, "pause", false); await service(page);
         await expect.poll(async () => (await service(page, "getStatus")).pendingChanges, { timeout: 12000 }).toBe(0);
         const writes = dav.requests.filter(request => request.method === "PUT").length;
-        await page.reload(); await injectUserscriptRuntime(page, { preserveStorage: true, beforeUserscriptInjection: install });
+        await page.reload(); await injectUserscriptRuntime(page, { preserveStorage: true, beforeUserscriptInjection });
         await service(page);
         expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writes);
         expect((await carList(page))[0].carNum).toBe("SYNC-2");
@@ -125,8 +128,14 @@ test("zero requests without credentials, saved connection auto joins, pause and 
         await page.getByRole("option", { name: /版本 1$/ }).click();
         await recovery.locator("#webdavSyncRestorePreferences").uncheck();
         await recovery.locator("#webdavSyncRestoreBtn").click();
-        await page.locator(".layui-layer-btn").getByRole("button", { name: "恢复", exact: true }).click();
-        await expect.poll(async () => (await carList(page)).length).toBe(0);
+        const preview = page.getByRole("dialog", { name: "数据差异预览" });
+        await expect(preview.getByText("鉴定记录", { exact: true })).toBeVisible();
+        expect((await carList(page)).map(record => record.carNum)).toEqual(["SYNC-2"]);
+        const reload = page.waitForEvent("load");
+        await preview.getByRole("button", { name: "恢复", exact: true }).click();
+        await reload;
+        await injectUserscriptRuntime(page, { preserveStorage: true, beforeUserscriptInjection });
+        expect(await carList(page)).toEqual([]);
         await service(page);
         expect((await service(page, "getStatus")).paused).toBe(true);
         expect(dav.requests.filter(request => request.method === "PUT")).toHaveLength(writesBeforeRestore);

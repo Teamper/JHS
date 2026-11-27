@@ -20,7 +20,8 @@ describe("start identification workflow", () => {
     it("scans the full page and ignores hidden, stateful, and hard-hidden cards", async () => {
         const { dom, $, plugin, list } = loadListActions();
         dom.window.document.querySelector(".movie-list").innerHTML = `
-            <div id="pending" class="item" style="display:none" data-jhs-flags='{}' data-jhs-visibility='{}'></div>
+            <div class="item" style="display:none" data-jhs-flags='{}' data-jhs-visibility='{}'></div>
+            <div id="pending" class="item" data-jhs-flags='{}' data-jhs-visibility='{}'></div>
             <div class="item" data-jhs-flags='{"favorite":true}' data-jhs-visibility='{}'></div>
             <div class="item" data-jhs-flags='{}' data-jhs-visibility='{"keyword":true}'></div>
             <div class="item" data-jhs-flags='{}' data-jhs-visibility='{"actorBlacklist":true}'></div>`;

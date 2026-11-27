@@ -30,7 +30,9 @@ export class BlacklistScanController {
             [this.movie.externalSiteOrigin("javDbBtn", settings), "javdb"],
             [this.movie.externalSiteOrigin("javBusBtn", settings), "javbus"],
         ];
-        /** @type {Array<{item: any, site: string}>} */
+        const current = new URL("https://" + options.currentHostname);
+        const activeSite = resolveBlacklistSite(current, origins);
+        /** @type {Array<{item: any, site: string, target: URL}>} */
         const eligible = [];
         for (const item of items) {
             let itemUrl;
@@ -40,7 +42,8 @@ export class BlacklistScanController {
                 options.onError?.("黑名单地址无效", item, error);
                 continue;
             }
-            if (options.currentHostname !== itemUrl.hostname) {
+            const site = resolveBlacklistSite(itemUrl, origins);
+            if (site && site !== activeSite) {
                 result.skippedHost++;
                 continue;
             }
@@ -52,13 +55,12 @@ export class BlacklistScanController {
                 result.skippedStopped++;
                 continue;
             }
-            const site = resolveBlacklistSite(itemUrl, origins);
             if (!site) {
                 result.parseFailed++;
                 options.onError?.(`不支持的黑名单来源站点: ${itemUrl.hostname}`, item, null);
                 continue;
             }
-            eligible.push({ item, site });
+            eligible.push({ item, site, target: new URL(itemUrl.pathname + itemUrl.search, current.origin) });
         }
 
         let nextIndex = 0, stopWorkers = false, blockedError = null;
@@ -69,7 +71,7 @@ export class BlacklistScanController {
                 if (index >= eligible.length) return;
                 const entry = eligible[index], { item, site } = entry;
                 try {
-                    await this.scanActor(entry, options);
+                    await this.scanActor(entry, options, entry.target);
                     result.success++;
                 } catch (error) {
                     if (this.disposed || /** @type {any} */ (error)?.name === "AbortError") throw error;
@@ -102,10 +104,10 @@ export class BlacklistScanController {
     }
 
     /** Fetch and commit one actor page through the existing storage schema. */
-    /** @param {{item: any, site: string}} entry @param {any} options */
-    async scanActor(entry, options) {
+    /** @param {{item: any, site: string}} entry @param {any} options @param {URL} [target] */
+    async scanActor(entry, options, target = new URL(entry.item.url)) {
         this.assertActive();
-        const { item, site } = entry, target = new URL(item.url);
+        const { item, site } = entry;
         options.onActorStart?.(item);
         let response;
         try {

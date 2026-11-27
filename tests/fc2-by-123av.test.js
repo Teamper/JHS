@@ -74,7 +74,8 @@ describe("FC2 123AV Feature catalog lifecycle", () => {
         const input = dom.window.document.querySelector("#search-123av-keyword");
         input.value = "fc2-123";
         dom.window.document.querySelector(".jhs-btn--primary").click();
-        await vi.waitFor(() => expect(catalog).toHaveBeenLastCalledWith("av123", { page: 1, keyword: "fc2-123" }, { scope: controller.scope }));
+        await vi.waitFor(() => expect(catalog).toHaveBeenLastCalledWith("av123", { page: 1, keyword: "fc2-123" }, { scope: expect.any(LifecycleScope) }));
+        expect(catalog.mock.lastCall[2].scope).not.toBe(controller.scope);
         expect(new URL(dom.window.location.href).searchParams.get("page")).toBe("1");
         expect(controller.maxPage).toBe(20);
     });
@@ -86,10 +87,11 @@ describe("FC2 123AV Feature catalog lifecycle", () => {
         controller.maxPage = 20;
         dom.window.document.querySelector("#search-123av-keyword").value = "old";
         dom.window.document.querySelector(".jhs-btn--secondary").click();
-        await vi.waitFor(() => expect(catalog).toHaveBeenLastCalledWith("av123", { page: 1, keyword: "" }, { scope: controller.scope }));
+        await vi.waitFor(() => expect(catalog).toHaveBeenLastCalledWith("av123", { page: 1, keyword: "" }, { scope: expect.any(LifecycleScope) }));
+        expect(catalog.mock.lastCall[2].scope).not.toBe(controller.scope);
         expect(controller.currentPage).toBe(1);
         expect(controller.maxPage).toBe(20);
-        expect(new URL(dom.window.location.href).searchParams.get("keyword")).toBe("");
+        expect(new URL(dom.window.location.href).searchParams.has("keyword")).toBe(false);
     });
 
     it("normalizes maxPage and clamps currentPage into bounds", async () => {

@@ -1,10 +1,11 @@
 // @ts-check
 
 import { C, _ } from "../../core/constants.js";
+import { isAbortError } from "../../core/jhs-error.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
 
 export class DetailBrowseLifecycleController {
-    /** @param {{settings: {snapshot: () => Record<string, unknown>}, state: {removeFromNewVideoList: (carNums: string[], reason: string) => Promise<unknown>}, scope: import("../../core/lifecycle-scope.js").LifecycleScope, onError?: (error: unknown) => void}} options */
+    /** @param {{settings: {snapshot: () => Record<string, unknown>}, state: Pick<import("../../core/state-service.js").StateService,"removeFromNewVideoList">, scope: import("../../core/lifecycle-scope.js").LifecycleScope, onError?: (error: unknown) => void}} options */
     constructor(options) {
         this.settings = options.settings;
         this.state = options.state;
@@ -20,10 +21,12 @@ export class DetailBrowseLifecycleController {
             if (enabled !== _) return false;
             const carNum = movieRef?.carNum;
             if (!carNum || !getMovieStateEligibility(movieRef).eligible) return false;
-            await this.state.removeFromNewVideoList([carNum], "browse");
+            await this.state.removeFromNewVideoList([carNum], "browse", { signal: this.scope.signal });
             return true;
         } catch (error) {
-            this.onError?.(error);
+            if (this.scope.disposed && isAbortError(error)) return false;
+            if (!this.onError) throw error;
+            this.onError(error);
             return false;
         }
     }

@@ -1,17 +1,19 @@
 /** Follow visible entry points, including compact and portaled menus. */
 export async function openDetailEnhancements(page) {
     const menu = page.locator(".jhs-detail-extra-actions").first();
-    if (!await menu.evaluate(node => node.open)) await menu.locator(":scope > summary").click();
+    const trigger = menu.getByRole("button", { name: "更多操作", exact: true });
+    if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
 }
 
 export async function enterMovieSelection(page) {
-    const desktop = page.locator('.jhs-commandbar__batch > button');
+    const desktop = page.locator('.jhs-commandbar__batch > button'), mobile = page.locator("#jhs-fab");
+    await desktop.or(mobile).filter({ visible: true }).first().waitFor({ state: "visible" });
     if (await desktop.isVisible()) {
         await desktop.click();
         await page.getByRole("menuitem", { name: "进入 / 退出选择", exact: true }).click();
         return;
     }
-    await page.locator("#jhs-fab").click();
+    await mobile.click();
     await page.locator('#jhs-fab-menu [data-action="batch"]').click();
     await page.getByRole("menuitem", { name: "进入 / 退出选择", exact: true }).click();
     await page.keyboard.press("Escape");

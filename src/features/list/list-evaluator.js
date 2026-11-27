@@ -3,6 +3,8 @@
 import { normalizeStateFlags } from "../../core/state-model.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
 import { buildFavoriteActressWorkIndex, matchCollectedActressesForWork, resolveFavoriteActressHighlightStyle } from "../../core/favorite-actress-highlight.js";
+import { findMatchedTitleKeyword } from "../../core/keyword-match.js";
+export { findMatchedTitleKeyword } from "../../core/keyword-match.js";
 import { isHardHidden, matchesQuickFilter } from "../../core/list-filters.js";
 
 /** @typedef {import("../../core/state-model.js").StateFlags} StateFlags */
@@ -13,13 +15,7 @@ import { isHardHidden, matchesQuickFilter } from "../../core/list-filters.js";
  * 屏蔽 / 状态 / 关键词 / 演员黑名单 / recent 语义，禁止第二套筛选判断。
  */
 
-/** @param {string[]} keywords @param {string} title @param {string} carNum */
-export function findMatchedTitleKeyword(keywords, title, carNum) {
-    for (const keyword of keywords) if (title.includes(keyword) || carNum.startsWith(keyword)) return keyword;
-    return null;
-}
-
-/** @param {{ titleKeywords?: string[], carMap?: Map<string, Record<string, any>>, actorCarNumToNameMap?: Map<string, string>, actressCarNumToNameMap?: Map<string, string>, recentCarNums?: Set<string>, settings?: Record<string, any>, favoriteActresses?: any[], favoriteActressIndex?: ReturnType<typeof buildFavoriteActressWorkIndex>, favoriteActressHighlightEnabled?: boolean }} options */
+/** @param {{ titleKeywords?: string[], carMap?: Map<string, Record<string, any>>, actorCarNumToNameMap?: Map<string, string>, actressCarNumToNameMap?: Map<string, string>, recentCarNums?: Set<string>, ratings?: Record<string, any>, settings?: Record<string, any>, favoriteActresses?: any[], favoriteActressIndex?: ReturnType<typeof buildFavoriteActressWorkIndex>, favoriteActressHighlightEnabled?: boolean }} options */
 export function createListEvaluationContext(options = {}) {
     const settings = options.settings ?? {};
     const favoriteActressIndex = options.favoriteActressIndex ?? buildFavoriteActressWorkIndex(options.favoriteActresses);
@@ -31,6 +27,7 @@ export function createListEvaluationContext(options = {}) {
         actressCarNumToNameMap: options.actressCarNumToNameMap instanceof Map ? options.actressCarNumToNameMap : new Map(),
         recentCarNums: options.recentCarNums instanceof Set ? options.recentCarNums : new Set(),
         settings,
+        ratings: options.ratings ?? {},
         favoriteActressIndex,
         favoriteActressHighlightEnabled,
     };
@@ -40,7 +37,7 @@ export function createListEvaluationContext(options = {}) {
  * @param {{ carNum?: string | null, title?: string, stateEligibility?: import("../../core/movie-identity.js").MovieStateEligibility, cardNames?: string, cardStarIds?: string[] }} record
  * @param {ReturnType<typeof createListEvaluationContext>} context
  * @param {{ filter?: unknown }} [options]
- * @returns {{ flags: StateFlags, visibilityReasons: VisibilityReasons, matchedKeyword: string | null, recent: boolean, hardHidden: boolean, matchesCurrentFilter: boolean, favoriteActresses: string[] }}
+ * @returns {{ flags: StateFlags, visibilityReasons: VisibilityReasons, matchedKeyword: string | null, recent: boolean, hardHidden: boolean, matchesCurrentFilter: boolean, favoriteActresses: string[], collectedActress: boolean, rated: boolean }}
  */
 export function evaluateListItem(record, context, { filter = "waitCheck" } = {}) {
     const carNum = record?.carNum;
@@ -55,7 +52,7 @@ export function evaluateListItem(record, context, { filter = "waitCheck" } = {})
     };
     const recent = carNum && reliable ? context.recentCarNums.has(carNum) : false;
     const hardHidden = isHardHidden(flags, visibilityReasons);
-    const favoriteActresses = !hardHidden && context.favoriteActressHighlightEnabled && context.favoriteActressIndex?.hasActresses
+    const favoriteActresses = !hardHidden && context.favoriteActressIndex?.hasActresses
         ? matchCollectedActressesForWork({
             carNum: reliable ? (carNum || "") : "",
             recordNames: state?.names,
@@ -63,13 +60,16 @@ export function evaluateListItem(record, context, { filter = "waitCheck" } = {})
             cardStarIds: record?.cardStarIds,
         }, context.favoriteActressIndex)
         : [];
+    const collectedActress = favoriteActresses.length > 0, rated = Boolean(carNum && reliable && context.ratings?.[carNum]);
     return {
         flags,
+        collectedActress,
+        rated,
         visibilityReasons,
         matchedKeyword: keyword,
         recent,
         hardHidden,
-        matchesCurrentFilter: matchesQuickFilter(filter, flags, { visibilityReasons, recent }),
-        favoriteActresses,
+        matchesCurrentFilter: matchesQuickFilter(filter, flags, { visibilityReasons, recent, favoriteActress: collectedActress, rated }),
+        favoriteActresses: context.favoriteActressHighlightEnabled ? favoriteActresses : [],
     };
 }

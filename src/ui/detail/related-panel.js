@@ -20,7 +20,7 @@ export class RelatedPanel {
         this.logger = dependencies.logger ?? console;
     }
 
-    /** @param {any} target @param {string} movieId @param {{ownedSection?: any, isActive?: () => boolean, ownCleanup?: (cleanup: () => void) => unknown, awaitInitialLoad?: boolean}} [options] */
+    /** @param {any} target @param {string} movieId @param {{ownedSection?: any, isActive?: () => boolean, ownCleanup?: (cleanup: () => void) => unknown, awaitInitialLoad?: boolean, listOrigin?: string}} [options] */
     async show(target, movieId, options = {}) {
         const jq = this.jquery, isActive = options.isActive ?? (() => true);
         if (!movieId) throw new TypeError("未传入movieId");
@@ -34,7 +34,7 @@ export class RelatedPanel {
         if (!isActive() || parentScope?.disposed) return jq();
         const releaseParent = parentScope?.addCleanup?.(() => { panelScope.dispose(); panel.remove(); });
         options.ownCleanup?.(() => { panelScope.dispose(); releaseParent?.(); panel.remove(); });
-        const state = { movieId, panel, panelScope, floorIndex: 1, loaded: false, loading: false, page: 1, enabled: false, generation: 0, isActive: () => !panelScope.disposed && isActive(), requestScope: /** @type {LifecycleScope | null} */ (null) };
+        const state = { movieId, listOrigin: options.listOrigin ?? "", panel, panelScope, floorIndex: 1, loaded: false, loading: false, page: 1, enabled: false, generation: 0, isActive: () => !panelScope.disposed && isActive(), requestScope: /** @type {LifecycleScope | null} */ (null) };
         header.append(toggle);
         if (options.ownedSection) options.ownedSection.find('[data-jhs-section-actions="related"]').first().append(toggle);
         else panel.append(header);
@@ -138,7 +138,7 @@ export class RelatedPanel {
     display(state, related, container) {
         const jq = this.jquery;
         related.forEach((item) => {
-            const title = jq("<a></a>").addClass("jhs-related-title jhs-link").attr({ href: `/lists/${encodeURIComponent(item.id)}`, target: "_blank", rel: "noopener noreferrer" }).text(item.name || "未命名清单");
+            const title = jq("<a></a>").addClass("jhs-related-title jhs-link").attr({ href: `${state.listOrigin}/lists/${encodeURIComponent(item.id)}`, target: "_blank", rel: "noopener noreferrer" }).text(item.name || "未命名清单");
             const heading = jq('<div class="jhs-related-heading"></div>').append(jq("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title);
             const meta = jq('<div class="jhs-related-meta"></div>');
             const formatted = item.createdAt ? this.formatDate(item.createdAt) : "未知";

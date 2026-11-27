@@ -46,7 +46,7 @@ describe("selected WebDAV recovery", () => {
             expect(backfill).toEqual(createActressProfileBackfillState(expect.any(String)));
             expect(backfill.generation).not.toBe(checkpoint.generation);
         } else expect(backfill).toEqual(checkpoint);
-        const snapshot = a.values.get("snapshots").find(item => item.source === "auto-import");
+        const snapshot = a.values.get("snapshots").find(item => item.source === "auto-restore");
         expect(snapshot).toBeTruthy();
     });
 

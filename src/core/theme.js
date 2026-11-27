@@ -342,30 +342,6 @@ export function buildThemeCss() {
         }
     }
 
-    /* 暗色下覆盖 layui-layer 弹层 chrome (外部 layui.css 为亮色主题) */
-    :root[data-jhs-theme="dark"] .jhs-dialog.layui-layer {
-        background-color: var(--jhs-surface);
-        color: var(--jhs-text);
-        box-shadow: var(--jhs-shadow-lg);
-    }
-    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-title {
-        background-color: var(--jhs-surface-2);
-        color: var(--jhs-text);
-        border-bottom: 1px solid var(--jhs-border);
-    }
-    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-content {
-        color: var(--jhs-text);
-    }
-    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-btn a {
-        background-color: var(--jhs-surface-2);
-        border: 1px solid var(--jhs-border);
-        color: var(--jhs-text);
-    }
-    :root[data-jhs-theme="dark"] .jhs-dialog .layui-layer-btn .layui-layer-btn0 {
-        background-color: var(--jhs-accent);
-        border-color: transparent;
-        color: var(--jhs-accent-text-on);
-    }
     .jhs-dialog .layui-layer-setwin .layui-layer-close {
         width: var(--jhs-touch-target)!important;
         height: var(--jhs-touch-target)!important;
@@ -389,45 +365,6 @@ export function buildThemeCss() {
     .jhs-dialog .layui-layer-setwin .layui-layer-close::after { transform: rotate(-45deg); }
     .jhs-dialog .layui-layer-setwin .layui-layer-close:hover,
     .jhs-dialog .layui-layer-setwin .layui-layer-close:focus-visible { color: var(--jhs-text)!important; }
-    /* 暗色下覆盖 Tabulator 表格 chrome (semanticui 主题为亮色) */
-    :root[data-jhs-theme="dark"] .tabulator {
-        background-color: var(--jhs-surface);
-        color: var(--jhs-text);
-        border: 1px solid var(--jhs-border);
-    }
-    :root[data-jhs-theme="dark"] .tabulator .tabulator-header {
-        background-color: var(--jhs-surface-2);
-        color: var(--jhs-text);
-        border-bottom: 1px solid var(--jhs-border);
-    }
-    :root[data-jhs-theme="dark"] .tabulator .tabulator-header .tabulator-col {
-        background-color: var(--jhs-surface-2);
-        color: var(--jhs-text);
-        border-right: 1px solid var(--jhs-border);
-    }
-    :root[data-jhs-theme="dark"] .tabulator .tabulator-row {
-        background-color: var(--jhs-surface);
-        color: var(--jhs-text);
-        border-bottom: 1px solid var(--jhs-border);
-    }
-    :root[data-jhs-theme="dark"] .tabulator .tabulator-row.tabulator-row-even {
-        background-color: var(--jhs-surface-2);
-    }
-    :root[data-jhs-theme="dark"] .tabulator .tabulator-cell {
-        color: var(--jhs-text);
-        border-right: 1px solid var(--jhs-border);
-    }
-    :root[data-jhs-theme="dark"] .tabulator .tabulator-footer {
-        background-color: var(--jhs-surface-2);
-        color: var(--jhs-text);
-        border-top: 1px solid var(--jhs-border);
-    }
-    :root[data-jhs-theme="dark"] .tabulator .tabulator-responsive-collapse {
-        background-color: var(--jhs-surface);
-        color: var(--jhs-text);
-        border-top: 1px solid var(--jhs-border);
-    }
-
 </style>\n`;
 }
 

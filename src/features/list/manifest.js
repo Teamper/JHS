@@ -76,7 +76,7 @@ export default defineFeature({
             runtime.scope.addCleanup(() => coverScope.dispose());
             try {
                 const coverButtons = new CoverButtonController({
-                    document, window, list, settings: deps[SERVICE.settings], state: deps[SERVICE.state], screenshot: deps[SERVICE.screenshot],
+                    document, window, list, settings: deps[SERVICE.settings], state: deps[SERVICE.state], http: deps[SERVICE.http], screenshot: deps[SERVICE.screenshot],
                     storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], scope: coverScope, ui: deps[SERVICE.domUi],
                     clipboard: deps[SERVICE.clipboard], notifications: deps[SERVICE.notifications], diagnostics: runtime.diagnostics, logger: deps[SERVICE.clog],
                     navigation: deps[SERVICE.domUi].navigation, screenshotAvailable: runtime.isContributionEnabled("detail", "detail.screenshot", "ScreenShotPlugin"),
@@ -105,6 +105,19 @@ export default defineFeature({
                 const imageLayoutController = new JavBusImageLayoutController({ hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings] });
                 const detach = deps[SERVICE.busImageLayout].attach(imageLayoutController);
                 runtime.scope.addCleanup(detach);
+                let frame = 0;
+                const refreshRows = () => {
+                    window.cancelAnimationFrame(frame);
+                    frame = window.requestAnimationFrame(() => {
+                        frame = 0;
+                        void imageLayoutController.logImageHeightsByRow().catch(error => runtime.diagnostics.recordError({
+                            source: "javbus-image-layout", message: error instanceof Error ? error.message : String(error),
+                        }));
+                    });
+                };
+                runtime.scope.listen(window, "resize", refreshRows);
+                runtime.scope.addCleanup(deps[SERVICE.events].on("list-items-added", refreshRows));
+                runtime.scope.addCleanup(() => window.cancelAnimationFrame(frame));
                 activeContributions.push("detail.javbus-images");
             } catch (error) {
                 runtime.diagnostics.recordError({ source: "list-feature", featureId: "list", contributionId: "detail.javbus-images", message: error instanceof Error ? error.message : String(error) });
@@ -121,12 +134,12 @@ export default defineFeature({
                     const [carMap, activity] = await Promise.all([deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getListActivity()]);
                     return { carMap, activity };
                 }
-                const [titleKeywords, blacklistMap, blacklistCars, carMap, activity, favoriteActresses] = await Promise.all([
+                const [titleKeywords, blacklistMap, blacklistCars, carMap, activity, favoriteActresses, ratings] = await Promise.all([
                     deps[SERVICE.keywordRules].getTitleKeywords(), deps[SERVICE.state].getBlacklistMap(),
                     deps[SERVICE.state].getBlacklistCarList(), deps[SERVICE.state].getCarMap(), deps[SERVICE.state].getListActivity(),
-                    deps[SERVICE.state].getFavoriteActressList(),
+                    deps[SERVICE.state].getFavoriteActressList(), deps[SERVICE.state].getPersonalRatings?.(),
                 ]);
-                return { titleKeywords, blacklistMap, blacklistCars, settings: deps[SERVICE.settings].snapshot(), carMap, activity, favoriteActresses, favoriteActressesEnabled: isFavoriteActressesFeatureEnabled() };
+                return { titleKeywords, blacklistMap, blacklistCars, settings: deps[SERVICE.settings].snapshot(), carMap, activity, favoriteActresses, ratings, favoriteActressesEnabled: isFavoriteActressesFeatureEnabled() };
             };
             controller = new ListController({
                 legacyPlugin, controllers: listControllers, hostAdapter: deps[PORT.host], scope: runtime.scope, styles: deps[PORT.style],

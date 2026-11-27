@@ -67,7 +67,7 @@ describe("translation DOM/jQuery contract", () => {
         const settings = new EventTarget();
         settings.snapshot = () => ({ translateTitle: "yes" });
         const controller = new ExternalBridgeTranslationController({
-            document: dom.window.document, window: dom.window, route: "list",
+            document: dom.window.document, window: dom.window, jquery: globalThis.$, route: "list",
             hostAdapter: { site: "javdb", getListSelectors: () => ({ itemSelector: ".movie-list .item" }) }, listPage,
             settings, translation: { translate }, styles: { register: () => () => {} }, diagnostics: { recordError: clog.error }, scope,
         });

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { initializeTooltips } from "../src/core/tooltip-controller.js";
+import { ImageHoverPreview } from "../src/core/image-hover-preview.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { PrivacyService, PRIVACY_STATE_KEY } from "../src/services/privacy-service.js";
 import { PrivacyController } from "../src/features/system/privacy-controller.js";
@@ -20,7 +22,7 @@ beforeEach(async () => {
     service = new PrivacyService({ storage, settings });
     vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
     const host = { document, getPrivacySelectors: () => privacySelectors({ title: ".video-title", code: ".video-title strong", actors: ".actors", images: ".cover img" }) };
-    controller = new PrivacyController({ host, privacy: service, scope, settings, ui: {}, dialog: {}, notifications: { error: vi.fn() } });
+    controller = new PrivacyController({ host, privacy: service, scope, settings, notifications: { error: vi.fn() } });
     await controller.start();
 });
 afterEach(() => { scope.dispose(); service.dispose(); vi.restoreAllMocks(); });
@@ -137,18 +139,6 @@ it("allows title and code masking to be configured independently", async () => {
     expect(document.querySelector(".video-title strong [data-jhs-privacy-text]")).toBeNull();
     expect(document.querySelector(".video-title > [data-jhs-privacy-text]")).not.toBeNull();
 });
-it("cleans a failed dialog mount and releases each completed preferences owner", () => {
-    controller.ui = { jquery: node => node };
-    controller.dialog = { open: vi.fn(() => { throw new Error("mount failed"); }), close: vi.fn() };
-    expect(() => controller.configure()).toThrow("mount failed");
-    expect(controller.dialogScope.disposed).toBe(true);
-    expect(document.querySelector(".jhs-privacy-config")).toBeNull();
-    const before = scope.cleanups.size;
-    let options;
-    controller.dialog.open.mockImplementation(value => { options = value; return 1; });
-    for (let index = 0; index < 3; index++) { controller.configure(); options.end(); }
-    expect(scope.cleanups.size).toBe(before);
-});
 it("masks JavBus's plain-text code beside its header while retaining dates", async () => {
     controller.host = new JavBusHostAdapter(document, { href: "https://www.javbus.com/ABC-123", pathname: "/ABC-123" });
     const root = document.createElement("div");
@@ -206,7 +196,7 @@ it("cannot reactivate privacy after its owner closes during the initial read", a
     const deferredStorage = { ...storage, getValue: () => new Promise(resolve => { finish = resolve; }) };
     const privacy = new PrivacyService({storage:deferredStorage,settings});
     const owner = new LifecycleScope("privacy:late-start");
-    const late = new PrivacyController({host:{document},privacy,scope:owner,settings,ui:{},dialog:{},notifications:{error:vi.fn()}});
+    const late = new PrivacyController({host:{document},privacy,scope:owner,settings,notifications:{error:vi.fn()}});
     const pending = late.start();
     owner.dispose();
     finish(true);
@@ -214,4 +204,52 @@ it("cannot reactivate privacy after its owner closes during the initial read", a
     expect(privacy.active).toBe(false);
     expect(privacy.masked).toBe(false);
     privacy.dispose();
+});
+
+it("masks explicitly tagged History buttons and actor surfaces with separate targets", async () => {
+    const root = document.createElement("section");
+    root.innerHTML = '<button class="code" data-jhs-privacy-kind="code">ABC-</button><button class="actor" data-jhs-privacy-kind="actor">演员</button><span class="jhs-stats__label">榜单演员</span><div tabulator-field="name" class="tabulator-cell">黑名单演员</div><span class="jhs-source-health-item__name">失效演员</span><span class="jhs-rebind-candidate__name">候选演员</span><span class="jhs-rebind-candidate__meta">曾用名</span><div class="layui-layer-title" data-jhs-privacy-kind="actor">编辑演员</div><a class="jhs-115-match-filename">private.mp4</a><div class="image-hover-preview"><img></div>';
+    document.body.append(root);
+    await service.setEnabled(true);
+    expect(root.querySelector(".code [data-jhs-privacy-text=code]")).not.toBeNull();
+    expect(root.querySelectorAll("[data-jhs-privacy-text=actors]")).toHaveLength(7);
+    expect(root.querySelector(".jhs-115-match-filename [data-jhs-privacy-text=title]")).not.toBeNull();
+    expect(root.querySelector("img").getAttribute("data-jhs-privacy-media")).toBe("images");
+    await settings.patch({ privacyTargets: ["actors"] });
+    expect(root.querySelector("[data-jhs-privacy-text=code]")).toBeNull();
+    expect(root.querySelector(".actor [data-jhs-privacy-text=actors]")).not.toBeNull();
+});
+it("closes sensitive tooltips at activation and allows them only during a temporary reveal", async () => {
+    initializeTooltips(scope, document);
+    const button = document.createElement("button");
+    button.className = "jhs-btn";
+    button.dataset.tip = "隐私演员";
+    button.setAttribute("data-jhs-privacy-sensitive", "");
+    document.body.append(button);
+    const focus = () => button.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    focus();
+    expect(document.querySelector('[role=tooltip]')?.textContent).toBe("隐私演员");
+    await service.setEnabled(true);
+    focus();
+    expect(document.querySelector('[role=tooltip]')).toBeNull();
+    service.reveal(true);
+    focus();
+    expect(document.querySelector('[role=tooltip]')).not.toBeNull();
+    service.reveal(false);
+    expect(document.querySelector('[role=tooltip]')).toBeNull();
+});
+it("holds hover preview requests while images are masked and restores access on reveal", async () => {
+    const target = document.createElement("img");
+    target.setAttribute("data-full", "https://images.example.test/hover.jpg");
+    document.body.append(target);
+    const hover = new ImageHoverPreview();
+    try {
+        await service.setEnabled(true);
+        hover.handleMouseEnter(new MouseEvent("mouseover"), target);
+        expect(hover.pendingImage).toBeNull();
+        expect(hover.preview.classList.contains("active")).toBe(false);
+        service.reveal(true);
+        hover.handleMouseEnter(new MouseEvent("mouseover"), target);
+        expect(hover.pendingImage).not.toBeNull();
+    } finally { hover.destroy(); }
 });

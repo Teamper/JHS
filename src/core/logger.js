@@ -22,6 +22,7 @@ class Logger {
         this.currentFilter = isLogLevel(previousFilter) ? previousFilter : "base";
         /** @type {LogEntry[]} */
         this.logs = [];
+        /** @type {((label: string, value:string) => Promise<unknown>) | null} */ this.copyText = null;
         /** @type {ReturnType<typeof createLogPanel> | undefined} */
         this.panel = undefined;
     }
@@ -37,6 +38,7 @@ class Logger {
         this.panel ??= createLogPanel(this.scope, {
             entries: () => this.logs, filter: () => this.currentFilter,
             changeFilter: level => this.setFilter(level), clear: () => this.clear(),
+            copy: async value => { try { await this.copyText?.("运行日志", value); } catch (error) { this.error("复制日志失败", error); } },
         });
         return true;
     }

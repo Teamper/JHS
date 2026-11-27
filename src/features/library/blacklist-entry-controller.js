@@ -1,11 +1,12 @@
 // @ts-check
+import { ACTRESS_SCAN_LOCK } from "../../core/site-context.js";
 
 import { escapeHtml } from "../../core/constants.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 
 /** Own actor/tag blacklist entry, first-page capture and bounded pagination. */
 export class BlacklistEntryController {
-    /** @param {{document: Document, window: Window, location: Location, jquery: (value: any) => any, site: string, state: any, http: any, ui: any, notifications: any, logger: any, scope: any, task: any, getSubjectInfo: () => any, parsePage: (page: any, name: string, starId: string, site: string) => any}} options */
+    /** @param {{document: Document, window: Window, location: Location, jquery: (value: any) => any, site: string, state: any, http: any, ui: any, notifications: any, logger: any, scope: any, getSubjectInfo: () => any, parsePage: (page: any, name: string, starId: string, site: string) => any}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
@@ -18,7 +19,6 @@ export class BlacklistEntryController {
         this.notifications = options.notifications;
         this.logger = options.logger;
         this.scope = options.scope;
-        this.task = options.task;
         this.getSubjectInfo = options.getSubjectInfo;
         this.parsePage = options.parsePage;
         /** @type {string | null} */ this.nextPageLink = null;
@@ -54,10 +54,9 @@ export class BlacklistEntryController {
     /** Save the actor record once, then commit each parsed page using the established storage API. */
     async addAndScan(info = this.getSubjectInfo()) {
         this.assertActive();
-        if (!this.task) return this.notifications.error("后台任务已关闭");
         const locks = this.window.navigator?.locks;
         if (!locks?.request) return this.notifications.error("当前浏览器不支持后台任务互斥");
-        return locks.request(this.task.singleTaskKey, { ifAvailable: true }, async (lock) => {
+        return locks.request(ACTRESS_SCAN_LOCK, { ifAvailable: true }, async (lock) => {
             this.assertActive();
             if (!lock) return this.notifications.error("后台任务运行中，请稍后再试");
             const loading = this.ui.loading();

@@ -17,7 +17,21 @@ export class HistoryRepository {
         }
         return rows;
     }
-    activity() { return this.state.getActivityLog(); }
+    async activity() {
+        const log = await this.state.getActivityLog(), groups = new Map(), entries = [];
+        for (const entry of log.entries) {
+            const combined = entry.importBatchId && groups.get(entry.importBatchId);
+            if (combined && entry.commitState === "committed") {
+                combined.changes.push(...entry.changes);
+                if (entry.undoAvailable === false) combined.undoAvailable = false;
+                continue;
+            }
+            const view = { ...entry, changes: [...(entry.changes || [])] };
+            if (entry.importBatchId && entry.commitState === "committed") groups.set(entry.importBatchId, view);
+            entries.push(view);
+        }
+        return { ...log, entries };
+    }
     offline() { return this.state.getOfflineHistory(); }
     /** @param {string} transactionId */
     undo(transactionId) { return this.state.undoTransaction(transactionId); }

@@ -173,7 +173,7 @@ export class JavDbPreviewController {
             const cover = $(".column-video-cover img").attr("src");
             if ($('[data-jhs-dmm-trigger]').length) return;
             const trigger = $('<button type="button" class="jhs-btn preview-video-container" data-jhs-dmm-trigger="true"><span>预告片</span></button>');
-            trigger.append($('<img class="video-cover jhs-layout-8cf76fd7" alt="">').attr("src", cover || ""));
+            trigger.append($('<img class="video-cover jhs-preview-cover" alt="">').attr("src", cover || ""));
             $(".preview-images").first().prepend(trigger);
             trigger.on("click.jhsVideo", () => this.openDmmDialog());
             this.consumePreviewIntent(trigger[0]);

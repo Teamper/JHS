@@ -14,7 +14,7 @@ export default defineFeature({
         if (!runtime.enabledContributions.includes("external-bridge.translation")) return { activeContributions: [] };
         try {
             const controller = new ExternalBridgeTranslationController({
-                document, window, route: runtime.route, hostAdapter: deps[PORT.host],
+                document, window, route: runtime.route, hostAdapter: deps[PORT.host], jquery: deps[SERVICE.domUi].jquery,
                 settings: deps[SERVICE.settings], translation: deps[SERVICE.translation], styles: deps[PORT.style],
                 diagnostics: runtime.diagnostics, scope: runtime.scope, privacy:deps[SERVICE.privacy],
             });

@@ -30,7 +30,7 @@ function createHarness({ site = "javdb", translation = vi.fn(async () => "即时
     const scope = new LifecycleScope("list-translation-feature-test");
     const diagnostics = { recordError: vi.fn() };
     const controller = new ExternalBridgeTranslationController({
-        document: window.document, window, route: "list", hostAdapter: {
+        document: window.document, window, jquery: globalThis.$, route: "list", hostAdapter: {
             site, getListSelectors: () => ({ itemSelector: isJavDb ? ".movie-list .item" : ".masonry .item" }),
         },
         settings, translation: { translate: translation }, styles: { register: () => () => {} }, diagnostics, scope,

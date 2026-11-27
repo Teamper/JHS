@@ -84,7 +84,9 @@ export class JavDbHostAdapter {
             .find(url => url?.origin === current.origin && /^\/users\/(?:edit|settings|account|profile)\/?$/.test(url.pathname));
         return { origin: current.origin, accountUrl: `${current.origin}${(account || current).pathname}` };
     }
-    getPrivacySelectors() { return privacySelectors({ title: ".video-title,.video-detail h2,.video-detail h1,.title.is-4,.column-video-info h1,.column-video-info h2", code: ".video-title strong,.video-id,#video_id,.column-video-info [data-clipboard-text]", actors: '.tags a[href^="/actors/"],.column-video-info a[href^="/actors/"],.actor-avatar,.actor-box', images: ".actor-avatar img,.actor-box img,.movie-list img,.video-detail img,.column-video-cover img,.tile-images img,.preview-images img" }); }
+    /** @param {string} route */
+    getTitleKeywordSelector(route) { return route === "detail" ? ".video-detail h1,.video-detail h2,.title strong,.current-title" : ".video-title,.jhs-fc2-title"; }
+    getPrivacySelectors() { return privacySelectors({ title: ".video-title,.video-detail h2,.video-detail h1,.title.is-4,.column-video-info h1,.column-video-info h2", code: ".video-title strong,.video-number,.video-id,#video_id,.column-video-info [data-clipboard-text]", actors: '.tags a[href^="/actors/"],.column-video-info a[href^="/actors/"],.actor-avatar,.actor-box,.actor-section-name,.section-meta,.actress-info', images: "span.avatar,.actor-avatar img,.actor-box img,.movie-list img,.video-detail img,.column-video-cover img,.tile-images img,.preview-images img" }); }
     locateMediaLibraryDetailRoot() { return this.detectRoute() === "detail" ? this.document.querySelector(".column-video-info,.video-detail .panel") : null; }
     /** @param {Document} [documentRuntime] @param {Location | URL} [locationRuntime] @param {{getSubjectInfo: (options: any) => any, parseFilterPage: (options: any) => any} | null} [blacklistParser] */
     constructor(documentRuntime = document, locationRuntime = window.location, blacklistParser = null) {
@@ -310,6 +312,17 @@ export class JavDbHostAdapter {
         }
         return { root, container, pagination, nextLink };
     }
+    getPaginationBoundary() {
+        const region = this.resolveListBoundary()?.pagination;
+        const list = region?.matches(".pagination-list") ? region : region?.querySelector(".pagination-list");
+        if (!list?.querySelector(".pagination-link.is-current") || list.closest(".page-box")?.matches("[data-jhs-catalog-pagination]")) return null;
+        const address = new URL(this.location.href);
+        return { list, page: Number(address.searchParams.get("page")) || 1, target: (/** @type {number} */ page) => {
+            const url = new URL(address);
+            url.searchParams.set("page", String(page));
+            return url.href;
+        } };
+    }
     locateListRoot() {
         if (/^\/(?:v|movies)\//.test(this.location.pathname)) return null;
         const root = this.resolveListBoundary()?.root ?? null;
@@ -485,7 +498,7 @@ export class JavDbHostAdapter {
             getResource(/** @type {Element} */ row) { return row.querySelector('.copy-to-clipboard[data-clipboard-text^="magnet:"]')?.getAttribute("data-clipboard-text") || row.querySelector('.magnet-name a[href^="magnet:"]')?.getAttribute("href") || ""; },
             getActionTarget: (/** @type {Element} */ row) => row.querySelector(".buttons"),
             actionTargetRequiresWrapper: () => false,
-            getTitleTarget: (/** @type {Element} */ row) => row.querySelector(".name"), hasSubtitleTag: () => false,
+            getTitleTarget: (/** @type {Element} */ row) => row.querySelector(".name"), hasSubtitleTag: (/** @type {Element} */ row) => [...row.querySelectorAll(".tag")].some(tag => tag.textContent?.includes("字幕")),
         });
     }
     /** @param {string} html @param {string} baseUrl */

@@ -5,7 +5,8 @@ import { escapeHtml } from "../../core/constants.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES, buildCustomMagnetSource, validateRule } from "../../services/resource-settings-service.js";
 import { BUILT_IN_SCREENSHOT_SOURCES } from "../../services/screenshot-sources.js";
-import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
+import { bindSettingRows, enhanceSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
+import { JhsError } from "../../core/jhs-error.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 /** @typedef {import("./settings-controller.js").SettingPlugin} SettingPlugin */
@@ -51,7 +52,7 @@ export async function loadResourceSettings(owner, /** @type {any} */ layerRoot =
 
             await owner.loadResourceSettings(root, generation);
             JhsSelect.refreshAll();
-        } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error("资源设置保存失败，请重试"); }
+        } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error(error instanceof TypeError || error instanceof JhsError ? error.message : "资源设置保存失败，请重试"); }
     }));
     root.find("#car-number-import,#car-number-import-status").off("input.jhsResource change.jhsResource").on("input.jhsResource change.jhsResource", (() => {
         owner.pendingCarImport = null;
@@ -87,7 +88,7 @@ export function renderCloudSettings(owner, root, cloud) {
     }
     const valueFor = (/** @type {string} */ key) => key === "offlineProviderMode" ? cloud.providerMode : key === "oneOneFiveConcurrency" ? cloud.concurrency : key === "oneOneFiveCacheMinutes" ? cloud.cacheMinutes : cloud[key];
     descriptors.forEach((/** @type {any} */ descriptor) => {
-        const rendered = renderSettingRow(descriptor, { deferred: true, value: valueFor(descriptor.key) });
+        const rendered = renderSettingRow(descriptor, { jquery: owner.jquery, deferred: true, value: valueFor(descriptor.key) });
         rendered.root.attr("id", descriptor.key);
         groups.get(descriptor.key === "offlineProviderMode" ? "general" : descriptor.key === "enable123Offline" ? "123" : "115").append(rendered.row);
     });
@@ -104,9 +105,31 @@ export function renderResourceSettings(owner, root = owner.jquery(owner.document
     const card = (/** @type {ResourceRecord} */ source, /** @type {boolean} */ custom, /** @type {"magnet" | "screenshot"} */ kind) => {
         const node = owner.jquery('<article class="jhs-card jhs-resource-card"></article>');
         const defaultType = "magnet" === kind ? "磁力来源" : "截图来源";
-        node.append(owner.jquery('<div class="jhs-setting-row jhs-setting-row--action"></div>').append(owner.jquery('<div></div>').append(owner.jquery("<strong></strong>").text(source.name), source.experimental ? '<span class="jhs-badge">实验性</span>' : "", owner.jquery("<small></small>").text(`${source.type || defaultType} · ${source.domain || (() => { try { return new URL(source.searchUrlTemplate).hostname; } catch { return "未配置域名"; } })()} · 优先级 ${source.priority}`)), owner.jquery('<input type="checkbox" class="jhs-switch jhs-source-toggle" role="switch">').prop("checked", source.enabled)));
+        node.append(owner.jquery('<div class="jhs-setting-row jhs-setting-row--action"></div>').append(owner.jquery('<div></div>').append(owner.jquery("<strong></strong>").text(source.name), source.experimental ? '<span class="jhs-badge">实验性</span>' : "", owner.jquery("<small></small>").text(`${source.type || defaultType} · ${source.domain || (() => { try { return new URL(source.searchUrlTemplate).hostname; } catch { return "未配置域名"; } })()}${custom ? " · 优先级 " + source.priority : ""}`)), owner.jquery('<input type="checkbox" class="jhs-switch jhs-source-toggle" role="switch">').prop("checked", source.enabled)));
         const actions = owner.jquery('<div class="jhs-toolbar"></div>').append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-source-test">测试</button>');
         if (custom) actions.append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-source-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-source-delete">删除</button>');
+        if (!custom && source.implemented !== false) {
+            const priority = owner.jquery('<input type="number" class="jhs-field jhs-source-priority" min="1" step="1">')
+                .val(source.priority).attr("aria-label", "优先级 " + source.name);
+            actions.prepend(owner.jquery('<label class="jhs-source-priority-label"></label>').text("优先级").append(priority));
+            priority.on("change", async () => {
+                const value = Number(priority.val());
+                if (!Number.isSafeInteger(value) || value < 1) { priority.val(source.priority); return; }
+                try {
+                    await resources.updateArray(kind === "screenshot" ? "screenshotProviders" : "magnetBuiltInSources", (list) => {
+                        const found = list.find(item => item.id === source.id);
+                        if (found) found.priority = value;
+                        else list.push({ id: source.id, priority: value });
+                        return list;
+                    });
+                    source.priority = value;
+                } catch (error) {
+                    priority.val(source.priority);
+                    owner.logger.error("保存来源优先级失败", error);
+                    owner.notifications.error("优先级保存失败");
+                }
+            });
+        }
         const row = node.children(".jhs-setting-row"), toggle = row.children("input").attr("aria-label", `启用 ${source.name}`);
         actions.prepend(toggle).addClass("jhs-setting-row__control"); row.append(actions);
         node.on("change", ".jhs-source-toggle", async (/** @type {JQueryInputEvent} */ event) => {
@@ -152,7 +175,7 @@ export function renderResourceSettings(owner, root = owner.jquery(owner.document
                 if (root && (!owner.jquery(root)[0]?.isConnected || resources !== owner.fullResources)) return;
                 owner.resourceState.custom = custom;
                 owner.renderResourceSettings(root);
-            } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error("资源设置保存失败，请重试"); }
+            } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error(error instanceof TypeError || error instanceof JhsError ? error.message : "资源设置保存失败，请重试"); }
         }), null, { confirmText: "删除", cancelText: "取消", tone: "danger" })));
         return node;
     };
@@ -181,24 +204,10 @@ export function renderRules(owner, /** @type {"tag" | "filter"} */ kind, root = 
                 if (root && (!owner.jquery(root)[0]?.isConnected || resources !== owner.fullResources)) return;
                 owner.resourceState["tag" === kind ? "tags" : "filters"] = rules;
                 owner.renderRules(kind, root);
-            } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error("资源设置保存失败，请重试"); }
+            } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error(error instanceof TypeError || error instanceof JhsError ? error.message : "资源设置保存失败，请重试"); }
         }), null, { confirmText: "删除", cancelText: "取消", tone: "danger" })));
         host.append(node);
     }));
-}
-
-/** Keep editor controls and native change events while sharing FieldRow geometry. */
-/** @param {SettingPlugin} owner */
-export function normalizeEditorRows(owner, /** @type {any} */ content) {
-    content.find("label").not(".jhs-setting-row").each((/** @type {number} */ _index,/** @type {HTMLElement} */ element)=>{
-        const label=owner.jquery(element), control=label.children("input,select,textarea").first();
-        if (!control.length) return;
-        const title=label.clone().children().remove().end().text().trim();
-        control.detach().attr("aria-label",title);
-        label.empty().addClass("jhs-setting-row jhs-setting-row--stacked")
-            .append(owner.jquery('<span class="jhs-setting-row__copy"><span class="jhs-setting-row__label"></span></span>').find("span").text(title).end(),owner.jquery('<span class="jhs-setting-row__control"></span>').append(control));
-    });
-    JhsSelect.enhance(content);
 }
 
 /** @param {SettingPlugin} owner */
@@ -211,7 +220,8 @@ export function openSourceDialog(owner, /** @type {ResourceRecord | null} */ exi
         const type = content.find('[name="parserType"]').val(), names = "torrent-table" === type ? fields.slice(0, 7) : "json" === type ? fields.slice(7) : [];
         content.find(".jhs-parser-fields").html(names.map((name => `<label>${fieldLabels[/** @type {keyof typeof fieldLabels} */ (name)]}<input name="${name}" class="jhs-field"></label>`)).join(""));
         names.forEach((name => content.find(`[name="${name}"]`).val(existing?.[name] || "")));
-        owner.normalizeEditorRows(content);
+        enhanceSettingRows(content[0]);
+        JhsSelect.enhance(content);
     };
     Object.entries(existing || { enabled: true, priority: 100, parserType: "magnet-links" }).forEach(([key, value]) => {
         const input = content.find(`[name="${key}"]`);
@@ -236,7 +246,7 @@ export function openSourceDialog(owner, /** @type {ResourceRecord | null} */ exi
                 if (root && (!owner.jquery(root)[0]?.isConnected || resources !== owner.fullResources)) return;
                 owner.resourceState.custom = custom;
             dialog.close(index), root && owner.renderResourceSettings(root);
-        } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error("资源设置保存失败，请重试"); }
+        } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error(error instanceof TypeError || error instanceof JhsError ? error.message : "资源设置保存失败，请重试"); }
         finally { saving = false; }
     } });
     releaseOwner = owner._settingsDialog?.scope.addCleanup(() => dialog.close(editorId));
@@ -251,7 +261,8 @@ export function openRuleDialog(owner, /** @type {"tag" | "filter"} */ kind, /** 
         const input = content.find(`[name="${key}"]`);
         "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);
     });
-    owner.normalizeEditorRows(content);
+    enhanceSettingRows(content[0]);
+    JhsSelect.enhance(content);
     content.appendTo("body").hide();
     let saving = false;
     /** @type {(() => void) | undefined} */ let releaseOwner;
@@ -274,16 +285,10 @@ export function openRuleDialog(owner, /** @type {"tag" | "filter"} */ kind, /** 
             if (root && (!owner.jquery(root)[0]?.isConnected || resources !== owner.fullResources)) return;
             owner.resourceState[isTag ? "tags" : "filters"] = rules;
             dialog.close(index), root && owner.renderRules(kind, root);
-        } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error("资源设置保存失败，请重试"); }
+        } catch (error) { owner.logger?.error?.("资源设置操作失败", error), owner.notifications.error(error instanceof TypeError || error instanceof JhsError ? error.message : "资源设置保存失败，请重试"); }
         finally { saving = false; }
     } });
     releaseOwner = owner._settingsDialog?.scope.addCleanup(() => dialog.close(editorId));
-}
-
-/** @param {SettingPlugin} owner */
-export async function saveCloudSettings(owner, root = owner.jquery(owner.document)) {
-    const resources = owner.fullResources;
-    await resources.saveCloudSettings({ enable123Offline: root.find("#enable123Offline").is(":checked"), enable115Offline: root.find("#enable115Offline").is(":checked"), providerMode: root.find("#offlineProviderMode").val(), enable115Match: root.find("#enable115Match").is(":checked"), enable115LoginRedirect: root.find("#enable115LoginRedirect").is(":checked"), concurrency: Number(root.find("#oneOneFiveConcurrency").val()), cacheMinutes: Number(root.find("#oneOneFiveCacheMinutes").val()) });
 }
 
 /** @param {SettingPlugin} owner */

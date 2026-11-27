@@ -1,7 +1,7 @@
 // @ts-check
 
 import { _ } from "../../core/constants.js";
-import { calcMagnetScore, getMagnetQualitySignals } from "../../core/magnet-quality.js";
+import { calcMagnetScore, getMagnetQualitySignals, magnetGrade } from "../../core/magnet-quality.js";
 
 export const DETAIL_MAGNET_FILTER_STYLES = `
     .jhs-magnet-score{display:inline-flex;align-items:center;gap:var(--jhs-space-1);margin-left:var(--jhs-space-2);padding:var(--jhs-space-half) var(--jhs-space-2);border-radius:var(--jhs-radius-pill);font-size:var(--jhs-font-size-xs);font-weight:var(--jhs-font-weight-semibold);vertical-align:middle;cursor:help}
@@ -86,12 +86,12 @@ export class MagnetFilterController {
     injectScoreBadge(target, title) {
         if (target.querySelector(".jhs-magnet-score")) return;
         const score = calcMagnetScore({ title: title || "", seeders: 0 });
-        const label = score.total >= 70 ? "高" : score.total >= 40 ? "中" : "低";
+        const label = magnetGrade(score.total);
         const badge = this.document.createElement("span");
         badge.className = "jhs-magnet-score";
         badge.title = `分辨率:${score.resolution}/25 字幕:${score.subtitle}/20 做种:${score.seeders}/35 新鲜度:${score.freshness}/15`;
-        badge.style.color = score.total >= 70 ? "var(--jhs-success-text)" : score.total >= 40 ? "var(--jhs-warning-text)" : "var(--jhs-text-muted)";
-        badge.style.backgroundColor = score.total >= 70 ? "var(--jhs-success-tint)" : score.total >= 40 ? "var(--jhs-warning-tint)" : "var(--jhs-surface-2)";
+        badge.style.color = label === "高" ? "var(--jhs-success-text)" : label === "中" ? "var(--jhs-warning-text)" : "var(--jhs-text-muted)";
+        badge.style.backgroundColor = label === "高" ? "var(--jhs-success-tint)" : label === "中" ? "var(--jhs-warning-tint)" : "var(--jhs-surface-2)";
         badge.textContent = `${label} ${score.total}`;
         target.append(badge);
     }

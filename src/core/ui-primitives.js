@@ -149,7 +149,6 @@ export class JhsSelect {
             this.control.removeClass("is-open");
             this.trigger.attr("aria-expanded", "false").removeAttr("aria-activedescendant");
             this.menu.find(".is-active").removeClass("is-active");
-            this.menu.find(".jhs-select-option").each((/** @type {number} */ _, /** @type {HTMLElement} */ item) => item.setAttribute("aria-selected", String(Number(item.dataset.index) === this.source[0].selectedIndex)));
             this.activeIndex = -1;
         } });
         JhsSelect.instances.set(this.source[0], this);
@@ -261,7 +260,8 @@ export class JhsSelect {
     setActive(item) {
         if (!item.length || item.prop("disabled")) return;
         this.activeIndex = Number(item.attr("data-index"));
-        this.menu.find(".jhs-select-option").removeClass("is-active").attr("aria-selected", "false"); item.addClass("is-active").attr("aria-selected", "true");
+        this.menu.find(".is-active").removeClass("is-active");
+        item.addClass("is-active");
         this.trigger.attr("aria-activedescendant", item.attr("id"));
         item[0].scrollIntoView?.({ block: "nearest" });
     }

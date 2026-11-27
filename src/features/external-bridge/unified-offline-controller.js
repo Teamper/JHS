@@ -1,4 +1,5 @@
 // @ts-check
+import { offlineErrorLabel } from "../../core/offline-error-label.js";
 
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 import { JhsError } from "../../core/jhs-error.js";
@@ -13,7 +14,7 @@ import { OfflineProviderRegistry } from "./offline-provider-registry.js";
 /** @typedef {any} JQueryHandle */
 /** @typedef {{provider: any, availability: any}} OfflineCandidate */
 /** @typedef {{binding:string, accountId?:string, token?:string}} SubmissionAccount */
-/** @typedef {{isActive?:()=>boolean, onMutationDispatch?:()=>void, account?:SubmissionAccount|null}} ProviderSubmitOptions */
+/** @typedef {{isActive?:()=>boolean, onMutationDispatch?:()=>void, onResolved?:(id:string)=>void, account?:SubmissionAccount|null}} ProviderSubmitOptions */
 
 /** Owns offline providers, detail controls, and submission state inside the External Bridge Feature. */
 export class UnifiedOfflineController {
@@ -132,7 +133,7 @@ export class UnifiedOfflineController {
                 if (this.scope.disposed || options.isActive?.() === false) throw Object.assign(new Error("界面已关闭，未提交任务"), { code: "SUBMIT_CANCELLED" });
                 if (!parseBooleanSetting(this.getSetting("enable123Offline", true), false)) throw Object.assign(new Error("123 离线服务已关闭，未提交任务"), { code: "SERVICE_DISABLED" });
                 if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" });
-                return this.offline.submitWithIntegration("pan123", resource, { token, scope: this.scope, onMutationDispatch: () => {
+                return this.offline.submitWithIntegration("pan123", resource, { token, scope: this.scope, onResolved: options.onResolved, onMutationDispatch: () => {
                     if (!parseBooleanSetting(this.getSetting("enable123Offline", true), false)) throw new JhsError("ABORTED", "123 离线服务已关闭，未提交任务");
                     options.onMutationDispatch?.();
                 } });
@@ -176,15 +177,15 @@ export class UnifiedOfflineController {
         this._loginLinks.clear();
     }
 
-    /** Show a safe login link beside the failed submission control. @param {Element | null | undefined} button @param {string} url */
-    show115LoginLink(button, url) {
+    /** Show a safe login link beside the failed submission control. @param {Element | null | undefined} button @param {string} url @param {string} [name] */
+    show115LoginLink(button, url, name = /** @type {string} */ (PRODUCT_NAMES.one115)) {
         if (!button?.isConnected || this.scope.disposed) return;
         const link = this.document.createElement("a");
         link.className = "jhs-btn jhs-btn--ghost jhs-115-login-link";
         link.href = url;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        link.textContent = `登录 ${PRODUCT_NAMES.one115}`;
+        link.textContent = `登录 ${name}`;
         link.title = url;
         button.insertAdjacentElement("afterend", link);
         this._loginLinks.set(button, link);
@@ -350,10 +351,19 @@ export class UnifiedOfflineController {
             token = account.token;
         } else if (integrationId === "pan123") token = await this.pan123Credential.getStoredToken();
         assertActive();
-        const { items } = await this.offline.listTasks(integrationId, { token, page: 1, scope });
-        assertActive();
         const hash = integrationId === "one115" ? extractInfoHash(resource) : null;
-        if (!hash || !items.some((/** @type {{id:string}} */ task) => task.id.toUpperCase() === hash)) {
+        const resolutionId = integrationId === "pan123" ? receipt.resolutionId : null;
+        let found = false;
+        if (hash || resolutionId) {
+            for (let page = 1; page <= 10; page++) {
+                const { items, total } = await this.offline.listTasks(integrationId, { token, page, scope, includeEvidence: Boolean(resolutionId) });
+                assertActive();
+                found = items.some((/** @type {{id:string,resourceId?:string}} */ task) => resolutionId
+                    ? task.resourceId === resolutionId : task.id.toUpperCase() === hash);
+                if (found || !items.length || page * items.length >= total || !Number.isFinite(total)) break;
+            }
+        }
+        if (!found) {
             return { raw, receipt, found: false };
         }
         const commit = async () => {
@@ -424,7 +434,7 @@ export class UnifiedOfflineController {
         }
     }
 
-    /** @param {unknown} event @param {string} resource @param {JQueryHandle|null} [button] @param {any} [context] @param {string|null} [retryOf] @param {{forceAvailabilityRefresh?:boolean,preferredProviderId?:string,previousOutcome?:string,expectedReceipt?:string|null}} [options] */
+    /** @param {unknown} event @param {string} resource @param {JQueryHandle|null} [button] @param {any} [context] @param {string|null} [retryOf] @param {{forceAvailabilityRefresh?:boolean,preferredProviderId?:string,previousOutcome?:string,chooseProvider?:boolean,expectedReceipt?:string|null}} [options] */
     async submitResource(event, resource, button = null, context = null, retryOf = null, options = {}) {
         const $ = this.getJQuery();
         button = button ?? $();
@@ -443,23 +453,24 @@ export class UnifiedOfflineController {
         let submitted = false;
         let submissionOutcome = "";
         let localHistoryFailed = false;
-        let receiptKey = null;
+        /** @type {string|null} */ let receiptKey = null;
         /** @type {string|null} */ let previousReceipt = null;
         /** @type {any|null} */ let selected = null;
         /** @type {any} */ let info = null;
+        /** @type {string | undefined} */ let tokenUsed;
         try {
             button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中");
             let candidates = await this.registry.getCandidates(resource, { force: Boolean(options.forceAvailabilityRefresh) });
             if (!candidates.length && !options.forceAvailabilityRefresh && active()) candidates = await this.registry.getCandidates(resource, { force: true });
             if (!active()) return;
             if (!candidates.length) {
-                this.notifications.error("离线不可用，请检查授权与设置");
+                this.notifications.error(this.registry.getUnavailableReason?.() || "离线不可用，请检查授权与设置");
                 return;
             }
-            selected = options.preferredProviderId
+            selected = options.preferredProviderId && !options.chooseProvider
                 ? candidates.find((candidate) => candidate.provider.id === options.preferredProviderId)
                 : await this.chooseCandidate(event, candidates);
-            if (options.preferredProviderId && !selected) {
+            if (options.preferredProviderId && !options.chooseProvider && !selected) {
                 this.notifications.info("原服务不可用，请恢复后核实重试");
                 return;
             }
@@ -499,14 +510,22 @@ export class UnifiedOfflineController {
                 }
                 if (!confirmed && (existingReceipt || uncertainRetry)) return { raw: previousReceipt, providerId: existingReceipt?.providerId || selected.provider.id };
                 const account = this.submissionSession ? await this.getSubmissionAccount(selected.provider.id, this.scope) : null;
+                if (selected.provider.id === "123") tokenUsed = (account?.token ?? await this.pan123Credential.getStoredToken()) || "";
                 if (!active()) return false;
                 if (account && existingReceipt?.state === "pending") this.assertSubmissionAccount(existingReceipt.accountBinding, account.binding);
                 const attempt = { attemptId: this.window.crypto?.randomUUID?.() || String(Date.now()), providerId: selected.provider.id,
                     ...(account && { accountBinding: account.binding }) };
                 if (receiptKey) await this.submissionReceipts.write(receiptKey, "pending", attempt, previousReceipt);
+                const pendingReceipt = receiptKey ? this.submissionReceipts.getRaw(receiptKey) : null;
                 let dispatched = false, failure;
+                /** @type {string | undefined} */ let resolutionId;
+                const onResolved = (/** @type {string} */ value) => {
+                    resolutionId = value;
+                    if (receiptKey) this.submissionReceipts.write(receiptKey, "pending", { ...attempt, resolutionId }, pendingReceipt);
+                };
                 try {
-                    await selected.provider.submit(resource, info, { isActive: active, account, onMutationDispatch: () => {
+                    const providerAccount = tokenUsed === undefined ? account : { ...account, token: tokenUsed };
+                    await selected.provider.submit(resource, info, { isActive: active, account: providerAccount, onResolved, onMutationDispatch: () => {
                         if (!active()) throw new JhsError("ABORTED", "界面已关闭，未提交任务");
                         dispatched = true;
                     } });
@@ -531,7 +550,7 @@ export class UnifiedOfflineController {
                 const failureRecord = /** @type {any} */ (failure);
                 if (["SUBMIT_CANCELLED", "SERVICE_DISABLED", "ABORTED"].includes(failureRecord?.code) && !dispatched) throw failure;
                 try {
-                    await this.state.appendOfflineHistory({ id: attempt.attemptId, providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info.carNum, status: submitted ? "submitted" : submissionOutcome === "unknown" ? "pending" : "failed", submissionOutcome, errorCode: failureRecord?.code, retryOf });
+                    await this.state.appendOfflineHistory({ id: attempt.attemptId, providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info.carNum, ...(resolutionId && { resourceId: resolutionId }), status: submitted ? "submitted" : submissionOutcome === "unknown" ? "pending" : "failed", submissionOutcome, errorCode: failureRecord?.code, errorMessage: submitted ? undefined : offlineErrorLabel(failureRecord?.code), retryOf });
                 } catch (error) {
                     localHistoryFailed = true;
                     this.recordError(submissionOutcome === "failed" ? "offline-failure-history" : "offline-history-after-submit", error);
@@ -596,6 +615,16 @@ export class UnifiedOfflineController {
             this.diagnostics?.recordError?.({ source: "offline-submit", featureId: "external-bridge", message, error });
             if (code === "SERVICE_DISABLED") { if (active()) this.notifications.error("离线服务已关闭"); return; }
             if (selected && needsAuth) this.registry.updateAvailability(selected.provider.id, { available: false, authState: selected.provider.id === "115" ? "login-required" : "token-missing", reason: "授权已失效，请重新登录" });
+            if (selected?.provider.id === "123" && needsAuth) {
+                try {
+                    if (tokenUsed && await this.pan123Credential.getStoredToken() === tokenUsed) this.pan123Credential.clearStoredToken(code);
+                } catch (error) { this.recordError("offline-auth-clear", error); }
+                if (active()) {
+                    this.show115LoginLink(trigger, "https://yun.123pan.com", PRODUCT_NAMES.pan123);
+                    this.notifications.error("123 云盘授权已失效，请登录后重试");
+                }
+                return;
+            }
             if (!active()) return;
             const loginUrl = selected?.provider.id === "115" && needsAuth
                 && parseBooleanSetting(this.getSetting("enable115LoginRedirect", false), false) ? this.get115LoginUrl() : null;

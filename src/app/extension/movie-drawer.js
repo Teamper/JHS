@@ -80,7 +80,7 @@ export class ExtensionMovieDrawer {
         const services = this.context.services;
         const settings = services.settings.snapshot();
         const [localRecord, ratings] = await Promise.all([
-            this.client.call("state.getState", [carNum]).catch(() => null),
+            this.client.call("state.getState", [carNum]),
             this.client.call("state.getPersonalRatings").catch(() => ({})),
         ]);
         if (!isActive()) return;
@@ -417,18 +417,20 @@ export class ExtensionMovieDrawer {
             btn.disabled = true;
             btn.textContent = "提交中…";
             let receiptKey = null;
-            let previousReceipt = null;
+            let previousReceipt = null, submitted = false;
+            const report = (/** @type {unknown} */ error) => services.diagnostics?.recordError({ source: "extension-offline", message: "更新离线记录失败", error });
             try {
                 const token = integrationId === "pan123" ? await services.pan123Credential.getStoredToken() : "";
                 if (integrationId === "pan123" && !token) throw new Error("请先在 123 云盘网页同步登录授权");
                 receiptKey = await buildReceiptKey(resource);
                 if (receiptKey) {
-                    previousReceipt = await this.client.call("receipts.getRaw", [receiptKey]).catch(() => null);
+                    previousReceipt = await this.client.call("receipts.getRaw", [receiptKey]);
                     await this.client.call("receipts.write", [receiptKey, "pending", { attemptId: crypto.randomUUID(), providerId }, previousReceipt]);
                 }
                 await services.offline.submitWithIntegration(integrationId, resource, { ...(token ? { token } : {}), scope });
+                submitted = true;
                 if (receiptKey) {
-                    await this.client.call("receipts.write", [receiptKey, "submitted", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(() => {});
+                    await this.client.call("receipts.write", [receiptKey, "submitted", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(report);
                 }
                 await this.client.call("state.appendOfflineHistory", [{
                     carNum, providerId, providerName, resource, status: "submitted", submissionOutcome: "submitted",
@@ -444,13 +446,18 @@ export class ExtensionMovieDrawer {
                 this.onStatus?.(`已推送至 ${providerName} 并标记已下载`);
                 this.onMutated?.();
             } catch (error) {
+                if (submitted) {
+                    report(error);
+                    if (isActive()) { btn.textContent = "已提交"; this.onStatus?.("云盘已接收任务，本地记录未完整更新"); }
+                    return;
+                }
                 if (receiptKey) {
-                    await this.client.call("receipts.write", [receiptKey, "failed", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(() => {});
+                    await this.client.call("receipts.write", [receiptKey, "failed", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(report);
                 }
                 await this.client.call("state.appendOfflineHistory", [{
                     carNum, providerId, providerName, resource, status: "failed",
                     errorMessage: error instanceof Error ? error.message : String(error),
-                }]).catch(() => {});
+                }]).catch(report);
                 if (isActive()) {
                     btn.textContent = "重试";
                     this.onStatus?.(error instanceof Error ? error.message : String(error));
@@ -701,7 +708,7 @@ export class ExtensionMovieDrawer {
                     model.movieId = resolved.movieId;
                     extLink.href = `${javdbOrigin}/v/${encodeURIComponent(resolved.movieId)}`;
                     const [detail, nativeMagnets] = await Promise.all([
-                        services.movie.detail(resolved, { scope }).catch(() => null),
+                        services.movie.detail(resolved, { scope }).catch((/** @type {unknown} */ error) => services.diagnostics?.recordError({ source: "extension-movie", message: "读取详情失败", error })),
                         services.magnet.listNative(resolved, { scope }).catch(() => []),
                     ]);
                     if (!isActive()) return;
@@ -724,7 +731,7 @@ export class ExtensionMovieDrawer {
                     }
                 }
                 if (!model.imageUrls.length) {
-                    const shots = await services.screenshot.resolve({ carNum, movieId: model.movieId || undefined }, { scope, settings, allowWhenDisabled: true }).catch(() => null);
+                    const shots = await services.screenshot.resolve({ carNum, movieId: model.movieId || undefined }, { scope, settings, allowWhenDisabled: true }).catch((/** @type {unknown} */ error) => services.diagnostics?.recordError({ source: "extension-movie", message: "读取剧照失败", error }));
                     if (isActive() && Array.isArray(shots) && shots.length) {
                         model.imageUrls = shots;
                         renderGallery();

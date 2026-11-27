@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
-import { SettingsEntryController } from "../src/features/system/settings-entry-controller.js";
+import { SettingsEntryController } from "../src/features/settings/settings-entry-controller.js";
 
 afterEach(() => vi.unstubAllGlobals());
 

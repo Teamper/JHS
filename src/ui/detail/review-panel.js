@@ -2,7 +2,6 @@
 import { formatUiDateTime } from "../../core/ui-date-time.js";
 
 import { escapeHtml } from "../../core/constants.js";
-import { createLatestSettingWriter } from "../settings/setting-binding-controller.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { getIcon } from "../../core/icons.js";
 import { createPanelLoading } from "./primitives.js";
@@ -37,12 +36,20 @@ export class ReviewPanel {
         if (!isActive() || parentScope?.disposed) return jq([]);
         const releaseParent = parentScope?.addCleanup?.(() => panelScope.dispose());
         options.ownCleanup?.(() => { panelScope.dispose(); releaseParent?.(); });
-        const state = { movieId, panel, panelScope, floorIndex: 1, loaded: false, loading: false, page: 1, enabled: false, generation: 0, isActive: () => !panelScope.disposed && isActive(), requestScope: /** @type {LifecycleScope | null} */ (null) };
+        const state = { movieId, panel, panelScope, floorIndex: 1, loaded: false, loading: false, page: 1, showFiltered: false, keywords: /** @type {string[]} */ ([]), enabled: false, generation: 0, isActive: () => !panelScope.disposed && isActive(), requestScope: /** @type {LifecycleScope | null} */ (null) };
         panelScope.addCleanup(() => panel.remove());
         header.append(toggle);
         if (options.ownedSection) options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle); else panel.append(header);
         panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>');
-        target.append(panel); this.bindFilter(panel);
+        const filters = jq('<div class="jhs-toolbar jhs-review-filters"></div>');
+        const reveal = jq('<button type="button" class="jhs-btn jhs-btn--ghost" aria-pressed="false"></button>').hide();
+        const block = jq('<button type="button" class="jhs-btn jhs-btn--ghost">屏蔽所选词</button>');
+        filters.append(reveal, block);
+        panel.prepend(filters);
+        reveal.on("click", () => { state.showFiltered = !state.showFiltered; this.filterReviews(state); reveal.trigger("focus"); });
+        block.on("mousedown", (/** @type {any} */ event) => event.preventDefault());
+        block.on("click", (/** @type {any} */ event) => void this.filterSelection(event, state));
+        target.append(panel); this.bindFilter(panel, state);
         const enabled = (this.settings.snapshot().enableLoadReview ?? "yes") === "yes";
         const applyExpanded = (/** @type {unknown} */ value) => {
             if (!state.isActive()) return;
@@ -52,22 +59,18 @@ export class ReviewPanel {
                 if (!next) { state.requestScope?.dispose(); state.loading = false; panel.attr("aria-busy", "false"); }
             }
             this.updateToggle(toggle, next);
-            panel.find(".jhs-review-container, .jhs-review-footer").toggle(next);
+            panel.find(".jhs-review-container, .jhs-review-footer, .jhs-review-filters").toggle(next);
             panel.find(".jhs-review-load-more").prop("disabled", false).text("加载更多评论");
             if (next && !state.loaded && !state.loading) return this.fetch(state);
         };
         if (this.settings.addEventListener) panelScope.listen(this.settings, "settings.changed", (/** @type {any} */ event) => {
             if (event.detail?.names?.includes("enableLoadReview")) void applyExpanded(this.settings.snapshot().enableLoadReview ?? "yes");
         });
-        const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadReview", fallback: "yes", apply: (value) => { void applyExpanded(value); }, onError: (error) => {
-            this.reportError("评论面板展开设置保存失败，已恢复", error);
-            this.notify("error", "评论面板展开设置保存失败，已恢复原设置");
-        } });
         toggle.on("click", (/** @type {any} */ event) => {
             event.preventDefault(); event.stopPropagation();
             const expanded = toggle.find(".toggle-text").text() === "展开";
             const desired = expanded ? "yes" : "no";
-            void writeExpanded(desired);
+            void applyExpanded(desired);
         });
         panelScope.addCleanup(() => { state.requestScope?.dispose(); panel.attr("aria-busy", "false"); toggle.off("click"); panel.off("contextmenu.jhsReviewFilter"); });
         const initialLoad = applyExpanded(enabled ? "yes" : "no");
@@ -94,11 +97,12 @@ export class ReviewPanel {
             const reviews = await this.review.list({ movieId: state.movieId }, { page: 1, limit: pageSize, scope });
             if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
             const keywords = await this.getKeywords();
+            state.keywords = keywords;
             if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
             state.loading = false; state.loaded = true; container.empty();
             if (!reviews.length) return void container.append(jq('<div class="jhs-panel-state"></div>').text("暂无评论"));
-            await this.display(state, reviews, container, keywords);
-            if (reviews.length === pageSize) this.bindLoadMore(state, pageSize, keywords, container, footer); else footer.append(jq('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
+            await this.display(state, reviews, container);
+            if (reviews.length === pageSize) this.bindLoadMore(state, pageSize, container, footer); else footer.append(jq('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
         } catch (error) {
             if (generation === state.generation) state.loading = false;
             if (!state.isActive() || scope?.signal?.aborted) return;
@@ -117,8 +121,8 @@ export class ReviewPanel {
         container.empty().append(jq('<div class="jhs-panel-state"></div>').append(this.document.createTextNode(`${message} `), jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)));
     }
 
-    /** @param {any} state @param {number} pageSize @param {string[]} keywords @param {any} container @param {any} footer */
-    bindLoadMore(state, pageSize, keywords, container, footer) {
+    /** @param {any} state @param {number} pageSize @param {any} container @param {any} footer */
+    bindLoadMore(state, pageSize, container, footer) {
         const jq = this.jquery, button = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = jq('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
         footer.empty().append(button, end);
         button.on("click", async () => {
@@ -128,7 +132,7 @@ export class ReviewPanel {
             try {
                 const reviews = await this.review.list({ movieId: state.movieId }, { page: nextPage, limit: pageSize, scope });
                 if (!state.isActive() || scope.signal.aborted || generation !== state.generation || !state.enabled) return;
-                state.page = nextPage; await this.display(state, reviews, container, keywords);
+                state.page = nextPage; await this.display(state, reviews, container);
                 if (reviews.length < pageSize) button.remove(), end.show(); else button.text("加载更多评论").prop("disabled", false);
             } catch (error) {
                 if (!state.isActive() || scope?.signal?.aborted) return;
@@ -137,20 +141,37 @@ export class ReviewPanel {
         });
     }
 
-    /** @param {any} state @param {any[]} reviews @param {any} container @param {string[]} keywords */
-    async display(state, reviews, container, keywords) {
+    /** @param {any} state @param {any[]} reviews @param {any} container */
+    async display(state, reviews, container) {
         const jq = this.jquery;
-        const filter = keywords.length ? new RegExp(keywords.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")) : null;
         for (const review of reviews) {
-            const content = String(review.content || ""); if (filter?.test(content)) continue;
+            const content = String(review.content || "");
             const item = jq('<article class="jhs-review-item"></article>'), meta = jq('<div class="jhs-review-meta"></div>'), body = jq('<div class="review-content jhs-review-content"></div>');
             meta.append(jq("<span></span>").addClass("jhs-review-author").text(review.author || "匿名用户"));
             const stars = jq('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
-            for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
+            for (let index = 0; index < score; index++) stars.append(getIcon("star"));
             const formatted = this.ui?.formatDate?.(review.createdAt) ?? formatUiDateTime(review.createdAt);
             meta.append(stars, jq("<time></time>").text(formatted), jq("<span></span>").text(`点赞：${Number(review.likes) || 0}`), jq("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`));
-            this.appendContent(body, content); item.append(meta, body); container.append(item);
+            this.appendContent(body, content);
+            item.data("jhsReviewContent", content).append(meta, body);
+            container.append(item);
         }
+        this.filterReviews(state);
+    }
+
+    /** @param {any} state */
+    filterReviews(state) {
+        const pattern = state.keywords.map((/** @type {string} */ value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+        const filter = pattern ? new RegExp(pattern, "i") : null;
+        let hidden = 0;
+        state.panel.find(".jhs-review-item").each((/** @type {number} */ _, /** @type {HTMLElement} */ node) => {
+            const matches = Boolean(filter?.test(this.jquery(node).data("jhsReviewContent")));
+            if (matches) hidden++;
+            node.hidden = matches && !state.showFiltered;
+        });
+        const reveal = state.panel.find(".jhs-review-filters [aria-pressed]");
+        reveal.toggle(hidden > 0).attr("aria-pressed", String(state.showFiltered))
+            .text(state.showFiltered ? "重新隐藏 " + hidden + " 条匹配评论" : "已隐藏 " + hidden + " 条匹配评论 · 展开");
     }
 
     /** @param {any} container @param {string} content */
@@ -173,14 +194,32 @@ export class ReviewPanel {
         container.append(wrapper);
     }
 
-    /** @param {any} panel */
-    bindFilter(panel) {
-        panel.off("contextmenu.jhsReviewFilter", ".review-content").on("contextmenu.jhsReviewFilter", ".review-content", async (/** @type {any} */ event) => {
-            if ((this.settings.snapshot().enableTitleSelectFilter ?? "yes") !== "yes") return;
-            const text = String(this.window.getSelection()?.toString() || ""); if (!text) return;
-            event.preventDefault();
-            await this.ui.confirm(event, `屏蔽评论关键词「${escapeHtml(text)}」？<br>刷新页面后生效`, async () => { await this.saveKeyword(text); this.notify("ok", "已屏蔽，刷新页面后生效"); }, { confirmText: "屏蔽", tone: "danger" });
-        });
+    /** @param {any} panel @param {any} state */
+    bindFilter(panel, state) {
+        panel.on("contextmenu.jhsReviewFilter", ".review-content", (/** @type {any} */ event) => void this.filterSelection(event, state));
+    }
+
+    /** @param {any} event @param {any} state */
+    async filterSelection(event, state) {
+        if ((this.settings.snapshot().enableTitleSelectFilter ?? "yes") !== "yes") return;
+        const selection = this.window.getSelection();
+        const text = String(selection?.toString() || "").trim();
+        if (!text || !state.panel[0].contains(selection?.anchorNode)) return;
+        event.preventDefault();
+        this.ui.confirm(event, `屏蔽评论关键词「${escapeHtml(text)}」？`, async () => {
+            try {
+                await this.saveKeyword(text);
+                if (!state.isActive()) return;
+                state.keywords = await this.getKeywords();
+                if (!state.isActive()) return;
+                state.showFiltered = false;
+                this.filterReviews(state);
+                this.notify("ok", "已屏蔽关键词");
+            } catch (error) {
+                this.reportError("保存评论屏蔽关键词失败", error);
+                if (state.isActive()) this.notify("error", "保存关键词失败，请重试");
+            }
+        }, { confirmText: "屏蔽", tone: "danger" });
     }
 
     /** @param {"error" | "ok"} kind @param {string} message */

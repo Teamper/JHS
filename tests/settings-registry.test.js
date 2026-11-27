@@ -72,4 +72,12 @@ describe("SettingsRegistry canonical descriptors", () => {
         expect(normalizers.oneOneFiveCacheMinutes("4.8")).toBe(5);
         expect(normalizers.offlineProviderMode("invalid")).toBe("ask");
     });
+
+    it("reports an invalid synchronized setting as a field-specific TypeError", () => {
+        const registry = new SettingsRegistry();
+        registerDefaultSettings(registry);
+        const validate = () => registry.validateSync("highlightedTagColor", "invalid-color");
+        expect(validate).toThrow(TypeError);
+        expect(validate).toThrow("同步设置“高亮边框颜色”(highlightedTagColor)无效：类型、可选值或取值范围不符合要求");
+    });
 });

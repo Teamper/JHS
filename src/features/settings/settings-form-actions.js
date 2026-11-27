@@ -1,7 +1,8 @@
 // @ts-check
 
-import { THIRD_PARTY_CACHE_KEY } from "../../services/cache-service.js";
+import { JhsError } from "../../core/jhs-error.js";
 import { MediaConnectionValidationError } from "../../core/media-library-model.js";
+import { THIRD_PARTY_CACHE_KEY } from "../../services/cache-service.js";
 import { renderCarImportResult } from "../../ui/settings/car-number-import-view.js";
 import { bindWebDavSyncControls } from "../../ui/settings/webdav-sync-controls.js";
 import { normalizeCarNum } from "../../core/constants.js";
@@ -33,7 +34,7 @@ export function hydrateLiveSettings(owner, layerRoot) {
     descriptors.forEach((/** @type {import('../../app/settings-registry.js').SettingDescriptor} */ descriptor) => {
         const host = hosts.filter(`[data-jhs-setting-section="${descriptor.section || "detail"}"]`).first();
         if (!host.length) return;
-        const { row } = renderSettingRow(descriptor, { deferred: true, value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
+        const { row } = renderSettingRow(descriptor, { jquery: owner.jquery, deferred: true, value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
         host.append(row);
     });
     const onWriteError = () => owner.notifications.error("设置保存失败，已恢复原设置");
@@ -56,14 +57,14 @@ export function hydrateLiveSettings(owner, layerRoot) {
         key: "themeMode",
         getValue: () => root.find("#themeMode").val(),
         setValue: (/** @type {any} */ value) => { const el = root.find("#themeMode"); if (el[0]) JhsSelect.setValue(el[0], String(value ?? ""), false); else el.val(String(value ?? "")); },
-        fallback: "light",
+        fallback: registry.get("themeMode")?.defaultValue,
     });
     registerStatic({
         selector: "#mobileMode",
         key: "mobileMode",
         getValue: () => root.find("#mobileMode").val(),
         setValue: (/** @type {any} */ value) => { const el = root.find("#mobileMode"); if (el[0]) JhsSelect.setValue(el[0], String(value ?? ""), false); else el.val(String(value ?? "")); },
-        fallback: "auto",
+        fallback: registry.get("mobileMode")?.defaultValue,
     });
     registerStatic({
         selector: "#enableClog",
@@ -77,14 +78,14 @@ export function hydrateLiveSettings(owner, layerRoot) {
         key: "containerColumns",
         getValue: () => Number(root.find("#containerColumns").val()) || 5,
         setValue: (/** @type {any} */ value) => applyLayoutRangeValue(root, null, "containerColumns", value, owner.utils.isMobileMode()),
-        fallback: 5,
+        fallback: registry.get("containerColumns")?.defaultValue,
     });
     registerStatic({
         selector: "#containerWidth",
         key: "containerWidth",
         getValue: () => Number(root.find("#containerWidth").val()) + 70,
         setValue: (/** @type {any} */ value) => applyLayoutRangeValue(root, null, "containerWidth", value, owner.utils.isMobileMode()),
-        fallback: 100,
+        fallback: registry.get("containerWidth")?.defaultValue,
     });
     registerStatic({
         selector: "#defaultQuickFilterTab",
@@ -117,7 +118,74 @@ export function bindClick(owner, layerRoot = null) {
     if (!panels) return;
     const dependencies = owner.getFormDependencies(), webdav = owner.getRuntimeService("webdav"), dialog = owner.getRuntimeService("dialog"), diagnostics = owner.getRuntimeService("diagnostics"), storage = owner.getRuntimeService("storage"), translation = owner.getRuntimeService("translation"), previewDiff = (/** @type {any} */ diff, /** @type {unknown} */ imported, restored = null) => panels.showDiffPreview(diff, imported, restored, dialog, dependencies);
     const root = layerRoot ? owner.jquery(layerRoot) : owner.jquery(owner.document);
-    bindWebDavSyncControls(root, dependencies);
+    bindWebDavSyncControls(root, { ...dependencies, dialog });
+    const registry = dependencies.settingsRegistry, session = dependencies.draftSettings;
+    const disclosure = new Map();
+    root.find("#jhs-settings-search").on("input.jhsSettingNav", (/** @type {JQueryInputEvent} */ event) => {
+        const query = event.currentTarget.value.trim().toLowerCase();
+        if (!query) {
+            root.find("[data-jhs-search-hidden]").removeAttr("data-jhs-search-hidden");
+            for (const [element, open] of disclosure) element.open = open;
+            disclosure.clear();
+            root.removeClass("jhs-settings-searching");
+            owner.activateSettingPanel(root, root.data("jhsActiveSettingGroup") || "appearance-panel");
+            return;
+        }
+        root.addClass("jhs-settings-searching");
+        root.find(".content-panel").each((/** @type {number} */ _, /** @type {HTMLElement} */ group) => {
+            let matched = false;
+            for (const section of group.querySelectorAll(".jhs-setting-section")) {
+                const heading = section.querySelector("h3,summary");
+                const sectionMatch = heading?.textContent?.toLowerCase().includes(query);
+                const rows = [...section.querySelectorAll(".jhs-setting-row,.jhs-option-row")];
+                let visible = Boolean(sectionMatch || !rows.length && section.textContent?.toLowerCase().includes(query));
+                for (const row of rows) {
+                    const show = Boolean(sectionMatch || row.textContent?.toLowerCase().includes(query));
+                    row.toggleAttribute("data-jhs-search-hidden", !show);
+                    visible ||= show;
+                    if (show) for (let details = row.closest("details"); details && section.contains(details); details = details.parentElement?.closest("details") ?? null) {
+                        if (!disclosure.has(details)) disclosure.set(details, details.open);
+                        details.open = true;
+                    }
+                }
+                section.toggleAttribute("data-jhs-search-hidden", !visible);
+                matched ||= visible;
+            }
+            group.toggleAttribute("data-jhs-search-hidden", !matched);
+        });
+    });
+    root.on("click.jhsSettingNav", ".jhs-reset-setting-group", async (/** @type {JQueryEvent} */ event) => {
+        const group = owner.jquery(event.currentTarget).closest(".content-panel");
+        const patch = /** @type {Record<string, any>} */ ({});
+        for (const descriptor of registry.list()) {
+            if (descriptor.sensitive || descriptor.defaultValue === undefined) continue;
+            const key = descriptor.key;
+            const field = descriptor.formSelector ? group.find(descriptor.formSelector)
+                : group.find('[data-jhs-setting="' + key + '"] input,[data-jhs-setting="' + key + '"] select,#' + key);
+            if (!field.length) continue;
+            if (!descriptor.formSelector) { patch[key] = descriptor.defaultValue; continue; }
+            if (descriptor.type === "boolean") field.prop("checked", descriptor.defaultValue === true || descriptor.defaultValue === "yes");
+            else field.val(descriptor.formScale ? descriptor.defaultValue / descriptor.formScale : descriptor.defaultValue);
+            field.trigger("change");
+        }
+        await session?.patch(patch);
+        owner._fullSettingBinding?.sync(session?.snapshot() ?? {});
+        JhsSelect.refreshAll(group[0]);
+        root.data("jhsSettingsDraft")?.refresh();
+    });
+    root.find("#discardSettingsBtn").on("click", async () => {
+        if (root.find("#saveBtn").data("jhsBusy")) return;
+        try {
+            session?.discard();
+            owner._fullSettingBinding?.sync(session?.snapshot() ?? {});
+            owner._cloudSettingBinding?.sync(session?.snapshot() ?? {});
+            root.find(".keyword-input,#car-number-import").val("");
+            root.find("#car-number-import").trigger("input");
+            const generation = root.data("jhsSettingsGeneration");
+            await Promise.all([owner.hydrateSettingForm(root, generation), owner.loadResourceSettings(root, generation)]);
+            if (dependencies.isActive?.() !== false) root.data("jhsSettingsDraft")?.refresh();
+        } catch (error) { owner.logger.error("恢复当前设置失败", error); owner.notifications.error("恢复设置失败，请重试"); }
+    });
     root.find("#jhs-settings-category").on("change.jhsSettingNav", (/** @type {JQueryInputEvent} */ event) => owner.activateSettingPanel(root, event.currentTarget.value));
     root.find("#saveBtn").attr("data-jhs-settings-ready", "false").prop("disabled", !0).attr("title", "加载中…");
     root.find(".side-menu-item").off(".jhsSettingNav").on("click.jhsSettingNav", (/** @type {JQueryEvent} */ event) => {
@@ -132,8 +200,27 @@ export function bindClick(owner, layerRoot = null) {
     });
     root.find("#importBtn").on("click", ((/** @type {JQueryEvent} */ e) => importSettingData(previewDiff, dependencies)));
     root.find("#exportBtn").on("click", ((/** @type {JQueryEvent} */ e) => exportSettingData(dependencies)));
+    root.find("#clear-car-number-import").on("click", () => {
+        root.find("#car-number-import").val("").trigger("input").trigger("focus");
+        root.find("#car-number-import-preview").empty().prop("hidden", true);
+    });
     root.find("#preview-car-number-import").on("click", (() => owner.previewCarNumbers(root)));
     root.find("#confirm-car-number-import").on("click", (async (/** @type {JQueryEvent} */ e) => owner.confirmCarNumbers(e, root)));
+    root.find("#testWebDavConnection").on("click", async (/** @type {JQueryEvent} */ event) => {
+        const button = owner.jquery(event.currentTarget).prop("disabled", true).attr("aria-busy", "true");
+        try {
+            await webdav.testConnection({
+                url: String(root.find("#webDavUrl").val() || ""), username: String(root.find("#webDavUsername").val() || ""),
+                password: String(root.find("#webDavPassword").val() || ""),
+            }, dependencies.scope);
+            if (dependencies.isActive()) owner.notifications.ok("WebDAV 连接成功，目录可读");
+        } catch (error) {
+            if (dependencies.isActive()) {
+                const code = /** @type {any} */ (error)?.code;
+                owner.notifications.error(code === "AUTH_REQUIRED" ? "WebDAV 登录失败，请核对账号与读取权限" : error instanceof Error ? error.message : "WebDAV 测试失败");
+            }
+        } finally { if (dependencies.isActive()) button.prop("disabled", false).removeAttr("aria-busy"); }
+    });
     root.find("#webdavBackupBtn").on("click", ((/** @type {JQueryEvent} */ e) => owner.hasUnsavedConnection(root) ? owner.notifications.info("请先保存连接设置") : backupDataByWebDav(owner.folderName, webdav, dependencies)));
     root.find("#webdavBackupListBtn").on("click", ((/** @type {JQueryEvent} */ e) => owner.hasUnsavedConnection(root) ? owner.notifications.info("请先保存连接设置") : backupListBtnByWebDav(owner.folderName, (/** @type {import('./setting-backup.js').BackupFile[]} */ files, /** @type {any} */ client, /** @type {string} */ label) => openFileListDialog(files, client, label, owner.folderName, previewDiff, dialog, dependencies), webdav, dependencies)));
     root.find("#saveBtn").on("click", (async (/** @type {JQueryEvent} */ event) => {
@@ -166,10 +253,10 @@ export function bindClick(owner, layerRoot = null) {
             root.data("jhsSettingsDraft")?.refresh();
             const changed = new Set([...(root.data("jhsDirtyManualKeys") || []), ...(dependencies.draftSettings?.dirtyKeys() || [])]);
             const invalid = root.find("input,select,textarea").toArray().find((/** @type {HTMLInputElement} */ input) => {
-                const key = input.closest("[data-jhs-setting]")?.getAttribute("data-jhs-setting") || input.id;
+                const key = input.closest("[data-jhs-setting]")?.getAttribute("data-jhs-setting") || (input.id === "circuitBreakerCooldownSec" ? "circuitBreakerCooldown" : input.id);
                 return changed.has(key) && !input.disabled && input.willValidate && !input.checkValidity();
             });
-            if (invalid) { $(invalid).parents("details").prop("open", true); owner.activateSettingPanel(root, invalid.closest(".content-panel")?.id); invalid.focus?.(); invalid.reportValidity(); return; }
+            if (invalid) { owner.jquery(invalid).parents("details").prop("open", true); owner.activateSettingPanel(root, invalid.closest(".content-panel")?.id); invalid.focus?.(); invalid.reportValidity(); return; }
             const result = await saveSettingForm(dependencies, root);
             if (result?.canceled) return;
             if (dependencies.isActive?.() === false) return;
@@ -177,9 +264,8 @@ export function bindClick(owner, layerRoot = null) {
             catch (error) { try { owner.logger?.warn?.("设置已保存，完成提示显示失败", error); } catch { /* committed settings win */ } }
         } catch (error) {
             if (dependencies.isActive?.() === false) return;
-            if (error instanceof MediaConnectionValidationError) owner.notifications.error(error.message);
-            else if (error && typeof error === 'object' && 'partialFailure' in error) owner.notifications.error("部分设置保存失败，请重试");
-            else owner.notifications.error("设置保存失败");
+            if (error && typeof error === 'object' && 'partialFailure' in error) owner.notifications.error("部分设置保存失败，请重试");
+            else owner.notifications.error(error instanceof TypeError || error instanceof JhsError || error instanceof MediaConnectionValidationError ? error.message : "设置保存失败，请重试");
             owner.logger.error("设置保存失败", error);
         } finally {
             button.removeData("jhsBusy").prop("disabled", "true" !== button.attr("data-jhs-settings-ready")).removeAttr("aria-busy aria-disabled");
@@ -192,8 +278,12 @@ export function bindClick(owner, layerRoot = null) {
     }));
     root.find("#runHealthCheckBtn").on("click", (() => panels.renderDataHealthPanel(dependencies)));
     root.find("#repairHealthBtn").on("click", ((/** @type {JQueryEvent} */ e) => {
-        owner.utils.q(e, "修复本地数据？修复前将下载备份", (() => panels.repairDataHealthWithBackup(owner.getFormDependencies())), null, { confirmText: "修复", cancelText: "取消" });
+        owner.utils.q(e, "修复本地数据？系统会先创建恢复点", (() => panels.repairDataHealthWithBackup(owner.getFormDependencies())), null, { confirmText: "修复", cancelText: "取消" });
     }));
+    root.find("#pm-export-diagnostics").on("click", () => {
+        const snapshot = owner.getRuntimeService("diagnostics").exportSnapshot();
+        owner.domUi.download(JSON.stringify(snapshot, null, 2), "JHS-diagnostics.json");
+    });
     root.find("#pm-clear-log").on("click", (() => {
         owner.getRuntimeService("diagnostics").clearErrors(), root.find("#plugin-error-log").text("暂无错误记录"), owner.notifications.ok("已清空错误日志");
     }));

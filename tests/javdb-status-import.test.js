@@ -38,7 +38,7 @@ describe("JavDB status imports", () => {
         ["https://javdb.com/want_watch_videos", "favorite", { favorite: true }, "将想看的影片导入 JHS 收藏？"],
         ["https://javdb.com/watched_videos", "watched", { watched: true }, "将看过的影片导入 JHS 已观看？"],
     ])("mounts and imports the matching state on %s", async (href, flag, expectedPatch, prompt) => {
-        const { controller, scope, patch, confirm, loadingHandle, settings } = createHarness();
+        const { controller, scope, patch, confirm, settings } = createHarness();
         controller.href = href;
         expect(controller.start()).toBe(true);
         const button = document.querySelector("#wantWatchBtn");
@@ -47,23 +47,33 @@ describe("JavDB status imports", () => {
         expect(confirm).toHaveBeenCalledWith(expect.any(MouseEvent), expect.stringContaining(prompt), expect.any(Function), { confirmText: "导入" });
         await vi.waitFor(() => expect(settings.ok).toHaveBeenCalledOnce());
 
-        expect(patch).toHaveBeenCalledWith("ABC-1", expectedPatch, {
-            type: "javdb-list-import", record: { carNum: "ABC-1", stateEligibility: {eligible:true,reason:null}, url: "/v/abc-1", names: "", publishTime: "2026" },
+        expect(patch).toHaveBeenCalledWith(["ABC-1"], expectedPatch, {
+            type: "javdb-list-import", importBatchId: expect.any(String),
+            records: [{ carNum: "ABC-1", stateEligibility: { eligible: true, reason: null }, url: "/v/abc-1", publishTime: "2026" }],
         });
-        expect(loadingHandle.close).toHaveBeenCalledOnce();
+        expect(button.disabled).toBe(false);
+        expect(document.body.textContent).not.toContain("停止导入");
         scope.dispose();
         expect(document.querySelector("#wantWatchBtn")).toBeNull();
     });
 
-    it("imports all pages sequentially and preserves per-record failure counts", async () => {
-        const page = (carNum, next = "") => `<div class="movie-list"><div class="item"><a href="/v/${carNum}"><div class="video-title"><strong>${carNum}</strong></div><div class="meta">2026</div></a></div></div>${next ? `<a class="pagination-next" href="${next}"></a>` : ""}`;
-        const { controller, patch, request, settings } = createHarness(page("ABC-1", "/p2"));
-        patch.mockRejectedValueOnce(new Error("record unavailable"));
-        request.mockResolvedValueOnce(page("ABC-2", "/p3")).mockResolvedValueOnce(page("ABC-3"));
+    it("imports successive pages in 75-item batches and reports partial failure", async () => {
+        const page = (first, last, next = "") => {
+            const cards = Array.from({ length: last - first + 1 }, (_, index) => {
+                const code = "ABC-" + (first + index);
+                return `<div class="item"><a href="/v/${code}"><div class="video-title"><strong>${code}</strong></div><div class="meta">2026</div></a></div>`;
+            }).join("");
+            return `<div class="movie-list">${cards}</div>${next ? `<a class="pagination-next" href="${next}"></a>` : ""}`;
+        };
+        const { controller, patch, request, settings } = createHarness(page(1, 40, "/p2"));
+        patch.mockRejectedValueOnce(new Error("batch unavailable"));
+        request.mockResolvedValueOnce(page(41, 75, "/p3")).mockResolvedValueOnce(page(76, 77));
         const result = await controller.readAndImport("watched");
 
-        expect(result).toEqual({ imported: 2, failed: 1, skipped: 0, pages: 3 });
-        expect(patch).toHaveBeenCalledTimes(3);
+        expect(result).toEqual({ imported: 2, failed: 75, skipped: 0, pages: 3 });
+        expect(patch.mock.calls.map(([keys]) => keys.length)).toEqual([75, 2]);
+        expect(patch.mock.calls[1][0]).toEqual(["ABC-76", "ABC-77"]);
+        expect(patch.mock.calls[1][2].importBatchId).toBe(patch.mock.calls[0][2].importBatchId);
         expect(request).toHaveBeenNthCalledWith(1, {}, new URL("/p2", window.location.href).href, expect.any(LifecycleScope));
         expect(request).toHaveBeenNthCalledWith(2, {}, new URL("/p3", window.location.href).href, expect.any(LifecycleScope));
         expect(controller.sleep).toHaveBeenCalledTimes(2);

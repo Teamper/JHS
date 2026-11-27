@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 import { parseBooleanSetting } from "../core/feature-helpers.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 
@@ -17,7 +18,7 @@ export class OfflineTaskQueryService {
         this.query?.dispose();
         const previous = this.running;
         this.running = (async () => {
-            await previous?.catch(() => {});
+            await waitForSettlement(previous);
             const state = { ...await this.read() };
             delete state[providerId];
             await this.deps.storage.set(KEY, state);

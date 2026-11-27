@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../../core/async-settlement.js";
 
 import { C, _ } from "../../core/constants.js";
 
@@ -18,7 +19,7 @@ export class JavBusImageLayoutController {
     /** @param {{vertical?: unknown, columns?: unknown, enableVerticalModel?: unknown, containerColumns?: unknown}} [options] */
     logImageHeightsByRow(options = {}) {
         const operation = this.runChain.then(() => this.apply(options));
-        this.runChain = operation.catch(() => undefined);
+        this.runChain = waitForSettlement(operation);
         return operation;
     }
 
@@ -27,8 +28,12 @@ export class JavBusImageLayoutController {
         if (this.disposed) return;
         const snapshot = this.settings.snapshot();
         const vertical = options.vertical ?? options.enableVerticalModel ?? snapshot.enableVerticalModel ?? C;
-        const columns = Number(options.columns ?? options.containerColumns ?? snapshot.containerColumns ?? 5) || 5;
-        if (vertical === _) return;
+        const list = this.hostAdapter.locateListRoot?.();
+        const tracks = list && this.document.defaultView?.getComputedStyle(list).gridTemplateColumns;
+        const requested = Number(options.columns ?? options.containerColumns ?? snapshot.containerColumns ?? 5) || 5;
+        const columns = tracks && tracks !== "none" && !tracks.includes("(") ? tracks.trim().split(/\s+/).length : requested;
+        this.restoreHeights();
+        if (vertical === _ || columns < 2) return;
 
         const itemSelector = this.hostAdapter.getListSelectors?.().itemSelector;
         if (!itemSelector) return;
@@ -39,8 +44,6 @@ export class JavBusImageLayoutController {
             const image = item.querySelector("img");
             if (!(image instanceof HTMLImageElement)) continue;
             this.captureOriginalHeight(image);
-            image.style.removeProperty("height");
-            this.updateWrittenHeight(image);
             const height = image.offsetHeight;
             if (height > 0) visibleImages.push({ imgElement: image, height });
         }
@@ -83,6 +86,10 @@ export class JavBusImageLayoutController {
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
+        this.restoreHeights();
+    }
+
+    restoreHeights() {
         for (const [image, original] of this.originalHeights) {
             if (image.style.getPropertyValue("height") !== original.writtenValue || image.style.getPropertyPriority("height") !== original.writtenPriority) continue;
             if (original.value) image.style.setProperty("height", original.value, original.priority);

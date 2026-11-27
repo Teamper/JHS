@@ -1,24 +1,48 @@
 // @ts-check
+import { OwnedPopover } from "../../core/owned-popover.js";
 
-/** One compact extension menu per detail surface, released by its contributors. @param {Element} host @param {HTMLElement} button @param {any} scope @param {boolean} [inline] */
+/** @type {WeakMap<Element, {host: HTMLElement, menu: HTMLElement, popover: OwnedPopover}>} */
+const actions = new WeakMap();
+
+/** @param {Element} host @param {HTMLElement} button @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope @param {boolean} [inline] */
 export function mountEnhancementAction(host, button, scope, inline = false) {
-    const surface = host.closest("[data-jhs-movie-code],[data-jhs-workspace-site]") || host.closest("main") || host;
-    const target = surface.querySelector('[data-jhs-slot="summary-actions"],.jhs-fc2-toolbar') || host;
+    const surface = host.closest("[data-jhs-movie-code],[data-jhs-workspace-site]") ?? host.closest("main") ?? host;
+    const target = surface.querySelector(".jhs-fc2-toolbar,.jhs-detail-extra-tools") ?? surface.querySelector('[data-jhs-slot="summary-actions"]') ?? host;
     if (inline) {
         target.append(button);
         scope.addCleanup(() => button.remove());
         return;
     }
-    let menu = surface.querySelector(".jhs-detail-extra-actions");
-    if (!menu) {
-        menu = host.ownerDocument.createElement("details");
-        menu.className = "jhs-detail-extra-actions jhs-ui";
-        const summary = host.ownerDocument.createElement("summary");
-        summary.className = "jhs-btn jhs-btn--secondary";
-        summary.textContent = "更多操作";
-        menu.append(summary);
+    let panel = actions.get(surface);
+    if (!panel) {
+        const doc = host.ownerDocument;
+        const wrapper = doc.createElement("div"), trigger = doc.createElement("button"), menu = doc.createElement("div");
+        wrapper.className = "jhs-detail-extra-actions";
+        trigger.type = "button";
+        trigger.className = "jhs-btn jhs-btn--secondary";
+        trigger.textContent = "更多操作";
+        trigger.setAttribute("aria-haspopup", "menu");
+        trigger.setAttribute("aria-expanded", "false");
+        menu.className = "jhs-popover";
+        menu.setAttribute("role", "menu");
+        wrapper.append(trigger, menu);
+        const popover = new OwnedPopover(trigger, menu);
+        menu.addEventListener("click", event => {
+            if (/** @type {Element} */ (event.target)?.closest('button[role="menuitem"]:not([disabled]),a[role="menuitem"]')) popover.close(true);
+        }, true);
+        trigger.addEventListener("click", () => popover.opened ? popover.close(true) : popover.open());
+        panel = { host: wrapper, menu, popover };
+        actions.set(surface, panel);
     }
-    if (menu.parentElement !== target) target.append(menu);
-    menu.append(button);
-    scope.addCleanup(() => { button.remove(); if (menu?.children.length === 1) menu.remove(); });
+    target.append(panel.host);
+    button.setAttribute("role", "menuitem");
+    panel.menu.append(button);
+    const owner = panel;
+    scope.addCleanup(() => {
+        button.remove();
+        if (owner.menu.childElementCount) return;
+        owner.popover.close();
+        owner.host.remove();
+        actions.delete(surface);
+    });
 }

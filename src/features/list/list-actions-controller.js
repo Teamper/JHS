@@ -2,9 +2,9 @@
 
 import { cleanActressName, readCleanActorElementText } from "../../core/actress-measurements.js";
 import { OwnedPopover } from "../../core/owned-popover.js";
-import { _, d, g, h } from "../../core/constants.js";
+import { _, d, g, h, p } from "../../core/constants.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
-import { isHardHidden } from "../../core/list-filters.js";
+import { isCardVisible, isHardHidden } from "../../core/list-filters.js";
 import { isBatchRunActive } from "./batch-coordinator.js";
 
 /** @typedef {import("../../core/lifecycle-scope.js").LifecycleScope} LifecycleScope */
@@ -59,7 +59,7 @@ export class ListActionsController {
         if (this.disposed) return;
         this.disposed = true;
         const $ = this.$;
-        $("#waitCheckBtn, #newVideoBtn, #blacklistBtn, #addBlacklistBtn, #filterAllVideo, #favoriteAllVideo, #hasDownAllVideo").off(".jhsListActions").remove();
+        $("#waitCheckBtn, #newVideoBtn, #blacklistBtn, #addBlacklistBtn, #filterAllVideo, #favoriteAllVideo, #hasDownAllVideo, #hasWatchAllVideo").off(".jhsListActions").remove();
         $(".jhs-sort-control").off(".jhsListActions").remove();
         const rows = $(".jhs-list-btn-row");
         rows.find("*").addBack().off(".jhsListActions");
@@ -151,7 +151,7 @@ export class ListActionsController {
                 ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${blacklistClass}" data-tip="屏蔽此演员及其后续影片"><span>${blacklistLabel}</span></button><button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--filter" data-tip="屏蔽当前分类的影片"><span>批量屏蔽</span></button>`
                 : "";
             const batchActions = hasList
-                ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button><button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button>`
+                ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button><button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button><button type="button" id="hasWatchAllVideo" class="jhs-btn jhs-btn--watch">批量标记已观看</button>`
                 : "";
             const tagAction = isTagPage && hasBlacklist ? '<button type="button" id="addBlacklistBtn" class="jhs-btn jhs-btn--filter"><span>加入黑名单</span></button>' : "";
             const newVideoAction = hasNewVideo ? '<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>' : "";
@@ -165,10 +165,10 @@ export class ListActionsController {
                 ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${blacklistClass}" data-tip="屏蔽此演员及其后续影片"><span>${blacklistLabel}</span></button><button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--filter" data-tip="屏蔽当前分类的影片"><span>批量屏蔽</span></button>`
                 : "";
             const batchActions = hasList
-                ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button><button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button>`
+                ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="${this.getBatchActionTip("favorite")}"><span>批量收藏</span></button><button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="${this.getBatchActionTip("download")}"><span>批量标记已下载</span></button><button type="button" id="hasWatchAllVideo" class="jhs-btn jhs-btn--watch">批量标记已观看</button>`
                 : "";
-            const blacklistAction = !isActorPage && hasBlacklist ? '<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>' : "";
-            const sortAction = this.supportsSorting() ? this.sortMenuHtml(initialSort) : "";
+            const blacklistAction = hasBlacklist ? '<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>' : "";
+            const sortAction = this.supportsSorting() && !this.sortController?.isRestrictedContext?.() ? this.sortMenuHtml(initialSort) : "";
             $(".masonry").parent().prepend(`<div class="jhs-list-btn-row"><button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>${actorActions}${batchActions}${blacklistAction}${sortAction}</div>`);
         }
 
@@ -210,7 +210,7 @@ export class ListActionsController {
 
     /** @param {unknown} method @param {string} [title] */
     sortMenuHtml(method, title = "选择列表排序方式") {
-        const labels = { default: "默认", rateCount: "评价人数", date: "时间" };
+        const labels = this.hostAdapter.site === "javbus" ? { default: "默认", date: "时间" } : { default: "默认", rateCount: "评价人数", date: "时间" };
         const key = typeof method === "string" && method in labels ? /** @type {keyof typeof labels} */ (method) : "default";
         const current = labels[key];
         return `<div class="jhs-sort-control"><button type="button" id="sort-toggle-btn" class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false" title="${title}"><span id="jhs-sort-current">${current}</span></button><div class="jhs-popover jhs-sort-menu" role="menu" aria-label="排序方式">${Object.entries(labels).map(([value, label]) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-sort-option" role="menuitemradio" aria-checked="${value === method}" data-sort-method="${value}" tabindex="-1">${label}</button>`).join("")}</div></div>`;
@@ -230,7 +230,7 @@ export class ListActionsController {
         $("#addBlacklistBtn").on("click.jhsListActions", (/** @type {any} */ event) => {
             void this.executePageAction("blacklist-add", event).catch((error) => this.recordError("加入黑名单失败", error));
         });
-        for (const [selector, action] of [["#filterAllVideo", "batch-block"], ["#favoriteAllVideo", "batch-favorite"], ["#hasDownAllVideo", "batch-downloaded"]]) {
+        for (const [selector, action] of [["#filterAllVideo", "batch-block"], ["#favoriteAllVideo", "batch-favorite"], ["#hasDownAllVideo", "batch-downloaded"], ["#hasWatchAllVideo", "batch-watched"]]) {
             $(selector).on("click.jhsListActions", () => { void this.executePageAction(action).catch(error => this.recordError("批量操作失败", error)); });
         }
     }
@@ -246,6 +246,7 @@ export class ListActionsController {
         if (this.list) actions.push(
             { id: "batch-favorite", label: "批量收藏", group: "batch", enabled: !busy },
             { id: "batch-downloaded", label: "批量标记已下载", group: "batch", enabled: !busy },
+            { id: "batch-watched", label: "批量标记已观看", group: "batch", enabled: !busy },
         );
         if (actor && this.blacklist) actions.push({ id: "batch-block", label: "批量屏蔽", group: "batch", enabled: !busy });
         if ((actor || tag) && this.blacklist) {
@@ -272,7 +273,7 @@ export class ListActionsController {
             batchScope.displayName = batchScope.recordName = info.name || this.getActorName();
             if (this.disposed || this.scope.disposed) return;
         }
-        return this.runBatch(action === "batch-favorite" ? h : g, "批量列表操作失败", batchScope);
+        return this.runBatch(action === "batch-favorite" ? h : action === "batch-watched" ? p : g, "批量列表操作失败", batchScope);
     }
 
     /** @param {string} flag @param {string} [errorMessage] @param {{kind?: "actor" | "search", displayName?: string, recordName?: string}} [batchScope] */
@@ -343,6 +344,10 @@ export class ListActionsController {
     async selectSortMethod(method) { return this.sortController?.selectSortMethod?.(method); }
     isFc2ListPage() { return this.sortController?.isFc2ListPage?.() ?? false; }
     supportsSorting() { return this.sortController?.supportsSorting?.() ?? true; }
+    sortUnavailableReason() {
+        if (this.settings.snapshot().autoPage === "yes") return "自动翻页开启时暂停排序";
+        return this.supportsSorting() && !this.sortController?.isRestrictedContext?.() ? "" : "当前列表不支持排序";
+    }
     supportsLiveSorting() { return this.sortController?.supportsLiveSorting?.() ?? false; }
 
     getActorName() {
@@ -377,6 +382,7 @@ export class ListActionsController {
         for (const element of this.$(selectors.itemSelector).toArray()) {
             this.scope.assertActive();
             if (opened >= limit) break;
+            if (!isCardVisible(element)) continue;
             const item = this.$(element);
             let flags, visibilityReasons;
             try {

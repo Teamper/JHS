@@ -138,11 +138,14 @@ describe("source movie identity safety", () => {
         expect(evaluateListItem({ carNum: "STUDIO-NAME", title: "Blocked word" }, createListEvaluationContext({ titleKeywords: ["Blocked"] })).visibilityReasons.keyword).toBe(true);
     });
 
-    it("does not replace an actor's old scan result after skipping an unreliable identity", async () => {
-        const state = { getCarMap: vi.fn(async () => new Map()), getNewVideoDecisions: vi.fn(async () => ({})), updateFavoriteActress: vi.fn(async () => true) };
-        const scan = new NewVideoScanController({ state, getTimestamp: () => "new time", onNewItems: vi.fn() });
-        await expect(scan.parseActorMovies([{ carNum: "ABC-123" }, { carNum: "STUDIO-NAME" }], "actor", "Actor", [], new Set())).rejects.toThrow("番号");
-        expect(state.updateFavoriteActress).not.toHaveBeenCalled();
+    it("adds verified new work and keeps existing work when one identity cannot be established", async () => {
+        const state = { getCarMap: vi.fn(async () => new Map()), getNewVideoDecisions: vi.fn(async () => ({})),
+            getFavoriteActressList: vi.fn(async () => [{ starId: "actor", newVideoList: ["OLD-9"] }]), updateFavoriteActress: vi.fn(async () => true) };
+        const scan = new NewVideoScanController({ state, getTimestamp: () => "2026-11-27", onNewItems() {} });
+        const skipped = vi.fn();
+        await expect(scan.parseActorMovies([{ carNum: "ABC-123", publishTime: "2026-11-27" }, { carNum: "FC2" }], "actor", "A", [], new Set(), skipped)).resolves.toBe(1);
+        expect(state.updateFavoriteActress).toHaveBeenCalledExactlyOnceWith({ starId: "actor", newVideoList: [expect.objectContaining({ carNum: "ABC-123" }), "OLD-9"], lastPublishTime: expect.anything() }, { scan: true });
+        expect(skipped).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it("does not automatically dismiss new work on an unreliable detail visit", async () => {
@@ -169,7 +172,7 @@ describe("source movie identity safety", () => {
         const controller = new WantWatchImportController({ document, window, href: window.location.href, hostAdapter: { getListSelectors: () => ({ itemSelector: ".movie-list .item" }) }, http: {}, state, ui: {}, notifications: { info: vi.fn() }, diagnostics: {}, scope });
         const result = await controller.readAndImport("favorite");
         expect(result).toMatchObject({ imported: 1, failed: 0, skipped: 1 });
-        expect(state.patch).toHaveBeenCalledTimes(1); expect(state.patch.mock.calls[0][0]).toBe("ABC-123"); scope.dispose();
+        expect(state.patch).toHaveBeenCalledTimes(1); expect(state.patch.mock.calls[0][0]).toEqual(["ABC-123"]); scope.dispose();
     });
 
     it("does not aggregate legacy label-only new works into a live state row", () => {

@@ -4,7 +4,7 @@ import { DETAIL_SHORTCUT_ACTIONS, readDetailShortcuts, shortcutFromEvent, shortc
 import { parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
 
 export const SHORTCUT_RECORDER_STYLES = `
-    #detail-shortcut-settings .jhs-setting-row { grid-template-columns:64px minmax(0,1fr); gap:var(--jhs-space-3); }
+    #detail-shortcut-settings .jhs-setting-row { grid-template-columns:minmax(0,1fr) 240px; gap:var(--jhs-space-3); }
     #detail-shortcut-settings .jhs-setting-row__control { width:100%; }
     .jhs-shortcut-fields { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:var(--jhs-space-2); min-width:0; width:100%; }
     .jhs-shortcut-fields .jhs-field { min-width:0; width:100%; }

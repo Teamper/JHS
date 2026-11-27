@@ -109,11 +109,12 @@ test("115 matching retry stays on the list", async ({page,context}) => {
     await expect(page.locator(".jhs-115-list-match")).toBeVisible();
     expect(page.url()).toBe("https://javdb.com/");await expect(page.locator("iframe")).toHaveCount(0);
 });
-test("related expansion synchronizes across tabs like reviews", async ({page,context}) => {
+test("related expansion synchronizes across tabs while reviews remain page-local", async ({page,context}) => {
     await fulfillHostFixtures(context);await boot(page);const other=await context.newPage();await boot(other);
     for (const current of [page,other]) await current.evaluate(()=>{for(const service of ["related","review"]) window.__jhsBrowserDiagnostics.detailServices[service].list=async()=>[];});
     await page.locator(".jhs-related-toggle").click();await page.locator(".jhs-review-toggle").click();
-    await expect(other.locator(".jhs-review-toggle")).toHaveAttribute("aria-expanded","true");
+    await expect(page.locator(".jhs-review-toggle")).toHaveAttribute("aria-expanded","true");
+    await expect(other.locator(".jhs-review-toggle")).toHaveAttribute("aria-expanded","false");
     await expect(other.locator(".jhs-related-toggle")).toHaveAttribute("aria-expanded","true");
     await other.locator(".jhs-related-toggle").click();await expect(page.locator(".jhs-related-container")).toBeHidden();
 });

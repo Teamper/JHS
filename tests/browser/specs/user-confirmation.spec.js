@@ -76,7 +76,7 @@ test("Escape ends the WebDAV authorization save without persisting the profile, 
   expect(await page.evaluate(async () => {
     const plugin = window.unsafeWindow.pluginManager.getBean("SettingPlugin"), snapshot = plugin.getRuntimeService("settings").snapshot();
     return { profile: await plugin.getRuntimeService("webdav").getProfile(), reviewCount: snapshot.reviewCount, origins: snapshot.trustedLocalOrigins ?? [] };
-  })).toEqual({ profile: { url: "", username: "", password: "" }, reviewCount: "20", origins: [] });
+  })).toEqual({ profile: { url: "", username: "", password: "" }, reviewCount: 20, origins: [] });
 });
 
 test("danger confirmation uses Cancel-left / Confirm-right order and danger token colors", async ({ page, context }, testInfo) => {

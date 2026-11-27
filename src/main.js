@@ -1,3 +1,4 @@
+// @ts-check
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
@@ -11,6 +12,8 @@
 // @match        https://javdb.com/*
 // @match        https://www.javbus.com/*
 // @match        *://*.123pan.com/*
+// @match        https://www.123684.com/*
+// @match        https://www.123865.com/*
 // @include      https://javdb*.com/*
 // @include      https://*javbus*/*
 // @include      https://*javsee*/*
@@ -72,7 +75,6 @@
 // @downloadURL https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js
 // @updateURL https://raw.githubusercontent.com/Teamper/JHS/main/JHS.user.js
 // ==/UserScript==
-// @ts-check
 
 import { bootstrapJhs, mountBootstrapError } from "./app/bootstrap.js";
 

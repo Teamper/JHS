@@ -211,10 +211,11 @@ export class ScreenshotService {
             throw error;
         }
     }
-    /** @param {Record<string, unknown>} movieRef @param {Record<string, any> | null} [settings] */
-    getSearchUrl(movieRef, settings = null) {
+    /** @param {Record<string, unknown>} movieRef @param {Record<string, any> | null} [settings] @param {string} [providerId] */
+    getSearchUrl(movieRef, settings = null, providerId) {
         if (settings && !this.isEnabled(settings)) return null;
-        const selected = settings ? this.getEnabledProviders(settings)[0]?.id : DEFAULT_SCREENSHOT_PROVIDER;
+        const providers = settings ? this.getEnabledProviders(settings) : [];
+        const selected = settings ? providers.find(provider => !providerId || provider.id === providerId)?.id : DEFAULT_SCREENSHOT_PROVIDER;
         if (!selected || !SCREENSHOT_PROVIDER_IDS.has(selected)) return null;
         for (const manifest of this.integrations?.list("movie.images") ?? []) {
             if (manifest.id !== selected) continue;

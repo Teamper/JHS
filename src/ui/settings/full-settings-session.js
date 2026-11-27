@@ -110,6 +110,14 @@ export class FullSettingsSession extends EventTarget {
     emit(names = Object.keys(this.values), external = false) {
         if (!this.disposed) this.dispatchEvent(new CustomEvent("settings.changed", { detail: { names, external, snapshot: this.snapshot() } }));
     }
+    discard() {
+        const names = this.dirtyKeys();
+        this.submitting.clear();
+        this.base = this.applied();
+        this.values = copy(this.base);
+        for (const editor of [...this.editors.values()]) editor.restore?.();
+        this.emit(names, true);
+    }
     /** Advance only the captured values; later edits remain dirty. @param {Record<string,any>} submitted */
     commit(submitted) {
         if (this.disposed) return;

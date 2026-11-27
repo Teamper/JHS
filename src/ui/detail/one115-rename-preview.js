@@ -29,6 +29,17 @@ export function create115RenamePreview({ document, records }) {
         root.append(row);
         return { record, checkbox, status };
     });
+    const actions = document.createElement("div");
+    actions.className = "jhs-toolbar";
+    for (const label of ["全选", "反选"]) {
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "jhs-btn jhs-btn--secondary"; button.textContent = label;
+        button.addEventListener("click", () => {
+            for (const { checkbox } of entries) if (!checkbox.disabled) checkbox.checked = label === "全选" || !checkbox.checked;
+        });
+        actions.append(button);
+    }
+    root.prepend(actions);
     const progress = document.createElement("p"), submit = document.createElement("button");
     progress.setAttribute("role", "status"); progress.setAttribute("aria-live", "polite");
     submit.type = "button"; submit.className = "jhs-btn jhs-btn--primary"; submit.textContent = "确认重命名所选文件";

@@ -10,7 +10,7 @@ export class NewVideoBatchController {
         this.disposed = false;
     }
 
-    /** @param {"favorite" | "watched" | "downloaded" | "ignore" | "snooze" | "restore" | "remove"} action @param {Array<Record<string, any>>} items */
+    /** @param {"favorite" | "watched" | "downloaded" | "blocked" | "ignore" | "snooze" | "restore" | "remove"} action @param {Array<Record<string, any>>} items */
     async run(action, items) {
         if (this.disposed) throw new DOMException("New-video batch feature is disposed", "AbortError");
         const byCarNum = new Map();
@@ -22,8 +22,8 @@ export class NewVideoBatchController {
         const carNums = records.map(([carNum]) => carNum);
         if (!carNums.length) return { changed: [] };
 
-        if (["favorite", "watched", "downloaded"].includes(action)) {
-            const flag = /** @type {"favorite" | "watched" | "downloaded"} */ (action);
+        if (["favorite", "watched", "downloaded", "blocked"].includes(action)) {
+            const flag = /** @type {"favorite" | "watched" | "downloaded" | "blocked"} */ (action);
             return this.state.patch(carNums, { [flag]: true }, {
                 type: "new-video-batch-state",
                 records: records.map(([, item]) => ({

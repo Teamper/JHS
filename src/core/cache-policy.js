@@ -16,4 +16,3 @@ export class ProviderError extends Error {
         this.retryable = Boolean(options.retryable);
     }
 }
-// @ts-check

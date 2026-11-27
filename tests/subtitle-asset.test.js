@@ -39,6 +39,10 @@ describe("raw subtitle assets", () => {
         expect(() => parseSubtitleAsset(utf8(srt), { extension: "srt", headers: "Content-Type: text/html; charset=utf-8" })).toThrow();
         expect(subtitleFilename("../SSIS-001.srt", "srt")).toBe(".._SSIS-001.srt");
     });
+    it("accepts inline formatting around an SRT timestamp", () => {
+        const marked = "<i>" + srt.replace("00:00:02,000", "00:00:02,000</i>");
+        expect(parseSubtitleAsset(utf8(marked), { extension: "srt" }).text).toBe(marked);
+    });
     it("rejects HTML wrapping a timestamp even when the server labels it as plain text", () => {
         expect(() => parseSubtitleAsset(utf8(`<pre>${srt}</pre>`), { extension: "srt", headers: "Content-Type: text/plain" })).toThrow();
         expect(() => parseSubtitleAsset(utf8(`<!-- error -->\n${srt}`), { extension: "srt" })).toThrow();

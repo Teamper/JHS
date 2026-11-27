@@ -33,5 +33,8 @@ export function getMagnetQualitySignals(title, hasSubtitleTag = false) {
 export function assessMagnetQuality({ title = "", hasHdTag = false, hasSubtitleTag = false, date = null, seeders = 0 } = {}) {
     const signals = getMagnetQualitySignals(title, hasSubtitleTag), highQuality = hasHdTag || signals.highQuality;
     const score = calcMagnetScore({ title, date, seeders, resolution: hasHdTag && !signals.resolution ? "1080p" : signals.resolution, hasSubtitle: signals.subtitle });
-    return { ...signals, highQuality, score, grade: score.total >= 70 ? "高" : score.total >= 40 ? "中" : "低" };
+    return { ...signals, highQuality, score, grade: magnetGrade(score.total) };
 }
+
+/** @param {number} score */
+export function magnetGrade(score) { return score >= 70 ? "高" : score >= 40 ? "中" : "低"; }

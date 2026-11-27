@@ -41,7 +41,7 @@ describe("owned UI boundaries",()=>{
     popover=new OwnedPopover(anchor,menu); popover.open();
     expect(menu.parentNode).toBe(doc.body);
     expect(ownedPopoverRoots(owner)).toEqual([menu]);
-    expect(menu.style.width).toBe('240px'); expect(menu.style.top).toBe('342px');
+    expect(menu.style.width).toBe('max-content'); expect(menu.style.minWidth).toBe('160px'); expect(menu.style.top).toBe('342px');
     const items=menu.querySelectorAll('button');
     items[0].dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));
     expect(doc.activeElement).toBe(items[1]);

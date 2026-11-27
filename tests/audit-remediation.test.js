@@ -54,22 +54,27 @@ describe("6.2.0 audit remediation", () => {
         dom.window.close();
     });
 
-    it("binds OtherSite settings idempotently and recovers malformed storage", () => {
-        const dom = new JSDOM('<button id="settingSiteBtn"></button><div id="settingsArea" class="jhs-is-hidden"><input type="checkbox" data-site-id="javDbBtn"></div>'), $ = jqueryFactory(dom.window), warn = vi.fn();
-        const storage = new Map([["jhs_enabled_sites", "broken-json"]]);
-        const storageService = { getLocal: key => storage.get(key) ?? null, setLocal: (key, value) => storage.set(key, value) };
-        const scope = new LifecycleScope("other-sites-settings"), controller = new OtherSitesController({
-            window: dom.window, document: dom.window.document, jquery: $, hostAdapter: {}, movie: {}, storage: storageService,
-            settings: { snapshot: () => ({}) }, events: {}, scope, ui: { isHidden: () => false, openPage: vi.fn() },
-            notifications: { debug: warn }, site: "javdb", route: "detail",
+    it("saves applicable external sites through settings while retaining other site choices", async () => {
+        const dom = new JSDOM('<main></main>', { url: "https://javdb.com/v/ABC-1" }), $ = jqueryFactory(dom.window);
+        const scope = new LifecycleScope("other-sites-settings"), values = { enabledExternalSites: ["javDbBtn", "javBusBtn"] };
+        const settings = new dom.window.EventTarget();
+        settings.snapshot = () => values;
+        settings.update = vi.fn(async edit => { edit(values); settings.dispatchEvent(new dom.window.CustomEvent("settings.changed", { detail: { names: ["enabledExternalSites"] } })); });
+        const controller = new OtherSitesController({
+            document: dom.window.document, jquery: $, hostAdapter: {}, movie: { externalSites: () => [], searchUrl: () => null },
+            settings, events: { on: () => () => {} }, scope, styles: { register: () => () => {} }, ui: {},
+            notifications: { error: vi.fn() }, site: "javdb", route: "list",
         });
-        expect(Array.from(controller.getEnabledSites())).toEqual(Array.from(controller.siteConfigs, site => site.id));
-        expect(warn).toHaveBeenCalledOnce();
-        controller.saveEnabledSites(["javDbBtn"]);
-        expect(storage.get("jhs_enabled_sites")).toBe('["javDbBtn"]');
-        controller.setupEventListeners(); controller.setupEventListeners();
-        $("#settingSiteBtn").trigger("click");
-        expect($("#settingsArea").hasClass("jhs-is-hidden")).toBe(false);
+        controller.start();
+        await controller.loadOtherSite("ABC-1", null, { target: $("main") });
+        expect($('[data-site-id="javDbBtn"]')).toHaveLength(0);
+        const box = $('[data-jhs-other-site-settings]');
+        $('[data-jhs-role="site-settings"]').trigger('click');
+        expect(box.hasClass("jhs-is-hidden")).toBe(false);
+        box.find('[data-site-id="javBusBtn"]').prop("checked", false).trigger("change");
+        await vi.waitFor(() => expect(values.enabledExternalSites).toEqual(["javDbBtn"]));
+        expect(settings.update).toHaveBeenCalledOnce();
+        expect($('[data-jhs-site-id="javBusBtn"]').hasClass("jhs-is-hidden")).toBe(true);
         scope.dispose();
         dom.window.close();
     });
@@ -83,21 +88,21 @@ describe("6.2.0 audit remediation", () => {
             settings: { snapshot: () => settings }, events: {}, scope, ui: { isHidden: () => false, openPage: vi.fn() },
             notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
         });
-        await expect(controller.getSiteConfigs()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "javBusBtn", baseUrl: "normalized" })]));
+        expect(controller.getSiteConfigs()).toEqual(expect.arrayContaining([expect.objectContaining({ id: "javBusBtn", baseUrl: "normalized" })]));
         expect(externalSites).toHaveBeenCalledWith({ javBusUrl: "configured" });
         scope.dispose();
         dom.window.close();
     });
 
     it("builds the DMM external link without shadowing its site config", async () => {
-        const dom = new JSDOM('<a data-jhs-site-id="fanzaBtn"></a>'), $ = jqueryFactory(dom.window);
-        const scope = new LifecycleScope("other-sites-dmm-link"), searchUrl = vi.fn(() => "https://www.dmm.co.jp/search/ABC-1");
+        const dom = new JSDOM('<main></main>'), $ = jqueryFactory(dom.window);
+        const scope = new LifecycleScope("other-sites-dmm-link"), searchUrl = vi.fn(id => id === "dmm" ? "https://www.dmm.co.jp/search/ABC-1" : null);
         const controller = new OtherSitesController({
-            window: dom.window, document: dom.window.document, jquery: $, hostAdapter: {}, movie: { searchUrl },
-            storage: { getLocal: () => null, setLocal: vi.fn() }, settings: { snapshot: () => ({}) }, events: {}, scope,
+            window: dom.window, document: dom.window.document, jquery: $, hostAdapter: {}, movie: { searchUrl, externalSites: () => [] },
+            styles: { register: () => () => {} }, storage: { getLocal: () => null, setLocal: vi.fn() }, settings: { snapshot: () => ({}) }, events: {}, scope,
             ui: { isHidden: () => false, openPage: vi.fn() }, notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
         });
-        await expect(controller.handleSite("ABC-1", { id: "fanzaBtn", providerId: "dmm", noHandle: true }, { root: $(dom.window.document), configs: [], isActive: () => true })).resolves.toBeUndefined();
+        await controller.loadOtherSite("ABC-1", null, { target: $(dom.window.document.body), autoDetect: true });
         expect(searchUrl).toHaveBeenCalledWith("dmm", { carNum: "ABC-1" });
         expect($("[data-jhs-site-id='fanzaBtn']").attr("href")).toBe("https://www.dmm.co.jp/search/ABC-1");
         scope.dispose();

@@ -11,23 +11,24 @@ let nextControlId = 0;
  * write through the same SettingsService key — no second semantic definition.
  */
 
-/** @param {string} key @param {unknown} value */
-function normalizeBooleanValue(key, value) {
+/** @param {unknown} value */
+function normalizeBooleanValue(value) {
     return parseBooleanSetting(value, false);
 }
 
-/** @typedef {{ value?: unknown, onChange?: ((value: unknown) => void) | null, deferred?: boolean }} ControlOptions */
+/** @typedef {{ value?: unknown, onChange?: ((value: unknown) => void) | null, deferred?: boolean, jquery: (value:any)=>any }} ControlOptions */
 
-/** Build the raw control element for a descriptor. @param {Record<string, any>} descriptor @param {ControlOptions} [options] */
-export function renderSettingControl(descriptor, options = {}) {
-    const jq = /** @type {any} */ (globalThis).$;
+/** Build the raw control element for a descriptor. @param {Record<string, any>} descriptor @param {ControlOptions} options */
+export function renderSettingControl(descriptor, options) {
+    const jq = options.jquery;
     const value = options.value ?? descriptor.defaultValue;
     const onChange = options.onChange ?? null;
     /** @type {any} */ let control;
     if (descriptor.type === "boolean") {
-        control = jq('<input type="checkbox" class="jhs-switch mini-switch" role="switch">').prop("checked", normalizeBooleanValue(descriptor.key, value));
-        control.on("change", () => { onChange?.(control.is(":checked") ? "yes" : "no"); });
-        return { root: control, getValue: () => control.is(":checked") ? "yes" : "no", setValue: /** @param {unknown} next */ (next) => control.prop("checked", normalizeBooleanValue(descriptor.key, next)) };
+        control = jq('<input type="checkbox" class="jhs-switch mini-switch" role="switch">').prop("checked", normalizeBooleanValue(value));
+        const getValue = makeGetValue("boolean", control, descriptor.defaultValue);
+        control.on("change", () => { onChange?.(getValue()); });
+        return { root: control, getValue, setValue: /** @param {unknown} next */ (next) => control.prop("checked", normalizeBooleanValue(next)) };
     }
     if (descriptor.type === "select") {
         const optionsList = Array.isArray(descriptor.options) ? descriptor.options : [];
@@ -51,10 +52,10 @@ export function renderSettingControl(descriptor, options = {}) {
     return { root: control, getValue: () => control.val(), setValue: /** @param {unknown} next */ (next) => control.val(next == null ? "" : String(next)) };
 }
 
-/** Build a canonical jhs-setting-row for a descriptor. @param {Record<string, any>} descriptor @param {ControlOptions & { value?: unknown, layout?: "compact" | "stacked" | "action" }} [options] */
-export function renderSettingRow(descriptor, options = {}) {
-    const jq = /** @type {any} */ (globalThis).$;
-    const rendered = renderSettingControl(descriptor, { value: options.value, onChange: options.onChange, deferred: options.deferred });
+/** Build a canonical jhs-setting-row for a descriptor. @param {Record<string, any>} descriptor @param {ControlOptions & { value?: unknown, layout?: "compact" | "stacked" | "action" }} options */
+export function renderSettingRow(descriptor, options) {
+    const jq = options.jquery;
+    const rendered = renderSettingControl(descriptor, { jquery: jq, value: options.value, onChange: options.onChange, deferred: options.deferred });
     const id = `jhs-setting-control-${++nextControlId}`;
     const copy = jq('<span class="jhs-setting-row__copy"></span>')
         .append(jq('<span class="jhs-setting-row__label"></span>').attr("id", `${id}-label`).text(descriptor.label));
@@ -90,12 +91,12 @@ export function enhanceSettingRows(root) {
     }
 }
 
-/** Render the quick settings list from registry descriptors. @param {import("../../app/settings-registry.js").SettingsRegistry} registry @param {{ disabledContributions?: Set<string> }} [options] */
-export function buildQuickSettingsHtml(registry, options = {}) {
-    const jq = /** @type {any} */ (globalThis).$;
+/** Render the quick settings list from registry descriptors. @param {import("../../app/settings-registry.js").SettingsRegistry} registry @param {{ disabledContributions?: Set<string>, jquery: (value:any)=>any }} options */
+export function buildQuickSettingsHtml(registry, options) {
+    const jq = options.jquery;
     const list = jq('<div class="simple-setting__list"></div>');
     for (const descriptor of registry.list({ surfaces: [ "quick" ], disabledContributions: options.disabledContributions })) {
-        const { row } = renderSettingRow(descriptor);
+        const { row } = renderSettingRow(descriptor, { jquery: jq });
         list.append(row);
     }
     return list;
@@ -137,7 +138,7 @@ export function syncSettingRows(root, descriptors, snapshot) {
         if (!row.length) return;
         const control = row.find(".jhs-setting-row__control").find("input, select, textarea").first();
         const value = Object.prototype.hasOwnProperty.call(snapshot, descriptor.key) ? snapshot[descriptor.key] : descriptor.defaultValue;
-        if (control.is('input[type="checkbox"]')) control.prop("checked", normalizeBooleanValue(descriptor.key, value));
+        if (control.is('input[type="checkbox"]')) control.prop("checked", normalizeBooleanValue(value));
         else if (control.is("select")) { if (control[0]) JhsSelect.setValue(control[0], String(value ?? ""), false); else control.val(String(value ?? "")); }
         else control.val(value == null ? "" : String(value));
     });
@@ -173,13 +174,13 @@ class RowBinding {
         const slot = row.find(".jhs-setting-row__control");
         let element = slot.children().first();
         if (!element.length) {
-            const rendered = renderSettingControl(descriptor);
+            const rendered = renderSettingControl(descriptor, { jquery: this.root.constructor });
             slot.append(rendered.root);
             element = rendered.root;
         }
         const type = descriptor.type || (element.is("select") ? "select" : element.is('input[type="checkbox"]') ? "boolean" : element.is('input[type="number"]') ? "number" : "text");
         const setValue = makeSetValue(type, element);
-        const getValue = makeGetValue(type, element);
+        const getValue = makeGetValue(type, element, descriptor.defaultValue);
         const fallback = descriptor.defaultValue;
         element.off(".jhsSettingBinding").on("change.jhsSettingBinding", () => {
             const rawValue = getValue();
@@ -219,15 +220,15 @@ class RowBinding {
 
 /** @param {string} type @param {any} element @returns {(value: unknown) => void} */
 function makeSetValue(type, element) {
-    if (type === "boolean") return (next) => element.prop("checked", normalizeBooleanValue("", next));
+    if (type === "boolean") return (next) => element.prop("checked", normalizeBooleanValue(next));
     if (type === "select") return (next) => { element.val(String(next ?? "")), JhsSelect.refresh(element); };
     if (type === "number") return (next) => element.val(next == null ? "" : String(next));
     return (next) => element.val(next == null ? "" : String(next));
 }
 
-/** @param {string} type @param {any} element @returns {() => unknown} */
-function makeGetValue(type, element) {
-    if (type === "boolean") return () => element.is(":checked") ? "yes" : "no";
+/** @param {string} type @param {any} element @param {unknown} defaultValue @returns {() => unknown} */
+function makeGetValue(type, element, defaultValue) {
+    if (type === "boolean") return () => typeof defaultValue === "boolean" ? element.is(":checked") : element.is(":checked") ? "yes" : "no";
     if (type === "select") return () => element.val();
     if (type === "number") return () => {
         const raw = element.val();

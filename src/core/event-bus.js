@@ -83,4 +83,3 @@ export function initializeEventBus() {
     runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed", { source: "legacy" });
     return jhsEventBus;
 }
-// @ts-check

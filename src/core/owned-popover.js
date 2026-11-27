@@ -16,7 +16,7 @@ export function closeOwnedPopover(document, restoreFocus = false) { activeByDocu
 
 /** One lifecycle-owned, keyboard-operable portal per document. */
 export class OwnedPopover {
-    /** @param {HTMLElement} anchor @param {HTMLElement} menu @param {{onClose?: () => void, manageKeyboard?: boolean}} [options] */
+    /** @param {HTMLElement} anchor @param {HTMLElement} menu @param {{onClose?: () => void, manageKeyboard?: boolean, minWidth?: number}} [options] */
     constructor(anchor, menu, options = {}) {
         this.anchor = anchor;
         this.menu = menu;
@@ -95,10 +95,17 @@ export class OwnedPopover {
         }
         const rect = anchorRect, availableBelow = top + height - rect.bottom - 16, availableAbove = rect.top - top - 16;
         const above = availableBelow < Math.min(320, this.menu.scrollHeight) && availableAbove > availableBelow;
-        const menuWidth = Math.max(0, Math.min(Math.max(rect.width, 240), 360, width - 16));
-        const owner = this.anchor.closest(".layui-layer"), z = owner ? Number(view?.getComputedStyle(owner).zIndex) || 0 : 0;
-        Object.assign(this.menu.style, {position:"fixed", display:"grid", width:`${menuWidth}px`, minWidth:"0", maxWidth:`${Math.max(0,width-16)}px`, maxHeight:`${Math.max(0,Math.min(320,above ? availableAbove : availableBelow))}px`, left:`${Math.max(left+8,Math.min(rect.left,left+width-menuWidth-8))}px`, top:"auto", right:"auto", bottom:"auto", zIndex:String(Math.max(JHS_Z_INDEX.pagePopover,z+1))});
-        const menuHeight = this.menu.getBoundingClientRect().height;
+        const maxWidth = Math.max(0, Math.min(360, width - 16));
+        const minWidth = Math.min(maxWidth, Math.max(rect.width, this.options.minWidth ?? 160));
+        const owner = this.anchor.closest(".layui-layer,.jhs-quick-setting-sheet,.jhs-fab-menu");
+        const z = owner ? Number(view?.getComputedStyle(owner).zIndex) || 0 : 0;
+        Object.assign(this.menu.style, {
+            position:"fixed", display:"grid", width:"max-content", minWidth:`${minWidth}px`, maxWidth:`${maxWidth}px`,
+            maxHeight:`${Math.max(0, Math.min(320, above ? availableAbove : availableBelow))}px`,
+            top:"auto", right:"auto", bottom:"auto", zIndex:String(Math.max(JHS_Z_INDEX.pagePopover, z + 1)),
+        });
+        const { width: menuWidth, height: menuHeight } = this.menu.getBoundingClientRect();
+        this.menu.style.left = `${Math.max(left+8, Math.min(rect.left, left+width-menuWidth-8))}px`;
         const desiredTop = above ? rect.top-menuHeight-8 : rect.bottom+8;
         this.menu.style.top = `${Math.max(top+8,Math.min(desiredTop,top+height-menuHeight-8))}px`;
     }

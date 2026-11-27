@@ -68,7 +68,9 @@ export async function showDetail(root, app, state, scope) {
         return;
     }
     scope.assertActive();
-    if (!state.saved) app.recentWorks.remember(movie);
+    if (!state.saved) void app.recentWorks.remember(movie)?.catch((/** @type {Error} */ error) => {
+        app.services.diagnostics.recordError({ source: "android-recent-works", message: error.message });
+    });
     const hero = el("section", null, "movie-hero");
     const facts = el("div");
     const mediaArea = el("section", null, "section");

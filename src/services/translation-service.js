@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { JhsError } from "../core/jhs-error.js";
 import { DEFAULT_TRANSLATION_PROMPT, GOOGLE_TRANSLATION_PROFILE, TRANSLATION_CONNECTIONS_KEY, normalizeTranslationConfiguration, normalizeTranslationProfile, normalizeTranslationPrompt } from "../core/translation-model.js";
@@ -6,7 +7,7 @@ import { DEFAULT_TRANSLATION_PROMPT, GOOGLE_TRANSLATION_PROFILE, TRANSLATION_CON
 const CACHE_TTL = 2_592_000_000, CACHE_LIMIT = 1_000, CACHE_KEY = "translation_cache_v2", V1_PREFIX = "translation:v1:";
 
 export class TranslationService extends EventTarget {
-    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./storage-service.js").StorageService | null} [storage] @param {{credential?:any, settings?:any, urlPolicy?:any, enabled?:boolean, googleOnly?:boolean}} [options] */
+    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./storage-service.js").StorageService | null} [storage] @param {{credential?:any, settings?:any, diagnostics?: import("./diagnostics-service.js").DiagnosticsService, urlPolicy?:any, enabled?:boolean, googleOnly?:boolean}} [options] */
     constructor(integrations, storage = null, options = {}) {
         super();
         this.integrations = integrations, this.storage = storage, this.memoryCache = new Map, this.inflight = new Map,
@@ -23,14 +24,15 @@ export class TranslationService extends EventTarget {
         this.configurationFailure = /** @type {any} */ (null);
         this.configurationRevision = /** @type {string|null} */ (null);
         /** @type {string | null} */ this._serializedChain = null;
+        this.diagnostics = options.diagnostics;
         this.loadSequence = 0;
         this.requestGeneration = 0;
         /** @type {any[]} */ this.queue = [];
         /** @type {Set<LifecycleScope>} */ this.workScopes = new Set();
         this.active = 0;
-        this.onCredential = (/** @type {any} */ event) => { if (event.detail?.key === TRANSLATION_CONNECTIONS_KEY) void this.reloadConfiguration().catch(() => {}); };
+        this.onCredential = (/** @type {any} */ event) => { if (event.detail?.key === TRANSLATION_CONNECTIONS_KEY) void waitForSettlement(this.reloadConfiguration()); };
         this.onSettings = (/** @type {any} */ event) => { if (event.detail?.names?.some((/** @type {string} */ name) => ["translationPrompt","translationConcurrency"].includes(name))) this.configurationChanged(); };
-        this.listener = this.googleOnly ? null : storage?.listenValue?.(TRANSLATION_CONNECTIONS_KEY, () => { void this.reloadConfiguration().catch(() => {}); });
+        this.listener = this.googleOnly ? null : storage?.listenValue?.(TRANSLATION_CONNECTIONS_KEY, () => { void waitForSettlement(this.reloadConfiguration()); });
         this.credential?.addEventListener("credentials.changed",this.onCredential);
         this.settings?.addEventListener("settings.changed",this.onSettings);
     }
@@ -173,7 +175,7 @@ export class TranslationService extends EventTarget {
                     generation === this.cacheGeneration && "string" === typeof entry?.value && Number(entry.expiresAt) > Date.now() && this.memoryCache.set(key, { value: entry.value, expiresAt: Number(entry.expiresAt), lastUsed: Number(entry.lastUsed) || Date.now() });
                     migrated.push(key), changed = !0;
                 }
-                if (generation === this.cacheGeneration && (this.prune() || changed)) void this.persistNow(generation).then((() => Promise.all(migrated.map((key => storage.remove(key)))))).catch((() => {}));
+                if (generation === this.cacheGeneration && (this.prune() || changed)) void this.persistNow(generation).then((() => Promise.all(migrated.map((key => storage.remove(key)))))).catch(error => this.diagnostics?.recordError({ source: "translation-cache", message: "清理旧翻译缓存失败", error }));
             } catch { /* Translations still work with an empty in-memory cache. */ }
         })();
     }
@@ -187,7 +189,7 @@ export class TranslationService extends EventTarget {
     schedulePersist() {
         if (!this.storage || null !== this.persistTimer) return;
         const generation = this.cacheGeneration;
-        this.persistTimer = setTimeout((() => { this.persistTimer = null, void this.persistNow(generation).catch((() => {})); }), 300);
+        this.persistTimer = setTimeout((() => { this.persistTimer = null, void this.persistNow(generation).catch(error => this.diagnostics?.recordError({ source: "translation-cache", message: "写入翻译缓存失败", error })); }), 300);
     }
     /** @param {number} [generation] */
     async persistNow(generation = this.cacheGeneration) {

@@ -67,18 +67,18 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         fixture.scope.dispose();
     });
 
-    it("OtherSite: 使用 SettingsService 快照（无私有缓存），OFF 只删 JHS 自有面板", async () => {
-        const snapshot = { enableLoadOtherSite: "no" };
-        const settings = { snapshot: () => snapshot, addEventListener: vi.fn(), removeEventListener: vi.fn() };
-        $("body").append('<div data-jhs-other-site-box></div><div data-jhs-other-site-settings></div><div id="otherSiteBox"></div>');
+    it("unmounts only its own external site views when disabled", async () => {
+        const snapshot = { enableLoadOtherSite: "yes" };
+        const settings = { snapshot: () => snapshot };
+        $("body").append('<div id="otherSiteBox"></div><main></main>');
         const scope = new LifecycleScope("other-sites-feature-off");
         const controller = new OtherSitesController({
-            window: win, document: doc, jquery: $, hostAdapter: { readMovieRef: () => null }, movie: {}, storage: {},
-            settings, events: {}, scope, ui: { isHidden: () => false, openPage: vi.fn() }, notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
+            document: doc, jquery: $, hostAdapter: {}, movie: { externalSites: () => [], searchUrl: () => null },
+            settings, scope, styles: { register: () => () => {} }, ui: {}, site: "javdb", route: "detail",
         });
-        const cache = await controller.getSettingCache();
-        expect(cache).toBe(settings.snapshot());
-        await controller.mount();
+        await controller.loadOtherSite("ABC-123", null, { target: $("main") });
+        expect($("[data-jhs-other-site-box]").length).toBe(1);
+        snapshot.enableLoadOtherSite = "no";
         controller.unmount();
         expect($("[data-jhs-other-site-box]").length).toBe(0);
         expect($("[data-jhs-other-site-settings]").length).toBe(0);
@@ -103,7 +103,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
             notifications: { debug: vi.fn() }, site: "javdb", route: "detail",
         });
         const mounted = vi.fn(async () => {}), unmounted = vi.fn();
-        controller.mount = mounted;
+        controller.loadOtherSite = mounted;
         controller.unmount = unmounted;
         controller.start();
         expect(settingsEvents.filter((item) => item.name === "settings.changed")).toHaveLength(1);
@@ -127,7 +127,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect(mounted).toHaveBeenCalledTimes(4); // 首次 ready 挂载 + 3 次重新启用
         scope.dispose();
         expect(handlers.size).toBe(0);
-        expect(settings.removeEventListener).toHaveBeenCalledWith("settings.changed", handler);
+        expect(settings.removeEventListener).toHaveBeenCalledWith("settings.changed", handler, undefined);
     });
 
     it("AutoPage: stop 释放 liveScope，请求中切 OFF 不再 append", async () => {

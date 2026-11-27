@@ -17,7 +17,7 @@ it("checks at most four sites at once and releases the busy button when all fini
     };
     const summary = document.querySelector("main");
     const controller = new OtherSitesController({
-        document, window, jquery: $, movie, scope,
+        document, jquery: $, movie, scope, styles: { register: () => () => {} },
         hostAdapter: { locateDetailSlots: () => ({ summary }) },
         settings: { snapshot: () => ({}) }, storage: { getLocal: () => null },
         ui: { isHidden: () => false }, site: "javdb", route: "detail",

@@ -80,7 +80,7 @@ describe("architecture runtime contracts", () => {
 
     it("declares command owners and platform dependencies in Feature manifests", () => {
         expect(featureManifests.find(item => item.id === "personal-ratings").providesCommands).toContain("library.rating.open");
-        expect(featureManifests.find(item => item.id === "movie-lists").providesCommands).toContain("library.lists.open");
+        expect(featureManifests.find(item => item.id === "movie-lists")).toMatchObject({ sites: ["javdb"], providesCommands: ["library.lists.open"] });
         expect(featureManifests.find(item => item.id === "movie-selection")).toMatchObject({ routes: ["list"] });
         expect(featureManifests.find(item => item.id === "privacy").providesCommands).toContain("privacy.toggle");
         expect(featureManifests.find(item => item.id === "enhancement-settings").providesCommands).toContain("media.configure");
@@ -96,7 +96,7 @@ describe("architecture runtime contracts", () => {
         expect(featureManifests.find((item) => item.id === "list").contributes).toContain("list.actions");
         expect(featureManifests.find((item) => item.id === "list").contributes).toContain("detail.cover-state-actions");
         expect(featureManifests.find((item) => item.id === "compatibility")).toMatchObject({ startup: "eager", requires: expect.arrayContaining([PORT.host, PORT.style, SERVICE.state, SERVICE.domUi]) });
-        expect(featureManifests.find((item) => item.id === "external-sites")).toMatchObject({ routes: ["detail", "owned-detail"] });
+        expect(featureManifests.find((item) => item.id === "external-sites")).toMatchObject({ routes: ["list", "detail", "owned-detail"] });
         expect(featureManifests.find((item) => item.id === "list").contributes).toContain("detail.javbus-images");
         expect(featureManifests.find((item) => item.id === "detail").contributes).not.toContain("detail.javbus-images");
         expect(featureManifests.find((item) => item.id === "external-bridge").contributes).toContain("detail.external-magnets");
@@ -106,7 +106,7 @@ describe("architecture runtime contracts", () => {
         expect(featureManifests.find((item) => item.id === "detail").contributes).not.toContain("detail.fc2-lookup");
         expect(featureManifests.find((item) => item.id === "external-bridge").contributes).not.toContain("external-bridge.115-match");
         expect(featureManifests.find((item) => item.id === "one-one-five")).toMatchObject({
-            sites: ["javdb", "javbus"], routes: ["list", "detail"], startup: "idle", requires: expect.arrayContaining([PORT.host, SERVICE.offline, SERVICE.settings]),
+            sites: ["javdb", "javbus"], routes: ["list", "detail", "owned-detail"], startup: "idle", requires: expect.arrayContaining([PORT.host, SERVICE.offline, SERVICE.settings]),
             contributes: ["external-bridge.115-match"],
         });
         expect(featureManifests.find((item) => item.id === "actress-info").startup).toBe("idle");
@@ -141,7 +141,7 @@ describe("architecture runtime contracts", () => {
         expect(list.isContributionEnabled("detail", "detail.reviews")).toBe(false);
         const detail = createRuntime("javbus", "detail", ["StatsPlugin"]);
         expect(detail.isContributionEnabled("detail", "detail.javbus-preview")).toBe(true);
-        expect(detail.isContributionEnabled("detail", "detail.related")).toBe(false);
+        expect(detail.isContributionEnabled("detail", "detail.related")).toBe(true);
         expect(detail.isContributionEnabled("stats", "stats.dashboard")).toBe(true);
     });
 

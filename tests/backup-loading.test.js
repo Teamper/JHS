@@ -2,17 +2,17 @@ import { getNowStr } from "../src/core/ui-date-time.js";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/core/credential-crypto.js", () => ({
-    decryptCredential: vi.fn(async () => "secret"),
     decryptPortableBackup: vi.fn(),
     encryptPortableBackup: vi.fn(async value => `encrypted:${value}`),
 }));
 
 import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData } from "../src/features/settings/setting-backup.js";
 
+const getProfile = async () => ({ url: "https://dav.example", username: "user", password: "secret" });
+
 function createDependencies(overrides = {}) {
     return {
         document: globalThis.document ?? {},
-        settings: { snapshot: () => ({ webDavUrl: "https://dav.example", webDavUsername: "user", webDavPassword: "encrypted" }) },
         backup: {
             exportData: vi.fn(async () => ({ records: [1] })),
         },
@@ -35,7 +35,7 @@ describe("backup loading lifecycle", () => {
             },
             domUi: { loading, tableConstructor: null },
         });
-        await backupDataByWebDav("JHS", { createClient: vi.fn(() => ({ backup })) }, dependencies);
+        await backupDataByWebDav("JHS", { getProfile, createClient: vi.fn(() => ({ backup })) }, dependencies);
         expect(loading.mock.invocationCallOrder[0]).toBeLessThan(exportData.mock.invocationCallOrder[0]);
         expect(backup.mock.invocationCallOrder[0]).toBeLessThan(close.mock.invocationCallOrder[0]);
     });
@@ -90,7 +90,7 @@ describe("backup loading lifecycle", () => {
             notifications: { ok: vi.fn(() => { throw new Error("synthetic notification failure"); }), error },
             domUi: { loading: () => ({ close }), tableConstructor: null },
         });
-        await backupDataByWebDav("JHS", { createClient: () => ({ backup }) }, dependencies);
+        await backupDataByWebDav("JHS", { getProfile, createClient: () => ({ backup }) }, dependencies);
         expect(backup).toHaveBeenCalledOnce();
         expect(error).not.toHaveBeenCalled();
         expect(close).toHaveBeenCalledOnce();
@@ -103,7 +103,7 @@ describe("backup loading lifecycle", () => {
             logger: { log: vi.fn(), warn, error: vi.fn() },
             domUi: { loading: () => ({ close: () => { throw new Error("synthetic layer cleanup failure"); } }), tableConstructor: null },
         });
-        await expect(backupDataByWebDav("JHS", { createClient: () => ({ backup }) }, dependencies)).resolves.toBeUndefined();
+        await expect(backupDataByWebDav("JHS", { getProfile, createClient: () => ({ backup }) }, dependencies)).resolves.toBeUndefined();
         expect(backup).toHaveBeenCalledOnce();
         expect(ok).toHaveBeenCalledWith("已备份数据");
         expect(error).not.toHaveBeenCalled();

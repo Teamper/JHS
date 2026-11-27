@@ -19,7 +19,13 @@ import { Z, canUseCardPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from
 
 const COVER_BUTTON_STYLES = `
                 .box .tags { justify-content:space-between; }
-                .jhs-cover-tools { display:flex; flex-wrap:wrap; max-width:100%; align-items:center; justify-content:flex-end; gap:var(--jhs-space-2); margin-left:auto; }
+                .jhs-cover-tools { display:flex; flex-wrap:wrap; max-width:100%; align-items:center; justify-content:flex-end; gap:var(--jhs-space-1); margin-left:auto; }
+                .jhs-cover-tools .card-btn { width:var(--jhs-control-height-sm); min-width:var(--jhs-control-height-sm); min-height:var(--jhs-control-height-sm); height:var(--jhs-control-height-sm); }
+                .jhs-cover-tools .card-btn .jhs-icon,.jhs-cover-tools .card-btn .icon { width:var(--jhs-icon-md); height:var(--jhs-icon-md); }
+                .jhs-card-preview { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:var(--jhs-media-bg); z-index:var(--jhs-z-content); }
+                @media (max-width:767px), (pointer:coarse) {
+                    .jhs-cover-tools .card-btn { width:var(--jhs-touch-target); height:var(--jhs-touch-target); min-width:var(--jhs-touch-target); min-height:var(--jhs-touch-target); }
+                }
                 .jhs-cover-tools .screenSvg, .jhs-cover-tools .videoSvg { opacity:.65; }
                 .jhs-cover-tools .screenSvg:hover, .jhs-cover-tools .videoSvg:hover { opacity:1; }
                 `;
@@ -39,13 +45,14 @@ const COVER_MENU_STYLES = `
             `;
 
 export class CoverButtonController {
-    /** @param {{document: Document, window: Window & typeof globalThis, list: any, settings: any, state: any, screenshot: any, storage: any, movie: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, ui: any, clipboard: any, notifications: any, diagnostics: any, logger?: Pick<Console, "debug" | "warn" | "error">, navigation: any, screenshotAvailable: boolean, isJavBus: boolean}} options */
+    /** @param {{document: Document, window: Window & typeof globalThis, list: any, settings: any, state: any, http: any, screenshot: any, storage: any, movie: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, ui: any, clipboard: any, notifications: any, diagnostics: any, logger?: Pick<Console, "debug" | "warn" | "error">, navigation: any, screenshotAvailable: boolean, isJavBus: boolean}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
         this.list = options.list;
         this.settings = options.settings;
         this.state = options.state;
+        this.http = options.http;
         this.screenshot = options.screenshot;
         this.storage = options.storage;
         this.movie = options.movie;
@@ -286,34 +293,42 @@ export class CoverButtonController {
                 if (this.releaseScreenshot === release) this.releaseScreenshot = null;
             }
         }));
-        documentRoot.on("click.jhsCoverButton", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", ((/** @type {CardActionEvent} */ event) => {
+        documentRoot.on("click.jhsCoverButton", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", (async (/** @type {CardActionEvent} */ event) => {
             event.preventDefault(); event.stopPropagation();
             try {
                 const button = $(event.currentTarget), card = this.cardForButton(button);
                 const { carNum } = this.readEligibleCard(card);
                 const anchor = this.activeCardPopover?.anchor;
                 this.closeCardMenus(!0);
-                const applyState = async (/** @type {string} */ action) => {
+                const action = button.hasClass("filterBtn") ? d : button.hasClass("favoriteBtn") ? h : button.hasClass("hasDownBtn") ? g : p;
+                const flag = legacyActionToFlag(action);
+                if (!flag) throw new TypeError("不支持的状态操作");
+                const current = await this.state.getState(carNum);
+                if (scope.disposed) return;
+                const next = !current?.stateFlags[flag];
+                const label = { blocked: "屏蔽", favorite: "收藏", downloaded: "已下载", watched: "已观看" }[flag];
+                const applyState = async () => {
                     if (scope.disposed) return;
                     let ownsFocus = !!anchor;
                     const moved = (/** @type {Event} */ event) => { if (event.target !== anchor) ownsFocus = false; };
                     const releaseFocus = scope.listen(this.document, "focusin", moved, true), releasePointer = scope.listen(this.document, "pointerdown", moved, true);
                     try {
                         const source = this.readEligibleCard(card, carNum);
-                        const names = await list.parseActressName(source.url, scope);
+                        const names = next ? await list.parseActressName(source.url, scope) : undefined;
                         if (scope.disposed) return;
                         const { url, publishTime, fc2Source, stateEligibility } = this.readEligibleCard(card, carNum);
-                        const flag = legacyActionToFlag(action);
-                        if (!flag) throw new Error("不支持的状态操作");
-                        await this.state.patch(carNum, { [flag]: true }, { type: "list-card-state", record: { carNum, url, names, publishTime, fc2Source, stateEligibility } });
-                        if (!scope.disposed) this.notifications.ok("已更新影片状态");
-                    } catch (error) { if (!scope.disposed) { this.recordError("保存操作失败", error); this.notifications.error(/** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY" ? `已跳过 1 项：${/** @type {Error} */ (error).message}` : "状态更新失败，请重试"); } }
-                    finally {
+                        const record = next ? { carNum, url, names, publishTime, fc2Source, stateEligibility } : { carNum, stateEligibility };
+                        await this.state.patch(carNum, { [flag]: next }, { type: "list-card-state", record });
+                        if (!scope.disposed) this.notifications.ok((next ? "已标记" : "已取消") + label);
+                    } catch (error) {
+                        if (!scope.disposed) { this.recordError("保存操作失败", error); this.notifications.error(error instanceof Error ? error.message : "状态更新失败，请重试"); }
+                    } finally {
                         releaseFocus(); releasePointer();
                         if (ownsFocus && (this.document.activeElement === anchor || this.document.activeElement === this.document.body)) this.focusCard(anchor, card[0]);
                     }
                 };
-                button.hasClass("filterBtn") ? this.ui.confirm(event, `屏蔽「${escapeHtml(carNum)}」？`, () => applyState(d), { confirmText: "屏蔽", tone: "danger" }) : button.hasClass("favoriteBtn") ? void applyState(h) : button.hasClass("hasDownBtn") ? void applyState(g) : button.hasClass("hasWatchBtn") && void applyState(p);
+                if (flag === "blocked" && next) this.ui.confirm(event, `屏蔽「${escapeHtml(carNum)}」？`, applyState, { confirmText: "屏蔽", tone: "danger" });
+                else void applyState();
             } catch (error) {
                 this.recordError("按钮点击处理失败", error);
                 if (!scope.disposed && /** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY") this.notifications.error(`已跳过 1 项：${/** @type {Error} */ (error).message}`);
@@ -376,7 +391,7 @@ export class CoverButtonController {
             const quality = Z(Object.keys(result.sources),this.settings.snapshot().videoQuality);
             if (!quality || !result.sources[quality]) return fallback();
             const wrapper = this.document.createElement("div"), video = this.document.createElement("video");
-            wrapper.className = "jhs-card-preview"; video.className = "jhs-layout-a38a0e50";
+            wrapper.className = "jhs-card-preview";
             video.src = result.sources[quality]; video.poster = image.attr("data-full") || image.attr("src") || "";
             video.controls = true; video.tabIndex = 0; video.loop = true; video.muted = this.settings.snapshot().videoMuted !== false; video.playsInline = true;
             wrapper.append(video); image.parent().append(wrapper); session.wrapper = wrapper; session.video = video;
@@ -436,9 +451,10 @@ export class CoverButtonController {
     async downloadCover(source, filename) {
         if (!source) return;
         try {
-            const response = await this.window.fetch(source);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const objectUrl = this.window.URL.createObjectURL(await response.blob());
+            const url = new URL(source, this.window.location.href);
+            const response = await this.http.request({ url: url.href, responseType: "blob", urlPolicy: { trustClass: "custom-public", expectedOrigin: url.origin } }, this.scope);
+            if (this.scope.disposed) return;
+            const objectUrl = this.window.URL.createObjectURL(response.data);
             const anchor = this.document.createElement("a");
             anchor.href = objectUrl; anchor.download = filename; this.document.body.appendChild(anchor); anchor.click(); anchor.remove();
             this.window.setTimeout(() => this.window.URL.revokeObjectURL(objectUrl), 100);

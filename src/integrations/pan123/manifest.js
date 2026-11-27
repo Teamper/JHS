@@ -79,8 +79,8 @@ export function createPan123Adapter(http, runtime = {}) {
             const payload = assertSuccess(parsePayload(response.data), "查询任务");
             if (!Array.isArray(payload.data?.list)) throw new JhsError("INVALID_RESPONSE", "123 任务列表无效", { source: "pan123" });
             return { page, total: Number(payload.data.total || 0), items: payload.data.list.map((/** @type {any} */ task) => ({
-                id: String(task.task_id), name: String(task.name || ""), status: String(task.status), progress: Number(task.progress || 0),
-                ...(context.includeEvidence && (typeof task.resource_id === "string" || typeof task.resource_id === "number") ? { resourceId: String(task.resource_id) } : {}),
+                id: String(task.task_id), name: String(task.name || ""), status: ({ 0: "排队中", 1: "下载中", 2: "已完成", 3: "失败" })[/** @type {0|1|2|3} */ (Number(task.status))] ?? String(task.status), progress: Number(task.progress || 0),
+                ...(context.includeEvidence && (typeof (task.resource_id ?? task.resourceId) === "string" || typeof (task.resource_id ?? task.resourceId) === "number") ? { resourceId: String(task.resource_id ?? task.resourceId) } : {}),
             })) };
         },
         /** @param {string} resource @param {Pan123Context} [context] */

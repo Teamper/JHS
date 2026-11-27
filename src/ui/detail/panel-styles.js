@@ -1,6 +1,15 @@
 // @ts-check
 
 /** Shared styles for detail panels that may be mounted by more than one feature. */
+export const SCREENSHOT_PANEL_STYLES = `
+    .jhs-screenshot-thumbnail { display:block; width:112px; max-width:100%; cursor:zoom-in; }
+    .jhs-screenshot-thumbnail img { display:block; width:100%; object-fit:contain; }
+    .jhs-screenshot-providers { display:flex; flex-wrap:wrap; justify-content:center; gap:var(--jhs-space-half); }
+    .screen-container[data-jhs-screenshot-mode="manual"] { grid-column:1 / -1; width:100%; max-width:none; }
+    .jhs-screenshot-result { display:grid; justify-items:center; }
+    .jhs-screenshot-retry { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:var(--jhs-space-2); }
+`;
+
 export function buildDetailPanelCss() {
     return `
         .jhs-review-panel { min-width:0; }
@@ -13,7 +22,7 @@ export function buildDetailPanelCss() {
         .jhs-review-meta { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-1) var(--jhs-space-3); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-md); }
         .jhs-review-author { color:var(--jhs-text); font-size:var(--jhs-font-size-md); font-weight:var(--jhs-font-weight-semibold); }
         .jhs-review-floor { margin-left:auto; color:var(--jhs-text-faint); }
-        .jhs-review-content { margin:var(--jhs-space-3) 0 0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); line-height:var(--jhs-line-height-read); overflow-wrap:anywhere; white-space:pre-wrap; }
+        .jhs-review-content { margin:var(--jhs-space-3) 0 0; color:var(--jhs-text); font-size:var(--jhs-font-size-md); line-height:var(--jhs-line-height-read); overflow-wrap:anywhere; white-space:pre-wrap; }
         .jhs-review-link { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); padding:var(--jhs-space-1) var(--jhs-space-2); border:0; border-radius:var(--jhs-radius-pill); background:var(--jhs-accent-tint); color:var(--jhs-accent-text); font:inherit; font-size:var(--jhs-font-size-sm); line-height:var(--jhs-line-height-ui); text-decoration:none; vertical-align:baseline; cursor:pointer; }
         .jhs-review-link-copy { color:var(--jhs-text-muted); }
         .jhs-review-link-wrap { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-2); width:100%; margin:var(--jhs-space-1) 0; }

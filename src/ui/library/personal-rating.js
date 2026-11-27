@@ -5,6 +5,7 @@ export const PERSONAL_RATING_STYLES = `
 .jhs-personal-rating { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); margin-block:var(--jhs-space-3); color:var(--jhs-text); }
 .jhs-rating-stars { display:inline-flex; gap:var(--jhs-space-1); }
 .jhs-rating-stars .jhs-btn { padding:var(--jhs-space-2); }
+.jhs-rating-stars [data-filled="true"] { color:var(--jhs-status-watch); }
 .jhs-rating-stars [data-filled="true"] svg { fill:currentColor; }
 .jhs-rating-status { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
 .jhs-rating-badge { display:inline-flex; margin:var(--jhs-space-1); }

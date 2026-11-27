@@ -67,9 +67,6 @@ export async function applyLayoutFromSettings(snapshot = {}, options = {}) {
     const mobile = options.mobile ?? false;
     const columns = mobile ? 1 : Number(snapshot.containerColumns ?? 5) || 5;
     const width = mobile ? 100 : Number(snapshot.containerWidth ?? 100) || 100;
-    if (l && imageLayout?.logImageHeightsByRow) {
-        await imageLayout.logImageHeightsByRow({ vertical, columns });
-    }
     if (hostAdapter) {
         const listRoot = hostAdapter.locateListRoot?.();
         if (listRoot) {
@@ -82,6 +79,7 @@ export async function applyLayoutFromSettings(snapshot = {}, options = {}) {
             boundary.root.style.setProperty("--jhs-recommendation-columns", String(mobile ? 2 : columns));
         }
         const layoutContainer = hostAdapter.getListLayoutContainer?.();
-        if (layoutContainer) layoutContainer.style.minWidth = `${width}%`;
+        if (layoutContainer) layoutContainer.style[l ? "width" : "minWidth"] = `${width}%`;
     }
+    if (l && imageLayout?.logImageHeightsByRow) await imageLayout.logImageHeightsByRow({ vertical, columns });
 }

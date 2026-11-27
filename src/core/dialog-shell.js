@@ -32,7 +32,7 @@ export function getDialogArea(size = "md", view = window) {
     const [width, height] = sizePresets[/** @type {keyof typeof sizePresets} */ (size)] ?? sizePresets.md;
     const margin = view.innerWidth <= 768 ? 16 : size === "workspace" ? 32 : 64;
     return [
-        `${Math.max(320, Math.min(width, view.innerWidth - margin))}px`,
+        `${Math.min(width, Math.max(280, view.innerWidth - margin))}px`,
         size === "form" ? "auto" : `${Math.max(320, Math.min(height, view.innerHeight - margin))}px`,
     ];
 }
@@ -225,7 +225,8 @@ export function prepareDialogOptions(options = {}, utils = {}) {
                     const content = root.querySelector(".layui-layer-content"), frame = root.querySelector("iframe");
                     if (frame && content && height !== "auto") {
                         const titleHeight = root.querySelector(".layui-layer-title")?.getBoundingClientRect().height || 0;
-                        content.style.height = `${Math.max(0,parseFloat(height)-titleHeight)}px`;
+                        const footerHeight = root.querySelector(".layui-layer-btn")?.getBoundingClientRect().height || 0;
+                        content.style.height = `${Math.max(0, parseFloat(height) - titleHeight - footerHeight)}px`;
                         frame.style.height = content.style.height;
                     }
                 }
@@ -257,7 +258,7 @@ export function prepareDialogOptions(options = {}, utils = {}) {
         if (typeof handler !== "function") continue;
         vendor[key] = function(/** @type {any[]} */ ...args) {
             const result = handler.apply(this, args);
-            if (result && typeof result.then === "function") { void result.catch(() => {}); return false; }
+            if (result && typeof result.then === "function") { void result.catch((/** @type {unknown} */ error) => queueMicrotask(() => { throw error; })); return false; }
             return result;
         };
     }

@@ -1,4 +1,5 @@
 // @ts-check
+import { ACTRESS_SCAN_LOCK } from "../../core/site-context.js";
 import { debounce } from "../../core/timing.js";
 
 import { defineFeature } from "../../contracts/manifests.js";
@@ -6,12 +7,11 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 
 export default defineFeature({
     id: "library", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.movie, SERVICE.keywordRules, SERVICE.domUi, SERVICE.notifications, SERVICE.events, SERVICE.profile, SERVICE.dialog, SERVICE.clipboard, SERVICE.clog],
+    requires: [PORT.host, PORT.style, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.movie, SERVICE.keywordRules, SERVICE.domUi, SERVICE.notifications, SERVICE.events, SERVICE.profile, SERVICE.dialog, SERVICE.clipboard, SERVICE.clog, SERVICE.offline],
     contributionAvailability: {
         "library.keyword-filter": { routes: ["list", "detail", "owned-detail"] },
         "library.state-actions": { sites: ["javdb"], routes: ["list"] },
         "library.blacklist": { routes: ["list"] },
-        "library.favorite-actresses": { sites: ["javdb"] },
     },
     contributes: ["library.history", "library.keyword-filter", "library.state-actions", "library.blacklist", "library.favorite-actresses"],
     providesCommands: ["library.history.open", "library.history.refresh", "library.blacklist.open", "library.blacklist.add", "library.blacklist.subject-info", "library.blacklist.parse", "library.blacklist.parse-and-save", "library.blacklist.scan-pages", "library.blacklist.reset-tooltip"],
@@ -58,6 +58,7 @@ export default defineFeature({
                     state: deps[SERVICE.state], repository: historyController.repository,
                     selectionModel: historyController.selectionModel, site: runtime.site,
                     getOfflineController: () => runtime.getCapability?.("external-bridge.offline"),
+                    offlineTasks: deps[SERVICE.offline].tasks,
                     getListPage: () => runtime.getCapability?.("list.core"),
                     fc2WorkspaceAvailable: runtime.isContributionEnabled("fc2-workspace", "detail.fc2-owned", "Fc2Plugin"),
                     getFc2Workspace: () => runtime.executeCommand("detail.fc2.workspace"),
@@ -128,7 +129,7 @@ export default defineFeature({
         }
         if (runtime.enabledContributions.includes("library.keyword-filter")) {
             const controller = new TitleKeywordController({
-                document, window, site: runtime.site, route: runtime.route,
+                document, window, host: deps[PORT.host], route: runtime.route,
                 settings: deps[SERVICE.settings], saveKeyword: (/** @type {string} */ keyword) => deps[SERVICE.keywordRules].saveTitleKeywords(keyword),
                 events: deps[SERVICE.events], ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], scope: runtime.scope, diagnostics: runtime.diagnostics,
             });
@@ -145,7 +146,7 @@ export default defineFeature({
                 runtime.diagnostics.recordError({ source: "library-feature", featureId: "library", contributionId: "library.blacklist", message: error instanceof Error ? error.message : String(error) });
             }
             const task = runtime.isContributionEnabled?.("scheduler", "discovery.scheduler", "TaskPlugin") ? {
-                singleTaskKey: "checkNewActressActorFilterCar",
+                singleTaskKey: ACTRESS_SCAN_LOCK,
                 lastCheckBlacklistTimeKey: "jhs_time_checkBlacklist",
                 activate: () => runtime.executeCommand("scheduler.service"),
                 current: () => runtime.getCapability?.("discovery.scheduler"),
@@ -156,7 +157,7 @@ export default defineFeature({
                 const entryController = new BlacklistEntryController({
                     document, window, location: window.location, jquery, site: runtime.site, state: deps[SERVICE.state], http: deps[SERVICE.http],
                     ui: deps[SERVICE.domUi], notifications: deps[SERVICE.notifications], logger: deps[SERVICE.clog],
-                    scope: runtime.scope, task, getSubjectInfo,
+                    scope: runtime.scope, getSubjectInfo,
                     parsePage: /** @type {(page: any, name: string, starId: string, site: string) => any} */ ((page, name, starId, site) => deps[PORT.host].parseBlacklistFilterPage(page, name, starId, site)),
                 });
                 blacklistEntry = entryController;
@@ -191,7 +192,7 @@ export default defineFeature({
         return {
             activeContributions,
             commands: {
-                "library.history.open": async () => (await ensureHistoryDialog())?.openHistory(),
+                "library.history.open": async (/** @type {string} */ filter) => (await ensureHistoryDialog())?.openHistory(filter),
                 "library.history.refresh": () => historyDialog?.tableObj ? historyDialog.refresh() : undefined,
                 "library.blacklist.open": () => blacklistWorkspace?.openBlacklistDialog() ?? undefined,
                 /** @param {any} event */

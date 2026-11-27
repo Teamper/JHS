@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import { CommandRegistry } from "../src/app/command-registry.js";
 import { DependencyContainer } from "../src/app/dependency-container.js";
 import { FeatureRuntime } from "../src/app/feature-runtime.js";
+import settingsEntry from "../src/features/settings/manifest.js";
 import { systemFeatureManifests } from "../src/features/system/catalog.js";
 import { openSettingsUi } from "../src/core/settings-ui-owner.js";
 import { PORT, SERVICE } from "../src/contracts/tokens.js";
@@ -89,8 +90,8 @@ describe("Settings system Feature UI ownership", () => {
         vi.spyOn(SettingPlugin.prototype, "openSettingDialog").mockImplementation(openSettingDialog);
         vi.spyOn(SettingPlugin.prototype, "disposeQuickSettings").mockImplementation(closeQuickSettings);
         vi.spyOn(SettingPlugin.prototype, "activateFeatureSurface").mockImplementation(activateFeatureSurface);
-        vi.spyOn(SettingPlugin.prototype, "initEntryCss").mockResolvedValue("<style>.settings-test{color:red}</style>");
-        runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings-entry"));
+        vi.spyOn(SettingPlugin.prototype, "initEntryCss").mockReturnValue(".settings-test{color:red}");
+        runtime.register(settingsEntry);
         runtime.register(systemFeatureManifests.find((feature) => feature.id === "settings"));
 
         await runtime.start();

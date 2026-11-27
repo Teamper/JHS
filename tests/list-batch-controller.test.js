@@ -100,7 +100,7 @@ describe("ListBatchController", () => {
         await controller.run({ kind: "search" }, "favorite", { filter: "all" });
         await controller.run({ kind: "search" }, "favorite", { filter: "favorite" });
         expect(ui.confirm.mock.calls.map(([message]) => message)).toEqual([
-            "将处理当前搜索全部分页的所有影片，包括屏蔽项。",
+            "将处理当前搜索全部分页中符合「全部」筛选的影片。",
             expect.stringMatching(/^将处理当前搜索全部分页中符合「.+」筛选的影片。$/),
         ]);
         expect(createEvaluationContext).not.toHaveBeenCalled();
@@ -197,15 +197,21 @@ describe("ListBatchController", () => {
         expect(isBatchRunActive()).toBe(false);
     });
 
-    it("warns that the TOP250 subtitle filter does not limit batch writes before confirmation", async () => {
-        const { ui, state, hostAdapter } = setup();
+    it("limits TOP250 batch writes to the visible cards when subtitle filtering is active", async () => {
+        const { ui, state, hostAdapter } = setup(
+            '<div class="item"><a href="/v/with"><div class="video-title"><strong>ABC-123</strong> Subtitled</div></a></div>' +
+            '<div class="item jhs-top250-subtitle-hidden"><a href="/v/without"><div class="video-title"><strong>ABC-124</strong> No subtitles</div></a></div>'
+        );
         dom.reconfigure({ url: "https://javdb.com/rankings/top?jhs_subtitle=with" });
         hostAdapter.getPageContext = () => ({ kind: "top250-ranking" });
         ui.confirm.mockResolvedValueOnce(false);
 
         await expect(controller.run({ kind: "search" }, "favorite", { filter: "all" })).resolves.toEqual({ cancelled: true });
-
-        expect(ui.confirm).toHaveBeenCalledWith(expect.stringContaining("当前字幕筛选只影响显示，不限制批量处理范围"), { confirmText: "收藏" });
+        expect(ui.confirm).toHaveBeenCalledWith("将处理当前榜单页内符合「全部」筛选的可见影片。", { confirmText: "收藏" });
         expect(state.patch).not.toHaveBeenCalled();
+
+        await expect(controller.run({ kind: "search" }, "favorite", { filter: "all" })).resolves.toEqual({ matched: 1, updated: 1 });
+        expect(state.patch.mock.calls.flatMap(([keys]) => keys)).toEqual(["ABC-123"]);
+        expect(controller.http.request).not.toHaveBeenCalled();
     });
 });

@@ -6,7 +6,7 @@ import { assertSupportedDataVersion, normalizePortableData, readPortableData } f
 import { SNAPSHOTS_KEY, createPortableSnapshot, getStoredSnapshots } from "../core/portable-snapshots.js";
 
 /** @typedef {Record<string, any>} BackupData */
-/** @typedef {{signal?: AbortSignal, assertActive?: () => unknown, prepareData?: () => BackupData | Promise<BackupData>, resetActressProfileBackfill?: boolean}} ImportOptions */
+/** @typedef {{signal?: AbortSignal, assertActive?: () => unknown, prepareData?: () => BackupData | Promise<BackupData>, resetActressProfileBackfill?: boolean, snapshotSource?: string}} ImportOptions */
 /** @typedef {Pick<Console, "log"|"warn">} BackupLogger */
 
 /** Owns portable exports, guarded restores and local recovery snapshots. */
@@ -34,7 +34,7 @@ export class PortableBackupService {
                 const version = await this.supportedVersion();
                 await this.state?.recoverPendingTransactionWithoutLock();
                 if (options.prepareData) ({ data, warnings } = normalizePortableData(await options.prepareData()));
-                const batch = await prepareAtomicImport(this.storage, data, warnings, version, options.resetActressProfileBackfill !== false);
+                const batch = await prepareAtomicImport(this.storage, data, warnings, version, options.resetActressProfileBackfill !== false, options.snapshotSource);
                 await options.assertActive?.();
                 await this.storage.commitAtomicBatch({ ...batch, signal: options.signal });
                 committed = true;
@@ -82,8 +82,8 @@ export class PortableBackupService {
     }
 
     async getSnapshotList() {
-        return (await getStoredSnapshots(this.storage)).map(({ id, name, source, time, itemCount, kind, targetDataVersion, appVersion }) =>
-            ({ id, name, source, time, itemCount, kind: kind || "snapshot", targetDataVersion, appVersion }));
+        return (await getStoredSnapshots(this.storage)).map(({ id, name, source, time, createdAt, itemCount, kind, targetDataVersion, appVersion }) =>
+            ({ id, name, source, time, createdAt, itemCount, kind: kind || "snapshot", targetDataVersion, appVersion }));
     }
 
     /** @param {string} id */
@@ -105,17 +105,20 @@ export class PortableBackupService {
         if (!snapshot) throw new Error("快照不存在: " + id);
         if (!snapshot.data || typeof snapshot.data !== "object") throw new Error("快照数据损坏");
         const { [SNAPSHOTS_KEY]: _snapshots, ...data } = snapshot.data;
-        await this.importData(data);
+        await this.importData(data, { snapshotSource: "auto-restore" });
         this.logger?.log("已恢复快照: " + snapshot.name);
         return snapshot;
     }
 
     inspectDataHealth() { return inspectDataHealth(this.storage); }
 
-    repairDataHealth() {
+    repairDataHealth({ snapshot = false } = {}) {
         return this.coordinator.runExclusive(async () => {
             await this.supportedVersion();
             await this.state?.recoverPendingTransactionWithoutLock();
+            const report = await inspectDataHealth(this.storage);
+            if (!report.fixable.length) return { fixedGroups: 0, report };
+            if (snapshot) await createPortableSnapshot(this.storage, "修复前自动恢复点", "auto-repair");
             return repairDataHealth(this.storage);
         });
     }

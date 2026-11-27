@@ -54,6 +54,7 @@ export function createMediaConnections(options) {
         const rowScope = new LifecycleScope(`media:connection:${id}`);
         const release = scope.addCleanup(() => rowScope.dispose());
         rowScope.addCleanup(release);
+        legend.className = "jhs-sr-only";
         legend.textContent = connection.name || "新服务器";
         const editor = document.createElement("details"), summary = document.createElement("summary");
         summary.textContent = legend.textContent;

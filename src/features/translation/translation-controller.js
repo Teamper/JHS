@@ -1,23 +1,26 @@
 // @ts-check
+import { readListItem } from "../../core/list-item-reader.js";
 
 import { _ } from "../../core/constants.js";
 import { mapLimit } from "../../core/feature-helpers.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { translationErrorLabel } from "../../core/translation-model.js";
+import { showTitleTranslationError } from "../../ui/translation/title-translation.js";
 
 const TRANSLATION_STYLES = `
     .translated-title { margin-top:var(--jhs-space-2); color:var(--jhs-text); font-size:var(--jhs-font-size-lg); font-weight:var(--jhs-font-weight-normal); line-height:var(--jhs-line-height-ui); }
-    .translated-title.is-error { color:var(--jhs-danger-text); }
+    .translated-title.is-error { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); color:var(--jhs-danger-text); }
 `;
 
 /** Feature-owned detail and list title translation with a narrow legacy attachment point. */
 export class ExternalBridgeTranslationController {
-    /** @param {{document: Document, window: Window, route: string, hostAdapter: any, settings: any, translation: any, styles: any, diagnostics: any, scope: any, privacy?:any}} options */
+    /** @param {{document: Document, window: Window, route: string, hostAdapter: any, jquery: (value: any) => any, settings: any, translation: any, styles: any, diagnostics: any, scope: any, privacy?:any}} options */
     constructor(options) {
         this.document = options.document;
         this.window = options.window;
         this.route = options.route;
         this.hostAdapter = options.hostAdapter;
+        this.jquery = options.jquery;
         this.settings = options.settings;
         this.translation = options.translation;
         this.styles = options.styles;
@@ -183,13 +186,9 @@ export class ExternalBridgeTranslationController {
         if (!this.isCurrentListTranslation(generation)) return;
         const titleNode = item.querySelector(".video-title");
         if (!titleNode) return;
-        const isJavDb = this.hostAdapter?.site === "javdb";
-        const sourceText = item.getAttribute("data-jhs-original-title") || (isJavDb
-            ? [...titleNode.childNodes].filter((node) => node.nodeType === 3 && (node.textContent ?? "").trim()).map((node) => node.textContent ?? "").join("").trim()
-            : item.querySelector("img")?.getAttribute("data-title")?.trim() ?? "");
-        const carNum = isJavDb
-            ? titleNode.querySelector("strong")?.textContent?.trim() ?? ""
-            : item.querySelector("a[href]")?.getAttribute("href")?.split("/").filter(Boolean).pop()?.trim() ?? "";
+        const isJavDb = this.hostAdapter.site === "javdb";
+        const movie = readListItem(item, this.jquery), carNum = movie.carNum;
+        const sourceText = movie.title || titleNode.textContent?.trim();
         if (!sourceText || !carNum) return;
         const result = await this.translateTitle(sourceText, {cacheAlias:carNum,canDispatch:() => this.isCurrentListTranslation(generation) && this.observeVisible(item,"list")}), translated = result.text;
         if (!this.isCurrentListTranslation(generation) || !item.isConnected || !titleNode.isConnected) return;
@@ -284,8 +283,9 @@ export class ExternalBridgeTranslationController {
             if (isCurrent()) translatedNode.textContent = String(result.text ?? "");
         } catch (error) {
             if (!isCurrent()) return;
-            translatedNode.classList.add("is-error");
-            translatedNode.textContent = translationErrorLabel(error);
+            showTitleTranslationError(translatedNode, error, () => {
+                void this.translateDetail(generation).catch(cause => this.report(cause));
+            });
             this.report(error);
         }
     }

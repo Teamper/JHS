@@ -1,10 +1,10 @@
 // @ts-check
 import { THIRD_PARTY_CACHE_KEY } from "../../services/cache-service.js";
 import { ENHANCEMENT_SETTINGS_STYLES } from "../../ui/settings/enhancement-settings.js";
-import { l, r } from "../../core/constants.js";
+import { l } from "../../core/constants.js";
 import { parseCarNumberText } from "../../core/feature-helpers.js";
 import { ResourceSettingsService } from "../../services/resource-settings-service.js";
-import { buildSettingCss } from "../../ui/settings/setting-styles.js";
+import { buildSettingCss, FULL_SETTINGS_STYLES } from "../../ui/settings/setting-styles.js";
 import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { SHORTCUT_RECORDER_STYLES } from "../../ui/settings/shortcut-recorder.js";
@@ -12,7 +12,7 @@ import { FullSettingsSession } from "../../ui/settings/full-settings-session.js"
 import { activateFeatureSurface, disposeQuickSettings, syncDesktopSettingNav, mountDesktopSettingNav, mountDesktopQuickSettings, unmountDesktopSettingNav, openQuickSetting } from "./quick-settings-controller.js";
 import { openSettingDialog, loadSettingDialog, requestSettingsClose, syncFullConnection, updateSettingsReady, hydrateSettingForm, renderTaskStatuses, activateSettingPanel, hasUnsavedConnection } from "./full-settings-dialog.js";
 import { hydrateLiveSettings, bindClick, previewCarNumbers, confirmCarNumbers } from "./settings-form-actions.js";
-import { loadResourceSettings, renderCloudSettings, renderResourceSettings, renderRules, normalizeEditorRows, openSourceDialog, openRuleDialog, saveCloudSettings, checkOneOneFiveLogin, cancelResourceTests, testSource } from "./resource-settings-controller.js";
+import { loadResourceSettings, renderCloudSettings, renderResourceSettings, renderRules, openSourceDialog, openRuleDialog, checkOneOneFiveLogin, cancelResourceTests, testSource } from "./resource-settings-controller.js";
 /** @typedef {import("../../services/resource-settings-service.js").ResourceRecord} ResourceRecord */
 /** @typedef {MouseEvent & {currentTarget: HTMLElement, target: HTMLElement, key: string, delegateTarget: HTMLElement}} JQueryEvent */
 /** @typedef {Event & {currentTarget: HTMLInputElement, target: HTMLElement}} JQueryInputEvent */
@@ -139,14 +139,12 @@ export class SettingPlugin {
             getScope: instance ? async () => instance.scope : this.getRuntimeService("scope"),
         });
     }
-    async initCss(includeFull = true) {
-        const e = this.getRuntimeService("settings").snapshot();
-        let t = (null == e ? void 0 : e.containerWidth) ?? "100";
-        this.utils.isMobileMode() && (t = "100");
-        let n = this.utils.isMobileMode() ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
-        return buildSettingCss(t, n, l, r, includeFull).replace("</style>", `${includeFull ? SHORTCUT_RECORDER_STYLES + ENHANCEMENT_SETTINGS_STYLES : ""}</style>`);
+    initCss() { return FULL_SETTINGS_STYLES + SHORTCUT_RECORDER_STYLES + ENHANCEMENT_SETTINGS_STYLES; }
+    initEntryCss() {
+        const { containerWidth = 100, containerColumns = 5 } = this.getRuntimeService("settings").snapshot();
+        const mobile = this.utils.isMobileMode();
+        return buildSettingCss(mobile ? 100 : containerWidth, mobile ? 1 : containerColumns, l);
     }
-    initEntryCss() { return this.initCss(false); }
     /** @param {ActionArgs<typeof activateFeatureSurface>} args */
     activateFeatureSurface(...args) { return activateFeatureSurface(this, ...args); }
     disposeQuickSettings() { return disposeQuickSettings(this); }
@@ -186,14 +184,10 @@ export class SettingPlugin {
     renderResourceSettings(...args) { return renderResourceSettings(this, ...args); }
     /** @param {ActionArgs<typeof renderRules>} args */
     renderRules(...args) { return renderRules(this, ...args); }
-    /** @param {ActionArgs<typeof normalizeEditorRows>} args */
-    normalizeEditorRows(...args) { return normalizeEditorRows(this, ...args); }
     /** @param {ActionArgs<typeof openSourceDialog>} args */
     openSourceDialog(...args) { return openSourceDialog(this, ...args); }
     /** @param {ActionArgs<typeof openRuleDialog>} args */
     openRuleDialog(...args) { return openRuleDialog(this, ...args); }
-    /** @param {ActionArgs<typeof saveCloudSettings>} args */
-    saveCloudSettings(...args) { return saveCloudSettings(this, ...args); }
     /** @param {ActionArgs<typeof checkOneOneFiveLogin>} args */
     checkOneOneFiveLogin(...args) { return checkOneOneFiveLogin(this, ...args); }
     cancelResourceTests() { return cancelResourceTests(this); }

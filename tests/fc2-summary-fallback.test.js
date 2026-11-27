@@ -16,7 +16,7 @@ function fixture(initialMovie = { title: "列表已有标题", coverUrl: "https:
     vi.stubGlobal("$", jquery);
     const detail = vi.fn(), scope = new LifecycleScope("fc2-fixture");
     const service = new Fc2WorkspaceService({ runtimeServices: {
-        movie: { detail, sourceUrls: () => [] }, scope: async () => scope, logger: { error: vi.fn() },
+        movie: { detail, sourceUrls: () => [] }, settings: { snapshot: () => ({}) }, state: {}, scope: async () => scope, logger: { error: vi.fn() },
     } });
     vi.spyOn(service, "getDetailStateController").mockReturnValue({ bind() {} });
     for (const method of ["loadNativeDetail", "loadFc2Screenshot", "mountFc2OtherSites", "bindFc2FeatureLifecycle"]) {

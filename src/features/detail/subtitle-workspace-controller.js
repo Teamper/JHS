@@ -18,7 +18,7 @@ export class SubtitleWorkspaceController {
         const focus = movie.trigger || /** @type {HTMLElement} */ (document.activeElement);
         let index = /** @type {number | null} */ (null), generation = 0;
         /** @type {LifecycleScope | null} */ let searchScope = null;
-        const search = async (refreshCache = false) => {
+        const search = async (refreshCache = false, keyword = "") => {
             searchScope?.dispose();
             const current = ++generation;
             const requestScope = new LifecycleScope("subtitle-search");
@@ -26,10 +26,11 @@ export class SubtitleWorkspaceController {
             const release = scope.addCleanup(() => requestScope.dispose());
             requestScope.addCleanup(release);
             view.reset();
-            try { await subtitle.searchAll({ carNum: movie.carNum }, { scope: requestScope, refreshCache, onSource: (/** @type {any} */ result) => { if (!scope.disposed && generation === current) view.update(result); } }); }
+            try { await subtitle.searchAll({ carNum: movie.carNum, ...(keyword && { keyword }) }, { scope: requestScope, refreshCache, onSource: (/** @type {any} */ result) => { if (!scope.disposed && generation === current) view.update(result); } }); }
             catch (error) { if (!scope.disposed && !requestScope.disposed) view.message(error instanceof Error ? error.message : String(error)); }
+            finally { requestScope.dispose(); if (searchScope === requestScope) searchScope = null; }
         };
-        const view = createSubtitleWorkspace({ document, scope, onSearch: () => void search(true), onRecords: this.options.uploadRecords ? trigger => {
+        const view = createSubtitleWorkspace({ document, scope, keyword: movie.carNum, onSearch: keyword => void search(true, keyword), onRecords: this.options.uploadRecords ? trigger => {
             void this.options.uploadRecords({ movie, scope, trigger }).catch((/** @type {unknown} */ error) => { if (!scope.disposed) view.message(error instanceof Error ? error.message : String(error)); });
         } : undefined, onAction: async (record, action, trigger) => {
             if (trigger.disabled) return;

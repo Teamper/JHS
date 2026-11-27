@@ -33,7 +33,10 @@ describe("JhsSelect global document click handler", () => {
     it.each(["Escape", "outside"])("cancels pending navigation with %s without emitting change", action => {
         const { dom, $, document } = loadJhsSelect(fixture), source = document.querySelector("#a"), instance = JhsSelect.get(source), change = vi.fn();
         source.addEventListener("change", change); instance.open(); instance.trigger.trigger($.Event("keydown", { key: "End" }));
-        expect(source.value).toBe("1"); expect(instance.menu.find('[aria-selected="true"]').text()).toBe("二");
+        expect(source.value).toBe("1");
+        expect(instance.menu.find('[aria-selected="true"]').text()).toBe("一");
+        expect(instance.menu.find(".is-active").text()).toBe("二");
+        expect(instance.trigger.attr("aria-activedescendant")).toBe(instance.menu.find(".is-active").attr("id"));
         if (action === "Escape") instance.trigger.trigger($.Event("keydown", { key: "Escape" })); else document.body.dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true }));
         expect(source.value).toBe("1"); expect(change).not.toHaveBeenCalled(); expect(instance.popover.opened).toBe(false);
         instance.open(); expect(instance.menu.find(".is-active").text()).toBe("一"); instance.close(); dom.window.close();

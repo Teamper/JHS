@@ -64,7 +64,7 @@ describe("123Pan platform boundary", () => {
 
     it("does not read or sync credentials outside the 123Pan account host", () => {
         const { service, scope } = createHarness();
-        service.window = new JSDOM("", { url: "https://www.123pan.com/" }).window;
+        service.window = new JSDOM("", { url: "https://foo.123pan.com/" }).window;
         expect(service.startTokenSync(scope)).toBe(false);
         expect(service.syncTimer).toBeNull();
         expect(scope.snapshot().listeners).toBe(0);

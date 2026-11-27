@@ -178,18 +178,22 @@ async function start() {
                 const token = integrationId === "pan123" ? await context.services.pan123Credential.getStoredToken() : "";
                 if (integrationId === "pan123" && !token) throw new Error("请先在 123 云盘网页同步登录授权");
                 const receiptKey = await buildReceiptKey(resource);
-                const prev = receiptKey ? await client.call("receipts.getRaw", [receiptKey]).catch(() => null) : null;
+                const prev = receiptKey ? await client.call("receipts.getRaw", [receiptKey]) : null;
                 if (receiptKey) await client.call("receipts.write", [receiptKey, "pending", { attemptId: crypto.randomUUID(), providerId }, prev]);
+                let submitted = false;
+                const report = (/** @type {unknown} */ error) => context.services.diagnostics.recordError({ source: "extension-offline", message: "更新离线记录失败", error });
                 try {
                     await context.services.offline.submitWithIntegration(integrationId, resource, { ...(token ? { token } : {}), scope: context.rootScope });
-                    if (receiptKey) await client.call("receipts.write", [receiptKey, "submitted", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(() => {});
+                    submitted = true;
+                    if (receiptKey) await client.call("receipts.write", [receiptKey, "submitted", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(report);
                     await client.call("state.appendOfflineHistory", [{ carNum: movieInfo?.carNum || "", providerId, providerName, resource, status: "submitted", submissionOutcome: "submitted" }]);
                     if (movieInfo?.carNum) {
                         await client.call("state.patch", [movieInfo.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { url: movieInfo.url, names: movieInfo.actress || "" } }]);
                     }
                     await app.refreshCurrentView();
                 } catch (error) {
-                    if (receiptKey) await client.call("receipts.write", [receiptKey, "failed", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(() => {});
+                    if (submitted) { report(error); app.setStatus("云盘已接收任务，本地记录未完整更新"); return; }
+                    if (receiptKey) await client.call("receipts.write", [receiptKey, "failed", { attemptId: crypto.randomUUID(), providerId }, undefined]).catch(report);
                     throw error;
                 }
             });

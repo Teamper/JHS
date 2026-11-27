@@ -1,6 +1,7 @@
 // @ts-check
 
 import { JhsError } from "../core/jhs-error.js";
+import { normalizeSharedWebDavProfile } from "./webdav-shared-profile.js";
 import { CREDENTIAL_KEYS } from "./credential-service.js";
 import { isManagedBackup } from "../core/auto-backup-policy.js";
 import { SYNC_FOLDER, parseSyncFileName } from "../core/webdav-sync-model.js";
@@ -285,6 +286,22 @@ export class WebDavService {
     }
     /** @param {{url: string, username: string, password: string}} config @param {{scope?: any}} [options] */
     createClient(config, options = {}) { return new WebDavClient(this.http, config.url, config.username, config.password, options.scope, this.parseXml); }
+    /** @param {{url:string,username:string,password:string}} value @param {import("../core/lifecycle-scope.js").LifecycleScope} scope */
+    async testConnection(value, scope) {
+        const profile = normalizeSharedWebDavProfile(value);
+        if (!profile.url) throw new TypeError("请输入 WebDAV 地址");
+        const origin = new URL(profile.url).origin, owner = "webdav-test:" + crypto.randomUUID();
+        this.http.urlPolicy.setLocalOriginOwner(owner, [origin]);
+        const release = scope.addCleanup(() => this.http.urlPolicy.setLocalOriginOwner(owner, []));
+        try {
+            const client = this.createClient(profile, { scope });
+            const xml = await client.request("PROPFIND", "", { Depth: "0", "Content-Type": "application/xml" }, '<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>');
+            scope.assertActive();
+            const doc = client.parseXml(String(xml));
+            if (doc.documentElement?.namespaceURI !== "DAV:" || doc.documentElement.localName !== "multistatus") throw new Error("服务未返回有效的 WebDAV 目录信息");
+            if (![...doc.getElementsByTagNameNS("DAV:", "status")].some(status => /\s2\d\d(?:\s|$)/u.test(status.textContent || ""))) throw new Error("当前账号无权读取 WebDAV 目录");
+        } finally { release(); }
+    }
     async getProfileSnapshot() {
         if (this.sharedProfile) return this.sharedProfile.snapshot();
         if (!this.settings) return { profile: await this.getProfile(), revision: "" };

@@ -112,7 +112,7 @@ test("full settings keep switch changes in the draft and a failed save leaves ru
         };
     });
     await page.locator("#saveBtn").click();
-    await expect(page.getByText("设置保存失败", {exact:true})).toBeVisible();
+    await expect(page.getByText("设置保存失败，请重试", {exact:true})).toBeVisible();
     expect(await page.evaluate(() => !JSON.parse(window.settingsService.snapshot().disabledPlugins || "[]").includes("translation-tools"))).toBe(true);
     await expect(page.locator(".jhs-translation-entry")).toHaveCount(1);
     await expect(master).not.toBeChecked();

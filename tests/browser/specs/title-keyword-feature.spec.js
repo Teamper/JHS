@@ -19,6 +19,7 @@ test("Library title filter safely confirms selected FC2 text and preserves the 6
   });
   await page.evaluate(() => {
     const workspace = document.createElement("div");
+    workspace.className = "jhs-fc2-title";
     const title = document.createElement("strong");
     title.className = "current-title";
     title.textContent = "FC2-TEST <img src=x onerror=alert(1)>";

@@ -1,4 +1,5 @@
 // @ts-check
+import { findMatchedTitleKeyword } from "../../core/keyword-match.js";
 import { sleep } from "../../core/timing.js";
 import { getNowStr, getHourDifference } from "../../core/ui-date-time.js";
 import { genericSort } from "../../core/collection-sort.js";
@@ -9,7 +10,7 @@ import { isAbortError } from "../../core/jhs-error.js";
 import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { parseHostListPage, readListItem } from "../../core/list-item-reader.js";
 import { getMovieStateEligibility } from "../../core/movie-identity.js";
-import { detectSite } from "../../core/site-context.js";
+import { ACTRESS_SCAN_LOCK, detectSite } from "../../core/site-context.js";
 import { StorageQueue } from "../../core/storage-queue.js";
 import { getTaskIntervalDefinition, parseTaskInterval } from "./task-intervals.js";
 
@@ -28,7 +29,7 @@ export class TaskExecutionService {
     constructor(options) {
         this.runtimeServices = Object.freeze({ ...options.runtimeServices });
         this.settings = options.runtimeServices.settings;
-        this.sourceHealth = new ActorSourceHealth(options.runtimeServices.storage, () => Date.now());
+        this.sourceHealth = new ActorSourceHealth(options.runtimeServices.storage, Date.now, error => options.logger.warn("演员来源状态已重置", error));
         this.blacklist = options.blacklist;
         this.keywordRules = options.runtimeServices.keywordRules;
         this.sleep = options.sleep ?? sleep;
@@ -37,7 +38,7 @@ export class TaskExecutionService {
         this.window = options.window;
         this.notifications = options.notifications;
         this.storageQueue = options.storageQueue ?? new StorageQueue(options.logger);
-        this.singleTaskKey = "checkNewActressActorFilterCar";
+        this.singleTaskKey = ACTRESS_SCAN_LOCK;
         /** @type {any} */ this.taskConfig = null;
         this.lastCheckFavoriteActressTimeKey = "jhs_time_checkFavoriteActress";
         this.lastCheckBlacklistTimeKey = "jhs_time_checkBlacklist";
@@ -163,7 +164,7 @@ export class TaskExecutionService {
         if (this.activeTasks.has(name)) status = "running";
         else if (state.pending && now < nextAt) status = "pending";
         else if (null == storedNext || now >= nextAt) status = "due";
-        return { name, ready: this.getHostListPageFlag() !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, unavailableCount: name === "newVideo" && this.javDbUrl ? this.sourceHealth.list(this.javDbUrl).length : 0, pendingUntil: state.pending ? nextAt : null };
+        return { name, ready: this.getHostListPageFlag() !== false, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, unavailableCount: name === "newVideo" ? this.sourceHealth.list(this.javDbUrl || this.getConfiguredSiteOrigin("javDbBtn")).length : 0, pendingUntil: state.pending ? nextAt : null };
     }
     /** @param {string} name @param {string} phase */
     async emitTaskStatus(name, phase) {
@@ -374,7 +375,7 @@ export class TaskExecutionService {
             } else {
                 let items = await this.getRuntimeService("state").getBlacklist();
                 items = items.sort(((/** @type {TaskRecord} */ left, /** @type {TaskRecord} */ right) => left.createTime < right.createTime ? 1 : left.createTime > right.createTime ? -1 : 0));
-                const eligible = [], currentHostname = new URL(this.window.location.href).hostname;
+                const eligible = [], current = new URL(this.window.location.href), activeSite = await this.resolveBlacklistSite(current.href);
                 for (const item of items) {
                     let itemUrl;
                     try {
@@ -383,25 +384,25 @@ export class TaskExecutionService {
                         result.parseFailed++, this.logger.error("黑名单地址无效:", item.url, error);
                         continue;
                     }
-                    if (currentHostname !== itemUrl.hostname) {
+                    const site = await this.resolveBlacklistSite(itemUrl.href);
+                    if (site && site !== activeSite) {
                         result.skippedHost++;
                         continue;
                     }
                     if (!force && item.checkTime && this.isUnnecessaryCheck(item.checkTime, interval)) result.skippedInterval++;
                     else if (shouldSkipStopped(item.lastPublishTime, rule)) result.skippedStopped++;
                     else {
-                        const site = await this.resolveBlacklistSite(itemUrl.href);
-                        site ? eligible.push({ item, site }) : (result.parseFailed++, this.logger.error(`不支持的黑名单来源站点: ${itemUrl.hostname}`));
+                        site ? eligible.push({ item, site, target: new URL(itemUrl.pathname + itemUrl.search, current.origin).href }) : (result.parseFailed++, this.logger.error(`不支持的黑名单来源站点: ${itemUrl.hostname}`));
                     }
                 }
                 this.logger.html(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
                 try {
                     await this.limitConcurrency(eligible, concurrency, sleep, (async (/** @type {TaskRecord} */ entry) => {
-                        const {item, site} = entry;
+                        const {item, site, target} = entry;
                         const {starId, name, url} = item;
                         let responseText;
                         try {
-                            this.logger.log("正在检屏黑名单演员:", name, url), this.jquery("#checkBlacklistMsg").text(`正在检测：${name}`), responseText = await this.requestHostPage(url, site);
+                            this.logger.log("正在检屏黑名单演员:", name, url), this.jquery("#checkBlacklistMsg").text(`正在检测：${name}`), responseText = await this.requestHostPage(target, site);
                         } catch (error) {
                             result.networkFailed++;
                             if (this.isNetworkBlocked(error)) throw error;
@@ -522,7 +523,7 @@ export class TaskExecutionService {
     }
     async checkNewVideo(force = !1) {
         await this.ensureReady();
-        const result = this.createTaskResult();
+        const result = this.createTaskResult({ skippedUnreliable: 0 });
         if (!await this.shouldStartTask("newVideo", force)) return this.logger.debug("检测新作品未到整批执行时间"), result;
         this.beginTaskAttempt("newVideo"), result.attempted = !0;
         return this.withActiveTask("newVideo", async () => {
@@ -544,7 +545,7 @@ export class TaskExecutionService {
                     },
                 });
                 Object.assign(result, {
-                    success: scan.success, parseFailed: scan.parseFailed, networkFailed: scan.networkFailed, unavailable: scan.unavailable || 0, skippedUnavailable: scan.skippedUnavailable || 0,
+                    success: scan.success, parseFailed: scan.parseFailed, networkFailed: scan.networkFailed, skippedUnreliable: scan.skippedUnreliable, unavailable: scan.unavailable || 0, skippedUnavailable: scan.skippedUnavailable || 0,
                     aborted: scan.aborted, skippedInterval: scan.skippedInterval, skippedStopped: scan.skippedStopped,
                     fatal: scan.fatal,
                 });
@@ -611,7 +612,7 @@ export class TaskExecutionService {
     }
     /** @param {TaskResult} result @param {string} [prefix] */
     renderCheckResult(result, prefix = "检测结束") {
-        const message = `${prefix}：成功 ${result.success}，解析/存储失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}${result.aborted ? `，未执行 ${result.aborted}` : ""}`;
+        const message = `${prefix}：成功 ${result.success}，解析/存储失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，番号待确认 ${result.skippedUnreliable ?? 0}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}${result.aborted ? `，未执行 ${result.aborted}` : ""}`;
         this.jquery("#checkNewVideoMsg").text(message), this.logger.log(message);
     }
     /** Read every source identity before any item may be filtered or persisted. @param {any[]} items */
@@ -688,7 +689,7 @@ export class TaskExecutionService {
         }
         const publishTimes = items.map((/** @type {TaskRecord} */ item) => item.publishTime).filter(Boolean), candidates = items.filter((/** @type {TaskRecord} */ item) => {
             if (!item.carNum || blacklistSet.has(item.carNum)) return false;
-            return !titleKeywords.some((/** @type {string} */ keyword) => item.title?.includes(keyword) || item.carNum.includes(keyword));
+            return !findMatchedTitleKeyword(titleKeywords, item.title || "", item.carNum);
         }).map((/** @type {TaskRecord} */ item) => ({
             carNum: item.carNum, coverUrl: item.coverUrl || "", title: item.title || "", publishTime: item.publishTime || "",
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",

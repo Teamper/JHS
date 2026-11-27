@@ -79,4 +79,3 @@ export function parseDisabledPlugins(serialized) {
         return [];
     }
 }
-// @ts-check

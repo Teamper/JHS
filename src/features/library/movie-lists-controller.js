@@ -156,8 +156,9 @@ export class MovieListsController {
             end:() => { closed = true; scope.dispose(); }}); }
         catch (error) { scope.dispose(); throw error; }
         /** @type {any[]} */ let selectedMovies = [];
+        /** @type {Array<{carNum:string,reason:string}>} */ let skippedMovies = [];
         /** @type {any[]} */ let lists = [];
-        /** @type {Map<string,{label:HTMLLabelElement,input:HTMLInputElement,text:HTMLElement}>} */ const rows = new Map();
+        /** @type {Map<string,{label:HTMLLabelElement,input:HTMLInputElement,text:HTMLAnchorElement}>} */ const rows = new Map();
         /** @type {Set<string>} */ const selectedLists = new Set();
         let generation = 0, directoryGeneration = 0, busy = false;
         const filter = () => { for (const [key, row] of rows) row.label.hidden = !lists.find(list => list.id === key)?.name.toLowerCase().includes(search.value.trim().toLowerCase()); };
@@ -183,8 +184,9 @@ export class MovieListsController {
                     status.textContent = "登录 JavDB 后可查看和管理当前账号的清单";
                     return;
                 }
-                try { selectedMovies = movies.length ? this.service.normalizeMovies(movies, access.origin) : []; }
-                catch (error) { selectedMovies = []; status.className = "jhs-field-error"; status.textContent = /** @type {Error} */ (error).message; }
+                const partition = this.service.partitionMovies(movies, access.origin);
+                selectedMovies = partition.movies;
+                skippedMovies = partition.skipped;
                 movieSelect.replaceChildren();
                 for (const movie of selectedMovies) { const option = this.document.createElement("option"); option.value = movie.videoId; option.textContent = movie.carNum; movieSelect.append(option); }
                 movieSelect.disabled = !selectedMovies.length;
@@ -194,7 +196,7 @@ export class MovieListsController {
                     if (signIn) refreshAccount.hidden = accountControls.hidden = false;
                     status.className = "";
                     const summary = movies.length ? `已选 ${selectedMovies.length} 部影片` : `${lists.length} 个清单`;
-                    status.textContent = `${access.account?.label || "账号未核对"}。${access.reason || summary}${movies.length && !selectedMovies.length ? "。所选影片缺少当前 JavDB 链接，成员操作保持只读" : ""}`;
+                    status.textContent = `${access.account?.label || "账号未核对"}。${access.reason || summary}${skippedMovies.length ? `，已跳过 ${skippedMovies.length} 部来源不匹配的影片` : ""}`;
                 }
             } catch (error) {
                 if (scope.disposed || current !== generation) return;
@@ -214,7 +216,9 @@ export class MovieListsController {
             for (const list of lists) {
                 let row = rows.get(list.id);
                 if (!row) {
-                    const label = this.document.createElement("label"), input = this.document.createElement("input"), text = this.document.createElement("span");
+                    const label = this.document.createElement("label"), input = this.document.createElement("input"), text = this.document.createElement("a");
+                    text.href = new URL("/lists/" + encodeURIComponent(list.id), requested.origin).href;
+                    text.target = "_blank"; text.rel = "noopener noreferrer";
                     input.type = "checkbox";
                     input.hidden = !movies.length;
                     input.className = "jhs-checkbox";
@@ -255,9 +259,25 @@ export class MovieListsController {
                 } catch (error) { if (!scope.disposed) status.textContent = /** @type {Error} */ (error).message; }
                 finally { busy = false; if (!scope.disposed) { confirm.disabled = false; await Promise.all([refreshTasks(),loadDirectory()]); } }
             });
+            for (const movie of skippedMovies) {
+                const item = this.document.createElement("li");
+                item.setAttribute("data-jhs-privacy-kind", "code");
+                item.textContent = movie.carNum + " · 跳过 · " + movie.reason;
+                range.append(item);
+            }
             preview.replaceChildren(summary,range,confirm);
             preview.hidden = false;
             confirm.focus();
+        }, accountControls);
+        button("清除已完成记录", async () => {
+            const fingerprint = access?.account?.fingerprint;
+            if (!fingerprint) return;
+            const removed = await this.service.clearCompleted(fingerprint, scope);
+            if (scope.disposed) return;
+            taskArea.replaceChildren();
+            taskViews.clear();
+            await refreshTasks();
+            status.textContent = "已清除 " + removed + " 条完成记录";
         }, accountControls);
         accountControls.prepend(search, ...(movies.length ? [movieSelect, mode] : []));
         const signIn = login ? button("登录 JavDB", async () => {

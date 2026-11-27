@@ -1,11 +1,11 @@
 // @ts-check
 
-import { calcMagnetScore, getMagnetQualitySignals } from "../../core/magnet-quality.js";
+import { calcMagnetScore, getMagnetQualitySignals, magnetGrade } from "../../core/magnet-quality.js";
 
 /** @param {unknown} value */
 export function magnetSizeBytes(value) {
     if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
-    const match = String(value || "").trim().match(/^(\d+(?:\.\d+)?)\s*([KMGTPE]?)(I?B|BYTES?)$/i);
+    const match = String(value || "").trim().match(/^(\d+(?:\.\d+)?)\s*([KMGTPE]?)(I?B|BYTES?)(?=\s*(?:[,，]|$))/i);
     if (!match) return null;
     const power = " KMGTPE".indexOf(match[2].toUpperCase());
     return Number(match[1]) * (/^I/i.test(match[3]) ? 1024 : 1000) ** Math.max(0, power);
@@ -46,7 +46,7 @@ export class MagnetResultsView {
         /** @type {Record<string, any>[]} */ this.records = [];
         /** @type {Map<string, any>} */ this.rows = new Map();
         this.root = jquery('<div class="jhs-magnet-view"></div>').appendTo(panel);
-        const controls = jquery('<div class="jhs-magnet-controls"></div>').appendTo(this.root);
+        const controls = jquery('<div class="jhs-toolbar jhs-magnet-controls"></div>').appendTo(this.root);
         this.sort = "quality";
         const sorting = jquery('<div role="group" aria-label="磁力排序"></div>').appendTo(controls);
         for (const [value, label] of [["quality", "质量"], ["seeders", "做种数"], ["date", "最新"], ["size-desc", "大小降序"], ["size-asc", "大小升序"]]) {
@@ -92,7 +92,7 @@ export class MagnetResultsView {
                 this.rows.set(key, row);
             }
             const score = record._score.total;
-            row.find(".magnet-score").text(`${score >= 80 ? "高" : score >= 60 ? "中" : "低"} ${score}`)
+            row.find(".magnet-score").text(`${magnetGrade(score)} ${score}`)
                 .attr("title", `做种 ${record._score.seeders}/35 · 分辨率 ${record._score.resolution}/25 · 字幕 ${record._score.subtitle}/20 · 新鲜度 ${record._score.freshness}/15 · 完整性 ${record._score.completeness}/5`);
             row.find(".magnet-title a").attr("href", record.magnet).text(record.title);
             row.find(".magnet-info").text(`大小 ${record.size || "未知"} · 做种 ${record.seeders ?? "—"} · 日期 ${record.date || "未知"}`);

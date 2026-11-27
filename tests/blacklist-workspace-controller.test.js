@@ -101,7 +101,7 @@ describe("BlacklistWorkspaceController", () => {
 
     it("uses DOM text for imported names and disables non-HTTP(S) actor links", () => {
         const { controller, dom } = createWorkspace();
-        const formatter = controller.getColumns()[0].formatter;
+        const formatter = controller.getColumns().find(column => column.field === 'name').formatter;
         const link = formatter({ getData: () => ({ name: '<img id="injected">', url: "javascript:alert(1)" }) });
 
         expect(link.tagName).toBe("A");

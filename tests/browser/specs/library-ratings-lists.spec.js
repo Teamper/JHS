@@ -123,8 +123,12 @@ for (const theme of ["light","dark"]) {
         await expect(control).toContainText("未评分");
         await page.keyboard.press("Escape");
         await expect(control).toHaveCount(0);
-        await expect(page.getByRole("button",{name:"JavDB 清单",exact:true})).toBeVisible();
-        await page.locator(".jhs-detail-extra-actions").screenshot({path:info.outputPath("detail-rating.png")});
+        await openDetailEnhancements(page);
+        await expect(page.getByRole("menuitem",{name:"JavDB 清单",exact:true})).toBeVisible();
+        await page.keyboard.press("Escape");
+        const actionBar = page.locator(detail === "fc2" ? ".jhs-fc2-workspace .jhs-detail-extra-actions" : ".jhs-detail-extra-actions");
+        await expect(actionBar).toHaveCount(1);
+        await actionBar.screenshot({path:info.outputPath("detail-rating.png")});
         expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth+1)).toBe(true);
         expect(errors).toEqual([]);
     });

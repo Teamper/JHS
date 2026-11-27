@@ -73,7 +73,7 @@ export class ListController {
         });
         this.contextMenuController = new ListContextMenuController({
             hostAdapter: this.hostAdapter, list: this.legacyPlugin, state: this.state,
-            ui: options.ui, notifications: options.notifications, scope: this.scope, diagnostics: options.diagnostics,
+            ui: options.ui, notifications: options.notifications, scope: this.scope, diagnostics: options.diagnostics, settings: this.settings,
         });
         this.controllers.contextMenu = this.contextMenuController;
         this.detachContextMenuAdapter = this.scope.addCleanup(() => {
@@ -267,6 +267,10 @@ export class ListController {
         if (typeof this.legacyPlugin.beginQuickFilterTransition === "function") {
             this.legacyPlugin.beginQuickFilterTransition(this.activeFilter);
             return this.listRefreshController.request({ reason: "quick-filter", visibilityOnly: true })
+                .then(async result => {
+                    if (result && !this.scope.disposed) await this.busImageLayout?.logImageHeightsByRow?.();
+                    return result;
+                })
                 .catch((error) => { this.logger.error("列表筛选刷新失败", error); return false; });
         }
         return this.legacyPlugin.setQuickFilter?.(this.activeFilter, { syncUi: false });

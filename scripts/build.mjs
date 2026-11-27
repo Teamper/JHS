@@ -67,7 +67,7 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
     }]
   });
   const rawBundle = buildResult.outputFiles[0].text.trimStart().split(/\r?\n/).map((line) => line.trimEnd()).join("\n");
-  const packed = packStaticResources ? await packResources(rawBundle, resourceRegistry) : null;
+  const packed = packStaticResources ? await packResources(rawBundle, resourceRegistry, { internRepeatedText: true }) : null;
   const bundledOutput = transformBundle(packed?.code ?? rawBundle);
   const decoderLicense = packed?.license ? `/* ${packed.license} */\n\n` : "";
   const output = `${metadata}\n\n/* ${ICON_LICENSE} */\n\n${decoderLicense}${bundledOutput}`;

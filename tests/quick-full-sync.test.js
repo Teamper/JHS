@@ -23,7 +23,7 @@ describe("Quick ↔ Full settings share one key", () => {
         const { dom, jq, registry } = createHarness({});
         vi.stubGlobal("$", jq);
         vi.stubGlobal("document", dom.window.document);
-        const list = buildQuickSettingsHtml(registry);
+        const list = buildQuickSettingsHtml(registry, { jquery: jq });
         expect(list.find('[data-jhs-setting="enableLoadScreenShot"]')).toHaveLength(1);
         expect(list.find('[data-jhs-setting="enablePreviewVideo"]')).toHaveLength(1);
         expect(list.find('[data-jhs-setting="enableLoadPreviewVideo"]')).toHaveLength(1);
@@ -39,7 +39,7 @@ describe("Quick ↔ Full settings share one key", () => {
         await settings.load();
 
         const quickRoot = jq("#quick");
-        quickRoot.append(buildQuickSettingsHtml(registry));
+        quickRoot.append(buildQuickSettingsHtml(registry, { jquery: jq }));
         bindSettingRows(quickRoot, registry.list({ surfaces: ["quick"] }), { settings });
         const quickToggle = quickRoot.find('[data-jhs-setting="enableLoadScreenShot"] input');
         expect(quickToggle.is(":checked")).toBe(false);
@@ -50,7 +50,7 @@ describe("Quick ↔ Full settings share one key", () => {
         // 完整设置使用同一 descriptor：同一 snapshot 值
         const fullDescriptors = registry.list({ surfaces: ["full"] }).filter((descriptor) => (descriptor.effect || "live") === "live");
         const fullRoot = jq("#full");
-        fullDescriptors.forEach((descriptor) => { const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue }); fullRoot.append(row); });
+        fullDescriptors.forEach((descriptor) => { const { row } = renderSettingRow(descriptor, { jquery: jq, value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue }); fullRoot.append(row); });
         bindSettingRows(fullRoot, fullDescriptors, { settings });
         expect(fullRoot.find('[data-jhs-setting="enableLoadScreenShot"] input').is(":checked")).toBe(true);
         expect(fullRoot.find('[data-jhs-setting="enableScreenSvg"] input').is(":checked")).toBe(true);
@@ -62,7 +62,7 @@ describe("Quick ↔ Full settings share one key", () => {
         vi.stubGlobal("document", dom.window.document);
         await settings.load();
         const quickRoot = jq("#quick");
-        quickRoot.append(buildQuickSettingsHtml(registry));
+        quickRoot.append(buildQuickSettingsHtml(registry, { jquery: jq }));
         bindSettingRows(quickRoot, registry.list({ surfaces: ["quick"] }), { settings });
         const preview = quickRoot.find('[data-jhs-setting="enablePreviewVideo"] input');
         const dmm = quickRoot.find('[data-jhs-setting="enableLoadPreviewVideo"] input');
@@ -92,8 +92,8 @@ describe("Quick ↔ Full reactive binding", () => {
         vi.stubGlobal("$", jq);
         vi.stubGlobal("document", dom.window.document);
         const descriptors = registry.list({ surfaces: [ "quick" ] });
-        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry));
-        const fullRoot = jq("#full").append(buildQuickSettingsHtml(registry));
+        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry, { jquery: jq }));
+        const fullRoot = jq("#full").append(buildQuickSettingsHtml(registry, { jquery: jq }));
         const quickBinding = bindSettingRows(quickRoot, descriptors, { settings });
         const fullBinding = bindSettingRows(fullRoot, descriptors, { settings });
         return { ...harness, quickRoot, fullRoot, descriptors, quickBinding, fullBinding };
@@ -127,12 +127,12 @@ describe("Quick ↔ Full reactive binding", () => {
         vi.stubGlobal("document", jq("body")[0].ownerDocument);
         await settings.load();
         const descriptors = registry.list({ surfaces: [ "quick" ] });
-        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry));
+        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry, { jquery: jq }));
         const quick = bindSettingRows(quickRoot, descriptors, { settings });
         const quickInput = quickRoot.find('[data-jhs-setting="enableLoadScreenShot"] input');
         quickInput.prop("checked", true).trigger("change");
         // Do not await the write: a full surface opened immediately must see the intent.
-        const fullRoot = jq("#full").append(buildQuickSettingsHtml(registry));
+        const fullRoot = jq("#full").append(buildQuickSettingsHtml(registry, { jquery: jq }));
         const full = bindSettingRows(fullRoot, descriptors, { settings });
         expect(fullRoot.find('[data-jhs-setting="enableLoadScreenShot"] input').is(":checked")).toBe(true);
         await Promise.all([ quick.flush(), full.flush() ]);
@@ -150,8 +150,8 @@ describe("Quick ↔ Full reactive binding", () => {
         });
         await settings.load();
         const descriptors = registry.list({ surfaces: [ "quick" ] });
-        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry));
-        const fullRoot = jq("#full").append(buildQuickSettingsHtml(registry));
+        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry, { jquery: jq }));
+        const fullRoot = jq("#full").append(buildQuickSettingsHtml(registry, { jquery: jq }));
         const quick = bindSettingRows(quickRoot, descriptors, { settings });
         const full = bindSettingRows(fullRoot, descriptors, { settings });
         quickRoot.find('[data-jhs-setting="enableLoadScreenShot"] input').prop("checked", true).trigger("change");
@@ -167,7 +167,7 @@ describe("Quick ↔ Full reactive binding", () => {
         vi.stubGlobal("document", dom.window.document);
         await settings.load();
         const descriptors = registry.list({ surfaces: [ "quick" ] });
-        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry));
+        const quickRoot = jq("#quick").append(buildQuickSettingsHtml(registry, { jquery: jq }));
         const binding = bindSettingRows(quickRoot, descriptors, { settings });
         const input = quickRoot.find('[data-jhs-setting="enableLoadScreenShot"] input');
         binding.dispose();

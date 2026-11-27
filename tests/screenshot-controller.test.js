@@ -84,6 +84,19 @@ describe("ScreenshotController", () => {
         expect(ui.openImageViewer).toHaveBeenCalledWith(tile, { imageKind:"contact-sheet", trigger:tile.querySelector('button'), owner: tile, scope: controller.scope });
     });
 
+    it("offers on-demand automatic screenshots without a native thumbnail host", async () => {
+        const resolve = vi.fn(async () => [{ url: "https://img.javstore.net/preview.jpg" }]);
+        const { controller, dom, firstTile, gallery, scope } = createHarness({ resolve });
+        firstTile.remove();
+        controller.start();
+        expect(resolve).not.toHaveBeenCalled();
+        gallery.querySelector(".jhs-screenshot-load").click();
+        await vi.waitFor(() => expect(gallery.querySelector(".jhs-screenshot-open img")?.src).toBe("https://img.javstore.net/preview.jpg"));
+        expect(resolve).toHaveBeenCalledOnce();
+        scope.dispose();
+        dom.window.close();
+    });
+
     it("keeps the JavBus screenshot out of the native gallery and opens its own viewer", async () => {
         const { dom, gallery, firstTile, controller, ui } = createHarness({ site: "javbus", resolve: vi.fn(async () => [{ url: "https://img.javstore.net/preview.jpg" }]) });
         firstTile.href = "https://example.com/native-1.jpg";

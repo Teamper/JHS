@@ -104,7 +104,7 @@ function historyHarness(patch) {
 }
 describe("history and detail action ownership",()=>{
     it.each(["closed", "replaced", "view"])("keeps a committed history edit successful after parent changes (%s)",async change=>{
-        const pending=deferred(), patch=vi.fn(()=>pending.promise), harness=historyHarness(patch);await harness.open();
+        const pending=deferred(), patch=vi.fn(()=>pending.promise), harness=historyHarness(patch);const root=await harness.open();root.find("#edit-remark").val("draft");
         const save=harness.options.btn2(1);await harness.options.btn2(1);expect(patch).toHaveBeenCalledOnce();const replacement={setData:vi.fn()};if(change==="closed"){harness.controller.tableObj=null;harness.controller.historyDialogGeneration++;}else if(change==="replaced")harness.controller.tableObj=replacement;else harness.controller.historyViewGeneration++;
         pending.resolve();await save;expect(harness.errors).not.toHaveBeenCalled();expect(harness.close).toHaveBeenCalledWith(1);expect(replacement.setData).not.toHaveBeenCalled();
     });

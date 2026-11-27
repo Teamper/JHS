@@ -4,7 +4,7 @@ import { L } from "../../core/constants.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { waitForPreviewReady } from "../../core/media-preview-session.js";
 import { safePlay } from "../../core/feature-helpers.js";
-import { Z, canUseDmmPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
+import { Z, canUseDmmPreview, fetchDmmPreviewIfEnabled, invalidateDmmPreview, isPreviewEnabled } from "../../services/preview-service.js";
 import { getIcon } from "../../core/icons.js";
 
 export const JAVBUS_PREVIEW_STYLES = `
@@ -101,8 +101,8 @@ export class JavBusPreviewController {
         const $ = this.ui.jquery, galleryElement = this.hostAdapter.locateNativeGallery?.();
         if (!galleryElement) return;
         this.mounted = true;
-        const gallery = $(galleryElement), imageSource = gallery.find(".sample-box .photo-frame img").first().attr("src");
-        const button = $(`<button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65"><div class="photo-frame"><img class="video-cover" alt=""><span class="play-icon jhs-play-overlay" aria-hidden="true">${getIcon("play")}</span></div></button>`);
+        const gallery = $(galleryElement), imageSource = gallery.find(".sample-box .photo-frame img").first().attr("src") || $(".bigImage img").first().attr("src");
+        const button = $(`<button type="button" class="jhs-btn preview-video-container sample-box"><div class="photo-frame"><img class="video-cover" alt=""><span class="play-icon jhs-play-overlay" aria-hidden="true">${getIcon("play")}</span></div></button>`);
         if (imageSource) button.find("img.video-cover").attr("src", imageSource);
         button.on("click.jhsBusPreview", (/** @type {MouseEvent} */ event) => {
             event.preventDefault();
@@ -126,7 +126,10 @@ export class JavBusPreviewController {
                 if (!carNum) throw new Error("番号不可用");
                 const { sources, error } = await fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, session.scope, this.settings.snapshot(), this.logger);
                 if (generation !== this.generation || this.scope.disposed || !isPreviewEnabled(this.settings.snapshot())) return;
-                if (!sources || !Object.keys(sources).length) throw new Error(error?.code === "REGION_BLOCKED" ? "视频访问受限" : "未找到可用视频");
+                if (!sources || !Object.keys(sources).length) {
+                    this.showTrailerLink(carNum);
+                    throw new Error(error?.code === "REGION_BLOCKED" ? "视频访问受限" : "未找到 DMM 视频，可尝试 JavTrailers");
+                }
                 await this.createVideoPlayerAndControls(sources, modal.find(".bus-preview-modal-content"));
                 if (!this.isActive(session)) return;
                 video = modal.find("video")[0];
@@ -150,13 +153,39 @@ export class JavBusPreviewController {
                 if (!ready) throw new Error("视频源暂不可用，请重试");
                 this.seekVideo(video, this.qualityTime); this.qualityTime = null;
             }
-            if (await this.playVideo(video, session)) this.confirmedSource = video.querySelector("source").src;
+            if (!await this.playVideo(video, session, null, false) && this.isActive(session)) {
+                const carNum = this.hostAdapter.readMovieRef?.()?.carNum;
+                if (!carNum) return;
+                invalidateDmmPreview(carNum, this.storage);
+                const result = await fetchDmmPreviewIfEnabled(carNum, this.storage, this.movie, session.scope, this.settings.snapshot(), this.logger);
+                if (!this.isActive(session)) return;
+                if (result.sources && Object.keys(result.sources).length) {
+                    await this.createVideoPlayerAndControls(result.sources, modal.find(".bus-preview-modal-content"));
+                    video = modal.find("video")[0];
+                    if (await this.playVideo(video, session)) {
+                        this.confirmedSource = video.querySelector("source").src;
+                        return;
+                    }
+                }
+                if (this.isActive(session)) { this.showTrailerLink(carNum); this.closeVideoModal(session); }
+            } else if (this.isActive(session)) this.confirmedSource = video.querySelector("source").src;
         } catch (error) {
             if (this.isActive(session)) this.ui.notifications?.error?.(error instanceof Error ? error.message : "视频预览失败，请重试");
             this.closeVideoModal(session);
         } finally {
             if (session.index === null) this.closeVideoModal(session);
         }
+    }
+
+    /** @param {string} carNum */
+    showTrailerLink(carNum) {
+        const $ = this.ui.jquery;
+        const root = $(this.hostAdapter.locateNativeGallery?.());
+        if (root.find(".jhs-trailer-link").length) return;
+        const origin = this.movie.externalSiteOrigin?.("javTrailersBtn", this.settings.snapshot()) || "https://javtrailers.com";
+        const url = new URL("/search/" + encodeURIComponent(carNum), origin);
+        url.searchParams.set("handle", "1");
+        root.prepend($('<a class="jhs-btn jhs-btn--secondary jhs-trailer-link" target="_blank" rel="noopener noreferrer">JavTrailers 预览</a>').attr("href", url.href));
     }
 
     /** @param {NonNullable<JavBusPreviewController["session"]>} session */
@@ -254,6 +283,16 @@ export class JavBusPreviewController {
             if (!sourceUrl) continue;
             const active = quality === item.quality, button = $('<button type="button" class="jhs-btn jhs-video-quality-btn"></button>');
             button.attr({ "data-quality": item.quality, "data-video-src": sourceUrl, "aria-pressed": String(active) }).data("label", item.text).text(item.text).toggleClass("active", active);
+            toolbar.append(button);
+        }
+        for (const [text, action] of /** @type {Array<[string,()=>void]>} */ ([
+            ["后退 10 秒", () => this.seekVideo(media, Math.max(0, media.currentTime - 10))],
+            ["前进 10 秒", () => this.seekVideo(media, media.currentTime + 10)],
+            ["屏蔽", () => $(this.document).find("#filterBtn").trigger("click")],
+            ["收藏", () => $(this.document).find("#favoriteBtn").trigger("click")],
+        ])) {
+            const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm"></button>').text(text);
+            scope.listen(button[0], "click", action);
             toolbar.append(button);
         }
         scope.listen(toolbar[0], "click", async (event) => {

@@ -54,6 +54,41 @@ describe("same-origin sync polling", () => {
         expect(dav.client.ensureFolder).toHaveBeenCalledTimes(3);
     });
 
+    it("keeps Android sync idle after a background online event and publishes on resume", async () => {
+        const dav = memoryDav(), mobile = await syncReplica(dav);
+        const owner = new LifecycleScope("mobile-sync"), timers = recordTimers(mobile.service);
+        const document = Object.assign(new EventTarget(), { hidden: false });
+        const window = Object.assign(new EventTarget(), mobile.service.window);
+        let active = true;
+        mobile.service.window = window;
+        mobile.service.start(owner, document, () => active && !document.hidden);
+        try {
+            await mobile.service.check({ scheduled: true });
+            await mobile.state.patch("POLL-1", { favorite: true });
+            active = false;
+            document.hidden = true;
+            mobile.service.cancel();
+            const beforeOnline = timers.length;
+            window.dispatchEvent(new Event("online"));
+            await mobile.service.reschedule();
+            expect(timers).toHaveLength(beforeOnline);
+            expect(mobile.service.nextDueAt).toBe(0);
+
+            mobile.advance(5000);
+            await mobile.service.check({ scheduled: true, force: true });
+            expect(dav.client.writeSyncFile).toHaveBeenCalledOnce();
+            expect((await mobile.service.getStatus()).pendingChanges).toBeGreaterThan(0);
+
+            active = true;
+            document.hidden = false;
+            document.dispatchEvent(new Event("visibilitychange"));
+            expect(timers.at(-1)).toBe(0);
+            await mobile.service.check({ scheduled: true, force: true });
+            expect(dav.client.writeSyncFile).toHaveBeenCalledTimes(2);
+            expect((await mobile.service.getStatus()).pendingChanges).toBe(0);
+        } finally { owner.dispose(); }
+    });
+
     it("does not skip a changed connection or bypass another tab's retry backoff", async () => {
         const dav = memoryDav(), a = await syncReplica(dav); await a.service.check({ scheduled: true });
         a.shared.revision = "updated";

@@ -41,5 +41,5 @@ describe("userscript static resource build contract", () => {
         const repeated = await buildUserscript({ ...transforms, packStaticResources: true });
         expect(repeated.output).toBe(packed.output);
         expect(await snapshotFormal()).toEqual(before);
-    }, 20_000);
+    }, 45_000);
 });

@@ -53,7 +53,7 @@ describe("Blacklist workspace combined filters", () => {
 
     it("returns safe DOM links for imported names and rejects non-HTTP(S) URLs", () => {
         const { controller, dom } = createWorkspace();
-        const formatter = controller.getColumns()[0].formatter, link = formatter({ getData: () => ({ name: '<img id="injected">', url: "javascript:alert(1)" }) });
+        const formatter = controller.getColumns().find(column => column.field === 'name').formatter, link = formatter({ getData: () => ({ name: '<img id="injected">', url: "javascript:alert(1)" }) });
         expect(link.tagName).toBe("A");
         expect(link.textContent).toBe('<img id="injected">');
         expect(link.querySelector("#injected")).toBeNull();

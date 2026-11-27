@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeywordRulesService } from "../src/services/keyword-rules-service.js";
 import { StorageMutationCoordinator } from "../src/core/storage-mutation-coordinator.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
+import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 import { TitleKeywordController } from "../src/features/library/title-keyword-controller.js";
 
 function setup({ site = "javdb", route = "detail", initial = {}, selection = "Movie title", saveKeyword } = {}) {
@@ -20,10 +22,10 @@ function setup({ site = "javdb", route = "detail", initial = {}, selection = "Mo
     Object.defineProperty(window, "getSelection", { configurable: true, value: () => ({ toString: () => selection }) });
     const confirm = vi.fn(), closePage = vi.fn(async () => true), emitted = vi.fn(async () => undefined), add = vi.fn(async () => undefined);
     const scope = new LifecycleScope("test:title-keyword");
-    const diagnostics = { recordError: vi.fn() }, notifications = { error: vi.fn() };
+    const diagnostics = { recordError: vi.fn() }, notifications = { error: vi.fn(), ok: vi.fn() };
     const ui = { confirm, jquery: value => ({ value }), closePage };
     const controller = new TitleKeywordController({
-        document, window, site, route, settings, saveKeyword: saveKeyword ?? add, events: { emit: emitted }, ui, notifications, scope, diagnostics,
+        document, window, host: site === "javbus" ? new JavBusHostAdapter(document, location) : new JavDbHostAdapter(document, location), route, settings, saveKeyword: saveKeyword ?? add, events: { emit: emitted }, ui, notifications, scope, diagnostics,
     });
     return { controller, scope, settings, host, confirm, closePage, emitted, add, diagnostics, notifications };
 }
@@ -58,6 +60,7 @@ describe("Library Feature title keyword controller", () => {
 
         await acceptAndDrain(test.confirm);
         expect(test.add).toHaveBeenCalledWith(`<img src=x onerror=alert(1)> ${"x".repeat(120 - "<img src=x onerror=alert(1)> ".length)}`);
+        expect(test.notifications.ok).toHaveBeenCalledWith("已添加屏蔽关键词");
         expect(test.emitted).toHaveBeenCalledWith("filter-rules-changed", { scope: "title-keyword" });
         expect(test.closePage).toHaveBeenCalledWith({ root: { value: title } });
         expect(test.diagnostics.recordError).not.toHaveBeenCalled();
@@ -102,12 +105,12 @@ describe("Library Feature title keyword controller", () => {
         expect(test.scope.snapshot()).toMatchObject({ listeners: 0, disposed: true });
     });
 
-    it("handles FC2 titles inserted into the JavDB page and excludes JavBus list headings", () => {
+    it("handles inserted FC2 titles and scopes JavBus list actions to card titles", () => {
         const javdb = setup({ site: "javdb", route: "list" });
         javdb.controller.start();
         const layer = document.createElement("div");
         layer.className = "layui-layer";
-        layer.innerHTML = '<h1><strong class="current-title">FC2 title</strong></h1>';
+        layer.innerHTML = '<h1 class="jhs-fc2-title"><strong class="current-title">FC2 title</strong></h1>';
         document.body.append(layer);
         layer.querySelector(".current-title").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
         expect(javdb.confirm).toHaveBeenCalledTimes(1);
@@ -115,7 +118,12 @@ describe("Library Feature title keyword controller", () => {
         javdb.scope.dispose();
 
         const javbusList = setup({ site: "javbus", route: "list" });
-        expect(javbusList.controller.start()).toBe(false);
+        expect(javbusList.controller.start()).toBe(true);
+        javbusList.host.querySelector(".title").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+        expect(javbusList.confirm).not.toHaveBeenCalled();
+        javbusList.host.innerHTML = '<span class="video-title">Card title</span>';
+        javbusList.host.firstElementChild.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+        expect(javbusList.confirm).toHaveBeenCalledOnce();
         javbusList.scope.dispose();
     });
 

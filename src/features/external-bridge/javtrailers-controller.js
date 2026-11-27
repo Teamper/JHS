@@ -54,7 +54,9 @@ export class JavTrailersController {
     bindPlaybackControls() {
         const container = this.document.querySelector(PLAYER_SELECTOR);
         if (container) this.scope.listen(container, "click", () => this.startPlaybackPreview());
-        this.scope.listen(this.window, "message", () => {
+        this.scope.listen(this.window, "message", event => {
+            const message = /** @type {MessageEvent} */ (event);
+            if (message.origin !== this.window.location.origin || message.source !== this.window && message.source !== this.window.parent || message.data?.type !== "jhs:trailer-seek") return;
             const element = this.document.querySelector(VIDEO_SELECTOR);
             if (!element || element.tagName !== "VIDEO") return;
             const video = /** @type {HTMLVideoElement} */ (element);
@@ -77,7 +79,7 @@ export class JavTrailersController {
                     if (currentVideo.currentTime >= 14 && currentVideo.currentTime < 16) currentVideo.currentTime += 2;
                 });
                 this.applyStyles(currentVideo, {
-                    position: "fixed", width: "100vw", height: "100vh", objectFit: "cover",
+                    position: "fixed", width: "100vw", height: "100vh", objectFit: "contain",
                     zIndex: String(JHS_Z_INDEX.debug),
                 });
                 const controls = this.document.querySelector(".vjs-control-bar");
@@ -88,7 +90,7 @@ export class JavTrailersController {
         this.waitFor(() => this.document.querySelector("#vjs_video_3 canvas"), (canvas) => {
             if (!canvas) return;
             this.applyStyles(/** @type {HTMLElement} */ (canvas), {
-                position: "fixed", width: "100vw", height: "100vh", objectFit: "cover",
+                position: "fixed", width: "100vw", height: "100vh", objectFit: "contain",
                 top: "0", right: "0", zIndex: String(JHS_Z_INDEX.debug - 1),
             });
         });

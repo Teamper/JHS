@@ -8,7 +8,7 @@ export const MAGNET_SOURCE_IDS = Object.freeze(["native-javdb", "native-javbus",
 /** @param {MagnetRecord} result @param {string} source */
 export function normalizeMagnetResult(result, source) {
     if (!result || !String(result.magnet || "").startsWith("magnet:")) return null;
-    return { title: String(result.title || ""), magnet: result.magnet, size: result.size || "", date: result.date || "", seeders: Number(result.seeders) || 0, leechers: Number(result.leechers) || 0, source, files: Array.isArray(result.files) ? result.files : [] };
+    return { title: String(result.title || ""), magnet: result.magnet, size: result.size || "", date: result.date || "", seeders: Number(result.seeders) || 0, leechers: Number(result.leechers) || 0, source, ...(typeof result.hasSubtitleTag === "boolean" && { hasSubtitleTag: result.hasSubtitleTag }), ...(typeof result.hasHdTag === "boolean" && { hasHdTag: result.hasHdTag }), files: Array.isArray(result.files) ? result.files : [] };
 }
 
 export function extractInfoHash(/** @type {string} */ magnet) {
@@ -44,7 +44,8 @@ export function deduplicateMagnetResults(/** @type {MagnetRecord[]} */ results) 
             return;
         }
         existing.sources = [...new Set([...existing.sources, ...(result.sources || [result.source])])];
-        for (const field of ["title", "size", "date", "seeders", "leechers"]) {
+        existing.seeders = Math.max(Number(existing.seeders) || 0, Number(result.seeders) || 0);
+        for (const field of ["title", "size", "date", "leechers"]) {
             if (!existing[field] && result[field]) existing[field] = result[field];
         }
         existing.files = [...new Set([...(existing.files || []), ...(result.files || [])])];
@@ -96,16 +97,25 @@ export function applyMagnetRules(/** @type {MagnetRecord} */ result, /** @type {
     return { ...result, tags: tags.map((rule => rule.name)), customTagWeight: tags.reduce(((sum, rule) => sum + (Number(rule.weight) || 0)), 0), hidden, filterPenalty: penalty, filteredReasons };
 }
 
-export function parseNativeMagnets(/** @type {Document | Element | any} */ root, /** @type {string} */ source) {
+/** @param {Document | Element} root @param {string} source */
+export function parseNativeMagnets(root, source) {
     /** @type {Map<string, MagnetRecord>} */
     const results = new Map();
-    $(root).find('a[href^="magnet:"],[data-clipboard-text^="magnet:"]').each(((/** @type {number} */ index, /** @type {Element} */ element) => {
-        const node = $(element), magnet = node.attr("href") || node.attr("data-clipboard-text");
-        if (!magnet) return;
-        const container = node.closest(".item, .magnet-name, tr, .panel-block"), title = container.find(".name, .magnet-name, .title").first().text().trim() || node.text().trim() || "本站磁力";
-        const result = normalizeMagnetResult({ title, magnet, size: container.find(".meta, .size").first().text().trim() }, source);
-        result && results.set(extractInfoHash(magnet) || magnet, result);
-    }));
+    for (const node of root.querySelectorAll('a[href^="magnet:"],[data-clipboard-text^="magnet:"]')) {
+        const magnet = node.getAttribute("data-clipboard-text") || node.getAttribute("href");
+        const row = node.closest(".item,tr,.panel-block") ?? node.parentElement;
+        if (!magnet || !row) continue;
+        const tags = [...row.querySelectorAll(".tag, td:first-child a:not(:first-child)")].map(tag => tag.textContent?.trim() ?? "");
+        const result = normalizeMagnetResult({
+            magnet, title: row.querySelector(".name, .magnet-name a, td:first-child a")?.textContent?.trim() || node.textContent?.trim() || "本站磁力",
+            size: row.querySelector(".meta,.size,td:nth-child(2)")?.textContent?.trim(),
+            date: row.querySelector(".time,.date,td:nth-child(3)")?.textContent?.trim(),
+            hasSubtitleTag: tags.some(text => text.includes("字幕")),
+            hasHdTag: tags.some(text => /高清|\bHD\b/i.test(text)),
+        }, source);
+        const key = extractInfoHash(magnet) || magnet;
+        if (result && !results.has(key)) results.set(key, result);
+    }
     return [...results.values()];
 }
 

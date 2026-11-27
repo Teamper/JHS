@@ -1,5 +1,4 @@
 // @ts-check
-import { getNowStr } from "../../core/ui-date-time.js";
 import { parseBooleanSetting } from "../../core/feature-helpers.js";
 
 import { getIcon } from "../../core/icons.js";
@@ -27,10 +26,10 @@ const snapshotPanels = new WeakMap();
 
 /** Keep a completed restore or import distinct from notification and reload failures. */
 /** @param {SettingsUiDependencies} dependencies @param {string} message */
-function finishCommittedDataChange(dependencies, message) {
+export function finishCommittedDataChange(dependencies, message) {
     const { notifications: show, logger: clog, window } = dependencies;
     try { show.ok(message); }
-    catch (error) { try { clog.warn("数据已写入，但完成提示失败", error); } catch { /* committed data wins */ } }
+    catch (error) { clog.warn("数据已写入，但完成提示失败", error); }
     try { window.setTimeout(() => window.location.reload(), 1e3); }
     catch (error) {
         try { clog.error("数据已写入，但自动刷新失败", error); } catch { /* committed data wins */ }
@@ -53,21 +52,21 @@ export async function renderNetworkPanel(diagnostics, dependencies) {
     }));
     const i = Object.entries(e);
     if (i.length) {
-        let t = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-center">状态</th><th class="is-center">失败次数</th><th class="is-center">操作</th></tr>';
+        let t = '<div class="jhs-table-scroll"><table class="jhs-data-table"><tr><th>域名</th><th class="is-center">状态</th><th class="is-center">失败次数</th><th class="is-center">操作</th></tr>';
         for (const [n, a] of i) {
             const i = "open" === a.state ? "熔断" : "half-open" === a.state ? "半开" : "正常", s = "open" === a.state ? `剩余${Math.ceil((Number(a.cooldownMs) - (Date.now() - Number(a.openTime))) / 1e3)}秒` : "";
             t += `<tr><td>${escapeHtml(n)}</td><td class="is-center">${i} ${s}</td><td class="is-center">${Number(a.failCount) || 0}</td><td class="is-center"><button type="button" class="jhs-btn jhs-btn--danger reset-breaker" data-domain="${escapeHtml(n)}">重置</button></td></tr>`;
         }
-        t += '</table>', $("#site-health-table").html(t);
+        t += '</table></div>', $("#site-health-table").html(t);
     } else $("#site-health-table").html('<p class="jhs-empty-note">暂无熔断记录</p>');
     const s = Object.entries(t).sort(((e, t) => t[1].count - e[1].count));
     if (s.length) {
-        let e = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-right">请求数</th><th class="is-right">错误数</th><th class="is-center">最后使用</th></tr>';
+        let e = '<div class="jhs-table-scroll"><table class="jhs-data-table"><tr><th>域名</th><th class="is-right">请求数</th><th class="is-right">错误数</th><th class="is-center">最后使用</th></tr>';
         for (const [t, n] of s) {
             const a = formatUiDateTime(n.lastUsed);
             e += `<tr><td>${escapeHtml(t)}</td><td class="is-right">${n.count}</td><td class="is-right ${n.errors > 0 ? "is-danger" : ""}">${n.errors}</td><td class="is-center">${a}</td></tr>`;
         }
-        e += '</table>', e += `<p class="jhs-caption">共 ${s.length} 个域名</p>`, $("#domain-stats-table").html(e);
+        e += '</table></div>', e += `<p class="jhs-caption">共 ${s.length} 个域名</p>`, $("#domain-stats-table").html(e);
     } else $("#domain-stats-table").html('<p class="jhs-empty-note">暂无统计数据</p>');
     $(".reset-breaker").off("click").on("click", ((/** @type {MouseEvent} */ e) => {
         const t = $(e.target).data("domain");
@@ -99,7 +98,7 @@ export async function renderSnapshotPanel(dependencies) {
     const generation = ++state.generation;
     const currentState = state;
     const active = () => dependencies.isActive?.() !== false && host.isConnected && currentState.generation === generation;
-    const e = await backup.getSnapshotList(), t = {
+    const e = (await backup.getSnapshotList()).sort((/** @type {any} */ left, /** @type {any} */ right) => String(right.createdAt || right.time || "").localeCompare(String(left.createdAt || left.time || ""))), t = {
         "manual": "手动创建",
         "auto-import": "导入前自动",
         "auto-repair": "修复前自动",
@@ -119,12 +118,12 @@ export async function renderSnapshotPanel(dependencies) {
         data: e,
         columnDefaults: { headerHozAlign: "center", hozAlign: "center" },
         columns: [
-            { title: "名称", field: "name", width: 200, headerSort: !1 },
-            { title: "来源", field: "source", width: 100, headerSort: !1, formatter: (/** @type {any} */ e) => t[/** @type {keyof typeof t} */ (e.getValue())] || e.getValue() },
-            { title: "时间", field: "time", width: 170, headerSort: !1 },
-            { title: "数据量", field: "itemCount", width: 80, headerSort: !1 },
+            { title: "名称", field: "name", minWidth: 124, widthGrow: 1, headerSort: !1 },
+            { title: "来源", field: "source", width: 92, headerSort: !1, formatter: (/** @type {any} */ e) => t[/** @type {keyof typeof t} */ (e.getValue())] || e.getValue() },
+            { title: "时间", field: "time", width: 154, headerSort: !1 },
+            { title: "数据量", field: "itemCount", width: 72, headerSort: !1 },
             {
-                title: "操作", minWidth: 220, headerSort: !1, formatter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {(callback: () => void) => void} */ a) => {
+                title: "操作", width: 172, headerSort: !1, formatter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {(callback: () => void) => void} */ a) => {
                     const i = e.getData();
                     return a((() => {
                         const t = e.getElement().querySelector(".snap-restore"), a = e.getElement().querySelector(".snap-download"), s = e.getElement().querySelector(".snap-delete");
@@ -139,7 +138,7 @@ export async function renderSnapshotPanel(dependencies) {
                                     try { clog.error(t); } catch { /* preserve the restore error */ }
                                     try { show.error("恢复失败，请重试"); } catch { /* preserve the restore error */ }
                                     return;
-                                } finally { try { e.close(); } catch (t) { try { clog.warn("恢复操作加载层关闭失败", t); } catch { /* committed data wins */ } } }
+                                } finally { try { e.close(); } catch (t) { clog.warn("恢复操作加载层关闭失败", t); } }
                                 if (active()) finishCommittedDataChange(dependencies, "已恢复，页面即将刷新");
                             }), null, { confirmText: "恢复", cancelText: "取消" });
                         })), a && a.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
@@ -162,7 +161,7 @@ export async function renderSnapshotPanel(dependencies) {
                                 }
                                 if (!active()) return;
                                 try { show.ok("已删除恢复点"); }
-                                catch (t) { try { clog.warn("快照已删除，但完成提示失败", t); } catch { /* committed deletion wins */ } }
+                                catch (t) { clog.warn("快照已删除，但完成提示失败", t); }
                                 try { await renderSnapshotPanel(dependencies); }
                                 catch (t) {
                                     try { clog.error("快照已删除，但列表刷新失败", t); } catch { /* committed deletion wins */ }
@@ -170,7 +169,7 @@ export async function renderSnapshotPanel(dependencies) {
                                 }
                             }), null, { confirmText: "删除", cancelText: "取消", tone: "danger" });
                         }));
-                    })), '<button type="button" class="jhs-btn jhs-btn--secondary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
+                    })), '<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger jhs-btn--sm snap-delete">删除</button>';
                 }
             }
         ]
@@ -179,17 +178,17 @@ export async function renderSnapshotPanel(dependencies) {
 }
 
 /** Show a data diff preview dialog before importing data. */
-/** @param {any} e @param {any} t @param {any} n @param {DialogHandle} dialog @param {SettingsUiDependencies} dependencies */
-export function showDiffPreview(e, t, n = null, dialog, dependencies) {
+/** @param {any} e @param {any} t @param {any} n @param {DialogHandle} dialog @param {SettingsUiDependencies} dependencies @param {((scope: LifecycleScope) => any) | null} [apply] */
+export function showDiffPreview(e, t, n = null, dialog, dependencies, apply = null) {
     if (dependencies.isActive?.() === false) return;
     const { backup, utilities: utils, notifications: show, logger: clog, domUi, window } = dependencies;
     const loading = () => domUi.loading();
     /** @type {Record<string, string>} */
-    const dataNames = { setting: "设置", car_list: "鉴定记录", favorite_actresses: "收藏演员", blacklist: "黑名单演员", blacklist_car_list: "屏蔽影片", filter_keyword_title: "影片屏蔽词", filter_keyword_review: "评论屏蔽词", highlighted_tags: "高亮标签", data_version: "数据版本" };
+    const dataNames = { setting: "设置", car_list: "鉴定记录", favorite_actresses: "收藏演员", blacklist: "黑名单演员", blacklist_car_list: "屏蔽影片", filter_keyword_title: "影片屏蔽词", filter_keyword_review: "评论屏蔽词", highlighted_tags: "高亮标签", activity_log: "操作记录", offline_history: "离线任务", new_video_decisions: "新作品决策", personal_ratings: "个人评分", data_version: "数据版本" };
     const a = e.summary, i = [];
     for (const [s, o] of Object.entries(e.stores)) {
         if ("unchanged" === o.status) continue;
-        const e = { store: s, status: o.status, oldCount: o.oldCount, newCount: o.newCount, added: o.added.length, removed: o.removed.length, modified: o.modified.length };
+        const e = { store: s, status: o.status, oldCount: o.oldCount, newCount: o.newCount, added: o.added.length, removed: o.removed.length, modified: Array.isArray(o.modified) ? o.modified.length : Object.keys(o.modified ?? {}).length };
         i.push(e);
     }
     let s = '<div class="jhs-dialog-content">';
@@ -200,7 +199,7 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
     s += `<div class="jhs-summary-card"><strong>${a.unchanged}</strong><span>无变化</span></div>`;
     s += '</div>';
     if (i.length > 0) {
-        s += '<div class="jhs-scroll-frame"><table class="jhs-data-table"><thead><tr><th>数据源</th><th>状态</th><th class="is-center">当前</th><th class="is-center">导入</th><th class="is-center">新增</th><th class="is-center">删除</th><th class="is-center">修改</th></tr></thead><tbody>';
+        s += '<div class="jhs-scroll-frame jhs-table-scroll"><table class="jhs-data-table"><thead><tr><th>数据源</th><th>状态</th><th class="is-center">当前</th><th class="is-center">导入</th><th class="is-center">新增</th><th class="is-center">删除</th><th class="is-center">修改</th></tr></thead><tbody>';
         const o = { added: "新增", removed: "缺失", modified: "变更", unchanged: "无变化" };
         for (const r of i) s += `<tr><td>${escapeHtml(dataNames[r.store] || "其他数据")}</td><td>${o[/** @type {keyof typeof o} */ (r.status)] || r.status}</td><td class="is-center">${r.oldCount}</td><td class="is-center">${r.newCount}</td><td class="is-center is-success">${r.added || "-"}</td><td class="is-center is-danger">${r.removed || "-"}</td><td class="is-center is-warning">${r.modified || "-"}</td></tr>`;
         s += '</tbody></table></div>';
@@ -223,7 +222,7 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
         scrollbar: false,
         ...(hasChanges ? { skin: "jhs-confirm-actions" } : {}),
         ui: { body: "scroll" },
-        btn: hasChanges ? ["取消", "导入"] : ["关闭"],
+        btn: hasChanges ? ["取消", apply ? "恢复" : "导入"] : ["关闭"],
         anim: -1,
         end: () => { index = null; scope.dispose(); },
         ...(hasChanges ? { btn2: async (/** @type {number} */ s) => {
@@ -234,19 +233,19 @@ export function showDiffPreview(e, t, n = null, dialog, dependencies) {
             const releaseLoading = scope.addCleanup(() => o.close());
             try {
                 if (scope.disposed || dependencies.isActive?.() === false) return;
-                if (!n && !t) return;
-                await backup.importData(n || t, { signal: scope.signal, assertActive: () => {
+                if (apply) await apply(scope);
+                else if (n || t) await backup.importData(n || t, { signal: scope.signal, assertActive: () => {
                     scope.assertActive();
                     if (dependencies.isActive?.() === false) throw new DOMException("导入已取消", "AbortError");
                 } });
             } catch (r) {
                 if (scope.disposed || dependencies.isActive?.() === false) return;
                 try { clog.error(r); } catch { /* preserve the import error */ }
-                try { show.error("数据导入失败，请检查文件"); } catch { /* preserve the import error */ }
+                try { show.error(apply && r instanceof Error ? r.message : "数据导入失败，请检查文件"); } catch { /* preserve the import error */ }
                 return;
-            } finally { busy = false; try { releaseLoading(); } catch (r) { try { clog.warn("导入操作加载层关闭失败", r); } catch { /* committed data wins */ } } }
+            } finally { busy = false; try { releaseLoading(); } catch (r) { clog.warn("导入操作加载层关闭失败", r); } }
             if (scope.disposed || dependencies.isActive?.() === false) return;
-            finishCommittedDataChange(dependencies, "已导入，页面即将刷新");
+            finishCommittedDataChange(dependencies, apply ? "已恢复，页面即将刷新" : "已导入，页面即将刷新");
         } } : {})
     });
     index = r;
@@ -357,24 +356,24 @@ export async function renderPluginMgmtPanel(diagnostics, settings, dependencies)
     if (featureTimings.length) {
         const activeFeatures = new Set(diagnosticSnapshot.activeFeatures);
         const sorted = featureTimings.sort((a, b) => Number(b[1]) - Number(a[1]));
-        let tHtml = '<table class="jhs-data-table"><tr><th>功能</th><th class="is-right">激活耗时(ms)</th><th class="is-center">状态</th></tr>';
+        let tHtml = '<div class="jhs-table-scroll"><table class="jhs-data-table"><tr><th>功能</th><th class="is-right">激活耗时(ms)</th><th class="is-center">状态</th></tr>';
         for (const [id, duration] of sorted) {
             const elapsed = Number(duration);
             const stateClass = elapsed > 500 ? "is-slow" : elapsed > 200 ? "is-warning" : "";
             tHtml += `<tr><td class="${stateClass}">${escapeHtml(id)}</td><td class="is-right ${stateClass}">${formatMs(elapsed)}</td><td class="is-center">${activeFeatures.has(id) ? "已激活" : "未激活"}</td></tr>`;
         }
-        tHtml += '</table><p class="jhs-caption">激活耗时包含异步依赖等待，不代表主线程执行时间。</p>';
+        tHtml += '</table></div><p class="jhs-caption">激活耗时包含异步依赖等待，不代表主线程执行时间。</p>';
         $("#plugin-timing-table").html(tHtml);
     } else {
         $("#plugin-timing-table").html('<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
     const errorLog = diagnosticSnapshot.errors;
     if (errorLog.length) {
-        let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>来源</th><th>阶段</th><th>错误信息</th></tr>';
+        let eHtml = '<div class="jhs-table-scroll"><table class="jhs-data-table"><tr><th>时间</th><th>来源</th><th>阶段</th><th>错误信息</th></tr>';
         for (const err of [...errorLog].reverse()) {
             eHtml += `<tr><td class="is-muted">${escapeHtml(String(err.timestamp || "").substring(11, 19))}</td><td>${escapeHtml(String(err.plugin || err.featureId || err.source || ""))}</td><td>${escapeHtml(String(err.phase || ""))}</td><td class="is-danger">${escapeHtml(String(err.message || ""))}</td></tr>`;
         }
-        eHtml += '</table>';
+        eHtml += '</table></div>';
         $("#plugin-error-log").html(eHtml);
     } else {
         $("#plugin-error-log").text("暂无错误记录");
@@ -390,16 +389,18 @@ export async function renderDataHealthPanel(dependencies) {
     const { backup, logger: clog } = dependencies, $ = panelQuery(dependencies);
     const e = $("#health-data-display");
     if (!e.length) return;
+    const repairButton = $("#repairHealthBtn").prop("disabled", true);
     e.text("体检中…");
     try {
         const t = await backup.inspectDataHealth(), n = t.fixable.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), a = t.readonly.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), i = (/** @type {HealthIssue[]} */ t) => t.length ? t.map((e => `<li><strong>${escapeHtml(e.message)}</strong>：${e.count}</li>`)).join("") : "<li>无</li>";
         if (dependencies.isActive?.() === false || !e[0]?.isConnected) return;
+        repairButton.prop("disabled", n === 0);
         e.html(`
                 <div class="jhs-summary-grid">
-                    <div>番号记录：<strong>${t.totals.carList}</strong></div>
-                    <div>收藏演员：<strong>${t.totals.favoriteActresses}</strong></div>
-                    <div>黑名单演员：<strong>${t.totals.blacklist}</strong></div>
-                    <div>屏蔽影片：<strong>${t.totals.blacklistCarList}</strong></div>
+                    <div class="jhs-summary-card">番号记录：<strong>${t.totals.carList}</strong></div>
+                    <div class="jhs-summary-card">收藏演员：<strong>${t.totals.favoriteActresses}</strong></div>
+                    <div class="jhs-summary-card">黑名单演员：<strong>${t.totals.blacklist}</strong></div>
+                    <div class="jhs-summary-card">屏蔽影片：<strong>${t.totals.blacklistCarList}</strong></div>
                 </div>
                 <div class="jhs-health-summary">体检时间：${escapeHtml(t.checkedAt)}；可修复问题 <strong>${n}</strong> 项，只读问题 <strong>${a}</strong> 项。</div>
                 <div class="jhs-health-columns">
@@ -408,16 +409,27 @@ export async function renderDataHealthPanel(dependencies) {
                 </div>
             `);
     } catch (t) {
-        clog.error(t), e.text("数据体检失败，请重试");
+        clog.error(t);
+        if (dependencies.isActive?.() !== false && e[0]?.isConnected) e.text("数据体检失败，请重试");
     }
 }
 
 /** Repair data health issues after auto-backing up current data. */
 /** @param {SettingsUiDependencies} dependencies */
 export async function repairDataHealthWithBackup(dependencies) {
-    const { backup, utilities: utils, notifications: show } = dependencies;
-    const e = JSON.stringify(await backup.exportData()), t = `health-backup-${getNowStr("_", "_")}.json`;
-    utils.download(e, t);
-    const n = await backup.repairDataHealth();
-    show.ok(`已修复 ${n.fixedGroups} 组，备份已下载`), await renderDataHealthPanel(dependencies);
+    const { backup, notifications, logger, domUi } = dependencies;
+    if (dependencies.isActive?.() === false) return;
+    const button = panelQuery(dependencies)("#repairHealthBtn").prop("disabled", true).attr("aria-busy", "true");
+    const loading = domUi.loading();
+    try {
+        const result = await backup.repairDataHealth({ snapshot: true });
+        if (dependencies.isActive?.() === false) return;
+        notifications.ok(result.fixedGroups ? "已修复 " + result.fixedGroups + " 组，已保存恢复点" : "暂无可修复问题");
+    } catch (error) {
+        logger.error("数据修复失败", error);
+        if (dependencies.isActive?.() !== false) notifications.error("数据修复失败，请重试");
+    } finally {
+        loading.close();
+        if (dependencies.isActive?.() !== false) { button.removeAttr("aria-busy"); await renderDataHealthPanel(dependencies); }
+    }
 }

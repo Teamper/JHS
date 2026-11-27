@@ -1,7 +1,9 @@
 // @ts-check
+import { findMatchedTitleKeyword } from "./keyword-match.js";
 import { formatUiDateTime } from "./ui-date-time.js";
 import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
 import { assertMovieStateEligible } from "./movie-identity.js";
+import { throwIfAborted } from "./jhs-error.js";
 import { STATE_FLAG_NAMES, createEmptyStateFlags, normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
 import { createStateDomainRegistry } from "./state-domains.js";
 import { cloneStateValue, stableStateValue, getStatePath, setStatePath, uniqueStateKeys, assertStateMutationEligible, createNewVideoEffectReader, canRestoreNewVideoEffect, restoreNewVideoEffect, pruneActivityLog } from "./state-activity-model.js";
@@ -126,6 +128,19 @@ export class StateService {
     async getOfflineHistory() {
         return await this.domains.offlineHistory.read();
     }
+    async clearFinishedOfflineHistory() {
+        return this._withLock(async () => {
+            const history = await this.getOfflineHistory();
+            const finished = history.filter((/** @type {StateRecord} */ item) =>
+                item.status === "success" || item.status === "failed" && item.submissionOutcome !== "unknown"
+                && !(!item.submissionOutcome && ["TIMEOUT", "NETWORK_ERROR", "ABORTED"].includes(item.errorCode)));
+            if (!finished.length) return 0;
+            const ids = new Set(finished.map((/** @type {StateRecord} */ item) => item.id));
+            await this.domains.offlineHistory.write(history.filter((/** @type {StateRecord} */ item) => !ids.has(item.id)));
+            await this._notifyCommitted("offline-history-changed", { ids: [...ids], removed: true });
+            return ids.size;
+        });
+    }
     /** @param {StateRecord} record */
     async appendOfflineHistory(record) {
         return this._withLock(async () => {
@@ -175,7 +190,7 @@ export class StateService {
             if (!Array.isArray(actress.newVideoList)) return actress;
             const newVideoList = actress.newVideoList.filter((/** @type {any} */ item) => {
                 const code = typeof item === "string" ? item : item?.carNum;
-                return typeof code !== "string" || !code.startsWith(prefix);
+                return typeof code !== "string" || !findMatchedTitleKeyword([prefix], typeof item === "string" ? "" : item.title || "", code);
             });
             if (newVideoList.length === actress.newVideoList.length) return actress;
             changed = true;
@@ -218,6 +233,23 @@ export class StateService {
             const result = await this.blacklist.removeActor(starId);
             if (result.removedCarRecords) await this._notifyCommitted("blacklist-rules-changed", {});
             return result;
+        });
+    }
+
+    /** @param {string[]} ids */
+    removeBlacklistActors(ids) {
+        return this._withLock(async () => {
+            const result = await this.blacklist.removeActors(ids);
+            if (result.removedCarRecords) await this._notifyCommitted("blacklist-rules-changed", {});
+            return result;
+        });
+    }
+    /** @param {string} starId @param {string} carNum */
+    removeBlacklistedMovie(starId, carNum) {
+        return this._withLock(async () => {
+            const removed = await this.blacklist.removeMovie(starId, carNum);
+            if (removed) await this._notifyCommitted("blacklist-rules-changed", {});
+            return removed;
         });
     }
 
@@ -352,7 +384,7 @@ export class StateService {
         if (!changes.length) return { changed: [], transactionId: null };
         const handledKeys = new Set(handled), readEffect = handled.length ? createNewVideoEffectReader(domains.actresses, domains.decisions, handledKeys) : null;
         changes.forEach((change => handledKeys.has(change.carNum) && readEffect && (change.newVideoEffect = readEffect(change.carNum))));
-        const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, handled), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: options.type || "state-patch", commitState: "pending", changes, createdAt: new Date().toISOString(), undoAttemptedAt: null };
+        const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, handled), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: options.type || "state-patch", ...(options.importBatchId ? { importBatchId: options.importBatchId } : {}), commitState: "pending", changes, createdAt: new Date().toISOString(), undoAttemptedAt: null };
         await this._commit(domains, { carList: [ ...map.values() ], ...effects }, activity, ["carList", ...(effects.actresses === domains.actresses ? [] : ["actresses"]), ...(effects.decisions === domains.decisions ? [] : ["decisions"]), "activity"]);
         await this._notifyCommitted("car-state-changed", { carNums: changes.map((change => change.carNum)), transactionId: activity.id });
         const affectedWorks = changes.filter(change => change.newVideoEffect && (change.newVideoEffect.actressItems.length || change.newVideoEffect.decision)).map(change => change.carNum);
@@ -412,10 +444,11 @@ export class StateService {
             return { changed, transactionId: activity.id };
         });
     }
-    /** @param {string | string[]} carNums @param {string} [reason] */
-    async removeFromNewVideoList(carNums, reason = "manual") {
+    /** @param {string | string[]} carNums @param {string} [reason] @param {{signal?: AbortSignal}} [options] */
+    async removeFromNewVideoList(carNums, reason = "manual", { signal } = {}) {
         const targets = Array.isArray(carNums) ? [ ...carNums ] : [ carNums ];
         return this._withLock(async () => {
+            throwIfAborted(signal);
             targets.forEach(assertMovieStateEligible);
             const keys = uniqueStateKeys(targets.map(normalizeCarNum));
             await this._recoverWithoutLock();
@@ -430,6 +463,7 @@ export class StateService {
                 return { carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect, afterDecision, undoState: "pending" };
             }));
             const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
+            throwIfAborted(signal);
             await this._commit(domains, { carList: domains.carList, actresses: effects.actresses, decisions }, activity, ["actresses", "decisions", "activity"]);
             await this._notifyCommitted("new-video-changed", { carNums: changed, reason });
             await this._notifyCommitted("activity-log-changed", { transactionId: activity.id });
@@ -446,8 +480,13 @@ export class StateService {
             const before = await this._readDomains([...(incremental ? [] : ["carList"]), "actresses", "decisions", "activity", "ratings"]);
             const domains = cloneStateValue(before), transaction = domains.activity.entries.find((/** @param {StateRecord} entry */ entry => entry.id === transactionId && "committed" === entry.commitState));
             if (!transaction) throw new Error("操作记录不存在或尚未提交");
+            const entries = transaction.importBatchId
+                ? domains.activity.entries.filter((/** @type {StateRecord} */ entry) => entry.commitState === "committed" && entry.importBatchId === transaction.importBatchId)
+                : [transaction];
+            if (this.sync && entries.some((/** @type {StateRecord} */ entry) => !this.sync.canUndo(entry.id))) throw new Error("部分导入批次已无法核对，操作未撤销");
+            const changes = entries.flatMap((/** @type {StateRecord} */ entry) => entry.changes);
             if (incremental) {
-                const keys = uniqueStateKeys(transaction.changes.map((/** @type {StateRecord} */ change) => normalizeCarNum(change.carNum)));
+                const keys = uniqueStateKeys(changes.map((/** @type {StateRecord} */ change) => normalizeCarNum(change.carNum)));
                 domains.carList = await incremental.getWorksByCarNums(keys);
             }
             const carMap = new Map(domains.carList.map((/** @param {StateRecord} record */ record => [ normalizeCarNum(record.carNum), cloneStateValue(record) ]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses);
@@ -457,7 +496,7 @@ export class StateService {
             const conflicts = [];
             const touched = new Set(["activity"]);
             const touchedCars = new Set();
-            for (const change of transaction.changes) {
+            for (const change of changes) {
                 if ("reverted" === change.undoState) continue;
                 if ("personal-rating" === change.operation) {
                     if (stableStateValue(domains.ratings[change.carNum] || null) !== stableStateValue(change.after)) {
@@ -517,13 +556,14 @@ export class StateService {
                 touchedCars.add(change.carNum);
                 touched.add("carList"), restoreEffect && change.newVideoEffect && (restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), touched.add("actresses"), touched.add("decisions")), change.undoState = "reverted", reverted.push(change.carNum);
             }
-            transaction.undoAttemptedAt = new Date().toISOString();
+            const undoAttemptedAt = new Date().toISOString();
+            for (const entry of entries) entry.undoAttemptedAt = undoAttemptedAt;
             const log = this._prepareActivity(domains.activity), nextCars = [ ...carMap.values() ], touchedDomains = [...touched];
             /** @type {Record<string, any>} */
             const nextState = { carList: nextCars, actresses, decisions, ratings: domains.ratings, activity: log };
             /** @type {Record<string, any>} */
             const beforeMap = before;
-            const journal = { schema: 2, dataVersion: CURRENT_DATA_VERSION, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(beforeMap[key])])), after: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(nextState[key])])) };
+            const journal = { schema: 2, dataVersion: CURRENT_DATA_VERSION, id: `undo_${transactionId}`, state: "prepared", createdAt: undoAttemptedAt, touchedDomains, before: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(beforeMap[key])])), after: Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(nextState[key])])) };
             const workPatch = incremental && touchedCars.size ? this._workPatch(touchedCars, nextCars) : undefined;
             const committedAtomically = await this._commitUndoAtomic(nextState, log, touchedDomains, journal.id, workPatch);
             if (!committedAtomically) {

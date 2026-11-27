@@ -38,7 +38,7 @@ it("saves a captured submission while retaining edits made during the asynchrono
     $("#reviewCount").val("30").trigger("input");
     const saving = saveSettingForm(deps, root); await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
     $("#reviewCount").val("40").trigger("input"); finish(); await saving;
-    expect(values.reviewCount).toBe("30"); expect(draft.refresh().count).toBe(1);
+    expect(values.reviewCount).toBe(30); expect(draft.refresh().count).toBe(1);
     $("#reviewCount").val("30").trigger("input"); expect(draft.refresh().count).toBe(0);
 });
 

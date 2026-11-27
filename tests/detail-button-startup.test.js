@@ -35,12 +35,12 @@ describe("detail browse lifecycle", () => {
     });
 
     it("removes the current movie mark only when the setting is enabled", () => {
-        const { controller, hostAdapter, state } = createController({ settings: { autoRemoveNewVideoMarkAfterBrowse: "yes" } });
+        const { controller, hostAdapter, state, scope } = createController({ settings: { autoRemoveNewVideoMarkAfterBrowse: "yes" } });
 
         controller.start();
 
         expect(hostAdapter.readMovieRef).toHaveBeenCalledOnce();
-        expect(state.removeFromNewVideoList).toHaveBeenCalledWith(["ABC-123"], "browse");
+        expect(state.removeFromNewVideoList).toHaveBeenCalledWith(["ABC-123"], "browse", { signal: scope.signal });
         controller.dispose();
     });
 

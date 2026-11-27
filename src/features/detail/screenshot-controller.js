@@ -3,10 +3,11 @@
 import { normalizeCarNum } from "../../core/constants.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { CANDIDATE_SCREENSHOT_LABEL, renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
+import { SCREENSHOT_PANEL_STYLES } from "../../ui/detail/panel-styles.js";
 import { screenshotErrorMessage } from "../../ui/detail/screenshot-error.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
-const SCREENSHOT_STYLES = `.jhs-screenshot-message{margin-top:50px;color:var(--jhs-text-muted);cursor:auto}.jhs-screenshot-message--bus{margin-top:30px}.screen-container .jhs-screenshot-open{display:block;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.screen-container .retry-link{padding:0;border:0;background:transparent;font:inherit;cursor:pointer}.screen-container .retry-link[aria-disabled="true"]{cursor:wait}:root .screen-container[data-jhs-screenshot-mode="manual"]{height:auto;max-height:none}.screen-container .jhs-screenshot-source{position:absolute;top:var(--jhs-space-1);left:var(--jhs-space-1);right:var(--jhs-space-1);z-index:var(--jhs-z-elevated);padding:var(--jhs-space-half);border-radius:var(--jhs-radius-sm);background:var(--jhs-surface);font-size:var(--jhs-font-size-sm);pointer-events:none}.screen-container[data-jhs-screenshot-mode="manual"] .jhs-screenshot-source{position:relative;inset:auto;padding:var(--jhs-space-half)}.screen-container .jhs-screenshot-providers{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--jhs-space-half)}`;
+const SCREENSHOT_STYLES = SCREENSHOT_PANEL_STYLES + `.jhs-screenshot-message{padding-block:var(--jhs-space-3);color:var(--jhs-text-muted)}.screen-container:is(.sample-box,.tile-item){overflow:hidden;text-align:center}.screen-container.sample-box{height:110px}.screen-container.tile-item{max-height:215px}.jhs-screenshot-open img{width:100%}.sample-box .jhs-screenshot-open img{height:inherit}.screen-container .jhs-screenshot-open{display:block;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.screen-container .retry-link{padding:0;border:0;background:transparent;font:inherit;cursor:pointer}.screen-container .retry-link[aria-disabled="true"]{cursor:wait}:root .screen-container[data-jhs-screenshot-mode="manual"]{height:auto;max-height:none}.screen-container .jhs-screenshot-source{position:absolute;top:var(--jhs-space-1);left:var(--jhs-space-1);right:var(--jhs-space-1);z-index:var(--jhs-z-elevated);padding:var(--jhs-space-half);border-radius:var(--jhs-radius-sm);background:var(--jhs-surface);font-size:var(--jhs-font-size-sm);pointer-events:none}.screen-container[data-jhs-screenshot-mode="manual"] .jhs-screenshot-source{position:relative;inset:auto;padding:var(--jhs-space-half)}`;
 
 /** Owns the host detail-page screenshot tile and its retry/settings lifecycle. */
 export class ScreenshotController {
@@ -79,30 +80,32 @@ export class ScreenshotController {
         if (this.disposed || this.scope.disposed || !this.screenshot.isEnabled(this.settings.snapshot())) return;
         if (this.hostContainer?.isConnected) return;
         const gallery = this.hostAdapter.locateNativeGallery?.();
-        if (!gallery) return;
+        const fallback = this.hostAdapter.locateDetailRoot?.();
+        if (!gallery && !fallback) return;
         const container = this.document.createElement("div");
         container.className = this.hostAdapter.site === "javbus"
-            ? "sample-box screen-container jhs-layout-b5c4e4f7"
-            : "tile-item screen-container jhs-layout-cd9d5db1";
+            ? "sample-box screen-container"
+            : "tile-item screen-container";
         container.classList.add("jhs-ui");
-        const loading = this.document.createElement("div");
-        loading.className = this.hostAdapter.site === "javbus" ? "jhs-layout-3536a853" : "jhs-layout-9db87399";
-        loading.textContent = "加载中…";
-        loading.setAttribute("role", "status");
-        container.append(loading);
-
-        if (this.hostAdapter.site === "javbus") {
-            const firstSample = gallery.matches?.(".sample-box") ? gallery : gallery.querySelector(".sample-box");
-            if (!firstSample?.parentElement) return;
-            firstSample.after(container);
-        } else {
-            const firstTile = gallery.querySelector(".tile-item");
-            if (!firstTile?.parentElement) return;
-            firstTile.before(container);
+        const firstTile = this.hostAdapter.site === "javbus"
+            ? gallery?.matches(".sample-box") ? gallery : gallery?.querySelector(".sample-box")
+            : gallery?.querySelector(".tile-item");
+        if (firstTile) {
+            if (this.hostAdapter.site === "javbus") firstTile.after(container);
+            else firstTile.before(container);
         }
+        else (gallery ?? fallback).append(container);
         this.hostContainer = container;
         const generation = ++this.generation;
-        void this.loadIntoContainer(container, generation);
+        if (firstTile || this.screenshot.getScreenshotSettings(this.settings.snapshot()).mode === "manual") {
+            void this.loadIntoContainer(container, generation);
+        } else {
+            const button = this.document.createElement("button");
+            button.type = "button";
+            button.className = "jhs-screenshot-load jhs-btn jhs-btn--secondary";
+            button.textContent = "加载缩略图";
+            container.append(button);
+        }
     }
 
     unmountHosted() {
@@ -143,7 +146,7 @@ export class ScreenshotController {
         try {
             await renderScreenshotPanel({
                 target: container, carNum, title, screenshot: this.screenshot, settings: this.settings.snapshot(),
-                scope: requestScope, refreshCache, isActive: () => this.isCurrent(container, generation),
+                scope: requestScope, refreshCache, openImageViewer: (image, options) => this.ui.openImageViewer(image, options), isActive: () => this.isCurrent(container, generation),
                 ...(!manual ? {
                     renderImage: (image, alt) => this.renderImage(container, alt, image),
                     renderError: error => { if (error) this.report(error); this.showErrorFallback(container, rawCarNum, error); },
@@ -173,9 +176,6 @@ export class ScreenshotController {
         image.alt = alt;
         if (this.hostAdapter.site === "javbus") {
             image.title = alt;
-            image.classList.add("jhs-layout-d4a575e8");
-        } else {
-            image.classList.add("jhs-layout-cad980f4");
         }
         const frame = this.document.createElement("button");
         frame.type = "button";
@@ -190,9 +190,8 @@ export class ScreenshotController {
 
     /** @param {Element} container @param {string | null} rawCarNum @param {unknown} error */
     showErrorFallback(container, rawCarNum, error) {
-        const bus = this.hostAdapter.site === "javbus";
         const message = this.document.createElement("div");
-        message.className = `jhs-screenshot-message${bus ? " jhs-screenshot-message--bus" : ""}`;
+        message.className = "jhs-screenshot-message";
         message.setAttribute("role", "status");
         const carNum = normalizeCarNum(rawCarNum);
         if (!carNum) {
@@ -207,7 +206,7 @@ export class ScreenshotController {
         retry.textContent = "重试";
         const restoreFocus = container.contains(this.document.activeElement);
         container.replaceChildren(message, this.document.createElement("br"), retry);
-        const searchUrl = normalizeHttpUrl(this.screenshot.getSearchUrl({ carNum }), this.window.location.href);
+        const searchUrl = normalizeHttpUrl(this.screenshot.getSearchUrl({ carNum }, this.settings.snapshot()), this.window.location.href);
         if (searchUrl) {
             container.append(this.document.createTextNode(" 或 "));
             const search = this.document.createElement("a");
@@ -228,17 +227,18 @@ export class ScreenshotController {
             : null;
         const container = target?.closest(".screen-container");
         if (!container) return;
-        const retry = target?.closest(".retry-link");
-        if (retry) {
+        const retry = target?.closest(".retry-link"), load = target?.closest(".jhs-screenshot-load");
+        if (retry || load) {
             event.preventDefault();
             event.stopPropagation();
             if (container.getAttribute("aria-busy") === "true") return;
             const message = container.querySelector(".jhs-screenshot-message");
             if (message) message.textContent = "正在重试…";
-            retry.textContent = "重试中…";
-            retry.setAttribute("aria-disabled", "true");
+            const trigger = retry ?? /** @type {Element} */ (load);
+            trigger.textContent = retry ? "重试中…" : "加载中…";
+            trigger.setAttribute("aria-disabled", "true");
             const generation = ++this.generation;
-            void this.loadIntoContainer(container, generation, true);
+            void this.loadIntoContainer(container, generation, Boolean(retry));
             return;
         }
         if (target?.closest(".check-link")) return;

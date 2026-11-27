@@ -1,6 +1,6 @@
 // @ts-check
 
-import { waitForDom } from "../../core/dom-actions.js";
+import { disabledIdForPlugin, parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
 import { DesktopQuickSettings } from "../../ui/settings/desktop-quick-settings.js";
 import { closeOwnedPopover, ownedPopoverRoots } from "../../core/owned-popover.js";
 import { acquirePageScrollLock } from "../../core/page-scroll-lock.js";
@@ -27,6 +27,12 @@ export function disposeQuickSettings(owner) {
     for (const surface of owner._desktopQuickSurfaces.values()) surface.close();
 }
 
+/** @param {SettingPlugin} owner */
+function quickSettingsOptions(owner) {
+    const disabled = parseDisabledPlugins(owner.getRuntimeService("settings").snapshot().disabledPlugins);
+    return { jquery: owner.jquery, disabledContributions: new Set(disabled.flatMap(id => [id, disabledIdForPlugin(id)])) };
+}
+
 /** 桌面设置入口 Surface：compact 卸载，regular/wide 幂等挂载。 */
     /** @param {boolean} compact
  * @param {SettingPlugin} owner
@@ -42,20 +48,19 @@ export function mountDesktopSettingNav(owner) {
     const scope = owner._settingScope;
     if (!scope) return;
     owner._desktopSettingNavMounted = true;
-    // surface generation：unmount 后旧 timer/DOM 等待回调不得再把 nav append 回来。
-    const generation = owner._desktopNavGeneration;
     if (r) {
         const e = () => {
             owner.jquery(".navbar-search").is(":hidden") ? (owner.jquery(".mini-setting-box").hide(), owner.jquery(".setting-box").show()) : (owner.jquery(".mini-setting-box").show(),
             owner.jquery(".setting-box").hide());
         };
         owner.jquery("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box jhs-setting-nav-item">\n                    <button type="button" id="setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-nav-button">\n                        设置\n                    </button>\n                    <div class="simple-setting"></div>\n                </div>'),
-        waitForDom((() => owner.jquery("#miniHistoryBtn").length > 0), (() => {
-            if (generation !== owner._desktopNavGeneration || !owner._desktopSettingNavMounted) return;
-            owner.jquery(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '),
+        (() => {
+            const mini = owner.jquery('<div class="navbar-item mini-setting-box jhs-mini-setting-box"><button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">设置</button><div class="mini-simple-setting"></div></div>');
+            const history = owner.jquery(".miniHistoryBtnBox").first();
+            if (history.length) history.before(mini);
+            else owner.jquery(".navbar-brand,.main-nav").first().append(mini);
             e();
-            owner.mountDesktopQuickSettings();
-        }), 20, 1e4, !0, scope);
+        })();
         owner._settingNavResizeCleanup?.();
         owner._settingNavResizeCleanup = scope.listen(owner.window, "resize", e);
     }
@@ -90,7 +95,7 @@ export function mountDesktopQuickSettings(owner) {
                 const { buildQuickSettingHtml } = await import("../../ui/settings/setting-templates.js");
                 if (surface.scope.disposed || !box.isConnected) return;
                 disposeQuickSettingHost(host, owner.jquery);
-                owner.jquery(host).html(buildQuickSettingHtml(owner.getRuntimeService("settingsRegistry")));
+                owner.jquery(host).html(buildQuickSettingHtml(owner.getRuntimeService("settingsRegistry"), quickSettingsOptions(owner)));
                 await initQuickSettingForm(owner.getFormDependencies(), owner.getSelector.bind(owner), async panel => {
                     surface.close(); await owner.openSettingDialog(panel);
                 }, owner.jquery(host));
@@ -168,12 +173,12 @@ export async function openQuickSetting(owner) {
         const { buildQuickSettingHtml } = await import("../../ui/settings/setting-templates.js");
         if (closed) return;
         backdrop = owner.jquery('<div id="jhs-quick-setting-backdrop" class="jhs-quick-setting-backdrop"></div>');
-        sheet = owner.jquery(`<section id="jhs-quick-setting-sheet" class="jhs-quick-setting-sheet jhs-ui" role="dialog" aria-modal="true" aria-labelledby="jhs-quick-setting-title">
+        sheet = owner.jquery(`<section id="jhs-quick-setting-sheet" class="jhs-quick-setting-sheet jhs-ui is-open" role="dialog" aria-modal="true" aria-labelledby="jhs-quick-setting-title">
             <header class="jhs-quick-setting__header"><h2 id="jhs-quick-setting-title">快捷设置</h2><button type="button" class="jhs-btn jhs-btn--ghost jhs-quick-setting__close" aria-label="关闭快捷设置">${getIcon("x")}</button></header>
             <div class="jhs-quick-setting"></div>
         </section>`);
         quickRoot = sheet.find(".jhs-quick-setting");
-        quickRoot.html(buildQuickSettingHtml(owner.getRuntimeService("settingsRegistry")));
+        quickRoot.html(buildQuickSettingHtml(owner.getRuntimeService("settingsRegistry"), quickSettingsOptions(owner)));
         owner.jquery(owner.document.body).append(backdrop, sheet);
         scope.addCleanup(acquirePageScrollLock(sheet[0]));
         scope.listen(backdrop[0], "click", () => closeQuickSetting());

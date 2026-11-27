@@ -1,4 +1,5 @@
 // @ts-check
+import { waitForSettlement } from "../core/async-settlement.js";
 
 export const PRIVACY_STATE_KEY = "jhs_privacy_enabled_v1";
 export const PRIVACY_TARGETS = Object.freeze(["title", "code", "actors", "images", "video"]);
@@ -26,7 +27,7 @@ export class PrivacyService extends EventTarget {
     toggle() { return this.updateEnabled(() => !this.enabled); }
     /** @param {() => boolean} resolve */
     updateEnabled(resolve) {
-        const operation = this.writeChain.catch(() => {}).then(async () => {
+        const operation = waitForSettlement(this.writeChain).then(async () => {
             const enabled = resolve();
             await this.storage.setValue(PRIVACY_STATE_KEY, enabled);
             if (await this.storage.getValue(PRIVACY_STATE_KEY, false) !== enabled) throw new Error("隐私遮罩状态保存失败");

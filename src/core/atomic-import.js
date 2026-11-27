@@ -25,14 +25,14 @@ function createDraft(expected) {
 }
 
 /** Prepare every business and synchronization write before opening the commit transaction. @param {import("../services/storage-service.js").StorageService} storage @param {any} imported @param {any[]} warnings @param {number} version @param {boolean} resetActressProfileBackfill */
-export async function prepareAtomicImport(storage, imported, warnings, version, resetActressProfileBackfill) {
+export async function prepareAtomicImport(storage, imported, warnings, version, resetActressProfileBackfill, snapshotSource = "auto-import") {
     const keys = [...PORTABLE_DATA_KEYS, ...getPortableDataKeys(0), "data_version", "data_health_warnings", SNAPSHOTS_KEY, SYNC_PENDING_KEY, SYNC_STATE_KEY];
     if (resetActressProfileBackfill) keys.push(ACTRESS_PROFILE_BACKFILL_KEY);
     // V3 removes the old HTTP cache namespace as part of the same batch.
     if (version < 3) keys.push(...(await storage.keys()).filter((/** @type {string} */ key) => key.startsWith("jhs_http_public_cache:v1:")));
     const expected = await storage.readAtomicSnapshot([...new Set(keys)]);
     const { store, values, touched } = createDraft(expected);
-    if (await hasPortableUserData(store)) await createPortableSnapshot(store, "导入前自动备份", "auto-import");
+    if (await hasPortableUserData(store)) await createPortableSnapshot(store, snapshotSource === "auto-restore" ? "恢复前自动备份" : "导入前自动备份", snapshotSource);
     await runDataMigrations(store);
     if (Object.hasOwn(imported, "setting")) imported.setting = mergePortableSettings(await store.get("setting") || {}, imported.setting);
     for (const [key, value] of Object.entries(imported)) await store.set(key, value);

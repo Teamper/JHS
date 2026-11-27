@@ -69,7 +69,7 @@ function button(className, text) {
     return element;
 }
 
-/** @param {import("./lifecycle-scope.js").LifecycleScope} scope @param {{entries: () => LogEntry[], filter: () => LogLevel, changeFilter: (level: LogLevel) => void, clear: () => void}} model */
+/** @param {import("./lifecycle-scope.js").LifecycleScope} scope @param {{entries: () => LogEntry[], filter: () => LogLevel, changeFilter: (level: LogLevel) => void, clear: () => void, copy?: (value: string) => Promise<unknown>}} model */
 export function createLogPanel(scope, model) {
     const container = document.createElement("div");
     container.className = "console-logger-container jhs-ui";
@@ -77,10 +77,6 @@ export function createLogPanel(scope, model) {
     const toggle = button("console-logger-toggle collapsed");
     toggle.setAttribute("aria-label", "展开或收起运行日志");
     toggle.innerHTML = getIcon("chevron-down");
-    if (window.matchMedia?.("(max-width: 767px)").matches) {
-        toggle.hidden = true;
-        toggle.style.display = "none";
-    }
     const panel = document.createElement("div");
     panel.className = "console-logger-window collapsed";
     const header = document.createElement("div");
@@ -93,6 +89,14 @@ export function createLogPanel(scope, model) {
     const maximize = button("console-logger-maximize-toggle");
     const clear = button("", "清空");
     clear.addEventListener("click", model.clear);
+    const copy = button("", "复制全部日志");
+    if (model.copy) {
+        scope.listen(copy, "click", () => {
+            const value = model.entries().map(entry => `[${entry.timestamp.toLocaleTimeString()}] ${labels[entry.type]} ${renderEntry(entry).textContent.replace(/^\[[^\]]*\]\s*/u, "")}`).join("\n");
+            void model.copy?.(value);
+        });
+        controls.append(copy);
+    }
     controls.append(maximize, clear);
     header.append(title, controls);
     const filterBar = document.createElement("div");
@@ -107,7 +111,10 @@ export function createLogPanel(scope, model) {
         filterGroup.append(filter);
     }
     const bottom = button("console-logger-scroll-to-bottom", "到底部");
-    filterBar.append(filterGroup, bottom);
+    const search = document.createElement("input");
+    search.type = "search"; search.className = "jhs-field"; search.placeholder = "搜索日志";
+    search.setAttribute("aria-label", "搜索日志");
+    filterBar.append(filterGroup, search, bottom);
     const content = document.createElement("div");
     content.className = "console-logger-content jhs-scrollbar";
     panel.append(header, filterBar, content);
@@ -115,16 +122,17 @@ export function createLogPanel(scope, model) {
     document.body.append(container);
     scope.addCleanup(() => { document.body.removeAttribute("data-jhs-debug-visible"); container.remove(); });
 
-    let userScrolledUp = false;
+    let userScrolledUp = false, dialogOpen = false;
     const scrollToBottom = () => { content.scrollTop = content.scrollHeight; userScrolledUp = false; };
-    const visible = () => container.style.display !== "none" && !panel.classList.contains("collapsed");
+    const visible = () => dialogOpen || container.style.display !== "none" && !panel.classList.contains("collapsed");
+    const matches = (/** @type {LogEntry} */ entry) => filters[model.filter()].includes(entry.type) && entry.message.toLowerCase().includes(search.value.trim().toLowerCase());
     const update = () => {
         const currentFilter = model.filter();
         for (const filter of filterGroup.querySelectorAll("button")) filter.classList.toggle("active", filter.dataset.type === currentFilter);
         if (!visible()) return;
         setTimeout(() => {
             if (scope.disposed || !visible()) return;
-            content.replaceChildren(...model.entries().filter(entry => filters[model.filter()].includes(entry.type)).map(renderEntry));
+            content.replaceChildren(...model.entries().filter(matches).map(renderEntry));
             scrollToBottom();
         }, 0);
     };
@@ -158,6 +166,7 @@ export function createLogPanel(scope, model) {
     setExpanded(Boolean(initialExpand && initialExpand !== "no"));
     setMaximized(localStorage.getItem(maximizeKey) === "maximized");
     update();
+    scope.listen(search, "input", update);
     toggle.addEventListener("click", toggleExpand);
     maximize.addEventListener("click", toggleMaximize);
     bottom.addEventListener("click", scrollToBottom);
@@ -179,21 +188,20 @@ export function createLogPanel(scope, model) {
         hide() { container.style.display = "none"; document.body.removeAttribute("data-jhs-debug-visible"); },
         setRaised(/** @type {boolean} */ raised) { container.style.zIndex = String(raised ? JHS_Z_INDEX.debug : JHS_Z_INDEX.debugLow); },
         append(/** @type {LogEntry} */ entry, /** @type {LogEntry | undefined} */ evicted) {
-            const levels = filters[model.filter()];
-            if (evicted && levels.includes(evicted.type)) content.firstElementChild?.remove();
-            if (!visible() || !levels.includes(entry.type)) return;
+            if (evicted && matches(evicted)) content.firstElementChild?.remove();
+            if (!visible() || !matches(entry)) return;
             content.append(renderEntry(entry));
             if (!userScrolledUp) scrollToBottom();
         },
         /** @param {{open: (options: Record<string, unknown>) => unknown}} layer @param {DialogUi} dialog */
         openDialog(layer, dialog) {
+            if (dialogOpen) return;
             const host = document.createElement("div");
             const originalParent = panel.parentNode, originalStyle = panel.getAttribute("style");
             host.className = "jhs-ui jhs-logger-dialog";
             host.style.height = "100%";
             panel.classList.remove("collapsed", "maximized");
             Object.assign(panel.style, { width: "100%", height: "100%", border: "0", borderRadius: "0", boxShadow: "none" });
-            update();
             /** @type {number | undefined} */
             let index;
             layer.open(prepareDialogOptions({
@@ -204,9 +212,11 @@ export function createLogPanel(scope, model) {
                     dialog.setupEscClose?.(id);
                     const root = element instanceof HTMLElement ? element : element[0];
                     root.querySelector(".jhs-logger-dialog")?.append(panel);
-                    scrollToBottom();
+                    dialogOpen = true;
+                    update();
                 },
                 end() {
+                    dialogOpen = false;
                     if (index != null) dialog.releaseEscClose?.(index);
                     originalParent?.appendChild(panel);
                     if (originalStyle === null) panel.removeAttribute("style");

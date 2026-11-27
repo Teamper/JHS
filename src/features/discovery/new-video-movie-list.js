@@ -1,4 +1,5 @@
 // @ts-check
+import { newVideoPagination } from "./new-video-pagination.js";
 
 import { OwnedPopover } from "../../core/owned-popover.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
@@ -170,8 +171,8 @@ export async function runBatchMutation(owner, /** @type {string} */ action, /** 
 /** @param {NewVideoWorkspaceService} owner */
 export function bindBatchActions(owner) {
     const footer = owner.jquery("#new-video-list-footer");
-    footer.off(".jhsNvBatch").on("click.jhsNvBatch", "#nvSelectPage", () => {
-        (owner.nvCurrentPageItems || []).forEach(item => owner.nvSelected.add(normalizeCarNum(item.carNum) ?? item.carNum));
+    footer.off(".jhsNvBatch").on("click.jhsNvBatch", "#nvSelectPage,#nvSelectFiltered", (/** @type {JQueryEvent} */ event) => {
+        (event.currentTarget.id === "nvSelectFiltered" ? owner.nvFlatListCache : owner.nvCurrentPageItems || []).forEach(item => owner.nvSelected.add(normalizeCarNum(item.carNum) ?? item.carNum));
         owner.jquery("#new-video-list-container .nv-select").prop("checked", true); owner.renderBatchBar();
     }).on("click.jhsNvBatch", "#nvClearSelection", () => {
         owner.nvSelected.clear(); owner.jquery("#new-video-list-container .nv-select").prop("checked", false); owner.renderBatchBar();
@@ -181,7 +182,7 @@ export function bindBatchActions(owner) {
 /** @param {NewVideoWorkspaceService} owner */
 export function executeBatchAction(owner, /** @type {string} */ id, /** @type {JQueryEvent} */ event) {
     /** @type {Record<string, string>} */
-    const flags = { batchMarkFavorite: "favorite", batchMarkWatched: "watched", batchMarkDownloaded: "downloaded" };
+    const flags = { batchMarkFavorite: "favorite", batchMarkWatched: "watched", batchMarkDownloaded: "downloaded", batchMarkBlocked: "blocked" };
     const flag = flags[id];
     if (flag) return void owner.runBatchMutation(flag, items => owner.getRuntimeService("state").patch(items.map(item => item.carNum), { [flag]: true }, { type: "new-video-batch-state", records: items.map(item => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime })) }), "已处理");
     if (id === "batchIgnore") return void owner.runBatchMutation("ignore", items => owner.getRuntimeService("state").setNewVideoDecision(items.map(item => item.carNum), "ignored"), "已忽略");
@@ -201,13 +202,13 @@ export function renderBatchBar(owner) {
     const visibleSelected = owner.nvFlatListCache.filter(item => owner.nvSelected.has(normalizeCarNum(item.carNum) ?? '')).length;
     const summary = selected ? `<span class="jhs-new-video-selection" title="${visibleSelected !== selected ? `当前结果中 ${visibleSelected} 项` : ''}">已选 <b>${selected}</b> 项</span>` : `<span>共 <b>${owner.nvFlatListCache.length}</b> 个番号，涉及 <b>${actresses.size}</b> 位演员</span>`;
     const primary = [["batchMarkFavorite", "收藏"], ["batchMarkWatched", "已观看"], ["batchMarkDownloaded", "已下载"]];
-    const secondary = [["batchIgnore", "忽略"], ["batchSnooze", "暂缓 7 天"], ["batchRestore", "恢复"], ["batchRemoveFromNewVideo", "从新作品列表移除"]];
+    const secondary = [["batchMarkBlocked", "屏蔽"], ["batchIgnore", "忽略"], ["batchSnooze", "暂缓 7 天"], ["batchRestore", "恢复"], ["batchRemoveFromNewVideo", "从新作品列表移除"]];
     const action = (/** @type {string[]} */ [id, label], menu = false) => `<button type="button" id="${id}" data-nv-batch class="jhs-btn ${id === "batchRemoveFromNewVideo" ? "jhs-btn--danger" : menu ? "jhs-btn--ghost" : "jhs-btn--secondary"}"${menu ? ' role="menuitem"' : ''}>${label}</button>`;
     const commands = owner.nvCompact ? [...primary, ...secondary] : secondary;
     const controls = selected ? `${owner.nvCompact ? "" : primary.map(item => action(item)).join("")}<details class="jhs-new-video-batch__more"><summary class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false">${owner.nvCompact ? "批量操作" : "更多"}${getIcon("chevron-down")}</summary><div class="jhs-popover jhs-new-video-batch__menu" role="menu" aria-label="批量操作">${commands.map(item => action(item, true)).join("")}</div></details><button type="button" class="jhs-btn jhs-btn--ghost" id="nvClearSelection">取消选择</button>` : "";
-    footer.html(`<div class="jhs-new-video-batch">${summary}<div class="jhs-new-video-batch__actions"><button type="button" class="jhs-btn jhs-btn--secondary" id="nvSelectPage">全选当前页</button>${controls}</div></div>`);
+    footer.html(`<div class="jhs-new-video-batch">${summary}<div class="jhs-new-video-batch__actions"><button type="button" class="jhs-btn jhs-btn--secondary" id="nvSelectPage">全选当前页</button><button type="button" class="jhs-btn jhs-btn--ghost" id="nvSelectFiltered">全选筛选结果</button>${controls}</div></div>`);
     owner.bindBatchPopover(footer);
-    const focus = restoreFocus ? ".jhs-new-video-batch__more summary" : ["nvSelectPage", "nvClearSelection"].includes(active?.id ?? '') ? selected ? `#${active?.id}` : "#nvSelectPage" : null;
+    const focus = restoreFocus ? ".jhs-new-video-batch__more summary" : ["nvSelectPage", "nvSelectFiltered", "nvClearSelection"].includes(active?.id ?? '') ? selected ? `#${active?.id}` : "#nvSelectPage" : null;
     if (focus) footer.find(focus).trigger("focus");
 }
 
@@ -238,6 +239,9 @@ export function nvSortList(owner, /** @type {MovieRow[]} */ e) {
           case "carNum":
             i = (e.carNum || "").localeCompare(t.carNum || "");
             break;
+          case "score":
+            i = (e.score || 0) - (t.score || 0);
+            break;
           case "voteCount":
             i = (e.voteCount || 0) - (t.voteCount || 0);
             break;
@@ -253,7 +257,8 @@ export function nvCardHtml(owner, /** @type {MovieRow} */ n) {
     const key = normalizeCarNum(n.carNum) ?? n.carNum, e = escapeHtml(key), t = escapeHtml(n.title || key), cachedCover = owner.nvCoverCache.get(key), a = escapeHtml((cachedCover || n.coverUrl || "").replace("thumbs", "covers")), i = escapeHtml(n.url || `${r}/search?q=${encodeURIComponent(key)}`), voteCount = escapeHtml(String(n.voteCount || ""));
     let o = `番号：${e}\n演员：${escapeHtml(n.actressName)}\n发行：${escapeHtml(String(n.publishTime || "未知"))}`;
     n.voteCount && (o += `\n评价人数：${voteCount}`);
-    const l = n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${voteCount} 人评价</span>` : "";
+    const score = Number(n.score);
+    const l = score > 0 ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${score.toFixed(1)} 分${n.voteCount ? " · " + voteCount + " 人评价" : ""}</span>` : n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${voteCount} 人评价</span>` : "";
     c += `<div class="nv-card jhs-media-card" data-car="${e}" title="${o}"><header class="jhs-media-card__header"><strong class="nv-card__title">${e}</strong><label class="jhs-choice"><input type="checkbox" class="nv-select" aria-label="选择影片 ${e}" value="${e}" ${owner.nvSelected.has(key) ? "checked" : ""}></label></header>`;
     c += `<a class="nv-card__link" href="${i}" target="_blank" rel="noopener noreferrer">`;
     c += `<div class="nv-card__cover">`;
@@ -289,13 +294,7 @@ export function nvRenderPage(owner, generation = owner.nvRenderGeneration, { inc
     }
     c += "</div>";
     if (o > 1) {
-        c += '<div id="nv-pagination-bar" class="jhs-new-video-pagination">';
-        owner.nvCurrentPage > 1 && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${owner.nvCurrentPage - 1}">上一页</button>`);
-        let e = Math.max(1, owner.nvCurrentPage - 2), n = Math.min(o, e + 4);
-        n - e < 4 && (e = Math.max(1, n - 4));
-        for (let t = e; t <= n; t++) c += `<button type="button" class="jhs-btn jhs-btn--secondary ${t === owner.nvCurrentPage ? "is-current" : ""} pagination-btn" data-nvpage="${t}" ${t === owner.nvCurrentPage ? 'aria-current="page"' : ""}>${t}</button>`;
-        owner.nvCurrentPage < o && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${owner.nvCurrentPage + 1}">下一页</button>`),
-        c += `<span class="jhs-pagination__summary">第 ${owner.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
+        c += `<div id="nv-pagination-bar" class="jhs-new-video-pagination">${newVideoPagination({page:owner.nvCurrentPage, pages:o, total:t.length, attribute:"data-nvpage"})}</div>`;
     }
     let createdCards;
     if (incremental) {

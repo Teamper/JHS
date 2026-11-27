@@ -2,12 +2,11 @@
 
 import { HostedDetailSurface } from "../../ui/detail/hosted-detail-surface.js";
 import { DetailBrowseLifecycleController } from "./detail-browse-lifecycle-controller.js";
-import { DetailSubtitleLinkController } from "./detail-subtitle-link-controller.js";
 import { DetailStateActionsController } from "./detail-state-actions-controller.js";
 import { DetailWorkspaceController } from "./detail-workspace-controller.js";
 
 export class DetailController {
-    /** @param {{hostAdapter: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, enabledContributions: readonly string[], state: any, settings?: any, diagnostics?: any, movie?: any, ui?: any, pageActions?: {readPageInfo: () => any, ui: any, attach: (controller: DetailStateActionsController) => void, detachWorkspace?: (controller: DetailWorkspaceController) => void, attachWorkspace?: (controller: DetailWorkspaceController) => void} | null, workspaceUi?: any, styles?: any, eventBus?: any, onWorkspaceError?: (error: unknown) => void}} options */
+    /** @param {{hostAdapter: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, enabledContributions: readonly string[], state: any, settings?: any, diagnostics?: any, pageActions?: {readPageInfo: () => any, ui: any, attach: (controller: DetailStateActionsController) => void, detachWorkspace?: (controller: DetailWorkspaceController) => void, attachWorkspace?: (controller: DetailWorkspaceController) => void} | null, workspaceUi?: any, styles?: any, eventBus?: any, onWorkspaceError?: (error: unknown) => void}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.scope = options.scope;
@@ -19,12 +18,6 @@ export class DetailController {
             ? new DetailBrowseLifecycleController({
                 settings: options.settings, state: options.state, scope: this.scope,
                 onError: (error) => options.diagnostics?.recordError({ source: "detail-browse-lifecycle", featureId: "detail", contributionId: "detail.page-state-actions", message: `自动移除新作品标记失败: ${error instanceof Error ? error.message : String(error)}` }),
-            })
-            : null;
-        this.subtitleLinks = this.enabledContributions.has("detail.page-state-actions") && options.movie && options.ui
-            ? new DetailSubtitleLinkController({
-                document: this.hostAdapter.document, hostAdapter: this.hostAdapter, movie: options.movie, ui: options.ui, scope: this.scope,
-                onError: (error) => options.diagnostics?.recordError({ source: "detail-subtitle-link", featureId: "detail", contributionId: "detail.page-state-actions", message: error instanceof Error ? error.message : String(error) }),
             })
             : null;
         this.pageActions = options.pageActions ?? null;
@@ -60,7 +53,6 @@ export class DetailController {
         }
         this.movieRef = this.hostAdapter.readMovieRef();
         if (this.browseLifecycle) void this.browseLifecycle.start(this.movieRef);
-        this.subtitleLinks?.start();
         const activeContributions = [...this.enabledContributions].filter((id) => !(id === "detail.workspace" && this.workspaceFailed));
         return Object.freeze({ movieRef: this.movieRef, contributions: activeContributions, activeContributions });
     }

@@ -1,7 +1,8 @@
 // @ts-check
 
-import { normalizeCarNum } from "../../core/constants.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { mapLimit } from "../../core/feature-helpers.js";
+import { normalizeMovieCarNum } from "../../core/movie-identity.js";
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 
 /** @type {Record<string, string>} */
@@ -12,50 +13,45 @@ const SITE_NAMES = {
     fanzaBtn: PRODUCT_NAMES.dmm,
 };
 
-/** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
-/** @typedef {{ id: string, providerId?: string, noHandle?: boolean, condition?: (sourceCarNum?: string | null) => boolean, searchUrl?: (carNum: string) => string, sourceCarNum?: string | null, baseUrl?: string }} SiteConfig */
-/** @typedef {{ root: JQueryHandle, target?: JQueryHandle, configs: SiteConfig[], carNum?: string | null, isActive?: () => boolean, box?: JQueryHandle, settings?: JQueryHandle }} OtherSiteView */
-/** @typedef {{ root?: Element | JQueryHandle, target?: Element | JQueryHandle, isActive?: () => boolean, autoDetect?: boolean }} OtherSiteLoadOptions */
-/** @typedef {{ preventDefault: () => void, currentTarget: HTMLInputElement, ctrlKey?: boolean, metaKey?: boolean }} JQuerySiteEvent */
+/** @typedef {{ id: string, providerId?: string, noHandle?: boolean, condition?: (carNum: string | null) => boolean, searchUrl?: (carNum: string) => string, baseUrl?: string }} SiteConfig */
+/** @typedef {{ root?: Element | any, target?: Element | any, scope?: LifecycleScope, isActive?: () => boolean, autoDetect?: boolean }} OtherSiteLoadOptions */
+/** @typedef {{ carNum: string | null, configs: SiteConfig[], box: any, settings: any, scope: LifecycleScope, options: OtherSiteLoadOptions }} OtherSiteView */
 
 export class OtherSitesController {
-    /** @param {{document: Document, window: Window, jquery: (value: any) => any, hostAdapter: any, movie: any, storage: any, settings: any, events: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, ui: any, notifications: any, site: string, route: string}} options */
-    constructor(options) {
-        this.document = options.document;
-        this.window = options.window;
-        this.$ = options.jquery;
-        this.hostAdapter = options.hostAdapter;
-        this.movie = options.movie;
-        this.storage = options.storage;
-        this.settings = options.settings;
-        this.events = options.events;
-        this.scope = options.scope;
-        this.ui = options.ui;
-        this.notifications = options.notifications;
-        this.site = options.site;
-        this.route = options.route;
+    /** @param {{document: Document, jquery: (value: any) => any, hostAdapter: any, movie: any, storage: any, settings: any, events: any, scope: LifecycleScope, styles: import("../../contracts/ports.js").StylePort, ui: any, notifications: any, diagnostics: any, site: string, route: string}} options */
+    constructor({ document, jquery, hostAdapter, movie, storage, settings, events, scope, styles, ui, notifications, diagnostics, site, route }) {
+        this.document = document;
         this.managedByFeature = true;
-        this.runtimeStatus = "active";
-        this.disposed = false;
-        /** @type {number} */ this.mountGeneration = 0;
-        /** @type {WeakMap<object, number>} */ this._mountGenerations = new WeakMap();
-        /** @type {SiteConfig[]} */
-        this.siteConfigs = [
-            { id: "javTrailersBtn" }, { id: "123AvBtn", providerId: "av123" }, { id: "jableBtn" }, { id: "avgleBtn" }, { id: "missAvBtn" }, { id: "supJavBtn" },
-            { id: "javDbBtn", condition: () => this.site === "javdb" }, { id: "javBusBtn", condition: e => Boolean(this.site === "javbus" && e && !e.includes("FC2")) },
-            { id: "fanzaBtn", providerId: "dmm", noHandle: !0, condition: e => Boolean(e && !e.includes("FC2")) },
+        this.$ = jquery;
+        this.hostAdapter = hostAdapter;
+        this.movie = movie;
+        this.storage = storage;
+        this.settings = settings;
+        this.events = events;
+        this.scope = scope;
+        this.ui = ui;
+        this.notifications = notifications;
+        this.diagnostics = diagnostics;
+        this.route = route;
+        this.styles = styles;
+        /** @type {Map<Node, OtherSiteView>} */ this.views = new Map();
+        this.styleRegistered = false;
+        /** @type {SiteConfig[]} */ this.siteConfigs = [
+            { id: "javTrailersBtn" }, { id: "123AvBtn", providerId: "av123" }, { id: "jableBtn" },
+            { id: "avgleBtn" }, { id: "missAvBtn" }, { id: "supJavBtn" },
+            { id: "javDbBtn", condition: () => site === "javbus" },
+            { id: "javBusBtn", condition: carNum => site === "javdb" && Boolean(carNum && !carNum.includes("FC2")) },
+            { id: "fanzaBtn", providerId: "dmm", noHandle: true, condition: carNum => Boolean(carNum && !carNum.includes("FC2")) },
         ];
     }
-    getName() {
-        return "OtherSitePlugin";
+    getName() { return "OtherSitePlugin"; }
+
+    getSiteConfigs() {
+        const definitions = this.movie.externalSites(this.settings.snapshot());
+        return this.siteConfigs.map(config => ({ ...definitions.find((/** @type {SiteConfig} */ item) => item.id === config.id), ...config }));
     }
-    async getSiteConfigs() {
-        const settings = await this.getSettingCache(), definitions = this.movie.externalSites(settings);
-        return this.siteConfigs.map((config) => ({ ...(definitions.find(((/** @type {SiteConfig} */ item) => item.id === config.id)) || {}), ...config }));
-    }
-    async initCss() {
+    initCss() {
         return `
-            <style>
                 [data-jhs-other-site-box], [data-jhs-other-site-settings], #otherSiteBox, #settingsArea { margin-top:var(--jhs-space-2); user-select:none; }
                 .jhs-site-list, [data-jhs-role="site-checkboxes"], #siteCheckboxes { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); }
                 .site-btn { position:relative; }
@@ -64,249 +60,183 @@ export class OtherSitesController {
                 [data-jhs-site-id="jableBtn"],#jableBtn { --jhs-brand-color:var(--jhs-site-jable); } [data-jhs-site-id="avgleBtn"],#avgleBtn { --jhs-brand-color:var(--jhs-site-avgle); }
                 [data-jhs-site-id="missAvBtn"],#missAvBtn { --jhs-brand-color:var(--jhs-site-missav); } [data-jhs-site-id="supJavBtn"],#supJavBtn { --jhs-brand-color:var(--jhs-site-supjav); }
                 [data-jhs-site-id="javDbBtn"],#javDbBtn { --jhs-brand-color:var(--jhs-site-javdb); } [data-jhs-site-id="javBusBtn"],#javBusBtn { --jhs-brand-color:var(--jhs-site-javbus); } [data-jhs-site-id="fanzaBtn"],#fanzaBtn { --jhs-brand-color:var(--jhs-site-dmm); }
-                .site-btn.is-checking { opacity:.65; pointer-events:none; }
+                .site-btn.is-checking { cursor:progress; }
                 .site-btn.is-available { border-color:var(--jhs-success-text); background:var(--jhs-success-tint); color:var(--jhs-success-text); }
                 .site-btn.is-unavailable { border-color:var(--jhs-danger-text); background:var(--jhs-danger-tint); color:var(--jhs-danger-text); }
                 .site-btn.is-domain-error { border-color:var(--jhs-warning-text); background:var(--jhs-warning-tint); color:var(--jhs-warning-text); }
                 .site-tag { margin-left:var(--jhs-space-1); padding:var(--jhs-space-half) var(--jhs-space-1); border-radius:var(--jhs-radius-pill); background:var(--jhs-surface-2); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
                 .jhs-site-option { display:flex; align-items:center; gap:var(--jhs-space-2); }
-            </style>`;
+`;
     }
     start() {
-        const settings = this.settings, events = this.events, scope = this.scope;
-        let legacyPluginsReady = false;
-        const mountWhenReady = () => {
-            if (!legacyPluginsReady || settings.snapshot().enableLoadOtherSite === "no") return;
-            void this.mount().catch((error => this.log("外部站点重新挂载失败", error)));
+        const safeMount = (/** @type {string | null} */ carNum, /** @type {OtherSiteLoadOptions} */ options = {}) => {
+            void this.loadOtherSite(carNum, null, options).catch(error => this.report(error));
         };
-        const onSettingsChanged = (/** @type {any} */ event) => {
-            const names = /** @type {string[] | undefined} */ (event.detail?.names);
-            if (!names?.includes("enableLoadOtherSite")) return;
-            if (settings.snapshot().enableLoadOtherSite === "no") this.unmount();
-            else mountWhenReady();
-        };
-        settings.addEventListener("settings.changed", onSettingsChanged);
-        const unsubscribeReady = events?.on?.("jhs-features-ready", () => {
-            legacyPluginsReady = true;
-            mountWhenReady();
-        }) ?? (() => {});
-        scope.addCleanup(() => {
-            settings.removeEventListener("settings.changed", onSettingsChanged);
-            unsubscribeReady();
+        let ready = false;
+        this.scope.addCleanup(this.events.on("jhs-features-ready", () => {
+            ready = true;
+            if (this.route === "detail") safeMount(null);
+        }));
+        this.scope.listen(this.settings, "settings.changed", event => {
+            const names = /** @type {CustomEvent} */ (event).detail.names;
+            if (names.includes("enableLoadOtherSite")) {
+                if (this.settings.snapshot().enableLoadOtherSite === "no") this.unmount();
+                else if (ready && this.route === "detail" && !this.views.has(this.document)) safeMount(null);
+            }
+            if (names.some((/** @type {string} */ name) => name.endsWith("Url"))) {
+                for (const view of [...this.views.values()]) {
+                    if (this.isActive(view)) safeMount(view.carNum, view.options);
+                }
+            } else if (names.includes("enabledExternalSites")) {
+                for (const view of this.views.values()) this.applySelection(view);
+            }
         });
         return true;
     }
-    /** ON：在当前详情页挂载外部站点面板。 */
-    async mount() {
-        if (this.disposed || this.route !== "detail") return;
-        if (this.settings.snapshot().enableLoadOtherSite === "no") return;
-        await this.loadOtherSite(null, null, { autoDetect: !1 });
-    }
-    /** OFF：删除 JHS 自有面板（宿主原生 UI 不做永久销毁），并使在途挂载作废。 */
-    unmount() {
-        this.mountGeneration++;
-        this._mountGenerations.set(this.document, (this._mountGenerations.get(this.document) || 0) + 1);
-        this.$("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
-    }
+    unmount() { for (const view of this.views.values()) view.scope.dispose(); }
     stop() { this.unmount(); }
-    dispose() { this.disposed = true; this.unmount(); }
-    readMovieRef() { return this.hostAdapter.readMovieRef?.(); }
-    /** @param {string} message @param {unknown} [error] */
-    log(message, error) { this.notifications?.debug?.(message, error); }
-    /** @param {string | null} e @param {string | null} t @param {OtherSiteLoadOptions} [n] */
-    async loadOtherSite(e, t, n = {}) {
-        if (this.disposed) return;
-        const settingsService = this.settings;
-        if (settingsService.snapshot().enableLoadOtherSite === "no") return;
-        // 每个 FC2 context（root）持有自己的 generation，互不失效；无 root 的详情页沿用全局 generation。
-        const rootElement = n.root?.[0] || null;
-        const generation = rootElement ? (this._mountGenerations.get(rootElement) || 0) + 1 : ++this.mountGeneration;
-        rootElement && this._mountGenerations.set(rootElement, generation);
-        const isActive = () => (rootElement ? generation === this._mountGenerations.get(rootElement) : generation === this.mountGeneration) && ("function" === typeof n.isActive ? n.isActive() : !0) && settingsService.snapshot().enableLoadOtherSite !== "no";
-        const root = n.root ? this.$(n.root) : this.$(this.document), target = n.target ? this.$(n.target) : this.$(this.hostAdapter.locateDetailSlots().summary);
-        if (!target.length || !isActive()) return;
-        root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
-        e = normalizeCarNum(e) || this.readMovieRef()?.carNum;
-        const enabled = this.getEnabledSites(), configs = (await this.getSiteConfigs()).map((config => ({ ...config, sourceCarNum: t })));
-        if (!isActive()) return;
-        const view = /** @type {OtherSiteView} */ ({ root, target, configs, carNum: e, isActive });
-        const box = this.$('<div class="panel-block" data-jhs-other-site-box><div class="jhs-site-list"></div></div>'), list = box.find(".jhs-site-list"), settings = this.$('<div class="panel-block jhs-is-hidden" data-jhs-other-site-settings><div data-jhs-role="site-checkboxes"></div></div>');
-        configs.forEach((config => {
-            if (config.condition && !1 === config.condition(config.sourceCarNum)) return;
-            const button = this.$('<a target="_blank" class="site-btn jhs-btn jhs-btn--secondary"><span></span></a>').attr("data-jhs-site-id", config.id).toggleClass("jhs-is-hidden", !enabled.includes(config.id));
-            button.find("span").text(SITE_NAMES[config.id] ?? "第三方站点"), list.append(button);
-        }));
-        list.append('<button type="button" class="site-btn jhs-btn jhs-btn--secondary" data-jhs-role="detect-sites"><span>检测第三方站点</span></button>', '<button type="button" class="site-btn jhs-btn jhs-btn--secondary" data-jhs-role="site-settings"><span>设置</span></button>'), target.append(box, settings), view.box = box, view.settings = settings;
-        if (!e) return box.find(".site-btn").removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), box.find('[data-jhs-role="detect-sites"]').prop("disabled", !0), this.renderSettingsArea(view), this.setupEventListeners(view), void this.log("跳过第三方站点解析：番号不可用");
-        box.find('[data-jhs-site-id="javTrailersBtn"]').on("click", ((/** @type {JQuerySiteEvent} */ event) => {
+    dispose() { this.unmount(); }
+    /** @param {unknown} error */
+    report(error) {
+        this.diagnostics.recordError({ source:"external-sites-feature", featureId:"external-sites", message:error instanceof Error ? error.message : String(error) });
+    }
+    /** @param {OtherSiteView} view */
+    isActive(view) { return !view.scope.disposed && view.options.isActive?.() !== false; }
+
+    /** @param {string | null} requested @param {string | null} sourceCarNum @param {OtherSiteLoadOptions} [options] */
+    async loadOtherSite(requested, sourceCarNum, options = {}) {
+        if (this.scope.disposed || options.scope?.disposed || options.isActive?.() === false || this.settings.snapshot().enableLoadOtherSite === "no") return;
+        const $ = this.$;
+        const target = options.target ? $(options.target) : $(this.hostAdapter.locateDetailSlots().summary);
+        if (!target.length) return;
+        const key = options.root ? $(options.root)[0] : this.document;
+        const carNum = normalizeMovieCarNum(sourceCarNum ?? requested ?? this.hostAdapter.readMovieRef()?.carNum);
+        const configs = this.getSiteConfigs().filter(config => !config.condition || config.condition(carNum));
+        this.views.get(key)?.scope.dispose();
+        if (!this.styleRegistered) {
+            this.scope.addCleanup(this.styles.register("jhs-detail-external-sites-feature", this.initCss()));
+            this.styleRegistered = true;
+        }
+        const box = $('<div class="panel-block" data-jhs-other-site-box><div class="jhs-site-list"></div></div>');
+        const settings = $('<div class="panel-block jhs-is-hidden" data-jhs-other-site-settings><div data-jhs-role="site-checkboxes"></div></div>');
+        const scope = new LifecycleScope("other-sites"), view = { box, settings, scope, carNum, configs, options };
+        const release = (options.scope ?? this.scope).addCleanup(() => scope.dispose());
+        scope.addCleanup(() => { release(); this.views.delete(key); box.remove(); settings.remove(); });
+        this.views.set(key, view);
+
+        const list = box.find(".jhs-site-list"), choices = settings.find('[data-jhs-role="site-checkboxes"]');
+        for (const config of configs) {
+            const name = SITE_NAMES[config.id] ?? "第三方站点";
+            const link = $('<a target="_blank" rel="noopener noreferrer" class="site-btn jhs-btn jhs-btn--secondary"></a>').attr("data-jhs-site-id", config.id).text(name);
+            const url = carNum && this.searchUrl(config, carNum);
+            if (url) link.attr({ href: url, title: "前往第三方搜索页" });
+            else link.attr({ "aria-disabled": "true", title: carNum ? "第三方站点地址不可用" : "番号不可用" });
+            list.append(link);
+            const input = $('<input type="checkbox" class="jhs-checkbox">').attr("data-site-id", config.id);
+            choices.append($('<label class="jhs-site-option"></label>').append(input, $("<span>").text(name)));
+        }
+        this.applySelection(view);
+        list.append('<button type="button" class="site-btn jhs-btn jhs-btn--secondary" data-jhs-role="detect-sites">检测第三方站点</button>',
+            '<button type="button" class="site-btn jhs-btn jhs-btn--secondary" data-jhs-role="site-settings">设置</button>');
+        const detect = box.find('[data-jhs-role="detect-sites"]').prop("disabled", !carNum);
+        box.find('[data-jhs-role="site-settings"]').on("click", () => settings.toggleClass("jhs-is-hidden"));
+        box.find('[data-jhs-site-id="javTrailersBtn"]').on("click", (/** @type {MouseEvent} */ event) => {
+            const href = $(event.currentTarget).attr("href");
+            if (!href) return;
             event.preventDefault();
-            const original = this.$(event.currentTarget).attr("href");
-            if (!original) return;
-            const destination = event.ctrlKey || event.metaKey ? original : original + "?handle=1";
-            this.ui.openPage(destination, e, !1, event);
-        })), await mapLimit(configs, 4, (async (config) => {
-            config.condition && !1 === config.condition(config.sourceCarNum) || await this.prepareSiteLink(e, config, view);
-        }));
-        if (!isActive()) return;
-        this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((/** @type {JQuerySiteEvent} */ event) => {
-            event.preventDefault(), this.detectOtherSites(e, view);
-        })), n.autoDetect && await this.detectOtherSites(e, view);
-        return box;
-    }
-    /** @param {string | null} e @param {SiteConfig} t @param {OtherSiteView} [view] */
-    async prepareSiteLink(e, t, view = { root: this.$(this.document), configs: [], isActive: () => !0 }) {
-        const n = view.root.find(`[data-jhs-site-id="${t.id}"],#${t.id}`).first();
-        if (!(e = normalizeCarNum(e))) return n.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n, "idle");
-        if (t.providerId) {
-            const url = this.movie.searchUrl(t.providerId, { carNum: e });
-            return void (url ? (n.attr("href", url), n.attr("title", "前往第三方搜索页"), this.setSiteState(n, "idle")) : (n.attr("title", "第三方站点地址不可用"), this.setSiteState(n, "domain-error")));
-        }
-        try {
-            view.isActive?.() !== false && t.searchUrl && (n.attr("href", t.searchUrl(e)), n.attr("title", "前往第三方搜索页，点击检测后检查"), this.setSiteState(n, "idle"));
-        } catch (a) {
-            view.isActive?.() !== false && (n.attr("title", "第三方站点地址未设置或不可用"), this.setSiteState(n, "domain-error"));
-        }
-    }
-    /** @param {string | null} e @param {OtherSiteView} [view] */
-    async detectOtherSites(e, view = { root: this.$(this.document), configs: this.siteConfigs, isActive: () => !0 }) {
-        const t = view.root.find('[data-jhs-role="detect-sites"],#detectOtherSiteBtn').first(), n = t.text();
-        if (!(e = normalizeCarNum(e))) return t.prop("disabled", !0), void this.log("跳过第三方站点检测：番号不可用");
-        return t.text("检测中").prop("disabled", !0).attr("aria-busy", "true").addClass("is-checking"), await mapLimit(view.configs, 4, (async (t) => {
-            t.condition && !1 === t.condition(t.sourceCarNum) || await this.handleSite(e, t, view);
-        })), view.isActive?.() !== false && t.text(n).prop("disabled", !1).removeAttr("aria-busy").removeClass("is-checking");
-    }
-    /** @param {JQueryHandle} e @param {string} t */
-    setSiteState(e, t) {
-        e.removeClass("is-checking is-available is-unavailable is-domain-error"), "idle" !== t && e.addClass(`is-${t}`);
-    }
-    /** @param {string} e @param {SiteConfig} t @param {OtherSiteView} [view] */
-    async handleSite(e, t, view = { root: this.$(this.document), configs: [], isActive: () => !0 }) {
-        const n = view.root.find(`[data-jhs-site-id="${t.id}"],#${t.id}`).first();
-        if (!n.length || this.ui.isHidden(n)) return;
-        n.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n, "checking");
-        if (t.noHandle && !0 === t.noHandle) {
-            const fallbackUrl = this.movie.searchUrl(t.providerId, { carNum: e });
-            fallbackUrl ? n.attr("href", fallbackUrl) : n.removeAttr("href");
-            const cacheKey = "jhs_other_site_dmm", raw = this.storage.getLocal(cacheKey);
-            let a = null;
+            const destination = new URL(href);
+            if (!event.ctrlKey && !event.metaKey) destination.searchParams.set("handle", "1");
+            this.ui.openPage(destination.href, carNum, false, event);
+        });
+        settings.on("change", "input[data-site-id]", async (/** @type {Event} */ event) => {
+            const input = /** @type {HTMLInputElement} */ (event.currentTarget), id = input.dataset.siteId;
+            if (!id) return;
             try {
-                const parsed = raw ? JSON.parse(raw) : {};
-                a = parsed && "object" == typeof parsed ? parsed[e] : null;
-            } catch { a = null; }
-            a ? (n.attr("href", a.url), "multiple" === a.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available")) : this.setSiteState(n, "idle");
-        } else if (t.providerId) try {
-            const scope = this.scope;
-            const result = await this.movie.resolve({ carNum: e, providerId: t.providerId }, { scope });
-            if (view.isActive?.() === false) return;
-            const resolvedUrl = result?.url || this.movie.searchUrl(t.providerId, { carNum: e });
-            resolvedUrl ? n.attr("href", resolvedUrl) : n.removeAttr("href");
-            this.setSiteState(n, result?.url ? "available" : "unavailable");
-            if (!result?.url) n.attr("title", "未找到影片，点击前往搜索页");
-        } catch (error) {
-            if (view.isActive?.() !== false) n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), this.log(`检测第三方资源失败, ${t.id.replace("Btn", "")}`, error);
-        } else try {
-            const a = "jhs_other_site", storage = this.storage, raw = storage.getLocal(a), i = raw ? JSON.parse(raw) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
-            if (o && o.time && m - o.time < 864e5) return void (n.attr("href", o.url), "multiple" === o.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available"));
-            const scope = this.scope, result = await this.movie.searchExternalSite(t.id, e, { settings: await this.getSettingCache(), scope }), l = result.searchUrl;
-            n.attr("href", l);
-            if (view.isActive?.() === false) return;
-            const h = result.matches;
-            let g = "", p = null;
-            if (1 === h.length) {
-                let e = h[0];
-                n.attr("href", e), this.setSiteState(n, "available"), p = {
-                type: "single",
-                url: e,
-                time: m
-            };
-            } else h.length > 1 ? (n.attr("href", l), g += '<span class="site-tag">多结果</span>', this.setSiteState(n, "available"), p = {
-                type: "multiple",
-                url: l,
-                time: m
-            }) : (n.attr("href", l), n.attr("title", "未找到影片，点击前往搜索页"), this.setSiteState(n, "unavailable"));
-            if (p) {
-                const latestRaw = storage.getLocal(a), e = latestRaw ? JSON.parse(latestRaw) : {};
-                e[s] = p, storage.setLocal(a, JSON.stringify(e));
-            }
-            g && n.append(g);
-        } catch (a) {
-            const i = t.id.replace("Btn", "");
-            const code = /** @type {{ code?: string }} */ (a)?.code;
-            "CIRCUIT_OPEN" === code ? (n.attr("title", "此来源暂不可用，请稍后重试"), this.setSiteState(n, "domain-error"), this.log(`检测第三方资源跳过, ${i} 已熔断`, a)) :
-            "CF_BLOCKED" === code ? (n.attr("title", "站点安全验证未通过，请稍后重试"), this.setSiteState(n, "domain-error"), this.log(`检测第三方资源失败, ${i} 需Cloudflare安全检查`, a)) :
-            "INVALID_URL" === code ? (n.attr("title", "站点地址不可用，请在设置中检查"), this.setSiteState(n, "domain-error"), this.log(`检测第三方资源失败, ${i} 域名或重定向无效`, a)) :
-            "NOT_FOUND" === code ? (n.attr("title", "未找到影片，点击前往搜索页"), this.setSiteState(n, "unavailable"), this.log(`检测第三方资源未找到, ${i}`, a)) :
-            (this.log(`检测第三方资源失败, ${i}`, a), n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"));
-        }
-    }
-    /** 设置唯一真相源：SettingsService 快照，不再维护插件私有缓存。 */
-    async getSettingCache() {
-        return /** @type {Record<string, any>} */ (this.settings.snapshot());
-    }
-    async getMissAvUrl() {
-        return (await this.getSiteConfigs()).find((site) => site.id === "missAvBtn")?.baseUrl || "";
-    }
-    async getjableUrl() {
-        return (await this.getSiteConfigs()).find((site) => site.id === "jableBtn")?.baseUrl || "";
-    }
-    async getAvgleUrl() {
-        return (await this.getSiteConfigs()).find((site) => site.id === "avgleBtn")?.baseUrl || "";
-    }
-    async getJavTrailersUrl() {
-        return (await this.getSiteConfigs()).find((site) => site.id === "javTrailersBtn")?.baseUrl || "";
-    }
-    async getAv123Url() {
-        return this.movie.providerOrigin("av123") || "";
-    }
-    async getJavDbUrl() {
-        return (await this.getSiteConfigs()).find((site) => site.id === "javDbBtn")?.baseUrl || "";
-    }
-    async getJavBusUrl() {
-        return (await this.getSiteConfigs()).find((site) => site.id === "javBusBtn")?.baseUrl || "";
-    }
-    async getSupJavUrl() {
-        return (await this.getSiteConfigs()).find((site) => site.id === "supJavBtn")?.baseUrl || "";
-    }
-    getEnabledSites() {
-        const fallback = this.siteConfigs.map((site => site.id));
-        try {
-            const raw = this.storage.getLocal("jhs_enabled_sites");
-            if (!raw) return fallback;
-            const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed.filter((id => fallback.includes(id))) : fallback;
-        } catch (error) {
-            return this.log("外部站点配置损坏，已回退默认值", error), fallback;
-        }
-    }
-    /** @param {string[]} e */
-    saveEnabledSites(e) {
-        this.storage.setLocal("jhs_enabled_sites", JSON.stringify(e));
-    }
-    /** @param {OtherSiteView} [view] */
-    renderSettingsArea(view = { root: this.$(this.document), configs: this.siteConfigs }) {
-        const enabled = this.getEnabledSites(), target = view.root.find('[data-jhs-role="site-checkboxes"],#siteCheckboxes').first().empty();
-        view.configs.forEach((config => {
-            const input = this.$('<input type="checkbox" class="jhs-checkbox">').attr("data-site-id", config.id).prop("checked", enabled.includes(config.id));
-            target.append(this.$('<label class="jhs-site-option"></label>').append(input, this.$("<span></span>").text(SITE_NAMES[config.id] ?? "第三方站点")));
-        }));
-    }
-    /** @param {OtherSiteView} [view] */
-    setupEventListeners(view = { root: this.$(this.document), configs: this.siteConfigs, carNum: null }) {
-        const $settingsArea = view.root.find('[data-jhs-other-site-settings],#settingsArea').first();
-        view.root.find('[data-jhs-role="site-settings"],#settingSiteBtn').off("click.jhsOtherSite").on("click.jhsOtherSite", (() => {
-            $settingsArea.toggleClass("jhs-is-hidden");
-        })), $settingsArea.off("change.jhsOtherSite").on("change.jhsOtherSite", 'input[type="checkbox"]', (async (/** @type {JQuerySiteEvent} */ event) => {
-            const siteId = this.$(event.currentTarget).attr("data-site-id");
-            try {
-                if (event.currentTarget.checked) {
-                    view.root.find(`[data-jhs-site-id="${siteId}"],#${siteId}`).removeClass("jhs-is-hidden");
-                    const carNum = view.carNum || this.readMovieRef()?.carNum, site = view.configs.find((item => item.id === siteId));
-                    site && await this.prepareSiteLink(carNum, site, view);
-                } else view.root.find(`[data-jhs-site-id="${siteId}"],#${siteId}`).addClass("jhs-is-hidden");
-                this.saveEnabledSites(/** @type {string[]} */ ($settingsArea.find('input[type="checkbox"]:checked').map(((/** @type {number} */ index, /** @type {HTMLInputElement} */ input) => this.$(input).attr("data-site-id"))).get()));
+                await this.settings.update((/** @type {Record<string, any>} */ draft) => {
+                    const selected = new Set(draft.enabledExternalSites ?? this.siteConfigs.map(site => site.id));
+                    if (input.checked) selected.add(id); else selected.delete(id);
+                    draft.enabledExternalSites = [...selected];
+                });
             } catch (error) {
-                this.log(`外部站点 ${siteId || "unknown"} 状态更新失败`, error);
+                if (!this.isActive(view)) return;
+                this.applySelection(view);
+                this.notifications.error(error instanceof Error ? error.message : String(error));
             }
-        }));
+        });
+        const runDetection = async () => {
+            if (!carNum || detect.prop("disabled")) return;
+            detect.text("检测中").prop("disabled", true).attr("aria-busy", "true");
+            try {
+                const enabled = this.getEnabledSites();
+                await mapLimit(configs.filter(site => enabled.includes(site.id)), 4, config => this.handleSite(view, config, carNum));
+            } finally {
+                if (this.isActive(view)) detect.text("检测第三方站点").prop("disabled", false).removeAttr("aria-busy");
+            }
+        };
+        detect.on("click", () => { void runDetection().catch(error => this.report(error)); });
+        target.append(box, settings);
+        if (options.autoDetect) await runDetection();
+        return this.isActive(view) ? box : undefined;
+    }
+
+    /** @param {SiteConfig} config @param {string} carNum */
+    searchUrl(config, carNum) {
+        return config.providerId ? this.movie.searchUrl(config.providerId, { carNum }) : config.searchUrl?.(carNum.replace(/^FC2-/, ""));
+    }
+    getEnabledSites() { return this.settings.snapshot().enabledExternalSites ?? this.siteConfigs.map(site => site.id); }
+    /** @param {OtherSiteView} view */
+    applySelection(view) {
+        const enabled = this.getEnabledSites();
+        for (const { id } of view.configs) {
+            view.box.find('a[data-jhs-site-id="' + id + '"]').toggleClass("jhs-is-hidden", !enabled.includes(id));
+            view.settings.find('input[data-site-id="' + id + '"]').prop("checked", enabled.includes(id));
+        }
+    }
+
+    /** @param {OtherSiteView} view @param {SiteConfig} config @param {string} carNum */
+    async handleSite(view, config, carNum) {
+        if (!this.isActive(view)) return;
+        const fallback = this.searchUrl(config, carNum);
+        if (!fallback) return;
+        const link = view.box.find('a[data-jhs-site-id="' + config.id + '"]');
+        link.attr({ href: fallback, "aria-busy": "true" }).removeClass("is-available is-unavailable is-domain-error").addClass("is-checking");
+        link.find(".site-tag").remove();
+        try {
+            let matches;
+            if (config.noHandle) {
+                const cached = this.storage.getLocal("jhs_other_site_dmm");
+                const result = cached ? JSON.parse(cached)[carNum] : null;
+                if (result?.url) {
+                    link.attr("href", result.url).addClass("is-available");
+                    if (result.type === "multiple") link.append('<span class="site-tag">多结果</span>');
+                }
+                return;
+            }
+            if (config.providerId) {
+                const resolved = await this.movie.resolve({ carNum, providerId: config.providerId }, { scope: view.scope });
+                matches = resolved?.url ? [resolved.url] : [];
+            } else {
+                const result = await this.movie.searchExternalSite(config.id, carNum.replace(/^FC2-/, ""), { settings: this.settings.snapshot(), scope: view.scope });
+                matches = result.matches;
+            }
+            if (!this.isActive(view)) return;
+            if (!matches.length) link.addClass("is-unavailable").attr("title", "未找到影片，点击前往搜索页");
+            else {
+                link.addClass("is-available").attr("title", matches.length === 1 ? "前往影片详情" : "前往第三方搜索页");
+                if (matches.length === 1) link.attr("href", matches[0]);
+                else link.append('<span class="site-tag">多结果</span>');
+            }
+        } catch (error) {
+            if (!this.isActive(view)) return;
+            const code = /** @type {{code?: string}} */ (error)?.code;
+            const messages = { CIRCUIT_OPEN: "此来源暂不可用，请稍后重试", CF_BLOCKED: "站点安全验证未通过，请稍后重试",
+                INVALID_URL: "站点地址不可用，请在设置中检查", NOT_FOUND: "未找到影片，点击前往搜索页" };
+            const domainError = code === "CF_BLOCKED" || code === "CIRCUIT_OPEN" || code === "INVALID_URL";
+            link.addClass(domainError ? "is-domain-error" : "is-unavailable").attr("title", messages[/** @type {keyof typeof messages} */ (code)] ?? "检测失败，点击前往搜索页");
+            this.notifications.debug("检测第三方站点失败", error);
+            if (!domainError && code !== "NOT_FOUND") this.report(error);
+        } finally {
+            if (this.isActive(view)) link.removeAttr("aria-busy").removeClass("is-checking");
+        }
     }
 }

@@ -49,7 +49,7 @@ export function validateDescriptorSync(descriptor, value) {
     if (descriptor.type === "number") {
         if (!number(value)) return false;
         const parsed = Number(value);
-        return (descriptor.min == null || parsed >= descriptor.min) && (descriptor.max == null || parsed <= descriptor.max) && (descriptor.step !== 1 || Number.isSafeInteger(parsed));
+        return (descriptor.min == null || parsed >= descriptor.min) && (descriptor.max == null || parsed <= descriptor.max) && (!descriptor.integer && descriptor.step !== 1 || Number.isSafeInteger(parsed));
     }
     if (["text", "password"].includes(descriptor.type)) return typeof value === "string";
     if (descriptor.type === "json") { const parsed = settingJson(value); return Array.isArray(descriptor.defaultValue) ? Array.isArray(parsed) : object(parsed); }

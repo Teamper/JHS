@@ -121,6 +121,21 @@ describe("build-time static resource packing", () => {
         expect(packed.license).toContain("0.8.3");
     });
 
+    it("stores repeated text once without rewriting property or tagged-template syntax", async () => {
+        const text = "A reusable selector or display label";
+        const literal = JSON.stringify(text);
+        const source = `const key = ${literal};globalThis.matches=[key,${literal},${literal}];globalThis.key=({[${literal}]:1})[${literal}];`;
+        const registry = new Map(), options = { internRepeatedText: true };
+        const replaced = replaceResourceLiterals(source, registry, options);
+        expect(replaced.resources).toEqual([text]);
+        expect(replaced.replacements).toHaveLength(3);
+        expect(structure(replaced.code, replaced)).toEqual(structure(source));
+        const packed = await packStaticResources(source, registry, options), candidate = { atob };
+        vm.runInNewContext(packed.code, candidate);
+        expect(candidate.matches).toEqual([text, text, text]);
+        expect(candidate.key).toBe(1);
+    });
+
     it("leaves bundles without eligible resources untouched", async () => {
         const source = "globalThis.value = 42;";
         const packed = await packStaticResources(source, new Map());

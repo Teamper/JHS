@@ -16,7 +16,7 @@ test("List Feature owns JavDB card-state badges and preserves the legacy page su
     return item;
   });
 
-  await expect(page.locator(".movie-list .item .tags .jhs-status-tags .status-tag")).toHaveText(["已收藏"]);
+  await expect(page.locator(".movie-list .item .jhs-status-tags .status-tag")).toHaveText(["已收藏"]);
   await expect.poll(() => page.evaluate(() => {
     const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
     const summary = listPage.getCurrentPageSummary();

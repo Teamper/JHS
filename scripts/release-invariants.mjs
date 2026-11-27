@@ -1,3 +1,4 @@
+import ts from "typescript";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -62,6 +63,35 @@ const cssZIndices = Object.fromEntries([...buildThemeCss().matchAll(/(--jhs-z-[\
   .map(([, name, value]) => [name, value.trim()]));
 assert.deepEqual(cssZIndices, expectedZIndices, "Theme CSS z-index tokens must match JHS_Z_INDEX");
 
+function silentRejections(source, label) {
+  const file = ts.createSourceFile(label, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const failures = [];
+  const unwrapped = node => {
+    while (node && ts.isParenthesizedExpression(node)) node = node.expression;
+    return node;
+  };
+  function isSilent(value) {
+    const node = unwrapped(value);
+    return !node || node.kind === ts.SyntaxKind.NullKeyword || ts.isIdentifier(node) && node.text === "undefined"
+        || ts.isVoidExpression(node) && ts.isNumericLiteral(node.expression);
+  }
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "catch") {
+      const handler = unwrapped(node.arguments[0]);
+      if (handler && (ts.isArrowFunction(handler) || ts.isFunctionExpression(handler))) {
+        const { body } = handler;
+        const silent = ts.isBlock(body)
+          ? !body.statements.length || body.statements.length === 1 && ts.isReturnStatement(body.statements[0]) && isSilent(body.statements[0].expression)
+          : isSilent(body);
+        if (silent) failures.push(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return failures;
+}
+
 const rules = [
   [/\bcatch\s*(?:\([^)]*\)\s*)?\{\s*\}/, "contains an undocumented empty catch block"],
   [/\bz-index\s*:\s*[-+]?(?:\d|\.\d)|\bzIndex\s*:\s*[-+]?(?:\d|\.\d)/i, "contains a numeric z-index"],
@@ -77,6 +107,7 @@ for (const entry of entries) {
   const file = join(entry.parentPath, entry.name);
   const label = relative(root, file).replaceAll("\\", "/");
   const source = await readFile(file, "utf8");
+  for (const line of silentRejections(source, label)) failures.push(`${label}:${line} discards a promise rejection silently`);
   for (const [pattern, reason] of rules) {
     if (pattern.test(source)) failures.push(`${label} ${reason}`);
   }

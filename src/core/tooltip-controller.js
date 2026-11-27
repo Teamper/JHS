@@ -33,10 +33,14 @@ export function initializeTooltips(scope, doc) {
         tooltip?.remove(); tooltip = null; trigger = null;
         activeTooltips.delete(doc);
     };
+    const privacyTarget = "[data-jhs-privacy-text],[data-jhs-privacy-media],[data-jhs-privacy-kind],[data-jhs-privacy-sensitive]";
+    const isMasked = (/** @type {HTMLElement} */ element) => doc.documentElement.hasAttribute("data-jhs-privacy-active") &&
+        Boolean(element.closest(privacyTarget) || element.querySelector(privacyTarget));
     const candidate = (/** @type {EventTarget | null} */ target, focused = false) => {
         const element = target instanceof view.Element ? /** @type {HTMLElement | null} */ (target.closest(selector)) : null;
         if (focused && element !== target && !(element instanceof view.HTMLLabelElement && element.control === target)) return null;
         if (!element?.closest(".jhs-ui,.jhs-dialog,.jhs-btn,.jhs-field,.jhs-switch,.mini-switch,.card-btn,.jhs-icon-btn,.jhs-link,.jhs-status-tags")) return null;
+        if (isMasked(element)) return null;
         const title = element.getAttribute("title");
         if (title) {
             if (!element.textContent?.trim() && !element.hasAttribute("aria-label") && !element.hasAttribute("aria-labelledby")) element.setAttribute("aria-label", title);
@@ -50,19 +54,22 @@ export function initializeTooltips(scope, doc) {
         if (!trigger.isConnected || trigger.closest("[hidden], .jhs-is-hidden") || view.getComputedStyle(trigger).display === "none" || view.getComputedStyle(trigger).visibility === "hidden") return hide();
         const anchor = trigger.getBoundingClientRect(), rect = tooltip.getBoundingClientRect();
         const direction = ["bottom", "left", "right", "top"].find(side => trigger?.hasAttribute(`data-tip-${side}`)) || "top";
+        const gap = 6;
         let left = anchor.left + (anchor.width - rect.width) / 2;
-        let top = direction === "bottom" ? anchor.bottom : anchor.top - rect.height;
+        let top = direction === "bottom" ? anchor.bottom + gap : anchor.top - rect.height - gap;
         if (direction === "left" || direction === "right") {
-            left = direction === "left" ? anchor.left - rect.width : anchor.right;
+            const before = anchor.left - rect.width - gap, after = anchor.right + gap;
+            const fitsBefore = before >= 8, fitsAfter = after + rect.width <= view.innerWidth - 8;
+            left = direction === "left" ? fitsBefore || !fitsAfter ? before : after : fitsAfter || !fitsBefore ? after : before;
             top = anchor.top + (anchor.height - rect.height) / 2;
-        } else if (top < 8) top = anchor.bottom;
-        else if (top + rect.height > view.innerHeight - 8) top = anchor.top - rect.height;
+        } else if (top < 8) top = anchor.bottom + gap;
+        else if (top + rect.height > view.innerHeight - 8) top = anchor.top - rect.height - gap;
         const menu = trigger.closest(".jhs-owned-popover");
         if (menu) {
             const bounds = menu.getBoundingClientRect();
-            if (bounds.right + rect.width <= view.innerWidth - 8) left = bounds.right;
-            else if (bounds.left - rect.width >= 8) left = bounds.left - rect.width;
-            else { left = bounds.left; top = bounds.bottom; }
+            if (bounds.right + gap + rect.width <= view.innerWidth - 8) left = bounds.right + gap;
+            else if (bounds.left - gap - rect.width >= 8) left = bounds.left - gap - rect.width;
+            else { left = bounds.left; top = bounds.bottom + gap; }
             if (left !== bounds.left) top = Math.max(bounds.top, anchor.top + (anchor.height - rect.height) / 2);
         }
         tooltip.style.left = `${Math.max(8, Math.min(left, view.innerWidth - rect.width - 8))}px`;
@@ -73,7 +80,7 @@ export function initializeTooltips(scope, doc) {
         if (trigger === element && tooltip) return;
         hide();
         const text = ["bottom", "left", "right", "top"].map(side => element.getAttribute(`data-tip-${side}`)).find(Boolean) || element.getAttribute("data-tip");
-        if (!text || !element.isConnected) return;
+        if (!text || !element.isConnected || isMasked(element)) return;
         trigger = element; tooltip = doc.createElement("div");
         tooltip.className = "js-tooltip jhs-ui is-active";
         const id = tooltipIds.get(element) || `jhs-tooltip-${++nextTooltipId}`;

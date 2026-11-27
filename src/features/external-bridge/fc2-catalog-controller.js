@@ -1,10 +1,12 @@
 // @ts-check
+import { mountPageJump } from "../../ui/table/page-jump.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { classifyJavDbPage } from "../../core/site-context.js";
-import { createFc2SourceLinks, renderFc2Gallery, renderFc2State, renderFc2SummaryState } from "../../ui/detail/fc2-workspace-view.js";
+import { renderFc2Gallery, renderFc2State, renderFc2SummaryState } from "../../ui/detail/fc2-workspace-view.js";
 
 /** @typedef {{ root: any, carNum: string, isAlive: () => boolean, initialMovie?: {title?: string, releaseDate?: string} }} Fc2DetailContext */
 
@@ -29,6 +31,7 @@ export class Fc2CatalogController {
         this.maxPage = null;
         this.keyword = this.urlParams.get("keyword") || "";
         this.queryGeneration = 0;
+        /** @type {LifecycleScope | null} */ this.queryScope = null;
         this.started = false;
         this.categoryLink = null;
         this.catalogRoot = null;
@@ -94,24 +97,25 @@ export class Fc2CatalogController {
             this.ownedHeading = true;
         }
         const controls = this.controls = this.document.createElement("div");
-        controls.className = "jhs-ui jhs-layout-f5f47b30";
+        controls.className = "jhs-ui jhs-123av-search";
         this.searchInput = this.document.createElement("input");
         this.searchInput.id = "search-123av-keyword";
         this.searchInput.type = "text";
         this.searchInput.placeholder = `搜索 ${PRODUCT_NAMES.av123} ${PRODUCT_NAMES.fc2} 影片`;
         this.searchInput.className = "jhs-field";
         this.searchInput.value = this.keyword;
-        const searchButton = this.createButton("搜索", "jhs-btn jhs-btn--primary jhs-layout-21a4fe43");
-        const clearButton = this.createButton("重置", "jhs-btn jhs-btn--secondary jhs-layout-21a4fe43");
+        const searchButton = this.createButton("搜索", "jhs-btn jhs-btn--primary");
+        const clearButton = this.createButton("重置", "jhs-btn jhs-btn--secondary");
         controls.append(this.searchInput, searchButton, clearButton);
         this.heading.after(controls);
 
-        this.catalogRoot = this.hostAdapter.createOwnedListRoot(["jhs-123av-list", "jhs-layout-d2c171b1"]);
+        this.catalogRoot = this.hostAdapter.createOwnedListRoot(["jhs-123av-list"]);
         this.hostAdapter.mountExternalFc2Catalog(this.catalogRoot);
         this.contentBox.querySelector(".empty-message")?.remove();
         this.contentBox.querySelector("#foldCategoryBtn")?.remove();
         this.pageBox = this.document.createElement("div");
         this.pageBox.className = "page-box";
+        this.pageBox.setAttribute("data-jhs-catalog-pagination", "");
         const nav = this.document.createElement("nav");
         nav.className = "pagination";
         const previous = this.createButton("上一页", "jhs-btn pagination-previous");
@@ -121,7 +125,16 @@ export class Fc2CatalogController {
         nav.append(previous, this.paginationList, next);
         this.pageBox.append(nav);
         this.contentBox.append(this.pageBox);
-        this.updateUrlParameter("page", String(this.currentPage));
+        const jump = mountPageJump(this.paginationList, this.currentPage, page => void this.changePage(page), this.scope);
+        this.writeAddress(true);
+        this.listen(this.window, "popstate", () => {
+            const params = new URLSearchParams(this.window.location.search);
+            this.currentPage = Math.max(1, Number.parseInt(params.get("page") || "1", 10) || 1);
+            this.keyword = params.get("keyword") || "";
+            if (this.searchInput) this.searchInput.value = this.keyword;
+            void this.query();
+        });
+        this.scope.addCleanup(() => { this.queryScope?.dispose(); jump.remove(); });
 
         this.listen(searchButton, "click", () => void this.search());
         this.listen(this.searchInput, "keydown", (event) => {
@@ -162,49 +175,42 @@ export class Fc2CatalogController {
         return button;
     }
 
-    async search() {
-        const keyword = this.searchInput?.value.trim() ?? "";
-        if (!keyword) {
-            if (this.keyword) return this.clearSearch();
-            return;
-        }
-        this.keyword = keyword;
-        this.updateUrlParameter("keyword", keyword);
-        this.currentPage = 1;
-        this.maxPage = null;
-        this.updateUrlParameter("page", "1");
-        await this.query();
-    }
+    async search() { await this.setSearch(this.searchInput?.value.trim() || ""); }
 
     async clearSearch() {
         if (this.searchInput) this.searchInput.value = "";
-        this.keyword = "";
-        this.updateUrlParameter("keyword", "");
-        this.currentPage = 1;
+        await this.setSearch("");
+    }
+
+    /** @param {string} keyword */
+    async setSearch(keyword) {
+        if (keyword === this.keyword && this.currentPage === 1) return;
+        this.keyword = keyword;
         this.maxPage = null;
-        this.updateUrlParameter("page", "1");
-        if (this.pageBox) this.pageBox.hidden = false;
-        await this.query();
+        await this.changePage(1);
     }
 
     /** @param {number} page */
     async changePage(page) {
-        this.currentPage = page;
-        this.updateUrlParameter("page", String(page));
-        this.renderPagination();
+        this.currentPage = this.maxPage ? Math.min(page, this.maxPage) : page;
+        this.writeAddress();
         await this.query();
     }
 
-    /** @param {string} key @param {string} value */
-    updateUrlParameter(key, value) {
+    writeAddress(replace = false) {
         const url = new URL(this.window.location.href);
-        url.searchParams.set(key, value);
-        this.window.history.pushState({}, "", url.toString());
+        url.searchParams.set("page", String(this.currentPage));
+        if (this.keyword) url.searchParams.set("keyword", this.keyword);
+        else url.searchParams.delete("keyword");
+        if (url.href !== this.window.location.href) this.window.history[replace ? "replaceState" : "pushState"]({}, "", url.href);
     }
 
     renderPagination() {
         if (!this.paginationList) return;
-        this.paginationList.replaceChildren();
+        const jump = this.paginationList.querySelector("#gemini-jump-page-control");
+        for (const child of [...this.paginationList.children]) if (child !== jump) child.remove();
+        const input = jump?.querySelector("input");
+        if (input) input.value = String(Math.min(this.maxPage || this.currentPage + 1, this.currentPage + 1));
         const maxPage = this.maxPage ?? 1;
         let first = Math.max(1, this.currentPage - 2), last = Math.min(maxPage, this.currentPage + 2);
         if (this.currentPage <= 3) last = Math.min(6, maxPage);
@@ -228,7 +234,7 @@ export class Fc2CatalogController {
         button.setAttribute("data-page", String(page));
         if (current) button.setAttribute("aria-current", "page");
         item.append(button);
-        this.paginationList.append(item);
+        this.paginationList.insertBefore(item, this.paginationList.querySelector("#gemini-jump-page-control"));
     }
 
     appendEllipsis() {
@@ -238,33 +244,55 @@ export class Fc2CatalogController {
         span.className = "pagination-ellipsis";
         span.textContent = "…";
         item.append(span);
-        this.paginationList.append(item);
+        this.paginationList.insertBefore(item, this.paginationList.querySelector("#gemini-jump-page-control"));
     }
 
+    /** @returns {Promise<void>} */
     async query() {
         if (!this.catalogRoot || this.scope.disposed) return;
         const generation = ++this.queryGeneration;
+        this.queryScope?.dispose();
+        const scope = this.queryScope = new LifecycleScope("fc2-catalog-page");
         const loading = this.ui.loading();
         try {
             if (this.pageBox) this.pageBox.hidden = false;
-            const result = await this.movie.catalog("av123", { page: this.currentPage, keyword: this.keyword }, { scope: this.scope });
+            const result = await this.movie.catalog("av123", { page: this.currentPage, keyword: this.keyword }, { scope });
             if (this.scope.disposed || generation !== this.queryGeneration) return;
             const items = Array.isArray(result?.items) ? result.items : [];
             this.maxPage = Math.max(1, Number(result?.maxPage) || 1);
-            this.currentPage = Math.min(Math.max(1, this.currentPage), this.maxPage);
+            if (this.currentPage > this.maxPage) {
+                this.currentPage = this.maxPage;
+                this.writeAddress(true);
+                return await this.query();
+            }
             this.renderPagination();
             this.renderItems(items);
-            if (!items.length) this.notifications.error("未找到相关影片");
+            if (!items.length) this.renderStatus("暂无匹配影片");
             if (this.processAddedItems) await this.processAddedItems([...this.catalogRoot.querySelectorAll(".item")]);
             await this.ui.smoothScrollToTop?.();
         } catch (error) {
             if (!this.scope.disposed && generation === this.queryGeneration) {
                 this.diagnostics.recordError({ source: "fc2-catalog", featureId: "external-bridge", contributionId: "detail.fc2-lookup", message: error instanceof Error ? error.message : String(error) });
-                this.notifications?.error?.("获取 123AV 列表失败，请稍后重试");
+                this.renderStatus("123AV 列表加载失败", true);
             }
         } finally {
             loading?.close?.();
+            scope.dispose();
+            if (this.queryScope === scope) this.queryScope = null;
         }
+    }
+
+    /** @param {string} message */
+    renderStatus(message, retry = false) {
+        const status = this.document.createElement("div");
+        status.className = "jhs-state";
+        status.textContent = message;
+        if (retry) {
+            const button = this.createButton("重试", "jhs-btn jhs-btn--secondary");
+            button.addEventListener("click", () => void this.query(), { once: true });
+            status.append(button);
+        }
+        this.catalogRoot?.replaceChildren(status);
     }
 
     /** @param {Array<{url?: string, imageUrl?: string, title?: string, carNum?: string}>} items */
@@ -299,7 +327,8 @@ export class Fc2CatalogController {
             const score = this.document.createElement("div"); score.className = "score";
             const meta = this.document.createElement("div"); meta.className = "meta";
             const toolbar = this.document.createElement("div"); toolbar.className = "jhs-toolbar";
-            link.append(cover, title, score, meta, toolbar);
+            const tags = this.document.createElement("div"); tags.className = "tags";
+            link.append(cover, title, score, meta, tags, toolbar);
             card.append(link);
             fragment.append(card);
         }
@@ -313,10 +342,10 @@ export class Fc2CatalogController {
         const actressPromise = this.getActressInfo(context.carNum);
         imagesPromise.then((images) => context.isAlive() && renderFc2Gallery(context, images, null)).catch(() => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", () => void this.reloadImages(context)));
         const renderActress = actressPromise.then(async (data) => {
-            await infoPromise.catch(() => null);
+            await infoPromise.catch(error => this.diagnostics.recordError({ source: "fc2-catalog", message: "读取影片关联失败", error }));
             if (context.isAlive()) this.render123AvActress(context, data);
         }).catch(async (error) => {
-            await infoPromise.catch(() => null);
+            await infoPromise.catch(error => this.diagnostics.recordError({ source: "fc2-catalog", message: "读取影片关联失败", error }));
             if (context.isAlive()) context.root.find('[data-jhs-role="actors"]').attr("aria-busy", "false").find("span").text("演员信息加载失败");
             this.diagnostics.recordError({ source: "fc2-catalog", message: error instanceof Error ? error.message : String(error) });
         });
@@ -348,7 +377,7 @@ export class Fc2CatalogController {
         const body = context.root.find('[data-jhs-role="summary-content"]').empty();
         const title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
         title.find("strong").text(info.title || context.initialMovie?.title || "无标题");
-        body.append(title, $('<div class="jhs-fc2-meta"></div>').append($('<span></span>').text(`番号：${context.carNum}`), $('<span></span>').text(`发行：${info.publishDate || context.initialMovie?.releaseDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors" aria-busy="true"><strong>主演：</strong><span role="status">加载中…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', createFc2SourceLinks(context, this.movie), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
+        body.append(title, $('<div class="jhs-fc2-meta"></div>').append($('<span></span>').text(`番号：${context.carNum}`), $('<span></span>').text(`发行：${info.publishDate || context.initialMovie?.releaseDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors" aria-busy="true"><strong>主演：</strong><span role="status">加载中…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
 
     /** @param {string} carNum @param {string} url */

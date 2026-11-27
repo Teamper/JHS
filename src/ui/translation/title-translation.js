@@ -1,6 +1,19 @@
 // @ts-check
 import { translationErrorLabel } from "../../core/translation-model.js";
 
+/** @param {HTMLElement} node @param {unknown} error @param {() => void} retry */
+export function showTitleTranslationError(node, error, retry) {
+    const label = node.ownerDocument.createElement("span"), button = node.ownerDocument.createElement("button");
+    label.className = "jhs-translation-error-message";
+    label.textContent = translationErrorLabel(error);
+    button.type = "button";
+    button.className = "jhs-btn jhs-btn--ghost jhs-btn--sm";
+    button.textContent = "重试";
+    button.addEventListener("click", retry, { once: true });
+    node.classList.add("is-error");
+    node.replaceChildren(label, button);
+}
+
 /**
  * @param {{root?: any, carNum?: string, logger?: Pick<Console, "error">, translation: import("../../services/translation-service.js").TranslationService, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean}} options
  */
@@ -31,6 +44,8 @@ export async function renderTranslatedTitle(options) {
         if (options.isActive && !options.isActive()) return;
         if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
         options.logger?.error("翻译失败:", error);
-        translatedNode.addClass("is-error").text(translationErrorLabel(error));
+        showTitleTranslationError(translatedNode[0], error, () => {
+            void renderTranslatedTitle(options).catch(cause => options.logger?.error("重试翻译失败", cause));
+        });
     }
 }

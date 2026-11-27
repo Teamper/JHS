@@ -101,13 +101,12 @@ it("releases dialog ownership without re-entering an already completed close", (
     expect(controller.dialog.close).toHaveBeenCalledOnce();
     expect(document.querySelector(".jhs-media-connections")).toBeNull();
 });
-it("allows configuration to reopen after a dialog mounting failure", () => {
+it("allows media version details to reopen after a dialog mounting failure", () => {
     controller.dialog = { open: vi.fn(() => { throw new Error("mount failed"); }), close: vi.fn() };
-    service.testConnection = vi.fn();
-    expect(() => controller.configure()).toThrow("mount failed");
-    expect(controller.configScope.disposed).toBe(true);
+    const result = { hits: [{ url: "https://media.example/details", serverName: "家庭媒体库", name: "ABC-123", path: "/ABC-123.mp4" }] };
+    expect(() => controller.openHits(result)).toThrow("mount failed");
     expect(document.querySelector(".jhs-media-connections")).toBeNull();
     controller.dialog.open.mockReturnValue(1);
-    controller.configure();
+    controller.openHits(result);
     expect(document.querySelector(".jhs-media-connections")).not.toBeNull();
 });

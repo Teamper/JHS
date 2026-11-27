@@ -78,7 +78,7 @@ describe("settings business navigation", () => {
         expect(stored.setting.reviewCount).toBe("20");
         expect(stored.setting.autoPage).toBe("no");
         await saveSettingForm(plugin.getFormDependencies(), root);
-        expect(stored.setting).toMatchObject({ reviewCount: "40", checkConcurrencyCount: "3", autoPage: "yes" });
+        expect(stored.setting).toMatchObject({ reviewCount: 40, checkConcurrencyCount: 3, autoPage: "yes" });
         expect(webdav.saveProfile).not.toHaveBeenCalled();
     });
 
@@ -108,7 +108,7 @@ describe("settings business navigation", () => {
         root.find("#reviewCount").val("40").trigger("change");
         root.find("#saveBtn").trigger("click");
         await vi.waitFor(() => expect(root.find("#saveBtn").attr("aria-busy")).toBeUndefined());
-        expect(stored.setting.reviewCount).toBe("40");
+        expect(stored.setting.reviewCount).toBe(40);
         expect(notifications.error).not.toHaveBeenCalled();
         expect(plugin.logger.warn).toHaveBeenCalledWith("设置已保存，完成提示显示失败", error);
     });

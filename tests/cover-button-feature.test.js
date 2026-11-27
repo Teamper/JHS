@@ -27,7 +27,7 @@ function createController({ screenshotAvailable = true, settings: settingValues 
     doc.body.innerHTML = `<div class="movie-list"><div class="item"><a href="/v/abc-123"><img class="cover-image" src="https://images.example.test/cover.jpg"><div class="video-title"><strong>ABC-123</strong> Test title</div><div class="meta">2026-08-25</div></a><div class="tags"></div></div></div>`;
     const $ = jqueryFactory;
     const settings = createSettings({ enableScreenSvg: "yes", enableVideoSvg: "yes", enablePreviewVideo: "no", enableLoadPreviewVideo: "yes", enableHandleSvg: "yes", enableSiteSvg: "yes", enableCopySvg: "yes", ...settingValues });
-    const state = { patch: vi.fn(async () => {}) };
+    const state = { getState: vi.fn(async () => null), patch: vi.fn(async () => {}) };
     const ui = {
         jquery: $,
         confirm: vi.fn(),
@@ -91,6 +91,7 @@ describe("native list card actions Feature", () => {
     it("rechecks the source after confirmation before requesting actor names", async () => {
         current = createController(); await current.controller.start();
         current.document.querySelector(".filterBtn").click();
+        await vi.waitFor(() => expect(current.ui.confirm).toHaveBeenCalledOnce());
         current.document.querySelector(".video-title strong").textContent = "FC2";
         await current.ui.confirm.mock.calls[0][2]();
         expect(current.list.parseActressName).not.toHaveBeenCalled();
@@ -101,6 +102,7 @@ describe("native list card actions Feature", () => {
         current = createController(); let finish;
         current.list.parseActressName.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
         await current.controller.start(); current.document.querySelector(".favoriteBtn").click();
+        await vi.waitFor(() => expect(current.list.parseActressName).toHaveBeenCalledOnce());
         current.document.querySelector(".video-title strong").textContent = "FC2";
         finish("Actress"); await new Promise(resolve => setTimeout(resolve, 0));
         expect(current.state.patch).not.toHaveBeenCalled();
@@ -108,6 +110,17 @@ describe("native list card actions Feature", () => {
         current.document.querySelector(".favoriteBtn").click();
         await vi.waitFor(() => expect(current.state.patch).toHaveBeenCalledOnce());
         expect(current.state.patch.mock.calls[0][2].record.stateEligibility).toEqual({ eligible: true, reason: null });
+    });
+
+    it("removes an existing block without a second confirmation or cast lookup", async () => {
+        current = createController();
+        current.state.getState.mockResolvedValue({ stateFlags: { blocked: true } });
+        await current.controller.start();
+        current.document.querySelector(".filterBtn").click();
+        await vi.waitFor(() => expect(current.state.patch).toHaveBeenCalledWith("ABC-123", { blocked: false }, expect.any(Object)));
+        expect(current.ui.confirm).not.toHaveBeenCalled();
+        expect(current.list.parseActressName).not.toHaveBeenCalled();
+        expect(current.notifications.ok).toHaveBeenCalledWith("已取消屏蔽");
     });
 
     it("gates screenshot and DMM controls while applying card settings live", async () => {
@@ -216,7 +229,7 @@ describe("native list card actions Feature", () => {
             type: "list-card-state",
             record: { carNum: "ABC-123", url: "/v/abc-123", names: "测试演员", publishTime: "2026-08-25", fc2Source: null, stateEligibility: { eligible: true, reason: null } },
         });
-        expect(current.notifications.ok).toHaveBeenCalledWith("已更新影片状态");
+        expect(current.notifications.ok).toHaveBeenCalledWith("已标记收藏");
     });
 
     it("returns menu actions to their trigger before opening a confirmation", async () => {
@@ -228,6 +241,7 @@ describe("native list card actions Feature", () => {
             dialogButton.id = "confirmation"; current.document.body.append(dialogButton); dialogButton.focus();
         });
         trigger.click(); current.document.querySelector(".filterBtn").click();
+        await vi.waitFor(() => expect(current.ui.confirm).toHaveBeenCalledOnce());
         expect(current.document.activeElement.id).toBe("confirmation");
     });
 
@@ -267,7 +281,7 @@ describe("native list card actions Feature", () => {
         current = createController(); let finish;
         current.list.parseActressName.mockImplementation(() => new Promise((yes, no) => { finish = reject ? no : yes; }));
         await current.controller.start(); current.document.querySelector(".favoriteBtn").click();
-        expect(current.list.parseActressName).toHaveBeenCalledWith("/v/abc-123", current.scope);
+        await vi.waitFor(() => expect(current.list.parseActressName).toHaveBeenCalledWith("/v/abc-123", current.scope));
         current.scope.dispose(); finish(reject ? new Error("cancelled lookup") : "演员");
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(current.state.patch).not.toHaveBeenCalled();
@@ -297,6 +311,7 @@ describe("native list card actions Feature", () => {
     it("does not start actor resolution when confirmation arrives after disposal", async () => {
         current = createController(); await current.controller.start();
         current.document.querySelector(".filterBtn").click();
+        await vi.waitFor(() => expect(current.ui.confirm).toHaveBeenCalledOnce());
         const confirm = current.ui.confirm.mock.calls[0][2];
         current.scope.dispose(); await confirm();
         expect(current.list.parseActressName).not.toHaveBeenCalled(); expect(current.state.patch).not.toHaveBeenCalled();
@@ -319,6 +334,7 @@ describe("native list card actions Feature", () => {
         const untrusted = 'ABC-123<img id="jhs-cover-xss" src=x onerror="window.__jhsXss=true">';
         current.document.querySelector(".video-title strong").textContent = untrusted;
         current.document.querySelector(".filterBtn").click();
+        await vi.waitFor(() => expect(current.ui.confirm).toHaveBeenCalledOnce());
 
         const message = current.ui.confirm.mock.calls[0][1];
         const rendered = current.document.createElement("div");

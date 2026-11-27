@@ -3,8 +3,10 @@
 import { PRODUCT_NAMES } from "../../core/product-names.js";
 
 import { createStateActions } from "../../ui/detail/state-actions.js";
+import { mountMovieRemark } from "../../ui/detail/movie-remark.js";
 
 import { _, k, m, v, y } from "../../core/constants.js";
+import { DetailBrowseLifecycleController } from "./detail-browse-lifecycle-controller.js";
 import { DetailStateController } from "../../core/detail-state-controller.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { normalizeHttpUrl, normalizeBtihHash } from "../../core/feature-helpers.js";
@@ -54,6 +56,7 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
  * @property {number | undefined} screenshotGeneration
  * @property {(() => void) | undefined} [releaseScreenshotScope]
  * @property {boolean} [screenshotCleanupRegistered]
+ * @property {LifecycleScope} [otherSitesScope]
  * @property {number | undefined} otherSiteGeneration
  * @property {((external?: boolean) => Promise<void>) | undefined} openMagnetHub
  * @property {(() => void) | undefined} syncMagnetHub
@@ -179,6 +182,15 @@ export class Fc2WorkspaceService {
     /** @param {Fc2DetailContext} context */
     initializeWorkspace(context) {
         context.root.attr("data-jhs-movie-code", context.carNum);
+        context.addObserver({ disconnect: () => context.otherSitesScope?.dispose() });
+        const settings = this.getRuntimeService("settings");
+        const scope = this.wantScopeFor(context);
+        void new DetailBrowseLifecycleController({ settings, state: this.getRuntimeService("state"), scope })
+            .start(context.movieContext).catch(error => this.logger.error("自动移除新作品标记失败", error));
+        context.root.on("click" + context.namespace, "[data-jhs-copy-magnet]", (/** @type {MouseEvent} */ event) => {
+            const magnet = $(event.currentTarget).attr("data-jhs-copy-magnet");
+            void this.getRuntimeService("clipboard").copyText("磁力链接", magnet);
+        });
         const summary = $('<div class="jhs-fc2-summary"><div class="jhs-fc2-preview" data-jhs-role="main-preview"></div><div class="jhs-fc2-summary__body"><div data-jhs-role="summary-content"></div></div></div>'), toolbar = $('<div class="jhs-fc2-toolbar" role="toolbar" aria-label="影片操作"></div>');
         toolbar.append(createStateActions());
         if (context.source === "fc2") {
@@ -261,7 +273,17 @@ export class Fc2WorkspaceService {
             }
         };
         hubButton.on(`click${context.namespace}`, () => void context.openMagnetHub?.());
-        this.getDetailStateController().bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", isActive: () => context.isAlive(), getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
+        const getRecord = () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() });
+        const stateController = this.getDetailStateController();
+        stateController.bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", isActive: () => context.isAlive(), getRecord });
+        if (this.runtimeServices.dialog) mountMovieRemark({
+            host: toolbar[0], scope, getRecord, state: stateController.stateService,
+            events: this.getRuntimeService("events"), dialog: this.getRuntimeService("dialog"),
+            report: (/** @type {unknown} */ error) => {
+                this.logger.error("FC2 备注操作失败", error);
+                this.getRuntimeService("notifications").error("备注操作失败，请重试");
+            },
+        });
         this.runtimeServices.mountShortcuts?.(context);
         "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
         this.mountFc2OtherSites(context, sitesGroup, this.readExternalSites());
@@ -361,7 +383,7 @@ export class Fc2WorkspaceService {
             if (window.IntersectionObserver) context.translationObserver = new window.IntersectionObserver((/** @type {IntersectionObserverEntry[]} */ entries) => {
                 if (entries.some(entry => entry.isIntersecting)) {
                     if (!context.releaseTranslationScope && !context.root.find(".translated-title").length) this.applyFc2Translation(context);
-                } else this.revertFc2Translation(context);
+                }
             });
         }
         if (context.translationVisibilityTarget !== title) {
@@ -401,8 +423,10 @@ export class Fc2WorkspaceService {
         const settings = this.getRuntimeService("settings");
         const generation = (context.otherSiteGeneration || 0) + 1;
         context.otherSiteGeneration = generation;
+        context.otherSitesScope?.dispose();
+        const scope = context.otherSitesScope = new LifecycleScope("fc2-other-sites");
         sitesGroup.length && sitesGroup.show();
-        void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: () => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no" && generation === context.otherSiteGeneration }))).then((/** @type {JQueryHandle | null} */ box) => {
+        void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), scope, autoDetect: !1, isActive: () => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no" && generation === context.otherSiteGeneration }))).then((/** @type {JQueryHandle | null} */ box) => {
             // 稳定插槽：OFF/无结果只隐藏分组，绝不 remove；OFF→ON 仍能重新挂载。
             if (!context.isAlive() || generation !== context.otherSiteGeneration) return;
             box ? sitesGroup.show() : sitesGroup.hide();
@@ -417,7 +441,7 @@ export class Fc2WorkspaceService {
     /** @param {Fc2DetailContext} context @param {any} sitesGroup */
     unmountFc2OtherSites(context, sitesGroup) {
         context.otherSiteGeneration = (context.otherSiteGeneration || 0) + 1;
-        context.root.find("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
+        context.otherSitesScope?.dispose();
         sitesGroup.length && sitesGroup.hide();
     }
     /** @param {string} title @param {string} role */
@@ -654,7 +678,7 @@ export class Fc2WorkspaceService {
                 if (!hash) return;
                 const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = magnetService.assess({ title: item.title, hasHdTag: item.hasHdTag, hasSubtitleTag: item.hasSubtitleTag, date: item.createdAt, seeders: item.seeders }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
                 assessments.push(assessment), tags.append($("<span></span>").addClass("jhs-badge").attr("title", `磁力质量评分 ${assessment.score.total}`).text(`${assessment.grade} ${assessment.score.total}`)), item.hasHdTag && tags.append('<span class="jhs-badge">高清</span>'), item.hasSubtitleTag && tags.append('<span class="jhs-badge">字幕</span>');
-                info.append($("<a></a>").attr("href", magnet).text(item.title || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.sizeMb || 0) / 1024).toFixed(2)} GB · ${Number(item.fileCount) || 0} 个文件${item.createdAt ? ` · ${item.createdAt}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
+                info.append($("<a></a>").attr("href", magnet).text(item.title || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.sizeMb || 0) / 1024).toFixed(2)} GB · ${Number(item.fileCount) || 0} 个文件${item.createdAt ? ` · ${item.createdAt}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary">复制</button>').attr("data-jhs-copy-magnet", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
             }));
             await this.bindNativeMagnetFilter(context, host, assessments.some((item => item.highQuality)));
         } catch (error) {

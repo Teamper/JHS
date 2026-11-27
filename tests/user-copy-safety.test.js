@@ -13,13 +13,14 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("user copy keeps technical diagnostics private", () => {
     it("keeps third-party failure hints safe and retains the original known-code errors", async () => {
-        const dom = new JSDOM('<body><a data-jhs-site-id="jableBtn">Jable</a></body>');
+        const dom = new JSDOM('<body><main></main></body>');
         const $ = jqueryFactory(dom.window), debug = vi.fn(), setLocal = vi.fn();
         const searchExternalSite = vi.fn();
         const controller = new OtherSitesController({
             document: dom.window.document, window: dom.window, jquery: $, hostAdapter: {},
-            movie: { searchExternalSite }, storage: { getLocal: () => null, setLocal },
-            settings: { snapshot: () => ({}) }, events: {}, scope: {}, ui: { isHidden: () => false },
+            movie: { searchExternalSite, searchUrl: () => null, externalSites: () => [{ id: "jableBtn", searchUrl: () => "https://jable.tv/search/ABC-1/" }] },
+            styles: { register: () => () => {} }, storage: { getLocal: () => null, setLocal },
+            settings: { snapshot: () => ({}) }, events: {}, scope: new LifecycleScope("third-party-copy"), ui: { isHidden: () => false },
             notifications: { debug }, site: "javdb", route: "detail",
         });
         try {
@@ -31,13 +32,14 @@ describe("user copy keeps technical diagnostics private", () => {
             ]) {
                 const failure = Object.assign(new Error("https://private.example/?token=secret"), { code });
                 searchExternalSite.mockRejectedValueOnce(failure);
-                await controller.handleSite("ABC-1", { id: "jableBtn" });
-                expect($("[data-jhs-site-id]").attr("title")).toBe(message);
+                await controller.loadOtherSite("ABC-1", null, { target: $("main"), autoDetect: true });
+                expect($("[data-jhs-site-id=jableBtn]").attr("href")).toBe("https://jable.tv/search/ABC-1/");
+                expect($("[data-jhs-site-id=jableBtn]").attr("title")).toBe(message);
                 expect(dom.window.document.body.outerHTML).not.toContain("secret");
                 expect(debug).toHaveBeenLastCalledWith(expect.any(String), failure);
             }
             expect(setLocal).not.toHaveBeenCalled();
-        } finally { dom.window.close(); }
+        } finally { controller.scope.dispose(); dom.window.close(); }
     });
 
     it.each(["internal-action-secret", "constructor"])("keeps the storage error for %s while showing an actionable message", async actionType => {
@@ -59,7 +61,8 @@ describe("user copy keeps technical diagnostics private", () => {
             diagnostics: { recordError }, scope: new LifecycleScope("safe-translation-error"),
         });
         await controller.translateDetail(0);
-        expect(dom.window.document.querySelector(".translated-title")?.textContent).toBe("翻译失败，请重试");
+        expect(dom.window.document.querySelector(".jhs-translation-error-message")?.textContent).toBe("翻译失败，请重试");
+        expect(dom.window.document.querySelector(".translated-title button")?.textContent).toBe("重试");
         expect(dom.window.document.body.textContent).not.toContain("secret");
         expect(recordError).toHaveBeenCalledWith(expect.objectContaining({ message: failure.message }));
         dom.window.close();
@@ -71,7 +74,8 @@ describe("user copy keeps technical diagnostics private", () => {
         vi.stubGlobal("$", jqueryFactory(dom.window));
         vi.stubGlobal("document", dom.window.document);
         await renderTranslatedTitle({ root: dom.window.document, logger: { error }, translation: { translate: vi.fn().mockRejectedValue(failure) }, isActive: () => true });
-        expect(dom.window.document.querySelector(".translated-title")?.textContent).toBe("翻译失败，请重试");
+        expect(dom.window.document.querySelector(".jhs-translation-error-message")?.textContent).toBe("翻译失败，请重试");
+        expect(dom.window.document.querySelector(".translated-title button")?.textContent).toBe("重试");
         expect(dom.window.document.body.textContent).not.toContain("secret");
         expect(error).toHaveBeenCalledWith("翻译失败:", failure);
         dom.window.close();

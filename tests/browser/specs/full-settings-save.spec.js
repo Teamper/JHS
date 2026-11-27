@@ -63,11 +63,11 @@ test("saving keeps edits made during submission, including a return to the origi
     await dialog.locator("#saveBtn").dispatchEvent("click"); expect(await page.evaluate(() => window.__saveCalls)).toBe(1);
     await page.evaluate(() => window.__finishSave());
     await expect.poll(async () => (await snapshot(page)).themeMode).toBe("dark");
-    expect((await snapshot(page)).waitCheckCount).toBe("7");
+    expect((await snapshot(page)).waitCheckCount).toBe(7);
     await expect(dialog.locator("#themeMode")).toHaveValue("light"); await expect(dialog.locator("#waitCheckCount")).toHaveValue("5");
     await expect(dialog.locator("#settings-draft-status")).toContainText("2 项未保存");
     await dialog.locator("#saveBtn").click(); await expect.poll(async () => (await snapshot(page)).themeMode).toBe("light");
-    expect((await snapshot(page)).waitCheckCount).toBe("5");
+    expect((await snapshot(page)).waitCheckCount).toBe(5);
     await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-dirty-count", "0");
 });
 
@@ -89,7 +89,7 @@ test("external updates merge clean fields, preserve dirty fields and resource dr
     expect((await snapshot(page)).magnetTagRules).not.toContain("本地规则");
     await dialog.locator("#saveBtn").click();
     await expect.poll(async () => (await snapshot(page)).magnetTagRules).toContain("本地规则");
-    const saved = await snapshot(page); expect(saved.magnetTagRules).toContain("外部规则"); expect(saved.httpTimeout).toBe(8000); expect(saved.themeMode).toBe("dark"); expect(saved.waitCheckCount).toBe("7");
+    const saved = await snapshot(page); expect(saved.magnetTagRules).toContain("外部规则"); expect(saved.httpTimeout).toBe(8000); expect(saved.themeMode).toBe("dark"); expect(saved.waitCheckCount).toBe(7);
 });
 
 test("resource JSON and pending keywords save together; partial failure keeps only failed edits", async ({ page, context }, info) => {

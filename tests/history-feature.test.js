@@ -32,6 +32,7 @@ describe("Library Feature history ownership", () => {
                 .register(SERVICE.events, { emit: vi.fn(), on: vi.fn(() => () => {}) })
                 .register(SERVICE.profile, profile)
                 .register(SERVICE.dialog, dialog)
+                .register(SERVICE.offline, { tasks: {} })
                 .register(SERVICE.clipboard, { copyText: vi.fn() })
                 .register(SERVICE.clog, { error: vi.fn(), warn: vi.fn() }),
             commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), disabled, site: "javdb", route: "list",

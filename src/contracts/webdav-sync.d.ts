@@ -8,6 +8,8 @@ export interface WebDavProfile {
 
 export interface SyncStatus {
     profileConflict: boolean;
+    retention?: { count: number; days: number };
+    legacyRetention?: boolean;
     busy: boolean;
     enabled: boolean;
     paused: boolean;
@@ -52,5 +54,6 @@ export interface WebDavSync extends EventTarget {
     schedule?(delay: number, force?: boolean, manual?: boolean): void;
     cancel(): void;
     listRecoveryFiles(scope?: LifecycleScope | null): Promise<SyncRecoveryFile[]>;
+    previewRecovery(name: string, layout: boolean, scope: LifecycleScope | null, selection: SyncRestoreSelection): Promise<{ diff: Record<string, unknown>; apply: (scope: LifecycleScope) => Promise<void> }>;
     restore(name: string, layout?: boolean, scope?: LifecycleScope | null, selection?: SyncRestoreSelection): Promise<void>;
 }

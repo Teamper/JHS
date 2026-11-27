@@ -150,11 +150,12 @@ for(const theme of ["light","dark"]) {
     await expect.poll(() => workspace.evaluate(root => root.closest(".layui-layer-content").scrollTop)).toBe(0);
     await writeFile(info.outputPath("translation-geometry.json"),JSON.stringify(await page.evaluate(()=>({innerWidth,clientWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll("body *")].filter(node=>node.getBoundingClientRect().right>document.documentElement.clientWidth+1).slice(0,25).map(node=>({tag:node.tagName,id:node.id,className:typeof node.className==="string"?node.className:"",right:node.getBoundingClientRect().right,width:getComputedStyle(node).width,position:getComputedStyle(node).position})),elements:[...document.querySelectorAll("html,body,main,.layui-layer,.jhs-translation-workspace,.jhs-translation-row")].map(node=>{const style=getComputedStyle(node);return {tag:node.tagName,id:node.id,className:node.className,rect:node.getBoundingClientRect().toJSON(),width:style.width,padding:style.padding,boxSizing:style.boxSizing,position:style.position,transform:style.transform};})})),null,2));
     await assertNoHorizontalOverflow(page);
+    if(hasVisualBaseline(info))await expect(page.locator(".toastify")).toHaveCount(0);
     await page.screenshot({path:info.outputPath(`translation-manual-${theme}.png`)});
     if(hasVisualBaseline(info))await expect(page).toHaveScreenshot(`translation-manual-${theme}.png`,{maxDiffPixelRatio:.02});
     const requests=await page.evaluate(()=>window.translationCalls);
     expect(requests.every(request=>request.body.model==="configured-model"&&request.body.stream===false&&request.headers.Authorization==="Bearer fixture-api-secret")).toBe(true);
-    await page.keyboard.press("Escape");await expect(workspace).toHaveCount(0);await expect(entry).toBeFocused();expect(errors).toEqual([]);
+    await page.keyboard.press("Escape");await expect(workspace).toHaveCount(0);await expect(page.getByRole("button", { name: "更多操作", exact: true })).toBeFocused();expect(errors).toEqual([]);
   });
 
   test(`selected list translation preserves masked titles and suspends automatic requests ${theme}`,async({page,context})=>{
@@ -173,7 +174,7 @@ for(const theme of ["light","dark"]) {
     await page.waitForTimeout(100);expect(await page.evaluate(()=>window.translationCalls.length)).toBe(1);
     await page.keyboard.press("Escape");await(await utility(page,"关闭隐私遮罩")).click();
     await page.locator(".movie-list .video-title").scrollIntoViewIfNeeded();
-    await expect(page.locator(".movie-list .video-title")).toContainText("服务译文 ABC-123");expect(await page.evaluate(()=>window.translationCalls.length)).toBe(2);expect(errors).toEqual([]);
+    await expect(page.locator(".movie-list .video-title")).toContainText("服务译文 ABC-123");expect(await page.evaluate(()=>window.translationCalls.length)).toBe(1);expect(errors).toEqual([]);
   });
 
   test(`FC2 workspace translates its original title through the shared panel ${theme}`,async({page,context})=>{
@@ -183,11 +184,15 @@ for(const theme of ["light","dark"]) {
     const headingColor = await page.locator(".jhs-fc2-title").evaluate(node => getComputedStyle(node).color);
     await expect(page.locator(".jhs-fc2-title strong")).toHaveCSS("color",headingColor);
     await expect(page.locator(".jhs-fc2-actors > strong")).toHaveCSS("color",headingColor);
-    const entry=page.locator(".jhs-fc2-workspace .jhs-translation-entry");await expect(entry).toHaveCount(1);await openDetailEnhancements(page);await entry.click();
+    await expect(page.locator(".jhs-fc2-workspace .jhs-translation-entry")).toHaveCount(1);
+    await openDetailEnhancements(page);
+    await page.getByRole("menuitem", { name: "翻译", exact: true }).click();
     const workspace=page.locator(".jhs-translation-workspace");await expect(workspace).toContainText("日本語の原題");
-    await workspace.getByRole("button",{name:"翻译所列标题",exact:true}).click();await expect(workspace.locator(".jhs-translation-output").last()).toContainText("服务译文");await expect(workspace.locator(".jhs-translation-meta")).toHaveText("");
-    expect(await page.evaluate(()=>window.translationCalls[0].body.messages[1].content)).toContain("FC2-PPV-1234567 日本語の原題");
-    await page.keyboard.press("Escape");await expect(entry).toBeFocused();expect(errors).toEqual([]);
+    await expect(workspace.locator(".jhs-translation-output").last()).toContainText("服务译文");await expect(workspace.locator(".jhs-translation-meta")).toHaveText("");
+    const request = await page.evaluate(()=>window.translationCalls[0].body.messages[1].content);
+    expect(request).toContain("日本語の原題");
+    expect(request).not.toContain("FC2-PPV-1234567 日本語の原題");
+    await page.keyboard.press("Escape");await expect(page.getByRole("button", { name: "更多操作", exact: true })).toBeFocused();expect(errors).toEqual([]);
   });
 }
 

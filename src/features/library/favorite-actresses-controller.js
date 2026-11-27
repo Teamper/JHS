@@ -93,6 +93,7 @@ export class FavoriteActressesController {
         this.releaseHighlightStyle = this.styles.register("jhs-favorite-actresses-feature", `a.${HIGHLIGHT_CLASS}.highlighted{border:${width}px solid ${color}}`);
         const actresses = await this.state.getFavoriteActressList();
         if (this.disposed || this.scope.disposed || generation !== this.highlightGeneration) return;
+        const names = new Set(actresses.flatMap((/** @type {any} */ actress) => [actress.name, ...(Array.isArray(actress.allName) ? actress.allName : [])]).filter(Boolean));
         const starIds = new Set(actresses.map((/** @type {{starId?: unknown}} */ actress) => String(actress.starId || "").trim()).filter(Boolean));
         const view = this.document.defaultView;
         if (!view) return;
@@ -102,7 +103,7 @@ export class FavoriteActressesController {
             const anchor = actor.link;
             if (!(anchor instanceof view.HTMLAnchorElement)) continue;
             const starId = actor.starId;
-            if (!starId || !starIds.has(starId)) continue;
+            if (this.hostAdapter.site === "javbus" ? !names.has(actor.name) : !starId || !starIds.has(starId)) continue;
             if (!this.highlightedAnchors.has(anchor)) this.highlightedAnchors.set(anchor, anchor.getAttribute("title"));
             anchor.classList.add("highlighted", HIGHLIGHT_CLASS);
             anchor.setAttribute("title", HIGHLIGHT_TITLE);
@@ -240,7 +241,7 @@ export class FavoriteActressesController {
     dispatchActressStateChanged(actorId) {
         if (this.scope.disposed) return;
         const normalizedId = String(actorId);
-        void Promise.resolve(this.events?.emit?.("actress-changed", { starId: normalizedId })).catch(() => {});
+        void Promise.resolve(this.events?.emit?.("actress-changed", { starId: normalizedId })).catch(error => this.diagnostics?.recordError?.({ source: "favorite-actresses", message: "演员资料更新通知失败", error }));
         const CustomEventConstructor = this.document.defaultView?.CustomEvent;
         if (!CustomEventConstructor) return;
         this.document.dispatchEvent(new CustomEventConstructor("actress-state-changed", { detail: { starId: normalizedId } }));

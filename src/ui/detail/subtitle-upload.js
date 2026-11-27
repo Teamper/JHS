@@ -30,7 +30,8 @@ export function createSubtitleUploadView({ document, scope }) {
     /** @param {any[]} matches */
     function add(matches) {
         for (const match of matches) {
-            if (directories.has(match.folderId)) continue;
+            const key = JSON.stringify([match.accountId, match.folderId, match.fileId ?? match.name]);
+            if (directories.has(key)) continue;
             const label = document.createElement("label"), checkbox = document.createElement("input"), text = document.createElement("span");
             label.className = "jhs-subtitles__row jhs-subtitles__actions";
             checkbox.type = "checkbox";
@@ -38,7 +39,7 @@ export function createSubtitleUploadView({ document, scope }) {
             text.textContent = `${match.name} · 目录 ${match.folderId}`;
             label.append(checkbox, text);
             targets.append(label);
-            directories.set(match.folderId, { checkbox, match });
+            directories.set(key, { checkbox, match });
         }
     }
     return {

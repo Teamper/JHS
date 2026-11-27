@@ -1,4 +1,5 @@
 // @ts-check
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 import { requestHostPage } from "../../core/host-page-request.js";
 import { readListItem } from "../../core/list-item-reader.js";
@@ -35,7 +36,7 @@ export class WantWatchImportController {
         const button = this.document.createElement("button");
         button.type = "button";
         button.id = "wantWatchBtn";
-        button.className = "jhs-btn jhs-btn--primary jhs-layout-481ed7e7";
+        button.className = "jhs-btn jhs-btn--primary";
         button.textContent = "导入至 JHS";
         this.scope.listen(button, "click", (/** @type {Event} */ rawEvent) => {
             const event = /** @type {MouseEvent} */ (rawEvent);
@@ -62,18 +63,25 @@ export class WantWatchImportController {
             button.disabled = true;
             button.setAttribute("aria-busy", "true");
         }
-        let loadingHandle;
+        const scope = new LifecycleScope("want-watch-import"), release = this.scope.addCleanup(() => scope.dispose());
+        const stop = this.document.createElement("button");
+        stop.type = "button";
+        stop.className = "jhs-btn jhs-btn--secondary";
+        stop.textContent = "停止导入";
+        button?.after(stop);
+        scope.listen(stop, "click", () => scope.dispose());
         try {
-            loadingHandle = this.ui.loading();
-            const result = await this.readAndImport(flag);
-            if (!this.scope.disposed) this.notifications.ok(`导入完成：成功 ${result.imported}，跳过 ${result.skipped}，失败 ${result.failed}，共 ${result.pages} 页`);
+            const result = await this.readAndImport(flag, scope);
+            if (!this.scope.disposed) this.notifications.ok(`${scope.disposed ? "导入已停止" : "导入完成"}：成功 ${result.imported}，跳过 ${result.skipped}，失败 ${result.failed}，共 ${result.pages} 页`);
         } catch (error) {
             if (!this.scope.disposed && !isAbortError(error)) {
                 this.report(error);
                 this.notifications.error("影片导入失败，请重试");
             }
         } finally {
-            loadingHandle?.close?.();
+            stop.remove();
+            release();
+            scope.dispose();
             this.running = false;
             if (button?.isConnected) {
                 button.disabled = false;
@@ -82,17 +90,29 @@ export class WantWatchImportController {
         }
     }
 
-    /** @param {"favorite" | "watched"} flag @returns {Promise<{imported: number, failed: number, skipped: number, pages: number}>} */
-    async readAndImport(flag) {
+    /** @param {"favorite" | "watched"} flag @param {LifecycleScope} [scope] @returns {Promise<{imported: number, failed: number, skipped: number, pages: number}>} */
+    async readAndImport(flag, scope = this.scope) {
         const selectors = this.hostAdapter.getListSelectors();
         if (!selectors?.itemSelector) throw new Error("无法读取 JavDB 影片列表结构");
         const parser = new DOMParser();
         const result = { imported: 0, failed: 0, skipped: 0, pages: 0 };
-        const visited = new Set();
+        const visited = new Set(), seen = new Set();
+        const importBatchId = crypto.randomUUID();
+        /** @type {any[]} */ const pending = [];
+        const flush = async () => {
+            if (!pending.length || scope.disposed) return;
+            const records = pending.splice(0);
+            try {
+                const saved = await this.state.patch(records.map(record => record.carNum), { [flag]: true }, { type: "javdb-list-import", importBatchId, records });
+                const count = saved?.changed?.length ?? records.length;
+                result.imported += count;
+                result.skipped += records.length - count;
+            } catch (error) { result.failed += records.length; this.report(error, "影片批次保存失败"); }
+        };
         let pageRoot = this.document;
         let pageUrl = this.window.location.href;
 
-        while (pageRoot && !this.scope.disposed) {
+        while (pageRoot && !scope.disposed) {
             if (visited.has(pageUrl)) break;
             visited.add(pageUrl);
             result.pages += 1;
@@ -101,39 +121,33 @@ export class WantWatchImportController {
             if (this.hostAdapter.resolveListBoundary && !boundary) throw new Error("\u65e0\u6cd5\u552f\u4e00\u786e\u5b9a\u6b63\u5f0f\u5f71\u7247\u5217\u8868");
             const items = boundary ? [...boundary.root.querySelectorAll(":scope > .item")] : [...pageRoot.querySelectorAll(selectors.itemSelector)];
             for (const item of items) {
-                if (this.scope.disposed) break;
+                if (scope.disposed) break;
                 try {
                     const movie = readListItem(item, this.ui.jquery);
-                    if (!getMovieStateEligibility(movie).eligible || !movie.url) { result.skipped++; continue; }
-                    const carNum = movie.carNum;
-                    await this.state.patch(carNum, { [flag]: true }, {
-                        type: "javdb-list-import",
-                        record: {
-                            carNum, stateEligibility: movie.stateEligibility,
-                            url: movie.url,
-                            names: "",
-                            publishTime: movie.publishTime ?? "",
-                        },
-                    });
-                    result.imported += 1;
-                } catch (error) {
-                    if (this.scope.disposed || isAbortError(error)) break;
-                    if (/** @type {any} */ (error)?.code === "UNRELIABLE_MOVIE_IDENTITY") { result.skipped++; continue; }
-                    result.failed += 1;
-                    this.report(error, "影片保存失败");
-                }
+                    if (!getMovieStateEligibility(movie).eligible || !movie.url || seen.has(movie.carNum)) { result.skipped++; continue; }
+                    seen.add(movie.carNum);
+                    pending.push({ carNum: movie.carNum, stateEligibility: movie.stateEligibility, url: movie.url, publishTime: movie.publishTime || "" });
+                    if (pending.length === 75) await flush();
+                } catch (error) { result.skipped++; this.report(error, "跳过无法读取的影片"); }
             }
-            if (this.scope.disposed) break;
+            if (scope.disposed) break;
             const nextHref = boundary ? boundary.nextLink?.getAttribute("href") : pageRoot.querySelector(".pagination-next")?.getAttribute("href");
             if (!nextHref) break;
             const nextUrl = new URL(nextHref, pageUrl).href;
             if (visited.has(nextUrl)) break;
-            await this.sleep(PAGE_DELAY_MS, this.scope.signal);
-            this.scope.assertActive();
-            const html = await requestHostPage(this.http, nextUrl, this.scope);
+            let html;
+            try {
+                await this.sleep(PAGE_DELAY_MS, scope.signal);
+                scope.assertActive();
+                html = await requestHostPage(this.http, nextUrl, scope);
+            } catch (error) {
+                if (!scope.disposed || !isAbortError(error)) throw error;
+                break;
+            }
             pageRoot = parser.parseFromString(html, "text/html");
             pageUrl = nextUrl;
         }
+        await flush();
         return result;
     }
 

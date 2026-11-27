@@ -104,21 +104,21 @@ export function createTorrentSourcesAdapter(http) {
     return Object.freeze({
         contracts: ["Magnet", "MagnetSource"],
         getSources: () => Object.freeze(SOURCES.map((source) => Object.freeze({ id: source.id, name: source.name, type: source.type, domain: source.domain, baseUrl: source.baseUrl, priority: source.priority, enabled: source.enabled }))),
-        /** @param {string} sourceId @param {string} keyword @param {{baseUrl?: string, scope?: any}} [options] */
+        /** @param {string} sourceId @param {string} keyword @param {{baseUrl?: string, scope?: any, refreshCache?: boolean}} [options] */
         targetUrl(sourceId, keyword, options = {}) {
             const source = find(sourceId);
             if (!source) throw new JhsError("UNSUPPORTED", `未知磁力来源：${sourceId}`, { source: "torrent-sources" });
             const origin = sourceOrigin(source, options.baseUrl);
             return `${origin}${source.searchPath(keyword)}`;
         },
-        /** @param {string} sourceId @param {string} keyword @param {{baseUrl?: string, scope?: any}} [options] */
+        /** @param {string} sourceId @param {string} keyword @param {{baseUrl?: string, scope?: any, refreshCache?: boolean}} [options] */
         async search(sourceId, keyword, options = {}) {
             const source = find(sourceId);
             if (!source) throw new JhsError("UNSUPPORTED", `未知磁力来源：${sourceId}`, { source: "torrent-sources" });
             const origin = sourceOrigin(source, options.baseUrl), overridden = new URL(origin).hostname !== source.domain;
             const urlPolicy = overridden ? { trustClass: "custom-public", expectedOrigin: origin } : { trustClass: "builtin-public", hosts: [source.domain], expectedOrigin: origin };
             const url = `${origin}${source.searchPath(keyword)}`;
-            const response = await http.request({ capability: "magnet.search", providerId: `magnet:${source.id}`, method: "GET", url, responseType: "text", urlPolicy, ...(source.id === "btsow" ? { cacheScope: "none" } : {}) }, options.scope);
+            const response = await http.request({ capability: "magnet.search", providerId: `magnet:${source.id}`, method: "GET", url, responseType: "text", urlPolicy, ...(options.refreshCache ? { refreshCache: true } : {}), ...(source.id === "btsow" ? { cacheScope: "none" } : {}) }, options.scope);
             return source.id === "btsow" ? parseBtsowHtml(response.data) : parseTorrentSource(response.data, keyword, source.id);
         },
     });

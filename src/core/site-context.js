@@ -1,4 +1,7 @@
 // @ts-check
+import { PAN123_WEB_HOSTS } from "./pan123-origins.js";
+
+export const ACTRESS_SCAN_LOCK = "checkNewActressActorFilterCar";
 
 const JAVDB_HOST_PATTERN = /^(?:[a-z0-9-]+\.)?javdb(?:[a-z0-9-]*)\.com$/i;
 const JAVBUS_HOST_MARKERS = ["javbus", "javsee", "seejav"];
@@ -16,7 +19,7 @@ export function detectSite(locationLike = window.location) {
     const hostname = locationUrl.hostname.toLowerCase().replace(/\.$/, "");
     const isJavDB = JAVDB_HOST_PATTERN.test(hostname);
     const isJavBus = JAVBUS_HOST_MARKERS.some((marker => hostname.includes(marker)));
-    const is123Pan = "123pan.com" === hostname || hostname.endsWith(".123pan.com");
+    const is123Pan = "123pan.com" === hostname || hostname.endsWith(".123pan.com") || PAN123_WEB_HOSTS.includes(hostname);
     const isJavTrailers = "javtrailers.com" === hostname || hostname.endsWith(".javtrailers.com");
     const isSubtitleCat = "subtitlecat.com" === hostname || hostname.endsWith(".subtitlecat.com");
     const site = isJavDB ? "javdb" : isJavBus ? "javbus" : is123Pan ? "123pan" : isJavTrailers ? "javtrailers" : isSubtitleCat ? "subtitlecat" : "unknown";

@@ -2,6 +2,7 @@
 
 import { createPanelEmpty, createPanelError, createPanelLoading } from "./primitives.js";
 import { screenshotErrorMessage } from "./screenshot-error.js";
+import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 
 export const CANDIDATE_SCREENSHOT_LABEL = "候选长图";
@@ -44,9 +45,9 @@ function renderImage(host, loadedImage, alt, scope, onError, openImageViewer) {
     const jq = /** @type {any} */ (globalThis).$;
     const image = jq(loadedImage).attr("alt", alt).addClass("jhs-fc2-gallery__image");
     image.one("error", () => { if (host[0]?.contains(image[0])) onError(); });
-    const button = jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"></button>').attr("aria-label", `查看${alt}大图`).append(image);
+    const button = jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item jhs-screenshot-thumbnail"></button>').attr("aria-label", `查看${alt}大图`).append(image);
     replaceResult(host, button);
-    host.off("click.jhsScreenshot").on("click.jhsScreenshot", ".jhs-fc2-screenshot-thumbnail", (/** @type {any} */ event) => {
+    host.off("click.jhsScreenshot").on("click.jhsScreenshot", ".jhs-screenshot-thumbnail", (/** @type {any} */ event) => {
         event.preventDefault(); event.stopPropagation();
         openImageViewer?.(image[0], {
             imageKind: "contact-sheet", owner: button[0], trigger: button[0], scope,
@@ -80,7 +81,12 @@ export async function renderScreenshotPanel(options) {
         const showError = (error = /** @type {unknown} */ (null)) => {
             if (!isActive()) return;
             if (options.renderError) options.renderError(error);
-            else replaceResult(resultHost, createPanelError(screenshotErrorMessage(error), () => void load(resultHost, selectedProviderId, true)));
+            else {
+                const feedback = createPanelError(error ? screenshotErrorMessage(error) : "暂无缩略图", () => void load(resultHost, selectedProviderId, true));
+                const searchUrl = normalizeHttpUrl(options.screenshot.getSearchUrl({ carNum: options.carNum }, options.settings, selectedProviderId));
+                if (searchUrl) feedback.addClass("jhs-screenshot-retry").append(jq('<a class="jhs-link" target="_blank" rel="noopener noreferrer">查看来源</a>').attr("href", searchUrl));
+                replaceResult(resultHost, feedback);
+            }
         };
         resultHost.data("jhs-screenshot-request", request).attr("aria-busy", "true");
         if (options.renderLoading) options.renderLoading(refreshCache);
@@ -93,11 +99,11 @@ export async function renderScreenshotPanel(options) {
                 loadImage: url => loadScreenshotImage(resultHost[0].ownerDocument, url, request.signal, options.settings.httpTimeout),
             });
             if (!isActive() || resultHost.data("jhs-screenshot-request") !== request) return null;
-            if (!preview) { if (options.renderError) options.renderError(null); else replaceResult(resultHost, createPanelEmpty("暂无缩略图")); return null; }
+            if (!preview) { showError(); return null; }
             if (options.isDuplicate?.(preview.url)) return resultHost.empty(), null;
             const candidate = preview.match === "candidate";
             const alt = candidate ? CANDIDATE_SCREENSHOT_LABEL : "缩略图";
-            const rendered = options.renderImage ? options.renderImage(preview.image, alt) : renderImage(resultHost, preview.image, alt, options.scope, showError, options.openImageViewer);
+            const rendered = options.renderImage ? options.renderImage(preview.image, alt) : renderImage(resultHost, preview.image, alt, options.scope, () => showError(new Error("缩略图图片加载失败")), options.openImageViewer);
             if (!rendered) { replaceResult(resultHost, createPanelEmpty("暂无缩略图")); return null; }
             const source = enabledProviders.find(provider => provider.id === preview.providerId);
             const label = candidate ? [alt, source?.name].filter(Boolean).join(" · ") : source ? `来源 ${source.name}` : "";
