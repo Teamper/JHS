@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### 修复
 
+- 修复详情页原题切换为可见时重复显示同一条自动译文的问题。
+
 - 修复 JavDB 主列表和推荐区并存时漏识别外层分页栏的问题，恢复瀑布流和页码跳转。
 - 恢复 FC2 等多图剧照的触屏左右滑动切图，照片放大后可单指拖动查看。
 - 修复 JavDB 标签筛选叠加 JHS 状态筛选时瀑布流停住的问题。当前几页无匹配时，页尾仍在预加载范围内就会继续自动翻页。

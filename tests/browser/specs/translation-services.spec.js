@@ -45,6 +45,32 @@ async function boot(page,context,theme,mode="detail",sharedGm=null) {
   return errors;
 }
 
+test("keeps one automatic translation when the original detail title becomes visible", async ({ page, context }) => {
+  const errors = await boot(page, context, "light");
+  await seed(page);
+  const heading = page.locator(".column-video-info h1");
+  await heading.evaluate(node => {
+    const original = document.createElement("span");
+    original.className = "origin-title";
+    original.textContent = "日本語の原題";
+    original.hidden = true;
+    node.append(original);
+  });
+
+  await page.evaluate(() => window.settingsService.set("translateTitle", "yes"));
+  const translation = page.locator(".translated-title");
+  await expect(heading.locator("+ .translated-title")).toHaveText("服务译文 ABC-123");
+
+  await heading.locator(".origin-title").evaluate(node => { node.hidden = false; });
+  await expect(heading.locator(".origin-title + .translated-title")).toHaveText("服务译文 ABC-123");
+  await expect(translation).toHaveCount(1);
+  expect(await page.evaluate(() => window.translationCalls.length)).toBe(1);
+
+  await page.evaluate(() => window.settingsService.set("translateTitle", "no"));
+  await expect(translation).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test("obsolete budget records never block translation",async({page,context},info)=>{
  test.skip(info.project.name!=="desktop-wide","one project owns the legacy budget scenario");
  await boot(page,context,"light");await seed(page);

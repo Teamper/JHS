@@ -32,6 +32,8 @@ export class ExternalBridgeTranslationController {
         this.listGeneration = 0;
         this.started = false;
         this.disposed = false;
+        /** @type {{source: string, anchor: Element, node: HTMLDivElement} | null} */
+        this.detailTranslation = null;
         /** @type {Map<Element,{node:Element,texts:Array<{node:ChildNode,text:string|null}>,title:string|null}>} */
         this.recommendationTitles = new Map();
         /** @type {Map<Element,number>} */
@@ -245,6 +247,7 @@ export class ExternalBridgeTranslationController {
 
     /** @param {number} generation */
     async translateDetail(generation) {
+        if (!this.isCurrent(generation)) return;
         const sourceTitle = this.document.querySelector(".origin-title")
             ?? this.document.querySelector(".current-title")
             ?? this.document.querySelector("h1")
@@ -260,23 +263,27 @@ export class ExternalBridgeTranslationController {
             this.report(new TypeError("获取标题失败, 无法进行翻译"));
             return;
         }
-        let translatedNode = title.nextElementSibling;
-        while (translatedNode && !translatedNode.matches(".translated-title")) translatedNode = translatedNode.nextElementSibling;
-        if (!translatedNode) {
-            translatedNode = this.document.createElement("div");
-            translatedNode.className = "translated-title";
-            title.insertAdjacentElement("afterend", translatedNode);
+        const current = this.detailTranslation;
+        const translatedNode = current?.node ?? this.document.createElement("div");
+        if (title.nextElementSibling !== translatedNode) title.after(translatedNode);
+        if (current?.source === sourceText && !translatedNode.classList.contains("is-error")) {
+            current.anchor = title;
+            return;
         }
-        translatedNode.classList.remove("is-error");
+        const detail = { source: sourceText, anchor: title, node: translatedNode };
+        this.detailTranslation = detail;
+        translatedNode.className = "translated-title";
         translatedNode.textContent = "翻译中…";
         const carNum = this.hostAdapter?.readMovieRef?.()?.carNum ?? undefined;
+        const isCurrent = () => this.isCurrent(generation) && this.detailTranslation === detail && detail.anchor.isConnected && translatedNode.isConnected;
         try {
-            const result = await this.translateTitle(sourceText, {cacheAlias:carNum,canDispatch:() => this.isCurrent(generation) && this.observeVisible(title,"detail")}), translated = result.text;
-            if (!this.isCurrent(generation) || !title.isConnected || !translatedNode.isConnected) return;
-            translatedNode.textContent = String(translated ?? "");
-            this.metadata(translatedNode,result);
+            const result = await this.translateTitle(sourceText, {
+                cacheAlias: carNum,
+                canDispatch: () => isCurrent() && this.observeVisible(detail.anchor, "detail"),
+            });
+            if (isCurrent()) translatedNode.textContent = String(result.text ?? "");
         } catch (error) {
-            if (!this.isCurrent(generation) || !title.isConnected || !translatedNode.isConnected) return;
+            if (!isCurrent()) return;
             translatedNode.classList.add("is-error");
             translatedNode.textContent = translationErrorLabel(error);
             this.report(error);
@@ -289,7 +296,8 @@ export class ExternalBridgeTranslationController {
     }
 
     revertTranslation() {
-        this.document.querySelectorAll(".translated-title").forEach((node) => node.remove());
+        this.detailTranslation?.node.remove();
+        this.detailTranslation = null;
         this.document.querySelectorAll("[data-jhs-auto-translation-meta]").forEach(node => node.remove());
         for (const {node,texts,title} of this.recommendationTitles.values()) {
             texts.forEach(child => { child.node.textContent = child.text; });
