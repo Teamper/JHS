@@ -37,3 +37,5 @@ node apps/android/preview.browser.mjs
 ```
 
 浏览器验收使用已安装的 Chrome。可通过 `JHS_CHROME_PATH` 指定浏览器路径。截图保存在仓库的 `output/jhs-android/preview-evidence`。
+
+设备验收使用样片流程。检查发现页返回时的滚动位置、追新的暂缓和撤销、片库批量操作及重启后备注保留。再检查窄屏、软键盘和系统返回、横竖屏、画廊缩放及 TalkBack 导航。安装与覆盖更新使用同一测试签名。

@@ -20,9 +20,9 @@
 | 设置、规则和备份 | `SettingsService`、`KeywordRulesService`、`PortableBackupService` |
 | 连接凭证与跨站连接配置 | `CredentialService`、`WebDavSharedProfile` 和平台加密存储 |
 | WebDAV 合并、同步计算和传输 | `WebDavSyncStore`、`SyncComputation`、`WebDavSyncService` |
-| 宿主详情、独立详情、弹窗和浮层 | `HostedDetailSurface`、`OwnedDetailSurface`、`DialogService`、`OwnedPopover` |
+| 宿主详情、独立详情、弹窗和浮层 | `HostedDetailSurface`、FC2 工作区、平台对话框端口、`OwnedPopover` |
 | 响应式布局和诊断 | `ProfileService`、Settings Effects Feature、`DiagnosticsService` |
 
-作品与设置写入各自由 StateService 和 SettingsService 管理。StorageService 封装平台存储端口，原子导入和状态修改共用业务锁。端口提供原生事务时，业务变更和对应的同步回执一起提交。来自旧版本的提交日志在启动或下一次写入前恢复。可移植备份只包含业务数据，密钥和设备偏好由所属平台保存。见 [存储与迁移](adr/009-storage-migration.md)、[WebDAV 同步](adr/013-webdav-sync-recovery.md) 和 [原子保存与计算](adr/014-atomic-state-and-sync-computation.md)。
+作品与设置写入各自由 StateService 和 SettingsService 管理。跨端存储通过 StorageService 端口，原子导入与状态修改共用业务锁。端口提供原生事务时，业务变更和相应同步回执一起提交；事务日志在启动或下一次写入前恢复。可移植备份包含业务数据及其可移植偏好，凭证由当前安装的加密存储管理。见 [存储与迁移](adr/009-storage-migration.md)、[WebDAV 同步](adr/013-webdav-sync-recovery.md) 和 [原子保存与计算](adr/014-atomic-state-and-sync-computation.md)。
 
 跨端验证使用 `npm run check`、`npm run check:browser`、`npm run check:visual`、`npm run build:extension`、`npm run check:mobile` 和 `npm run build:android:web`。扩展重启由已安装的 Edge 或 Chrome 验证。真实设备、账号授权和外部服务各自保留验收记录。见 [开发与发布](../development.md)。

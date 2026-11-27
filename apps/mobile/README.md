@@ -1,5 +1,7 @@
 # JHS Android 与 iOS 验收工程
 
+这是在线原生工程的构建与验收入口。网页用户脚本的 RC 发布通过独立工作流交付。需要在浏览器体验内置样片时，使用 [Android 离线预览](../android/README.md)。
+
 Expo SDK 57 和 React Native 0.86.3 共用一套原生页面。Android 样片包的应用 ID 为 `io.github.teamper.jhs.dev.native.lab`。样片和在线运行各自使用独立的 SQLite 数据库。浏览器预览固定使用中性样片。
 
 ## 开发与验收
