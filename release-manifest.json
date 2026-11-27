@@ -1,15 +1,15 @@
 {
   "schema": 1,
-  "version": "7.0.0-rc.2",
-  "sourceSha": "e0e479b2a14c7d28f0e1c05203f6cc3db37b866f",
+  "version": "7.0.0-rc.3",
+  "sourceSha": "ad11199a283a88b3825c79d447a6ec9d6df6c395",
   "packStaticResources": false,
   "files": {
     "JHS-7.0.rc.user.js": {
-      "sha256": "83d679f3d07435cda2d7aafe0776df69cb863736bd54d8cc83e3ac1de8bef54a",
-      "bytes": 1777502
+      "sha256": "32fd37c9015f86ba3bb01e3bcff5eee5f483b21e8acc6ebb29bf5986764f667a",
+      "bytes": 1773248
     },
     "JHS-7.0.rc.meta.js": {
-      "sha256": "aa8bb73d81294ae2ddf3c62ffb4d7fdace8be0f40543ecc3b5ddedcc96169850",
+      "sha256": "dcde4f49686ee8456c24935e23858bdfb8f35091847f641f10ee348d61d7176e",
       "bytes": 3050
     }
   }
