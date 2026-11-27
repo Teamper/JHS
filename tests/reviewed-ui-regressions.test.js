@@ -50,6 +50,32 @@ describe("reviewed UI regressions", () => {
         expect(favoriteOne).toHaveBeenCalledOnce();
         plugin.unmountDmmPlayer();
         expect($("#video-favoriteBtn")).toHaveLength(1);
+        const { scope } = plugin.previewSession;
+        vi.stubGlobal("$", undefined);
+        dom.window.HTMLMediaElement.prototype.pause = vi.fn();
+        plugin.disposePreviewSession();
+        expect(scope.disposed).toBe(true);
+        expect($("#video-bottom-toolbar")).toHaveLength(0);
+    });
+    it("drops a DMM lookup that resolves after the preview has closed", async () => {
+        const $ = setup('<div class="fancybox-content"><video id="preview-video"></video></div>', "https://javdb.com/v/abc");
+        vi.stubGlobal("getComputedStyle", dom.window.getComputedStyle.bind(dom.window));
+        vi.stubGlobal("MutationObserver", dom.window.MutationObserver);
+        dom.window.HTMLMediaElement.prototype.pause = vi.fn();
+        const plugin = new PreviewVideoPlugin({ settings: { snapshot: () => ({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "yes" }) } });
+        let completeLookup;
+        plugin.getDmmPreview = () => new Promise(resolve => { completeLookup = resolve; });
+
+        const preview = plugin.handleVideo();
+        expect(completeLookup).toBeTypeOf("function");
+        const { scope } = plugin.previewSession;
+        plugin.disposePreviewSession();
+        completeLookup({ sources: { "720": "https://example.test/late.mp4" }, error: null });
+        await preview;
+
+        expect(scope.disposed).toBe(true);
+        expect(plugin.previewSession).toBeNull();
+        expect($("#video-bottom-toolbar,#jhs-preview-video,.jhs-native-preview-hidden")).toHaveLength(0);
     });
     it("routes the legacy batch API through its Feature-owned controller", async () => {
         setup('<button id="favoriteAllVideo"></button>');

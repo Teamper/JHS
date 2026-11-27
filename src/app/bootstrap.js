@@ -229,6 +229,16 @@ export async function bootstrapJhs(options = {}) {
                 pluginManager: Object.freeze({ getBean: context.registries.features.runtimeLookup.getBean }), utils, stateService: context.services.state, jhsEventBus,
                 clog: logger.clog, show: logger.show, loading: logger.loading, showImageViewer: logger.showImageViewer, ImageHoverPreview: logger.ImageHoverPreview,
             }, globals.unsafeWindow);
+            const telemetry = context.services.diagnostics, page = globals.unsafeWindow;
+            const performanceDiagnostics = Object.freeze({
+                startPerformanceCapture: () => telemetry.startPerformanceCapture(),
+                stopPerformanceCapture: () => telemetry.stopPerformanceCapture(),
+                performanceSnapshot: () => telemetry.performanceSnapshot(),
+            });
+            page.jhsDiagnostics = performanceDiagnostics;
+            context.rootScope.addCleanup(() => {
+                if (page.jhsDiagnostics === performanceDiagnostics) delete page.jhsDiagnostics;
+            });
         }
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";

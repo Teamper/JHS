@@ -1,5 +1,7 @@
 // @ts-check
 
+import { readStoredActressMeasurements } from "../../core/actress-measurements.js";
+
 import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { escapeHtml } from "../../core/constants.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
@@ -56,6 +58,10 @@ export async function applyActorRebind(owner, /** @type {ActorRecord} */ actress
         const task = await owner.task.activate();
         await task?.checkOneNewVideo(result.actress);
     }
+    void owner.requestActressProfileBackfill({
+        clearStarIds: [fromStarId, toStarId],
+        backfillOptions: readStoredActressMeasurements(result.actress) ? null : { starIds: [toStarId], force: true, refresh: true },
+    });
     return result.actress;
 }
 

@@ -112,13 +112,14 @@ async function start() {
         state: services.state, readTitleKeywords: () => services.keywordRules.getTitleKeywords(),
         actressInfo: {
             collection: services.actressInfo.collection.bind(services.actressInfo),
+            lookupAny: services.actressInfo.lookupAny.bind(services.actressInfo),
             movies: async (/** @type {string} */ _provider, /** @type {{actorId: string}} */ { actorId },
                 /** @type {{scope: LifecycleScope}} */ { scope }) => {
                 const { items } = /** @type {{items: Record<string, any>[]}} */ (await catalog.read(`/v1/actors/${actorId}/movies`, {}, scope));
                 return items.map(movie => ({ ...movie, publishTime: movie.releaseDate, score: movie.ratingValue }));
             },
         },
-        preserveNewVideo: true,
+        preserveNewVideo: true, events, window,
         sourceHealth: new ActorSourceHealth(services.storage), scope: context.rootScope, logger: context.feedback.clog,
         getTimestamp: getNowStr, onNewItems() {},
     });

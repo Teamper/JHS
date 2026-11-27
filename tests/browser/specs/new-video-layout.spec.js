@@ -9,23 +9,25 @@ for (const scenario of [
     test.skip(!["desktop-wide", "mobile"].includes(info.project.name), "desktop and mobile pagination acceptance");
     await fulfillHostFixtures(context);
     await page.goto("https://javdb.com/");
-    await injectUserscriptRuntime(page, { disabledPlugins: ["TaskPlugin"], settingOverrides: { enableLoadReview: "no" } });
+    await injectUserscriptRuntime(page, {
+        disabledPlugins: ["TaskPlugin"], settingOverrides: { enableLoadReview: "no" },
+        beforeUserscriptInjection: host => host.evaluate(async count => {
+            const storage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
+            await storage.setItem("favorite_actresses", [{ starId: "fixture", name: "Fixture", actressType: "censored",
+                newVideoList: Array.from({ length: count }, (_, index) => ({
+                    carNum: `ABC-${String(index + 1).padStart(3, "0")}`, publishTime: "2026-09-09", title: "Fixture",
+                    coverUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+                })),
+            }]);
+        }, scenario.count),
+    });
     await page.waitForFunction(() => window.__jhsBrowserDiagnostics.features.newVideo?.featureNewVideoWorkspaceController);
-    await page.evaluate(async count => {
-            await window.__jhsBrowserDiagnostics.activateFeature("new-video");
-        const storage = window.__jhsBrowserDiagnostics.detailServices.storage;
-        await storage.set("favorite_actresses", [{ starId: "fixture", name: "Fixture", actressType: "censored",
-            newVideoList: Array.from({ length: count }, (_, index) => ({
-                carNum: `ABC-${String(index + 1).padStart(3, "0")}`, publishTime: "2026-09-09", title: "Fixture",
-                coverUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-            })),
-        }]);
-
+    await page.evaluate(async () => {
         window.__jhsBrowserDiagnostics.detailServices.storage.setLocal("jhs_newVideoViewMode", "list");
         const plugin = window.__jhsBrowserDiagnostics.features.newVideo;
         plugin.nvPageSize = 3;
         await plugin.openDialog();
-    }, scenario.count);
+    });
     await expect(page.locator("#nv-grid .nv-card")).toHaveCount(3);
     const result = await page.evaluate(async ({ removed, target, back }) => {
             await window.__jhsBrowserDiagnostics.activateFeature("new-video");

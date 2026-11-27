@@ -19,7 +19,7 @@ export async function createRemoteRuntime(client) {
         getTaskStatusSnapshot: (/** @type {string} */ name) => taskSnapshot.states[name],
     };
     const refreshTasks = async () => { taskSnapshot = await client.call("scan.snapshot"); taskExecution.taskConfig = taskSnapshot.config; };
-    for (const method of ["checkBlacklist", "checkFavoriteActress", "checkNewVideo", "checkOneNewVideo", "invalidateConfig"]) {
+    for (const method of ["checkBlacklist", "checkFavoriteActress", "checkNewVideo", "checkOneNewVideo", "invalidateConfig", "triggerProfileBackfill"]) {
         /** @type {any} */ (taskExecution)[method] = async (/** @type {any} */ argument) => {
             const result = await client.call(`scan.${method}`, [argument]);
             await refreshTasks();

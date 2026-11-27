@@ -6,7 +6,7 @@ import { assertSupportedDataVersion, normalizePortableData, readPortableData } f
 import { SNAPSHOTS_KEY, createPortableSnapshot, getStoredSnapshots } from "../core/portable-snapshots.js";
 
 /** @typedef {Record<string, any>} BackupData */
-/** @typedef {{signal?: AbortSignal, assertActive?: () => unknown, prepareData?: () => BackupData | Promise<BackupData>}} ImportOptions */
+/** @typedef {{signal?: AbortSignal, assertActive?: () => unknown, prepareData?: () => BackupData | Promise<BackupData>, resetActressProfileBackfill?: boolean}} ImportOptions */
 /** @typedef {Pick<Console, "log"|"warn">} BackupLogger */
 
 /** Owns portable exports, guarded restores and local recovery snapshots. */
@@ -34,7 +34,7 @@ export class PortableBackupService {
                 const version = await this.supportedVersion();
                 await this.state?.recoverPendingTransactionWithoutLock();
                 if (options.prepareData) ({ data, warnings } = normalizePortableData(await options.prepareData()));
-                const batch = await prepareAtomicImport(this.storage, data, warnings, version);
+                const batch = await prepareAtomicImport(this.storage, data, warnings, version, options.resetActressProfileBackfill !== false);
                 await options.assertActive?.();
                 await this.storage.commitAtomicBatch({ ...batch, signal: options.signal });
                 committed = true;

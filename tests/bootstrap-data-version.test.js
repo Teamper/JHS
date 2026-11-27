@@ -8,6 +8,7 @@ import { KeywordRulesService } from "../src/services/keyword-rules-service.js";
 import { SettingsService } from "../src/services/settings-service.js";
 import { CREDENTIAL_KEYS, CredentialService } from "../src/services/credential-service.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { CURRENT_DATA_VERSION } from "../src/core/constants.js";
 
 const seam = vi.hoisted(() => ({ context: null, contextCreated: vi.fn(), emit: vi.fn(), attachFacade: vi.fn() }));
@@ -41,6 +42,7 @@ function fixture(version = CURRENT_DATA_VERSION) {
     vi.stubGlobal("crypto", webcrypto);
     vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => forage });
     vi.stubGlobal("utils", undefined);
+    vi.stubGlobal("unsafeWindow", {});
     vi.stubGlobal("settingsService", undefined);
     vi.stubGlobal("credentialService", undefined);
     vi.stubGlobal("clog", { log() {}, warn() {}, debug() {}, error() {} });
@@ -52,7 +54,7 @@ function fixture(version = CURRENT_DATA_VERSION) {
         removeValue: async (key) => gm.delete(key),
     }, localStorage);
     const features = { runtimeLookup: { getBean: () => undefined }, register() {}, start: vi.fn(async () => {}), scheduleIdle: vi.fn() };
-    seam.context = { services: { domUi: {isMobileMode: () => false}, clipboard: {copyText: vi.fn()}, dialog: {}, backgroundWork: { markReady: vi.fn() }, settings, credential, storage, state, keywordRules: new KeywordRulesService({ storage, coordinator, state }), profile: { start: vi.fn() }, styles: {}, diagnostics: new DiagnosticsService() }, rootScope: {}, container: { register() {} }, registries: { integrations: { register() {} }, features } };
+    seam.context = { services: { domUi: {isMobileMode: () => false}, clipboard: {copyText: vi.fn()}, dialog: {}, backgroundWork: { markReady: vi.fn() }, settings, credential, storage, state, keywordRules: new KeywordRulesService({ storage, coordinator, state }), profile: { start: vi.fn() }, styles: {}, diagnostics: new DiagnosticsService() }, rootScope: new LifecycleScope("test:bootstrap"), container: { register() {} }, registries: { integrations: { register() {} }, features } };
     seam.contextCreated.mockClear();
     seam.attachFacade.mockClear();
     seam.emit.mockClear();

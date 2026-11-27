@@ -5,19 +5,19 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ActressInfoService } from "../src/services/actress-info-service.js";
 import { CacheService } from "../src/services/cache-service.js";
 
-it("normalizes aliases, uses v3 cache prefix with 7d/24h TTLs, and caches actress information", async () => {
+it("normalizes aliases, uses v4 cache prefix with 7d/24h TTLs, and caches actress information", async () => {
     const lookup = vi.fn(async name => ({ name, url: `https://ja.wikipedia.org/wiki/${encodeURIComponent(name)}` }));
     const adapter = { lookup, profileUrl: name => `profile:${name}` };
     const integrations = { list: () => [{ id: "wikipedia" }], getAdapter: () => adapter };
     const cache = new CacheService();
-    await cache.set("actress-info", "actress-info:v2:三上悠亜", { name: "Unverified" }, { scope: "public", ttlMs: 60_000 });
+    await cache.set("actress-info", "actress-info:v3:三上悠亜", { name: "Unverified" }, { scope: "public", ttlMs: 60_000 });
     const setSpy = vi.spyOn(cache, "set");
     const service = new ActressInfoService(integrations, cache);
 
     await expect(service.lookup("三上悠亞")).resolves.toMatchObject({ name: "三上悠亜" });
     await expect(service.lookup("三上悠亞")).resolves.toMatchObject({ name: "三上悠亜" });
     expect(lookup).toHaveBeenCalledOnce();
-    expect(setSpy).toHaveBeenCalledWith("actress-info", "actress-info:v3:三上悠亜", expect.any(Object), expect.objectContaining({
+    expect(setSpy).toHaveBeenCalledWith("actress-info", "actress-info:v4:三上悠亜", expect.any(Object), expect.objectContaining({
         scope: "public",
         ttlMs: CACHE_TTL.actressInfo,
         negative: false,
@@ -33,7 +33,7 @@ it("caches normal misses and NOT_FOUND errors for 24h while propagating abort an
     await expect(service.lookup("Missing")).resolves.toBeNull();
     await expect(service.lookup("Missing")).resolves.toBeNull();
     expect(lookup).toHaveBeenCalledOnce();
-    expect(setSpy).toHaveBeenCalledWith("actress-info", "actress-info:v3:Missing", null, expect.objectContaining({
+    expect(setSpy).toHaveBeenCalledWith("actress-info", "actress-info:v4:Missing", null, expect.objectContaining({
         scope: "public",
         ttlMs: CACHE_TTL.actressInfoNegative,
         negative: true,
@@ -101,4 +101,23 @@ it("routes avatar source lookup and placeholders through declared Integrations",
     await expect(service.searchAvatars(["Alice"], "jsdelivr", { scope: "scope" })).resolves.toEqual(["avatar:a"]);
     expect(searchAvatars).toHaveBeenCalledWith(["Alice"], { sourceId: "jsdelivr", scope: "scope" });
     expect(service.placeholderUrl("javdb")).toBe("avatar:placeholder");
+});
+
+it("bypasses cached misses when refresh is true", async () => {
+    const lookup = vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ url: "https://ja.wikipedia.org/wiki/RefreshTarget", height: "160cm" });
+    const service = new ActressInfoService({ list: () => [{ id: "wikipedia" }], getAdapter: () => ({ lookup }) }, new CacheService());
+
+    await expect(service.lookupAny(["RefreshTarget"])).resolves.toBeNull();
+    await expect(service.lookupAny(["RefreshTarget"])).resolves.toBeNull();
+    expect(lookup).toHaveBeenCalledTimes(1);
+
+    await expect(service.lookupAny(["RefreshTarget"], { refresh: true })).resolves.toEqual({
+        info: { url: "https://ja.wikipedia.org/wiki/RefreshTarget", height: "160cm" },
+        matchedName: "RefreshTarget",
+    });
+    expect(lookup).toHaveBeenCalledTimes(2);
+    await expect(service.lookupAny(["RefreshTarget"])).resolves.toMatchObject({ matchedName: "RefreshTarget" });
+    expect(lookup).toHaveBeenCalledTimes(2);
 });

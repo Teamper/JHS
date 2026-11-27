@@ -42,11 +42,11 @@ export const newVideoFeature = defineFeature({
         });
         const scanController = new NewVideoScanController({
             sourceHealth, backgroundWork: runtime.backgroundWork,
-            storage: deps[SERVICE.storage],
             state: deps[SERVICE.state],
             readTitleKeywords: () => deps[SERVICE.keywordRules].getTitleKeywords(),
             actressInfo: deps[SERVICE.actressInfo],
             scope: runtime.scope,
+            events: deps[SERVICE.events], jquery: deps[SERVICE.domUi].jquery, window,
             logger: deps[SERVICE.clog],
             getTimestamp: getNowStr,
             onNewItems: (name, count) => deps[SERVICE.clog].html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${count}部</span>`),
@@ -80,6 +80,10 @@ export const newVideoFeature = defineFeature({
                 available: () => schedulerEnabled() && (Boolean(remoteTask) || runtime.isCommandAvailable("scheduler.service")),
                 current: () => remoteTask ?? runtime.getCapability?.("discovery.scheduler"),
                 activate: activateScheduler,
+            },
+            requestProfileBackfill: (/** @type {Record<string, any>} */ options) => {
+                if (!schedulerEnabled()) return;
+                return remoteTask ? remoteTask.triggerProfileBackfill(options) : scanController.triggerProfileBackfill(options);
             },
             batchController, workspaceController, loadStyles: ensureStyles,
             openTaskSettings: (callback) => runtime.getCapability?.("settings.core")?.openSettingDialog("task-panel", callback),

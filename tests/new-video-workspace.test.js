@@ -25,6 +25,7 @@ function createHarness() {
         getNewVideoDecisions: vi.fn(async () => ({})),
         getFavoriteActressList: vi.fn(() => storageManager.getFavoriteActressList()),
         getCarMap: vi.fn(() => storageManager.getCarMap()),
+        clearActressProfileBackfillAttempts: vi.fn(async () => {}),
         updateFavoriteActress: (...args) => storageManager.updateFavoriteActress(...args),
         rebindFavoriteActress: vi.fn(async () => ({ ok: true, merged: false, actress: { ...actresses[0], starId: "rebound" } })),
         removeFavoriteActress: vi.fn(starId => storageManager.removeFavoriteActress?.(starId) ?? true),

@@ -62,6 +62,7 @@ async function initialize() {
     const scan = new NewVideoScanController({
         state: context.services.state, actressInfo: context.services.actressInfo, readTitleKeywords: () => context.services.keywordRules.getTitleKeywords(),
         sourceHealth: new ActorSourceHealth(context.services.storage), scope: context.rootScope, allowHidden: true,
+        events, window,
         logger: context.feedback.clog, getTimestamp: getNowStr, onNewItems() {},
     });
     const taskWindow = new Proxy(/** @type {any} */ (window), { get(target, key) { if (key === "location") return new URL("https://javdb.com"); if (key === "isListPage") return true; const value = target[key]; return typeof value === "function" ? value.bind(target) : value; } });
@@ -144,7 +145,7 @@ export async function dispatchDomain(method, args) {
         }
     }
     if (owner === "scan") {
-        if (!["checkBlacklist", "checkFavoriteActress", "checkNewVideo", "checkOneNewVideo", "invalidateConfig"].includes(name)) throw new Error("扫描操作不受支持");
+        if (!["checkBlacklist", "checkFavoriteActress", "checkNewVideo", "checkOneNewVideo", "invalidateConfig", "triggerProfileBackfill"].includes(name)) throw new Error("扫描操作不受支持");
         if (name !== "invalidateConfig") await tasks.invalidateConfig();
         return /** @type {any} */ (tasks)[name](...args);
     }

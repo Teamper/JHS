@@ -166,7 +166,13 @@ export async function renderActressCards(owner) {
     })), owner.jquery(".btn-check-actress").off("click").on("click", ((/** @type {JQueryEvent} */ e) => {
         e.preventDefault();
         const button = owner.jquery(e.currentTarget), starId = button.attr("data-starId"), actress = sortedActresses.find((item => item.starId === starId));
-        void owner.runManualTask(button, "检测中…", (/** @type {any} */ task) => task.checkOneNewVideo(actress));
+        void owner.runManualTask(button, "检测中…", async task => {
+            await task.checkOneNewVideo(actress);
+            if (actress?.starId && !readStoredActressMeasurements(actress)) void owner.requestActressProfileBackfill({
+                clearStarIds: [actress.starId],
+                backfillOptions: { starIds: [actress.starId], force: true, refresh: true },
+            });
+        });
     })), owner.jquery(".actress-card__menu").each((/** @type {number} */ _, /** @type {HTMLElement} */ element) => {
         const anchor = element.querySelector("button"), menu = element.querySelector("[role=menu]");
         if (!anchor || !menu) return;

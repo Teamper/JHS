@@ -17,13 +17,15 @@ export class ActressInfoService {
         return "";
     }
 
-    /** @param {string} name @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    /** @param {string} name @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, refresh?: boolean}} [options] */
     async lookup(name, options = {}) {
         const normalized = normalizeActressLookupName(name);
         if (!normalized) return null;
-        const key = `actress-info:v3:${normalized}`;
-        const cached = await this.cache.get("actress-info", key, { scope: "public" });
-        if (cached.hit) return cached.value;
+        const key = `actress-info:v4:${normalized}`;
+        if (!options.refresh) {
+            const cached = await this.cache.get("actress-info", key, { scope: "public" });
+            if (cached.hit) return cached.value;
+        }
         const generation = this.cache.generation("actress-info");
         for (const manifest of this.integrations.list("person.actress-info")) {
             const adapter = this.integrations.getAdapter(manifest.id);
@@ -54,7 +56,7 @@ export class ActressInfoService {
         return null;
     }
 
-    /** @param {string | string[]} names @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    /** @param {string | string[]} names @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, refresh?: boolean}} [options] */
     async lookupAny(names, options = {}) {
         /** @type {string[]} */
         const candidates = [];

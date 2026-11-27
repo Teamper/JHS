@@ -225,10 +225,14 @@ export class StateService {
     addFavoriteActressList(actresses) { return this._withLock(() => this.actresses.add(actresses)); }
     /** @param {StateRecord} update @param {{scan?: boolean, keepUnseen?: boolean, signal?: AbortSignal}} [options] */
     updateFavoriteActress(update, options) { return this._withLock(() => this.actresses.update(update, options)); }
-    /** @param {Array<{starId: string, actressProfile: StateRecord}>} updates */
-    batchUpdateFavoriteActressProfiles(updates) {
-        if (!Array.isArray(updates) || !updates.length) return Promise.resolve(0);
-        return this._withLock(() => this.actresses.updateProfiles(updates));
+    getActressProfileBackfillState() { return this.actresses.readBackfillState(); }
+    getActressProfileBackfillSnapshot() { return this.actresses.readBackfillSnapshot(); }
+    /** @param {string[]} [starIds] */
+    clearActressProfileBackfillAttempts(starIds) { return this._withLock(() => this.actresses.clearBackfillAttempts(starIds)); }
+    /** @param {Array<{starId: string, actressProfile: StateRecord}>} updates @param {import("./actress-profile-backfill-state.js").ActressProfileBackfillProgress} [progress] */
+    batchUpdateFavoriteActressProfiles(updates, progress) {
+        if (!progress && (!Array.isArray(updates) || !updates.length)) return Promise.resolve(0);
+        return this._withLock(() => this.actresses.updateProfiles(updates, progress));
     }
     /** @param {StateRecord} payload */
     rebindFavoriteActress(payload) { return this._withLock(() => this.actresses.rebind(payload)); }

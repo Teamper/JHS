@@ -2,7 +2,7 @@
 
 用 40 部内置样片体验发现、追新、片库和共享作品详情。标记、备注、清单和偏好保存在当前预览的本地存储。Android 使用独立包名 `io.github.teamper.jhs.preview`。
 
-样片用于公开界面的回归验证。日常开发与实站验收使用设备上的在线开发 App。
+样片用于离线界面与流程回归。在线目录、账号和同步由 [Android / iOS 原生验收工程](../mobile/README.md) 提供。
 
 ## 构建网页
 
@@ -37,3 +37,5 @@ node apps/android/preview.browser.mjs
 ```
 
 浏览器验收使用已安装的 Chrome。可通过 `JHS_CHROME_PATH` 指定浏览器路径。截图保存在仓库的 `output/jhs-android/preview-evidence`。
+
+设备验收使用样片流程。检查发现页返回时的滚动位置、追新的暂缓和撤销、片库批量操作及重启后备注保留。再检查窄屏、软键盘和系统返回、横竖屏、画廊缩放及 TalkBack 导航。安装与覆盖更新使用同一测试签名。
